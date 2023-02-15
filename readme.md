@@ -3,6 +3,12 @@ a standalone online editor to write Hugo compatible content using Markdown.
   
 [Read more](https://hugoeditor.com/en/)  
   
+
+## Requirements
+
+- current browser
+- php from version 7.4
+  
 ## Short instructions
 
 1. Install apache2-utils
