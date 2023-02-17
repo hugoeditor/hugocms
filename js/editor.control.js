@@ -795,6 +795,13 @@ $(document).ready(function()
 						changeLang();
 					});
 				}
+				else if(data.lang == "fr")
+				{
+					$.getScript("./js/editor.lang.fr.js", function()
+					{
+						changeLang();
+					});
+				}
 				else
 				{
 					changeLang();
@@ -822,6 +829,15 @@ $(document).ready(function()
 		{
 			changeLang();
 			setLang("de");
+		});
+	});
+
+	$("#lang-fr").click(function()
+	{
+		$.getScript("./js/editor.lang.fr.js", function()
+		{
+			changeLang();
+			setLang("fr");
 		});
 	});
 
