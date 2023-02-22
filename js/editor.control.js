@@ -659,10 +659,10 @@ $(document).ready(function()
 					}
 					else
 					{
-						$('#editor-save').text('Gespeichert!').toggleClass('btn-primary btn-success');
+						$('#editor-save').text(translate('Saved')).toggleClass('btn-primary btn-success');
 						setTimeout(function()
 						{
-							$('#editor-save').text('Speichern').toggleClass('btn-success btn-primary');
+							$('#editor-save').text(translate('Save')).toggleClass('btn-success btn-primary');
 						}, 2000);
 					}
 				}

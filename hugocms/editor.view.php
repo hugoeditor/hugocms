@@ -12,7 +12,7 @@
 		<div class="container">
 			<div class="row">
 				<div class="col-md-4" style="margin-top: 10px;"><?php if(!empty($license_error)) echo '<span class="bg-danger">'.$license_error.'</span>'; else echo '<span class="text-muted" id="license-text"></span> <span class="text-muted">'.$license_user.'</span>'; ?></div>
-				<div class="col-md-8 text-right" style="margin-top: 10px;"><span id="lang-en">En</span> / <span id="lang-fr">Fr<span> / <span id="lang-de">De<span></div>
+				<div class="col-md-8 text-right" style="margin-top: 10px;"><span id="lang-en">English</span> / <span id="lang-fr">Français</span> / <span id="lang-de">Deutsch</span></div>
 			</div>
 		</div>
 		<div id="directory-view" class="container">
