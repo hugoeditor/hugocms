@@ -23,13 +23,11 @@ a standalone online editor to write Hugo compatible content using Markdown.
 
 5. Create a password with htpasswd and configure *Nginx* or *Apache2* to protect the directory.
 
-6. Copy the license files sent by mail into the directory.
+6. Create the *Hugo* configuration file (*config.json*).
 
-7. Create the *Hugo* configuration file (*config.json*).
+7. Create the the website with *Hugo*.
 
-8. Create the the website with *Hugo*.
-
-9. Call up the editor via your own domain with '/edit' appended.
+8. Call up the editor via your own domain with '/edit' appended.
    
 [Read more](https://hugoeditor.com/en/install-use/)
   
