@@ -18,9 +18,9 @@ a standalone online editor to write Hugo compatible content using Markdown.
    e.g. apt install hugo
     or with tarball
 
-3. Run hugo new site <directory>
-   to set write permissions sudo -u <user> hugo new site <directory>
-   it should be noted that Hugo writes to the public subdirectory by default.
+3. Run hugo new site \<directory\>. 
+   To set write permissions run sudo -u \<user\> hugo new site <directory>. 
+   It should be noted that Hugo writes to the public subdirectory by default.
 
 4. Clone the repo into the 'static/edit/' directory, for example
 
