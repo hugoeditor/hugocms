@@ -8,7 +8,9 @@ a standalone online editor to write Hugo compatible content using Markdown.
 
 - current browser
 - php from version 7.4
-  
+- [Hugo](https://gohugo.io/)
+- apache2-utils
+   
 ## Short instructions
 
 1. Install apache2-utils
@@ -19,7 +21,7 @@ a standalone online editor to write Hugo compatible content using Markdown.
     or with tarball
 
 3. Run hugo new site \<directory\>. 
-   To set write permissions run sudo -u \<user\> hugo new site <directory>. 
+   To set write permissions run sudo -u \<user\> hugo new site \<directory\>. 
    It should be noted that Hugo writes to the public subdirectory by default.
 
 4. Clone the repo into the 'static/edit/' directory, for example
