@@ -1,7 +1,7 @@
 <?php
 session_start();
 
-if(!isset($_SESSION['hugocms_client']) && !isset($_SESSION['hugocms_login']) && is_readable('editor.setup.php'))
+if(!isset($_SESSION['hugocms_client']) && !isset($_SESSION['hugocms_login']) && is_readable(SETUP_FILE))
 {
     header('Content-Type: application/json');
     echo '{ "success": false, "session_expired": true, "error": "errLogout" }';

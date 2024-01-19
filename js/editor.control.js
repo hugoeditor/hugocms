@@ -205,7 +205,15 @@ $(document).ready(function()
         return false;
     });
 
-    $('#publish, #editor-save-publish').click(function()
+    $('#editor-save-publish').click(function()
+    {
+        saveFile(function()
+        {
+            $('#publish').click();
+        });
+    });
+
+    $('#publish').click(function()
     {
         $.ajax({
             url: 'backend/editor.control.php',
@@ -288,7 +296,7 @@ $(document).ready(function()
             {
                 if(exists(data.success) && !data.success)
                 {
-                    if(data.hasOwnProperty('session_expired'))
+                    if(data.hasOwnProperty('session_expired') || data.hasOwnProperty('invalid_session'))
                     {
                         alert(translate('Session is expired!'));
                         window.open('./', '_self');
@@ -302,13 +310,14 @@ $(document).ready(function()
                 $('#editor-view').show();
                 $('#editor-view-filename').text(currentFile.get());
 
+                $('#editor-view-var-table > tbody').html('');
                 if(editFrontMatter)
                 {
                     $('.md-toolbar').show();
                     $('#editor-view-front-matter').show();
+                    $('editor-preview').show();
 
                     const frontmater = parseFrontMatterVariables(data);
-                    $('#editor-view-var-table > tbody').html('');
                     if(false !== frontmater)
                     {
                         $.each(frontmater, function(frontmater_key, frontmater_value)
@@ -363,6 +372,7 @@ $(document).ready(function()
                 {
                     $('.md-toolbar').hide();
                     $('#editor-view-front-matter').hide();
+                    $('editor-preview').hide();
                 }
 
                 if(markdownEditor)
@@ -518,6 +528,11 @@ $(document).ready(function()
 
     $('.save-button').click(function()
     {
+        saveFile();
+    });
+
+    function saveFile(fx = null)
+    {
         let frontmatter = '';
         $('#editor-view-var-table > tbody > tr').each(function()
         {
@@ -546,6 +561,18 @@ $(document).ready(function()
             {
                 if(data)
                 {
+                    if(exists(data.success) && !data.success)
+                    {
+                        if(data.hasOwnProperty('session_expired') || data.hasOwnProperty('invalid_session'))
+                        {
+                            alert(translate('Session is expired!'));
+                            window.open('./', '_self');
+                            return;
+                        }
+                        $('#message-dialog').showMessageDialog('error', translate('Open file'), translate('The file could not be edit!'), (data.hasOwnProperty('debug'))? data.debug : null);
+                        return;
+                    }
+
                     const result = JSON.parse(data);
                     if(!result.success)
                     {
@@ -560,6 +587,7 @@ $(document).ready(function()
                         }, 2000);
                     }
                 }
+                if(null != fx) fx();
             },
             error: function()
             {
@@ -568,7 +596,7 @@ $(document).ready(function()
             }
         });
         return false;
-    });
+    }
 
     function closeEditor()
     {
