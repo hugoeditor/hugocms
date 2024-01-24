@@ -43,7 +43,7 @@
     </body>
     <script src="./js/jquery.min.js"></script>
     <script>
-        var cmsLoginLang = "<?php echo $_COOKIE['hugocms_lang']; ?>";
+        var cmsLoginLang = "<?php if(isset($_COOKIE['hugocms_lang'])) echo $_COOKIE['hugocms_lang']; ?>";
 
         function translate(text)
         {
@@ -64,10 +64,10 @@
         function changeLang()
         {
             $('#title').html(translate('HugoCMS Login'));
-            $('#username-label').html(translate('Nickname'));
-            $('#username-input').attr('placeholder', translate('Enter your nickname'));
+            $('#username-label').html(translate('Login'));
+            $('#username').attr('placeholder', translate('Enter your login name'));
             $('#password-label').html(translate('Password'));
-            $('#password-input').attr('placeholder', translate('Enter your password'));
+            $('#password').attr('placeholder', translate('Enter your password'));
             $('#submit-btn').html(translate('Submit'));
         }
         if(cmsLoginLang == "de")

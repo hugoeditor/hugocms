@@ -813,8 +813,8 @@ $(document).ready(function()
         $('#message').text(translate($('#message').text()))
         // Setup
         $('#title').html(translate('Setup'));
-        $('#username-label').html(translate('Nickname'));
-        $('#username-input').attr('placeholder', translate('Enter your nickname'));
+        $('#username-label').html(translate('Login'));
+        $('#username-input').attr('placeholder', translate('Enter your login name'));
         $('#set-password-label').html(translate('Change password'));
         $('#password-label').html(translate('Password'));
         $('#password-input').attr('placeholder', translate('Enter your password'));

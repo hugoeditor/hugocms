@@ -1,7 +1,7 @@
 <?php
 function resolvePath()
 {
-	if(validVar($_POST['mode']) && validVar($_POST['file']))
+	if(isset($_POST['mode']) && !empty($_POST['mode']) && isset($_POST['file']) && !empty($_POST['file']))
 	{
 		if(false !== strpos($_POST['file'], '..'))
 		{

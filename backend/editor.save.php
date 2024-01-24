@@ -5,9 +5,8 @@ require 'editor.restricted.php';
 require 'editor.path.php';
 
 $full_filename = resolvePath();
-writeLog($full_filename);
 
-if(false !== $full_filename && validVar($_POST['text']))
+if(false !== $full_filename && isset($_POST['text'])) && !empty($_POST['text']))
 {
     if(!is_writeable($full_filename))
     {

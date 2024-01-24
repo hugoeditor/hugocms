@@ -99,16 +99,19 @@ function writeUserSetup($data)
         $index = count($login_data) - 1;
     }
 
-    if(validVar($data['username']))
+    if(isset($data['username']) && !empty($data['username']))
     {
         $login_data[$index]['username'] = $data['username'];
         $_SESSION['hugocms_login'] = $data['username'];
     }
-    if(validVar($data['password'])) $login_data[$index]['password'] = password_hash($data['password'], PASSWORD_BCRYPT);
-    if(validVar($data['lang'])) $login_data[$index]['lang'] = $data['lang'];
-    if(validVar($data['mode'])) $login_data[$index]['mode'] = $data['mode'];
+    if(isset($data['password']) && !empty($data['password'])) $login_data[$index]['password'] = password_hash($data['password'], PASSWORD_BCRYPT);
+    if(isset($data['lang']) && !empty(($data['lang']))) $login_data[$index]['lang'] = $data['lang'];
+    if(isset($data['mode']) && !empty($data['mode'])) $login_data[$index]['mode'] = $data['mode'];
 
-    if(!validVar($login_data[$index]['username']) || !validVar($login_data[$index]['password']) || !validVar($login_data[$index]['lang']) || !validVar($login_data[$index]['mode']))
+    if(!isset($login_data[$index]['username']) && empty($login_data[$index]['username'])
+		 || !isset($login_data[$index]['password']) && empty($login_data[$index]['password'])
+		 || !isset($login_data[$index]['lang']) && empty($login_data[$index]['lang'])
+		 || !isset($login_data[$index]['mode']) && empty($login_data[$index]['mode']))
     {
         resultInfo(false, 'Current setup data is incomplete');
         return;
