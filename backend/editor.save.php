@@ -6,7 +6,7 @@ require 'editor.path.php';
 
 $full_filename = resolvePath();
 
-if(false !== $full_filename && isset($_POST['text'])) && !empty($_POST['text']))
+if(false !== $full_filename && isset($_POST['text']) && !empty($_POST['text']))
 {
     if(!is_writeable($full_filename))
     {
