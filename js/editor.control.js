@@ -200,7 +200,7 @@ $(document).ready(function()
 
     $('#config').click(function()
     {
-        const file = { path: (('admin' == cmsMode)? 'cmsroot/config.json' : 'config.json') };
+        const file = { path: (('admin' == cmsMode)? '../config.json' : 'config.json') };
         openEditor(file, true, false);
         return false;
     });
@@ -282,11 +282,11 @@ $(document).ready(function()
     const getFileCallback = function(file)
     {
         if(file.path.endsWith('.html')) openEditor(file, false);
-        else if(file.path.endsWith('.json') || file.path.endsWith('.toml') || file.path.endsWith('.yaml')) openEditor(file, true, false);
-        else openEditor(file);
+        else if(file.path.endsWith('.md')) openEditor(file, true);
+        else openEditor(file, true, false, false);
     }
 
-    const openEditor = function(file, markdownEditor = true, editFrontMatter = true) {
+    const openEditor = function(file, markdownEditor = true, editFrontMatter = true, editContent = true) {
         $.ajax(
         {
             url: 'backend/editor.load.php',
@@ -389,6 +389,9 @@ $(document).ready(function()
                     cmsMarkdownEditor = false;
                     tinymce.get("wysiwyg-editor").setContent(data);
                 }
+
+                if(editContent) $('#editor-preview').show();
+                else $('#editor-preview').hide();
             },
             error: function()
             {
@@ -726,16 +729,19 @@ $(document).ready(function()
         {
             $('#set-mode').text(translate('Normal mode'));
             $('#show-mode').text(text + translate('Easy mode'));
+            $('#config').show();
         }
         else if('normal' === cmsMode)
         {
             $('#set-mode').text(translate('Admin mode'));
             $('#show-mode').text(text + translate('Normal mode'));
+            $('#config').show();
         }
         else if('admin' === cmsMode)
         {
             $('#set-mode').text(translate('Easy mode'));
             $('#show-mode').text(text + translate('Admin mode'));
+            $('#config').hide();
         }
 
         $('#elfinder').elfinder('destroy');
