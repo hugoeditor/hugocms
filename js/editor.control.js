@@ -315,7 +315,7 @@ $(document).ready(function()
                 {
                     $('.md-toolbar').show();
                     $('#editor-view-front-matter').show();
-                    $('editor-preview').show();
+                    $('#editor-preview').show();
 
                     const frontmater = parseFrontMatterVariables(data);
                     if(false !== frontmater)
@@ -746,6 +746,7 @@ $(document).ready(function()
 
         $('#elfinder').elfinder('destroy');
         $('#elfinder').openFileBrowser();
+        changeLang();
     }
 
     $("#lang-en, #setup-lang-en").click(function()
@@ -841,6 +842,10 @@ $(document).ready(function()
 
         elFinder.prototype.i18.en.messages['cmdcms_edit_md'] = "Open in Markdown editor";
         elFinder.prototype.i18.en.messages['cmdcms_edit_html'] = "Open in HTML editor";
+        elFinder.prototype.i18.en.messages['untitled folder'] = 'new_folder';
+        elFinder.prototype.i18.en.messages['untitled file'] = 'new_file.$1';
+
+        elFinder.prototype._options.contextmenu.files.push('Test');
     }
 
     $('#logout').click(function()

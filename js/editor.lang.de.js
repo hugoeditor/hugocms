@@ -81,3 +81,5 @@ languageMap = {
 elFinder.prototype.i18.de.messages.errLogout = "Sitzung ist abgelaufen!";
 elFinder.prototype.i18.de.messages['cmdcms_edit_md'] = "Im Markdown Editor öffnen";
 elFinder.prototype.i18.de.messages['cmdcms_edit_html'] = "Im HTML Editor öffnen";
+elFinder.prototype.i18.de.messages['untitled folder'] = 'neuer_ordner';
+elFinder.prototype.i18.de.messages['untitled file'] = 'neue_datei.$1';

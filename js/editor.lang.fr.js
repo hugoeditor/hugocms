@@ -81,3 +81,5 @@ languageMap = {
 elFinder.prototype.i18.fr.messages.errLogout = "Session expirée!";
 elFinder.prototype.i18.fr.messages['cmdcms_edit_md'] = "Ouvrir dans l'éditeur Markdown";
 elFinder.prototype.i18.fr.messages['cmdcms_edit_html'] = "Ouvrir dans l'éditeur HTML";
+elFinder.prototype.i18.fr.messages['untitled folder'] = 'new_folder';
+elFinder.prototype.i18.fr.messages['untitled file'] = 'new_file.$1';
