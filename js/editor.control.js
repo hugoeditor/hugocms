@@ -21,6 +21,7 @@ $(document).ready(function()
     var cmsUser = '';
     var cmsFrontMatterTemplate = {};
     var cmsMarkdownEditor = true;
+	var cmsHideFrontMatter = true;
 
     function initTinyMCE()
     {
@@ -239,6 +240,26 @@ $(document).ready(function()
         return false;
     });
 
+	function showHideFrontMatter()
+	{
+	}
+
+	$('#toggle-front-matter').click(function()
+	{
+		if($('#editor-view-front-matter').is(':visible'))
+		{
+	        $('#toggle-front-matter').text(translate('Show Front matter variables'));
+			$('#editor-view-front-matter').hide();
+			cmsHideFrontMatter = true;
+		}
+		else
+		{
+	        $('#toggle-front-matter').text(translate('Hide Front matter variables'));
+			$('#editor-view-front-matter').show();
+			cmsHideFrontMatter = false;
+		}
+	});
+
     function parseFrontMatterVariables(data)
     {
         // HugoCMS Front matter variablen auslesen, in einem assoziativen Array speichern und aus dem Text entfernen
@@ -286,7 +307,8 @@ $(document).ready(function()
         else openEditor(file, true, false, false);
     }
 
-    const openEditor = function(file, markdownEditor = true, editFrontMatter = true, editContent = true) {
+    const openEditor = function(file, markdownEditor = true, editFrontMatter = true, editContent = true)
+	{
         $.ajax(
         {
             url: 'backend/editor.load.php',
@@ -314,7 +336,8 @@ $(document).ready(function()
                 if(editFrontMatter)
                 {
                     $('.md-toolbar').show();
-                    $('#editor-view-front-matter').show();
+                    if(!cmsHideFrontMatter) $('#editor-view-front-matter').show();
+                    $('#toggle-front-matter').show();
                     $('#editor-preview').show();
 
                     const frontmater = parseFrontMatterVariables(data);
@@ -372,6 +395,7 @@ $(document).ready(function()
                 {
                     $('.md-toolbar').hide();
                     $('#editor-view-front-matter').hide();
+                    $('#toggle-front-matter').hide();
                     $('editor-preview').hide();
                 }
 
@@ -434,8 +458,8 @@ $(document).ready(function()
                 getFileCallback : getFileCallback,
 
                 handlers : {
-                    error : function(error) {
-                        console.log(error.data.error);
+                    error : function(error)
+					{
                         if('errLogout' == error.data.error)
                         {
                             alert(translate('Session is expired!'));
@@ -443,7 +467,7 @@ $(document).ready(function()
                             data.result = false;
                         }
                     }
-                }
+               }
             },
 
             elFinder.prototype.i18.en.messages.errLogout = "Session is expired!",
@@ -485,27 +509,43 @@ $(document).ready(function()
         );
     }
 
-    elFinder.prototype.commands.cms_edit_md = function() {
-        this.exec = function(hashes) {
-              //implement what the command should do here
-              const file = { path: this.fm.path(hashes[0]) };
-              openEditor(file);
+    elFinder.prototype.commands.cms_edit_md = function()
+	{
+        this.exec = function(hashes)
+		{
+            //implement what the command should do here
+            const file = { path: this.fm.path(hashes[0]) };
+            openEditor(file);
         }
-        this.getstate = function() {
-              //return 0 to enable, -1 to disable icon access
-              return 0;
+        this.getstate = function(hashes)
+		{
+            //return 0 to enable, -1 to disable icon access
+			if(undefined != hashes)
+			{
+				const file = this.fm.file(hashes[0]);
+				return ('directory' !== file.mime)? 0 : -1;
+			}
+            return -1;
         }
     }
 
-    elFinder.prototype.commands.cms_edit_html = function() {
-        this.exec = function(hashes) {
-              //implement what the command should do here
-              const file = { path: this.fm.path(hashes[0]) };
-              openEditor(file, false);
+    elFinder.prototype.commands.cms_edit_html = function()
+	{
+		this.exec = function(hashes)
+		{
+            //implement what the command should do here
+			const file = { path: this.fm.path(hashes[0]) };
+            openEditor(file, false);
         }
-        this.getstate = function() {
-              //return 0 to enable, -1 to disable icon access
-              return 0;
+        this.getstate = function(hashes)
+		{
+            //return 0 to enable, -1 to disable icon access
+			if(undefined != hashes)
+			{
+				const file = this.fm.file(hashes[0]);
+				return ('directory' !== file.mime)? 0 : -1;
+			}
+            return -1;
         }
     }
 
@@ -547,7 +587,7 @@ $(document).ready(function()
                 value = value.trim();
                 if('' != key)
                 {
-                    if(value.startsWith('[') && value.endsWith(']')) frontmatter += key + ': ' + value + '\n';
+                    if(value.startsWith('[') && value.endsWith(']') || 'false' == value || 'true' == value) frontmatter += key + ': ' + value + '\n';
                     else frontmatter += key + ': "' + value + '"\n';
                 }
             }
@@ -744,9 +784,9 @@ $(document).ready(function()
             $('#config').hide();
         }
 
+        changeLang();
         $('#elfinder').elfinder('destroy');
         $('#elfinder').openFileBrowser();
-        changeLang();
     }
 
     $("#lang-en, #setup-lang-en").click(function()
@@ -781,12 +821,14 @@ $(document).ready(function()
     function changeLang()
     {
         // Main menu buttons
+		$('.navbar-nav').hide();
         $('#versioning').html(translate('Versioning'));
         $('#reset').html(translate('Restore'));
         $('#config').html(translate('Configuration'));
         $('#publish').html(translate('Publish'));
         $('#mkdir').html(translate('New directory'));
         $('#new-file').html(translate('New file'));
+		$('.navbar-nav').show();
         // Editor buttons
         $('#close-no-saving').html(translate('Close without saving!'));
         $('#editor-save').html(translate('Save'));
@@ -833,6 +875,7 @@ $(document).ready(function()
         $('#normal-mode-label').html(translate('Normal mode'));
         $('#admin-mode-label').html(translate('Admin mode'));
         //Editor for front matter variables
+        $('#toggle-front-matter').text(translate('Show Front matter variables'));
         $('#editor-view-var-section').text(translate('Front matter variables'));
         $('#editor-view-var-key').html(translate('Variable name'));
         $('#editor-view-var-value').html(translate('Variable value'));
@@ -844,8 +887,6 @@ $(document).ready(function()
         elFinder.prototype.i18.en.messages['cmdcms_edit_html'] = "Open in HTML editor";
         elFinder.prototype.i18.en.messages['untitled folder'] = 'new_folder';
         elFinder.prototype.i18.en.messages['untitled file'] = 'new_file.$1';
-
-        elFinder.prototype._options.contextmenu.files.push('Test');
     }
 
     $('#logout').click(function()

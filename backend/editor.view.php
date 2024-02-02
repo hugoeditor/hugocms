@@ -33,6 +33,10 @@
                 border-width: 1px;
                 border-radius: 4px 4px 0 0;
             }
+
+			.editor-btn {
+				margin-bottom: 1em;
+			}
         </style>
     </head>
     <body>
@@ -56,15 +60,15 @@
                         <a class="navbar-brand" href="<?php echo SITE_URL; ?>" target="_blank"><?php echo $title ?> - HugoCMS</a>
                     </div>
                     <div class="collapse navbar-collapse" id="editor-navbar">
-                    <ul class="nav navbar-nav">
+                    <ul class="nav navbar-nav" style="display:none;">
                         <li>
                             <button type="button" id="versioning" class="btn btn-default navbar-btn"></button>
                             <button type="button" id="reset" class="btn btn-default navbar-btn"></button>
                             <button type="button" id="config" class="btn btn-default navbar-btn"></button>
                             <button type="button" id="publish" class="btn btn-default navbar-btn"></button>
-                            <button type="button" id="logout" class="btn btn-default navbar-btn" style="margin-left:1em;"></button>
                             <button type="button" id="setup" class="btn btn-default navbar-btn"></button>
                             <button type="button" id="set-mode" class="btn btn-default navbar-btn"></button>
+                            <button type="button" id="logout" class="btn btn-default navbar-btn" style="margin-left:1em;"></button>
                         </li>
                     </ul>
                     </div>
@@ -81,10 +85,13 @@
                 </div>
             </nav>
             <div id="editor-area">
-            <div style="margin-bottom: 1em">
-                <strong><span id="editor-view-filename"></span></strong>
-            </div>
-                <div id="editor-view-front-matter">
+			    <div style="margin-bottom: 1em">
+					<div class="row" style="margin-bottom: 1em">
+						<div class="col-md-8"><strong><span id="editor-view-filename"></span></strong></div>
+						<div class="col-md-4" style="text-align: right"><a id="toggle-front-matter" class="text-muted" href="#"></a></div>
+					</div>
+				</div>
+                <div id="editor-view-front-matter" style="display:none;">
                     <table id="editor-view-var-table" class="table" width="100%">
                         <caption id="editor-view-var-section"></caption>
                         <thead>
@@ -105,12 +112,12 @@
                     <textarea id="wysiwyg-editor"></textarea>
                 </div>
                 <div style="margin-top:10px; margin-bottom:3em;">
-                    <button type="button" id="editor-save" class="btn btn-primary save-button"></button>
-                    <button type="button" id="editor-save-close" class="btn btn-primary save-button close-editor"></button>
-                    <button type="button" id="editor-save-publish" class="btn btn-primary save-button close-editor"></button>
-                    <button type="button" id="editor-preview" class="btn btn-primary save-button"></button>
-                    <button type="button" id="spellcheck" class="btn btn-success"></button>
-                    <button type="button" id="close-no-saving" class="btn btn-default"></button>
+                    <button type="button" id="editor-save" class="btn btn-primary save-button editor-btn"></button>
+                    <button type="button" id="editor-save-close" class="btn btn-primary save-button close-editor editor-btn"></button>
+                    <button type="button" id="editor-save-publish" class="btn btn-primary save-button close-editor editor-btn"></button>
+                    <button type="button" id="editor-preview" class="btn btn-primary save-button editor-btn"></button>
+                    <button type="button" id="spellcheck" class="btn btn-success editor-btn"></button>
+                    <button type="button" id="close-no-saving" class="btn btn-default editor-btn"></button>
                 </div>
             </div>
         </div>

@@ -13,7 +13,7 @@ a standalone CMS with online editor to write Hugo compatible content using Markd
 
 ### Short instructions for webmasters
 
-1. Download the tarball and unpack it into the working directory on the web server. [Download here](https://github.com/hugoeditor/hugocms-pro/releases/download/v2.4.121/hugocms-2.4.121.tar.gz)
+1. Download the tarball and unpack it into the working directory on the web server. [Download here](https://github.com/hugoeditor/hugocms/releases/download/)
 
 2. Configure the website's document directory. The directory is the 'public ' directory.
 
