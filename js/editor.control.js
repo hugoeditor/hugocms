@@ -274,10 +274,14 @@ $(document).ready(function()
             {
                 let frontmater_line = frontmater_lines[i];
                 let frontmater_key_value = frontmater_line.split(':');
-                if(frontmater_key_value.length === 2)
+                if(frontmater_key_value.length >= 2)
                 {
                     const key = frontmater_key_value[0].trim();
-                    const value = frontmater_key_value[1].trim();
+                    let value = frontmater_key_value[1].trim();
+					if(frontmater_key_value.length > 2)
+					{
+						for(let s = 2; s < frontmater_key_value.length; s++) value += (':' + frontmater_key_value[s]).trim();
+					}
                     if(value.startsWith('[') && value.endsWith(']'))
                     {
                         const value_array = value.split(',');

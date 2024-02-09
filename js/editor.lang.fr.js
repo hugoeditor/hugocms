@@ -76,6 +76,9 @@ languageMap = {
     "Session is expired!": "Session expirée!",
     "Use template": "Utiliser le modèle",
     "Save and publish": "Sauvegarder et publier",
+	"Show Front matter variables": "Afficher les matter variables",
+	"Hide Front matter variables": "Masquer les matter variables",
+	"Saved": "Enregistré",
 };
 
 elFinder.prototype.i18.fr.messages.errLogout = "Session expirée!";

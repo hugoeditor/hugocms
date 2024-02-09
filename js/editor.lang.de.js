@@ -76,6 +76,9 @@ languageMap = {
     "Session is expired!": "Sitzung ist abgelaufen!",
     "Use template": "Vorlage verwenden",
     "Save and publish": "Speichern und veröffentlichen",
+	"Show Front matter variables": "Front matter variablen anzeigen",
+	"Hide Front matter variables": "Front matter variablen verstecken",
+	"Saved": "Gespeichert",
 };
 
 elFinder.prototype.i18.de.messages.errLogout = "Sitzung ist abgelaufen!";
