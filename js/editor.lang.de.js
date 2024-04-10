@@ -55,7 +55,7 @@ languageMap = {
     "The changes have been rolled back.": "Die Änderungen wurden zurückgesetzt.",
     "The changes could not be rolled back!": "Die Änderungen konnten nicht zurückgesetzt werden!",
     "License for": "Lizensiert für",
-    "Setup": "Einrichtung",
+    "Setup": "Setup",
     "Login": "Login",
     "Enter your login name": "Geben Sie hier Ihre Login ein",
     "Enter your password": "Geben Sie hier Ihre Passwort ein",
@@ -79,6 +79,8 @@ languageMap = {
 	"Show Front matter variables": "Front matter variablen anzeigen",
 	"Hide Front matter variables": "Front matter variablen verstecken",
 	"Saved": "Gespeichert",
+    "Revert to the latest restore point. Continue?": "Zurück zum letzten Wiederherstellungspunkt. Fortfahren?",
+    "Use PurgeCSS": "PurgeCSS verwenden",
 };
 
 elFinder.prototype.i18.de.messages.errLogout = "Sitzung ist abgelaufen!";

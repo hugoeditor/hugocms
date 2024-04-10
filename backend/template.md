@@ -11,5 +11,7 @@ jumbotron-image: "Pfad/Dateiname"
 jumbotron-image-alt: ""
 jumbotron-image-srcset: ""
 keywords: [ "Schlüsselwort1", "Schlüsselwort2", "..." ]
+menu: "portfolio"
+menuitem-name: ""
 draft: true
 ---

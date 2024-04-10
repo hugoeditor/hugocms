@@ -17,6 +17,7 @@ function removeFrontMatterVariables(e)
 $(document).ready(function()
 {
     var cmsMode = 'easy';
+    var cmsUsePurgeCSS = false;
     var cmsLang = 'en';
     var cmsUser = '';
     var cmsFrontMatterTemplate = {};
@@ -159,28 +160,31 @@ $(document).ready(function()
 
     $('#reset').click(function()
     {
-        $.ajax({
-            url: 'backend/editor.control.php',
-            type: 'POST',
-            data: { action: 'editor\\restore', client: $('#hugocms-client').val() },
-            success: function(data)
-            {
-                if(data.hasOwnProperty('session_expired'))
+        if(confirm(translate("Revert to the latest restore point. Continue?")))
+        {
+            $.ajax({
+                url: 'backend/editor.control.php',
+                type: 'POST',
+                data: { action: 'editor\\restore', client: $('#hugocms-client').val() },
+                success: function(data)
                 {
-                    alert(translate('Session is expired!'));
-                    window.open('./', '_self');
-                    return;
+                    if(data.hasOwnProperty('session_expired'))
+                    {
+                        alert(translate('Session is expired!'));
+                        window.open('./', '_self');
+                        return;
+                    }
+                    let message = (data.success)? translate('The changes have been rolled back.') : translate('The changes could not be rolled back!');
+                    $('#message-dialog').showMessageDialog( (data.success)? 'success' : 'error', translate('Restore'), message, (data.hasOwnProperty('debug'))? data.debug : null);
+                    $('#navi, #directory-list').refreshDirectoryView();
+                },
+                error: function()
+                {
+                    console.log('reset ajax call error');
+                    $('#message-dialog').showMessageDialog('error', translate('Connection to the server'), translate('The server could not process the request!'));
                 }
-                let message = (data.success)? translate('The changes have been rolled back.') : translate('The changes could not be rolled back!');
-                $('#message-dialog').showMessageDialog( (data.success)? 'success' : 'error', translate('Restore'), message, (data.hasOwnProperty('debug'))? data.debug : null);
-                $('#navi, #directory-list').refreshDirectoryView();
-            },
-            error: function()
-            {
-                console.log('reset ajax call error');
-                $('#message-dialog').showMessageDialog('error', translate('Connection to the server'), translate('The server could not process the request!'));
-            }
-        });
+            });
+        }
         return false;
     });
 
@@ -228,8 +232,47 @@ $(document).ready(function()
                     window.open('./', '_self');
                     return;
                 }
-                let message = (data.success)? translate('The website has been published.') : translate('The website could not be published!');
-                $('#message-dialog').showMessageDialog( (data.success)? 'success' : 'error', translate('Publish'), message, (data.hasOwnProperty('debug'))? data.debug : null);
+                if(!cmsUsePurgeCSS && data.success)
+                {
+                    let message = (data.success)? translate('The website has been published.') : translate('The website could not be published!');
+                    $('#message-dialog').showMessageDialog( (data.success)? 'success' : 'error', translate('Publish'), message, (data.hasOwnProperty('debug'))? data.debug : null);
+                    setTimeout(function()
+                    {
+                        $('#message-dialog').dialog('close');
+                    }, 2000);
+                }
+                if(!data.success) return;
+                if(cmsUsePurgeCSS)
+                {
+                    $.ajax({
+                        url: 'backend/editor.control.php',
+                        type: 'POST',
+                        data: { action: 'editor\\purgecss', client: $('#hugocms-client').val() },
+                        success: function(data)
+                        {
+                            if(data.hasOwnProperty('session_expired'))
+                            {
+                                alert(translate('Session is expired!'));
+                                window.open('./', '_self');
+                                return;
+                            }
+                            let message = (data.success)? translate('The website has been published an the CSS files have been minimized.') : translate('The CSS files could not be minimized!');
+                            $('#message-dialog').showMessageDialog( (data.success)? 'success' : 'error', 'PurgeCSS', message, (data.hasOwnProperty('debug'))? data.debug : null);
+                            if(data.success)
+                            {
+                                setTimeout(function()
+                                {
+                                   $('#message-dialog').dialog('close');
+                                }, 2000);
+                            }
+                        },
+                        error: function()
+                        {
+                            console.log('purgecss ajax call error');
+                            $('#message-dialog').showMessageDialog('error', translate('Connection to the server'), translate('The server could not process the request!'));
+                        }
+                    });
+                }
             },
             error: function()
             {
@@ -239,10 +282,6 @@ $(document).ready(function()
         });
         return false;
     });
-
-	function showHideFrontMatter()
-	{
-	}
 
 	$('#toggle-front-matter').click(function()
 	{
@@ -873,6 +912,7 @@ $(document).ready(function()
         $('#password-input').attr('placeholder', translate('Enter your password'));
         $('#password-retry-label').html(translate('Retry password'));
         $('#password-retry-input').attr('placeholder', translate('Retry your password'));
+        $('#use-purgecss-label').html(translate('Use PurgeCSS'));
         $('#setup-submit-btn').html(translate('Save'));
         $('#setup-cancel-btn').html(translate('Cancel'));
         $('#easy-mode-label').html(translate('Easy mode'));
@@ -917,6 +957,7 @@ $(document).ready(function()
         $("#normal-mode-input").attr('checked', (('normal' == cmsMode)? 'checked' : ''));
         $("#admin-mode-input").attr('checked', (('admin' == cmsMode)? 'checked' : ''));
         $("#username-input").val(cmsUser);
+        document.getElementById('use-purgecss').checked = cmsUsePurgeCSS;
 
         $( '#directory-view' ).hide();
         $( '#setup-view' ).show();
@@ -935,6 +976,7 @@ $(document).ready(function()
         const password = $('#password-input').val();
         const password_retry = $('#password-retry-input').val();
         cmsMode = $('input[name=mode]:checked').val();
+        cmsUsePurgeCSS = document.getElementById('use-purgecss').checked;
         let data = {};
 
         if($('input[name=set-password]:checked').val() || !$('#set-password').is(':visible'))
@@ -943,7 +985,7 @@ $(document).ready(function()
             {
                 if(password === password_retry)
                 {
-                    data = { 'username': username, 'password': password, 'lang': cmsLang, 'mode': cmsMode };
+                    data = { 'username': username, 'password': password, 'lang': cmsLang, 'mode': cmsMode, 'purgecss': cmsUsePurgeCSS };
                 }
                 else
                 {
@@ -961,7 +1003,7 @@ $(document).ready(function()
         {
             if(username)
             {
-                data = { 'username': username, 'lang': cmsLang, 'mode': cmsMode };
+                data = { 'username': username, 'lang': cmsLang, 'mode': cmsMode, 'purgecss': cmsUsePurgeCSS };
             }
             else
             {
@@ -1033,6 +1075,17 @@ $(document).ready(function()
             data: { action: 'editor\\getSetup', client: $('#hugocms-client').val() },
             success: function(data)
             {
+                if(data.hasOwnProperty('success'))
+                {
+                    if(false == data.success)
+                    {
+                        let error = 'The setup could not be read!';
+                        if('' !== data.debug) error = ' ' + data.debug;
+                        $('#message-dialog').showMessageDialog('error', translate('Connection to the server'), translate(error));
+                        return;
+                    }
+                }
+
                 if(data.lang == "de")
                 {
                     $.getScript("./js/editor.lang.de.js", function()
@@ -1054,6 +1107,7 @@ $(document).ready(function()
                 cmsMode = data.mode;
                 cmsUser = data.login;
                 cmsLang = data.lang;
+                cmsUsePurgeCSS = ('true' == data.purgecss)? true : false;
 
                 $.ajax({
                     url: 'backend/editor.md.template.php',

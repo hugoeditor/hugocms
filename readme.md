@@ -1,13 +1,23 @@
 # HugoCMS Editor
 a standalone CMS with online editor to write Hugo compatible content using Markdown and HTML.
 
-[Read more](https://hugoeditor.com/en/)
+[Read more](https://hugocms.com/en/)
 
 ## Requirements
 
 - current browser
 - php from version 7.4
 - Hugo
+
+## Dependencies
+
+Dependencies on other open source projects:
+
+- [Hugo](https://gohugo.io/)
+- [elFinder](https://github.com/Studio-42/elFinder)
+- [TinyMCE](https://www.tiny.cloud/)
+- [marked](https://github.com/markedjs/marked)
+- [ACE](https://ace.c9.io/)
 
 ## Installation
 
@@ -19,7 +29,9 @@ a standalone CMS with online editor to write Hugo compatible content using Markd
 
 3. Call up the CMS via your own domain with '/edit' appended.
 
-4. Set the password and startup settings for the CMS.
+4. (Optional) Copy the license files sent by mail into the 'hugocms' directory.
+
+5. Set the password and startup settings for the CMS.
 
 ### Short instructions for developers
 

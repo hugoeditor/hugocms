@@ -46,6 +46,7 @@ function getSetup()
 {
     $lang = 'en';
     $mode = 'easy';
+    $purgecss = 'false';
     $login_data = array();
     require SETUP_FILE;
     foreach($login_data as $login_entry)
@@ -57,7 +58,32 @@ function getSetup()
             break;
         }
     }
-    echo '{ "lang": "'.$lang.'", "mode": "'.$mode.'", "login": "'.$_SESSION['hugocms_login'].'" }';
+
+        // Prüft, ob die Konfigurationsdatei existiert
+        if(!file_exists(CONFIG_FILE))
+        {
+            resultInfo(false, "The configuration file file does not exist.");
+            return;
+        }
+    
+        // Liest den Inhalt der Datei
+        $content = file_get_contents(CONFIG_FILE);
+        // Wandelt den JSON-Inhalt in ein PHP-Array um
+        $config = json_decode($content, true);
+    
+        // Prüft, ob der Schlüssel 'params' existiert und ein Array ist
+        if(isset($config['params']) && is_array($config['params']))
+        {
+            // Setzt den Wert von 'minimizeCSS' auf den übergebenen Wert
+            $purgecss = $config['params']['minimized'];
+        }
+        else
+        {
+            resultInfo(false, "The configuration file is in the wrong format.");
+            return;
+        }
+    
+    echo '{ "lang": "'.$lang.'", "mode": "'.$mode.'", "purgecss":"'.$purgecss.'", "login": "'.$_SESSION['hugocms_login'].'" }';
 }
 
 function logout()
@@ -107,6 +133,7 @@ function writeUserSetup($data)
     if(isset($data['password']) && !empty($data['password'])) $login_data[$index]['password'] = password_hash($data['password'], PASSWORD_BCRYPT);
     if(isset($data['lang']) && !empty(($data['lang']))) $login_data[$index]['lang'] = $data['lang'];
     if(isset($data['mode']) && !empty($data['mode'])) $login_data[$index]['mode'] = $data['mode'];
+    if(isset($data['purgecss']) && !empty($data['purgecss'])) $login_data[$index]['purgecss'] = $data['purgecss'];
 
     if(!isset($login_data[$index]['username']) && empty($login_data[$index]['username'])
 		 || !isset($login_data[$index]['password']) && empty($login_data[$index]['password'])
@@ -126,6 +153,45 @@ function writeUserSetup($data)
     if(!file_put_contents(SETUP_FILE, $setup_file))
     {
         resultInfo(false, 'Cannot save login data');
+        return;
+    }
+
+    // Prüft, ob die Konfigurationsdatei existiert
+    if(!file_exists(CONFIG_FILE))
+    {
+        resultInfo(false, "The configuration file file does not exist.");
+        return;
+    }
+
+    // Liest den Inhalt der Datei
+    $content = file_get_contents(CONFIG_FILE);
+    // Wandelt den JSON-Inhalt in ein PHP-Array um
+    $config = json_decode($content, true);
+
+    // Prüft, ob der Schlüssel 'params' existiert und ein Array ist
+    if(isset($config['params']) && is_array($config['params']))
+    {
+        // Setzt den Wert von 'minimizeCSS' auf den übergebenen Wert
+        $config['params']['minimized'] = $data['purgecss'];
+    }
+    else
+    {
+        resultInfo(false, "The configuration file is in the wrong format.");
+        return;
+    }
+
+    // Wandelt das PHP-Array zurück in einen JSON-String
+    $newContent = json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+    if($newContent === false)
+    {
+        resultInfo(false, "Error converting configuration to JSON.");
+        return;
+    }
+
+    // Schreibt den neuen JSON-Inhalt zurück in die Datei
+    if(file_put_contents(CONFIG_FILE, $newContent) === false)
+    {
+        resultInfo(false, "Error writing updated configuration to file.");
         return;
     }
     resultInfo(true);

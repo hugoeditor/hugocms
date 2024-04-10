@@ -79,6 +79,8 @@ languageMap = {
 	"Show Front matter variables": "Afficher les matter variables",
 	"Hide Front matter variables": "Masquer les matter variables",
 	"Saved": "Enregistré",
+    "Revert to the latest restore point. Continue?": "Revenir au dernier point de restauration. Continuer?",
+    "Use PurgeCSS": "Utiliser PurgeCSS",
 };
 
 elFinder.prototype.i18.fr.messages.errLogout = "Session expirée!";

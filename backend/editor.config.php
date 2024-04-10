@@ -8,3 +8,4 @@ define("TEMPLATE_DIR", "../template/");
 define("SETUP_FILE", ROOT_DIR."hugocms/editor.setup.php");
 define("LICENSE_FILE", ROOT_DIR."hugocms/hugocms.license");
 define("USER_FILE", ROOT_DIR."hugocms/hugocms.user");
+define("CONFIG_FILE", ROOT_DIR."config.json");

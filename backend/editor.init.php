@@ -10,19 +10,24 @@ function siteURL()
 }
 define('SITE_URL', siteURL());
 
-$license_error = "";
+$license_error = "Community Edition";
 $license_user = "";
 
-if(file_exists('backend/editor.pro.control.php') && file_exists(USER_FILE) && file_exists(LICENSE_FILE))
+if(file_exists(LICENSE_FILE))
 {
-    $license_user = file_get_contents(USER_FILE);
-    if(!$license_user) $license_error = "Invalid user license file!";
-}
-else if(file_exists('backend/editor.pro.control.php'))
-{
-    $license_error = "Missing license files!";
-}
-else
-{
-    $license_error = "Opensource Edition";
+    if(file_exists(USER_FILE))
+    {
+        $license_user = file_get_contents(USER_FILE);
+        if(!$license_user) $license_user = "";
+    }
+    $licence = "";
+    if(file_exists(LICENSE_FILE))
+    {
+        $license = file_get_contents(LICENSE_FILE);
+        if(!$license) die( editor\resultInfo(false, "Invalid license file!") );
+    }
+    if(!empty($license) && password_verify("cmTvVBCfhEkq8s96", $license))
+    {
+        $license_error = "";
+    }
 }
