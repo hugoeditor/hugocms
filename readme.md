@@ -31,7 +31,7 @@ Dependencies on other open source projects:
 
 3. Call up the CMS via your own domain with '/edit' appended.
 
-4. (Optional) Copy the license files sent by mail into the 'hugocms' directory.
+4. (Optional) Copy the license files sent by email into the “hugocms” directory to use the full functionality of the Pro version.
 
 5. Set the password and startup settings for the CMS.
 
@@ -46,6 +46,8 @@ Starting from the working folder to be used with Hugo:
 3. Clone the *HugoCMS* repo into the 'static/edit/' directory, for example.
 
 4. Create a folder named 'hugocms' in the working folder.
+
+5. (Optional) Copy the license files sent by email into the “hugocms” directory to use the full functionality of the Pro version.
 
 6. Create the *Hugo* configuration file (*config.json*).
 
