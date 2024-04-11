@@ -55,7 +55,7 @@ Starting from the working folder to be used with Hugo:
 
 9. Set the password and startup settings for the CMS.
 
-[Read more](https://hugoeditor.com/en/install-use/)
+[Read more](https://hugocms.com/en/docs/install-use/)
 
 ## License
 
