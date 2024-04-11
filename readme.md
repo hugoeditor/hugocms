@@ -1,4 +1,4 @@
-# HugoCMS Editor
+# HugoCMS (Online-Editor)
 a standalone CMS with online editor to write Hugo compatible content using Markdown and HTML.
 
 [Read more](https://hugocms.com/en/)
@@ -8,12 +8,14 @@ a standalone CMS with online editor to write Hugo compatible content using Markd
 - current browser
 - php from version 7.4
 - Hugo
+- PurgeCSS
 
 ## Dependencies
 
 Dependencies on other open source projects:
 
 - [Hugo](https://gohugo.io/)
+- [PurgeCSS](https://purgecss.com/)
 - [elFinder](https://github.com/Studio-42/elFinder)
 - [TinyMCE](https://www.tiny.cloud/)
 - [marked](https://github.com/markedjs/marked)
@@ -41,7 +43,7 @@ Starting from the working folder to be used with Hugo:
 
 2. Create the new website with Hugo.
 
-3. Clone the *HugoCMS Editor* repo into the 'static/edit/' directory, for example.
+3. Clone the *HugoCMS* repo into the 'static/edit/' directory, for example.
 
 4. Create a folder named 'hugocms' in the working folder.
 
