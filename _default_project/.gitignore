@@ -1,6 +1,3 @@
-static/edit/
 stats
-public
 .lock
 .hugo_build.lock
-mailapi.json

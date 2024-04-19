@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Your Webseite</title>
+    <link>http://theme.hugocms.com/</link>
+    <description>Recent content on Your Webseite</description>
+    <generator>Hugo 0.125.1</generator>
+    <language>en</language>
+    <atom:link href="http://theme.hugocms.com/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Contact form</title>
+      <link>http://theme.hugocms.com/contact/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      <guid>http://theme.hugocms.com/contact/</guid>
+      <description>To change language of labels and messages edit &amp;lsquo;static/js/contact_std_form.js&amp;rsquo; and &amp;lsquo;static/mail-api/messages.json&amp;rsquo;.&#xA;To configure the mail API, edit the file &amp;lsquo;static/mail-api/mailapi.json&amp;rsquo;</description>
+    </item>
+    <item>
+      <title>My first blog post</title>
+      <link>http://theme.hugocms.com/blog/first_blog_post/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      <guid>http://theme.hugocms.com/blog/first_blog_post/</guid>
+      <description>Duplicate this file to create a new blog post. The front matter type is blog do not change this variable.&#xA;If you don&#39;t want a jumbotron image, delete the front matter variables whose names start with jumbotron.</description>
+    </item>
+    <item>
+      <title>My first page</title>
+      <link>http://theme.hugocms.com/my_first_page/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      <guid>http://theme.hugocms.com/my_first_page/</guid>
+      <description>Create a new page listed on the front page:&#xA;1. Open file manager: Navigate to the &#34;Content&#34; folder.&#xA;2. Duplicate page: Right-click on an existing page to open the context menu and select &#34;Duplicate&#34;. Rename the new page, for example, to &#34;my_first_page.html&#34;.&#xA;3. Edit page: Open the duplicated file with a double click and insert the desired content, e.g., &#34;Hello World&#34;.&#xA;4. Edit Front matter variables: Click on &#34;Show Front Matter Variables&#34;</description>
+    </item>
+    <item>
+      <title>Data protection</title>
+      <link>http://theme.hugocms.com/data-protection/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      <guid>http://theme.hugocms.com/data-protection/</guid>
+      <description>Here you can describe what personal data you collect and how you use this user data.</description>
+    </item>
+    <item>
+      <title>Imprint</title>
+      <link>http://theme.hugocms.com/imprint/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      <guid>http://theme.hugocms.com/imprint/</guid>
+      <description>Enter your legally required business contact details here.</description>
+    </item>
+    <item>
+      <title>My second blog post</title>
+      <link>http://theme.hugocms.com/blog/second_blog_post/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      <guid>http://theme.hugocms.com/blog/second_blog_post/</guid>
+      <description>Duplicate this file to create a new blog post. The front matter type is blog do not change this variable.&#xA;If you don&#39;t want a image on headline, delete the front matter variables whose names start with &#39;feature&#39;.&#xA;With the variable &#39;feature-image-left&#39; you can influence whether the image is displayed to the left or right of the heading ( value can be &#39;true&#39; or &#39;false&#39; ).</description>
+    </item>
+    <item>
+      <title>My second page</title>
+      <link>http://theme.hugocms.com/my_second_page/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      <guid>http://theme.hugocms.com/my_second_page/</guid>
+      <description>If you would like an alternative to the jumbotron design, duplicate this file and change the following variables:&#xA;Variable name Variable value (example) Instruction title My first page Change the title of the page here type portfolio Only change if the page should not be linked directly on the front page weight 2 Determines the order on the front page description Describes how a new page can be created Change description of page metaDescription Description of the page for search engines✓ .</description>
+    </item>
+    <item>
+      <title>Promotion or credits line</title>
+      <link>http://theme.hugocms.com/promotion/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      <guid>http://theme.hugocms.com/promotion/</guid>
+      <description>At the end of the page there is a line with the credits for promoting or advertising for a specific product or company.&amp;nbsp;&amp;nbsp;&#xA;You change them by editing the file &#39;themes/inter-data/layouts/partials/promotion.html&#39;. To show or hide the credits, the &#39;promotion&#39; parameter in the central configuration file can be set to true or false.</description>
+    </item>
+    <item>
+      <title>Address and route</title>
+      <link>http://theme.hugocms.com/address_and_route/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      <guid>http://theme.hugocms.com/address_and_route/</guid>
+      <description>In the footer there are areas for the address and the route, the parameters for this are in the central configuration file:&#xA;&amp;nbsp; &amp;nbsp; &#34;params&#34;: {&#xA;&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &#34;addressPartTitle&#34;: &#34;Address&#34;,&#xA;&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &#34;addressName&#34;: &#34;Name of company or author&#34;,&#xA;&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &#34;addressOwner&#34;: &#34;Name of owner&#34;,&#xA;&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &#34;addressStreet&#34;: &#34;Street&#34;,&#xA;&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &#34;addressCity&#34;: &#34;City&#34;,&#xA;&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &#34;addressRegion&#34;: &#34;Region / Locality&#34;,</description>
+    </item>
+    <item>
+      <title>Leagal information section</title>
+      <link>http://theme.hugocms.com/leagalnotice/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      <guid>http://theme.hugocms.com/leagalnotice/</guid>
+      <description>There is a separate area on the home page for legal information. Additional links to the pages can be added in the central configuration file. For example:&#xA;&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &#34;legalnotice&#34;: [&#xA;&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; {&#xA;&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &#34;identifier&#34;: &#34;imprint&#34;,&#xA;&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &#34;name&#34;: &#34;Imprint&#34;,&#xA;&amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &amp;nbsp; &#34;url&#34;: &#34;/imprint/&#34;,</description>
+    </item>
+    <item>
+      <title>Search</title>
+      <link>http://theme.hugocms.com/search/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      <guid>http://theme.hugocms.com/search/</guid>
+      <description>The index file for the search is automatically created when the website is published. The text in the search field can be customized using the &#39;searchInputLabel&#39; and &#39;searchErrorText&#39; parameters in the central configuration file.</description>
+    </item>
+  </channel>
+</rss>

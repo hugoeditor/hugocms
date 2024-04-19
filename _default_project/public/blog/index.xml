@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Blogs on Your Webseite</title>
+    <link>http://theme.hugocms.com/blog/</link>
+    <description>Recent content in Blogs on Your Webseite</description>
+    <generator>Hugo 0.125.1</generator>
+    <language>en</language>
+    <atom:link href="http://theme.hugocms.com/blog/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>My first blog post</title>
+      <link>http://theme.hugocms.com/blog/first_blog_post/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      <guid>http://theme.hugocms.com/blog/first_blog_post/</guid>
+      <description>Duplicate this file to create a new blog post. The front matter type is blog do not change this variable.&#xA;If you don&#39;t want a jumbotron image, delete the front matter variables whose names start with jumbotron.</description>
+    </item>
+    <item>
+      <title>My second blog post</title>
+      <link>http://theme.hugocms.com/blog/second_blog_post/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      <guid>http://theme.hugocms.com/blog/second_blog_post/</guid>
+      <description>Duplicate this file to create a new blog post. The front matter type is blog do not change this variable.&#xA;If you don&#39;t want a image on headline, delete the front matter variables whose names start with &#39;feature&#39;.&#xA;With the variable &#39;feature-image-left&#39; you can influence whether the image is displayed to the left or right of the heading ( value can be &#39;true&#39; or &#39;false&#39; ).</description>
+    </item>
+  </channel>
+</rss>

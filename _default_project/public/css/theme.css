@@ -1,0 +1,64 @@
+.custom-tooltip {
+  --bs-tooltip-bg: var(--bs-primary);
+}
+
+.logo img { width: 330px; height: auto; }
+
+@media (max-width: 1200px){
+	.logo img { width: 220px; height: 50px; }
+}
+
+main p {
+    margin-top: 2rem;
+	margin-bottom: 0.5rem;
+}
+
+main h1 {
+	font-size: 2rem;
+}
+
+main h2 {
+	margin-top: 2rem;
+	font-size: 1.5rem;
+}
+
+main h3 {
+	margin-top: 2rem;
+	font-size: 1.5rem;
+}
+
+main h4 {
+	margin-top: 2rem;
+	font-size: 1.5rem;
+}
+
+main h5 {
+	margin-top: 2rem;
+	font-size: 1.5rem;
+}
+
+.id-card-image {
+	width: 100%;
+	height: auto;
+}
+
+.id-jumbotron-image {
+	width: 100%;
+	height: auto;
+}
+
+.feature {
+        padding-left: 1em;
+        padding-right: 1em;
+        align-items: center;
+    justify-content: center;
+}
+
+.featurette-heading {
+        letter-spacing: -.05rem;
+}
+
+.featurette-img {
+        width: 100%; height: auto;
+}
+

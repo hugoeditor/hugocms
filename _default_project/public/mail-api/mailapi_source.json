@@ -1,0 +1,12 @@
+{
+    "host": "mail.your-server.de",
+    "auth": true,
+    "autoTLS": true,
+    "port": 587,
+    "username": "mail@your-domain.com",
+    "password": "your-password",
+    "from": "mail@your-domain.com",
+    "secure": "tls",
+    "to": "mail@your-domain.com"
+}
+
