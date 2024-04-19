@@ -1,0 +1,63 @@
+	<header>
+		<section class="py-5 container">
+			<div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 g-3">
+				<div class="col">
+					<a class="navbar-brand" href="{{ $.Site.BaseURL }}">
+						<div class="logo"><img src="{{ $.Site.Params.logoURL }}" width="330" height="75" alt="{{ $.Site.Params.logoText }}" class="logo"></div>
+					</a>
+				</div>
+				<div class="col">
+					<a href="tel:{{ $.Site.Params.telref }}" class="btn btn-secondary my-1" content="{{ $.Site.Params.teltext }}">{{ $.Site.Params.teltext }}</a>
+					<a href="https://api.whatsapp.com/send?phone={{ $.Site.Params.mobiltelref }}&amp;text=Anfrage" target="_blank" class="btn btn-secondary my-1"><img src="/images/whatsapp.svg" alt="Whatsapp" width="16" height="16"></a>
+					<div><a href="mailto:{{ $.Site.Params.mailto }}" class="btn btn-secondary my-1">{{ $.Site.Params.mailto }}</a></div>
+				 </div>
+				<div id="search" class="col">
+					<input id="search_input" class="form-control" placeholder="{{ $.Site.Params.searchInputLabel }}" aria-label="Suche">
+                    <input type="hidden" id="search_error" value="{{ $.Site.Params.searchErrorText }}"></input>
+				</div>
+		  </div>
+		</div>
+		<div class="pt-5 container">
+		<nav class="navbar navbar-expand-lg {{ $.Site.Params.navbarClass  }}" aria-label="Inter-Data Theme Navbar">
+			<div class="container">
+				<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarsHugoCMS" aria-controls="navbarsHugoCMS" aria-expanded="false" aria-label="Toggle navigation">
+					<span class="navbar-toggler-icon"></span>
+				</button>
+
+				<div class="collapse navbar-collapse" id="navbarsHugoCMS">
+					<ul class="navbar-nav me-auto mb-2 mb-lg-0">
+						{{ with $.Site.Params.portfolioMenu }}
+						<li class="nav-item dropdown">
+							<a class="nav-link dropdown-toggle active" href="/" data-bs-toggle="dropdown" aria-expanded="false">{{ $.Site.Params.portfolioMenuName }}</a>
+							<ul class="dropdown-menu">
+								{{ range $.Site.RegularPages }}
+								{{ if eq .Params.menu "portfolio" }}
+								<li><a class="dropdown-item" href="{{ .RelPermalink }}">{{ .Param "menuitem-name" }}</a></li>
+								{{ end }}
+								{{ end }}
+							</ul>
+						</li>
+						{{ end }}
+						{{ range .Site.Menus.main }}
+						{{ if .HasChildren }}
+						<li class="nav-item dropdown">
+							<a class="nav-link dropdown-toggle active" href="{{ .URL }}" data-bs-toggle="dropdown" aria-expanded="false">{{ .Name }}</a>
+							<ul class="dropdown-menu">
+								{{ range .Children }}
+								<li><a class="dropdown-item" href="{{ .URL }}">{{ .Name }}</a></li>
+								{{ end }}
+							</ul>
+						</li>
+						{{ else }}
+						<li class="nav-item">
+							<a class="nav-link active" aria-current="page" href="{{ .URL }}" {{ if eq .Identifier "external-shop" }} target="_blank" {{ end }}>{{ .Name }}</a>
+						</li>
+						{{ end }}
+						{{ end }}
+					</ul>
+				</div>
+			</div>
+		</nav>
+		</div>
+	</header>
+

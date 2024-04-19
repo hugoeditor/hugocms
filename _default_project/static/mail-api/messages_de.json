@@ -1,0 +1,9 @@
+{
+    "ERROR_READING_CONFIG": "Es ist ein Fehler aufgetreten: Die Konfigurationsdatei für das Mail-API konnte nicht gelesen werden!",
+    "ERROR_CONFIG_PARAMETER_MISSING": "Es ist ein Fehler aufgetreten: In der Konfigurationsdatei fehlt ein Parameter!",
+    "SUBJECT": "Kontaktanfrage WICHTIG...",
+    "ERROR_WRONG_MIMETYPE": "Es ist ein Fehler aufgetreten: Es können nur Dokumente vom Typ PDF versendet werden.",
+    "SUCCESS": "Die E-Mail wurde versendet.",
+    "ERROR_SENT_MAIL": "Es ist ein Fehler aufgetreten, die Nachricht konnte nicht versendet werden: ",
+    "ERROR_MALFORMED_MAIL": "Es ist ein Fehler aufgetreten: Die Anfrage hat das falsche Format!"
+}

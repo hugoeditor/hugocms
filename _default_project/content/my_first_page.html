@@ -1,0 +1,123 @@
+---
+title: "My first page"
+type: "portfolio"
+weight: "1"
+description: "Describes how a new page can be created"
+metaDescription: "Description of the page for search engines✓ ...✓"
+card-image: "/images/card-image.webp"
+card-image-alt: "Alternative description of the image"
+category: "Home"
+jumbotron-image: "/images/jumbotron-image.webp"
+jumbotron-image-alt: "Alternative description of the image"
+menu: "portfolio"
+menuitem-name: "My first page with jumbotron"
+---
+<p>Create a new page listed on the front page:</p>
+<p style="padding-left: 40px;"><strong>1. Open file manager:</strong> Navigate to the "Content" folder.</p>
+<p style="padding-left: 40px;"><strong>2. Duplicate page:</strong> Right-click on an existing page to open the context menu and select "Duplicate". Rename the new page, for example, to "my_first_page.html".</p>
+<p style="padding-left: 40px;"><strong>3. Edit page:</strong> Open the duplicated file with a double click and insert the desired content, e.g., "Hello World".</p>
+<p style="padding-left: 40px;"><strong>4. Edit Front</strong><strong> matter variables:</strong> Click on "Show Front Matter Variables" to change the title and description of the page.<br><br></p>
+<table style="width: 99.5471%; border-collapse: collapse; border-width: 1px;" border="1">
+<tbody>
+<tr>
+<td style="width: 13.4409%; border-width: 1px;"><strong>Variable name</strong></td>
+<td style="width: 35.1254%; border-width: 1px;"><strong>Variable value (example)</strong></td>
+<td style="width: 51.4337%; border-width: 1px;"><strong>Instruction</strong></td>
+</tr>
+<tr>
+<td style="width: 13.4409%; border-width: 1px;">title</td>
+<td style="width: 35.1254%; border-width: 1px;">My first page</td>
+<td style="width: 51.4337%; border-width: 1px;">Change the title of the page here</td>
+</tr>
+<tr>
+<td style="width: 13.4409%; border-width: 1px;">type</td>
+<td style="width: 35.1254%; border-width: 1px;">portfolio</td>
+<td style="width: 51.4337%; border-width: 1px;">Only change if the page should not be linked directly on the front page</td>
+</tr>
+<tr>
+<td style="width: 13.4409%; border-width: 1px;">weight</td>
+<td style="width: 35.1254%; border-width: 1px;">1</td>
+<td style="width: 51.4337%; border-width: 1px;">Determines the order on the front page</td>
+</tr>
+<tr>
+<td style="width: 13.4409%; border-width: 1px;">description</td>
+<td style="width: 35.1254%; border-width: 1px;">Describes how a new page can be created</td>
+<td style="width: 51.4337%; border-width: 1px;">Change description of page</td>
+</tr>
+<tr>
+<td style="width: 13.4409%; border-width: 1px;">metaDescription</td>
+<td style="width: 35.1254%; border-width: 1px;">Description of the page for search engines✓ ...✓</td>
+<td style="width: 51.4337%; border-width: 1px;">Change description for search engines her</td>
+</tr>
+<tr>
+<td style="width: 13.4409%; border-width: 1px;">card-image</td>
+<td style="width: 35.1254%; border-width: 1px;">/images/card-image.webp</td>
+<td style="width: 51.4337%; border-width: 1px;">Change the filename and path for an image to be displayed on the main page</td>
+</tr>
+<tr>
+<td style="width: 13.4409%; border-width: 1px;">card-image-alt</td>
+<td style="width: 35.1254%; border-width: 1px;">Alternative description of the image</td>
+<td style="width: 51.4337%; border-width: 1px;">Change alternative description of the image</td>
+</tr>
+<tr>
+<td style="width: 13.4409%; border-width: 1px;">category</td>
+<td style="width: 35.1254%; border-width: 1px;">Home</td>
+<td style="width: 51.4337%; border-width: 1px;">Change the name of the category under which the page should be grouped</td>
+</tr>
+<tr>
+<td style="width: 13.4409%; border-width: 1px;">jumbotron-image</td>
+<td style="width: 35.1254%; border-width: 1px;">/images/jumbotron-image.webp</td>
+<td style="width: 51.4337%; border-width: 1px;">Change the path and file name for the large image at the top of the page</td>
+</tr>
+<tr>
+<td style="width: 13.4409%; border-width: 1px;">jumbotron-image-alt</td>
+<td style="width: 35.1254%; border-width: 1px;">Alternative description of the jumbotron image</td>
+<td style="width: 51.4337%; border-width: 1px;">Change alternative description of the large image</td>
+</tr>
+<tr>
+<td style="width: 13.4409%; border-width: 1px;">menu</td>
+<td style="width: 35.1254%; border-width: 1px;">portfolio</td>
+<td style="width: 51.4337%; border-width: 1px;">Remove this variable if you do not want the page to be listed in the first dropdown menu</td>
+</tr>
+<tr>
+<td style="width: 13.4409%; border-width: 1px;">menuitem-name</td>
+<td style="width: 35.1254%; border-width: 1px;">My first page with jumbotron</td>
+<td style="width: 51.4337%; border-width: 1px;">Name of the menu entry in the first menu</td>
+</tr>
+</tbody>
+</table>
+<p style="padding-left: 40px;"><strong>5. Rename first dropdown menu</strong></p>
+<p style="padding-left: 40px;">Open the central configuration file by clicking on the button labeled 'Configuration' and look for the entry 'portfolioMenuName' and change the value. You can disable the first dropdown menu if you set 'portfolioMenu' to false.</p>
+<p style="padding-left: 40px;"><strong>6. Define the other menu entry:</strong> Open the central configuration file by clicking on the button labeled 'Configuration' and look for the entry "menu". Change the variables of the main menu items (for example "FAQ") and the submenu entries (for example "My first page").</p>
+<p style="padding-left: 40px;"><code>{<br>&nbsp; &nbsp; "identifier": "contact",<br>&nbsp; &nbsp; "name": "Contact",<br>&nbsp; &nbsp; "weight": 1<br>},<br></code></p>
+<table style="width: 99.5471%; border-collapse: collapse; border-width: 1px;" border="1">
+<tbody>
+<tr>
+<td style="width: 13.4803%; border-width: 1px;"><strong>Variable name</strong></td>
+<td style="width: 35.0857%; border-width: 1px;"><strong>Variable value (example)</strong></td>
+<td style="width: 51.4282%; border-width: 1px;"><strong>Instruction</strong></td>
+</tr>
+<tr>
+<td style="width: 13.4803%; border-width: 1px;">"identifier"</td>
+<td style="width: 35.0857%; border-width: 1px;">"contact"</td>
+<td style="width: 51.4282%; border-width: 1px;">Change the identifier must be unique</td>
+</tr>
+<tr>
+<td style="width: 13.4803%; border-width: 1px;">"name"</td>
+<td style="width: 35.0857%; border-width: 1px;">"Contact"</td>
+<td style="width: 51.4282%; border-width: 1px;">Change the Name of menu entry displayed on front page</td>
+</tr>
+<tr>
+<td style="width: 13.4803%; border-width: 1px;">"url"</td>
+<td style="width: 35.0857%; border-width: 1px;">"/my_first_page/"</td>
+<td style="width: 51.4282%; border-width: 1px;">Change the URL for the page</td>
+</tr>
+<tr>
+<td style="width: 13.4803%; border-width: 1px;">"weight"</td>
+<td style="width: 35.0857%; border-width: 1px;">2</td>
+<td style="width: 51.4282%; border-width: 1px;">Set the order of the menu items on the front page</td>
+</tr>
+</tbody>
+</table>
+<p style="padding-left: 40px;"><strong>7. Final step:</strong> As a final step, simply delete the files in the content directory that you no longer need.</p>
+<p style="padding-left: 40px;">To customize the navbar, the file 'static/css/custom.css' can be revised.</p>

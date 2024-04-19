@@ -1,0 +1,96 @@
+{
+    "ignoreFiles": [
+        ".git/.*",
+        ".gitignore"
+    ],
+    "baseURL": "http://theme.hugocms.com/",
+    "languageCode": "en",
+    "title": "Your Webseite",
+    "theme": "inter-data",
+    "enableRobotsTXT": true,
+    "outputs": {
+        "home": [
+            "HTML",
+            "RSS",
+            "JSON"
+        ]
+    },
+    "markup": {
+        "defaultMarkdownHandler": "goldmark",
+        "goldmark": {
+            "renderer": {
+                "unsafe": true
+            }
+        }
+    },
+    "params": {
+        "addressPartTitle": "Address",
+        "addressName": "Name of company or author",
+        "addressOwner": "Name of owner",
+        "addressStreet": "Street",
+        "addressCity": "City",
+        "addressRegion": "Region / Locality",
+        "addressPostcode": "Postcode",
+        "addressCountry": "Country",
+        "mailto": "info@hugocms.com",
+        "mobiltelref": "+491757880999",
+        "mobilteltext": "+491757880999",
+        "telref": "+4933435804020",
+        "teltext": "+49 - 33435 - 80 40 20",
+        "approachRouteTitle": "Approach route",
+        "googleMapsLink": "https://www.google.com/maps/place/Berlin/@52.5069386,13.2599299,11z/data=!3m1!4b1!4m6!3m5!1s0x47a84e373f035901:0x42120465b5e3b70!8m2!3d52.5200066!4d13.404954!16zL20vMDE1NnE?entry=ttu",
+        "latitude": "52.5069386",
+        "longitude": "13.2599299",
+        "approachRoute": "/images/approach.webp",
+        "approachRouteAltTag": "Approach route",
+        "legalnoticeTitle": "Legal information",
+        "logoURL": "/images/logo.webp",
+        "logoText": "My Web presents",
+        "schemaLogoURL": "http://localhost/images/logo.webp",
+        "schemaBusinessType": "MyBusiness",
+        "keywords": [
+            "Keyword1",
+            "Keyword2",
+            "Keyword3"
+        ],
+        "metaDescription": "My website with blog\u2713",
+        "customCSS": "/css/custom.css",
+        "navbarClass": "navbar-light id-custom-navbar",
+        "searchInputLabel": "Search",
+        "searchErrorText": "Search: Please use at least 3 letters.",
+        "promotion": true,
+        "portfolioMenu": true,
+        "portfolioMenuName": "FAQ",
+        "minimizedCSS": false
+    },
+    "menu": {
+        "main": [
+            {
+                "identifier": "contact",
+                "name": "Contact",
+                "url": "/contact/",
+                "weight": 1
+            },
+            {
+                "identifier": "blog",
+                "name": "Blog",
+                "url": "/blog/",
+                "weight": 2
+            }
+        ],
+        "legalnotice": [
+            {
+                "identifier": "imprint",
+                "name": "Imprint",
+                "url": "/imprint/",
+                "weight": 1
+            },
+            {
+                "identifier": "data-protection",
+                "name": "Data protection",
+                "url": "/data-protection/",
+                "weight": 2
+            }
+        ]
+    }
+}

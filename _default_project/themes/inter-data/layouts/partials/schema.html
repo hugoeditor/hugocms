@@ -1,0 +1,70 @@
+		{{ if or .IsHome .IsPage }}
+			{{ if .IsHome }}
+				<script type="application/ld+json">
+				{
+					"@context": "https://schema.org",
+					"@type": "{{ $.Site.Params.schemaBusinessType }}",
+					"logo": "{{ $.Site.Params.schemaLogoURL | absURL }}",
+				    "name": "{{ $.Site.Params.firmenname  }}",
+					"description": "{{ $.Site.Params.metaDescription }}",
+					"address": {
+						"@type": "PostalAddress",
+						"streetAddress": "{{ $.Site.Params.firmenstrasse }}",
+						"addressLocality": "{{ $.Site.Params.firmenort }}",
+					    "addressRegion": "{{ $.Site.Params.firmenregion }}",
+						"postalCode": "{{ $.Site.Params.firmenplz }}",
+						"addressCountry": "{{ $.Site.Params.firmenland }}"
+					 },
+					"geo": {
+						"@type": "GeoCoordinates",
+						"latitude": {{ $.Site.Params.latitude }},
+						"longitude": {{ $.Site.Params.longitude }}
+					},
+					"url": "{{ $.Site.BaseURL | absURL }}",
+					"telephone": "{{ $.Site.Params.telref | safeHTML }}"{{ if .Site.Params.keywords }},
+					"keywords": [ {{ range $index, $keyword := .Site.Params.keywords }}{{ if $index }}, {{ end }}"{{ $keyword }}" {{ end }}]{{ end }}
+				}
+				</script>
+			{{ else }}
+				<script type="application/ld+json">
+				[{
+					"@context": "https://schema.org",
+					"@type": "{{ $.Params.schemaBusinessType }}",{{ if eq $.Params.schemaBusinessType "Service" }}
+					"serviceType": {{ if .Params.schemaServiceType }}"{{ $.Params.schemaServiceType }}"{{ else }}"{{ .Title }}"{{ end }},{{ end }}{{ if or .Params.metaDescription .Params.description }}
+					"description": {{ if or .Params.metaDescription }} "{{ $.Params.metaDescription }}", {{ else }} "{{ $.Params.description }}",{{ end }}{{ end }}
+					"provider": {
+						"@type": "{{ $.Site.Params.schemaBusinessType }}",
+						"name": "{{ $.Site.Params.firmenname }}",
+						"url": "{{ $.Site.BaseURL | absURL }}"
+					}{{ if .Params.keywords }},
+					"keywords": [ {{ range $index, $keyword := .Params.keywords }}{{ if $index }}, {{ end }}"{{ $keyword }}" {{ end }}]{{ end }}
+				},{
+					"@context": "https://schema.org",
+					"@type": "BreadcrumbList",
+					"itemListElement": [{
+						"@type": "ListItem",
+						"position": 1,
+						"name": "{{ (.Site.GetPage .Section).Title }}",
+						"item": "{{ $.Section | absURL  }}"
+						},{
+						"@type": "ListItem",
+						"position": 2,
+						"name": "{{ $.Title }}",
+						"item": "{{ $.RelPermalink | absURL }}"
+					}]
+   				}]
+				</script>
+			{{ end }}
+		{{ else }}
+			<script type="application/ld+json">
+			{
+				"@context": "https://schema.org",
+				"itemListElement": [{ {{ range $index, $page := .RegularPages }}{{ if $index }} },{ {{ end }}
+						"@type": "ListItem",
+						"position": {{ add $index 1 }},
+						"url": "{{ $.RelPermalink | absURL }}"
+					{{ end }} }]
+			}
+			</script>
+		{{ end }}
+

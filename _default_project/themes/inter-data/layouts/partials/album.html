@@ -1,0 +1,27 @@
+		<div class="album py-4 bg-body">
+	    <div class="container">
+			<div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 g-3">
+			{{ range where .Site.RegularPages "Type" "portfolio" }}
+				<div class="col">
+					<div class="card shadow-sm">
+						{{ if isset .Params "description" }}
+							<a href="{{ .File.ContentBaseName }}/" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-custom-class="custom-tooltip" data-bs-title="{{ .Params.description }}"><img src="{{ .Param "card-image" }}" width="668" height="336" alt="{{ .Param "card-image-alt" }}" class="id-card-image"></a>
+						{{ else }}
+							<a href="{{ .File.ContentBaseName }}/"><img src="{{ .Param "card-image" }}" width="668" height="336" alt="{{ .Param "card-image-alt" }}" class="id-card-image"></a>
+						{{ end }}
+						<div class="card-body">
+							<div class="d-flex justify-content-center align-items-center">
+							{{ if isset .Params "description" }}
+								<a href="{{ .File.ContentBaseName }}/" class="btn btn-secondary my-1" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-custom-class="custom-tooltip" data-bs-title="{{ .Params.description }}">{{ .Name }}</a>
+							{{ else }}
+								<a href="{{ .File.ContentBaseName }}/" class="btn btn-secondary my-1">{{ .Name }}</a>
+							{{ end }}
+							</div>
+						</div>
+					</div>
+				</div>
+			{{ end }}
+			</div>
+		</div>
+		</div>
+

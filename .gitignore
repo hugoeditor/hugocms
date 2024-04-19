@@ -1,0 +1,12 @@
+/*
+
+!/config/
+!/_default_project/
+!/hugo/
+!/hugocms/
+!/log/
+!public
+!/purgecss/
+!publish.sh
+!.gitignore
+!.gitignore

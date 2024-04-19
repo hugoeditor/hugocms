@@ -1,0 +1,9 @@
+{
+    "ERROR_READING_CONFIG": "An error has occurred: The Mail API configuration file could not be read!",
+    "ERROR_CONFIG_PARAMETER_MISSING": "An error has occurred: A parameter is missing from the configuration file!",
+    "SUBJECT": "Contact request IMPORTANT...",
+    "ERROR_WRONG_MIMETYPE": "An error has occurred: Only documents of type PDF can be sent.",
+    "SUCCESS": "The email has been sent.",
+    "ERROR_SENT_MAIL": "An error has occurred and the message could not be sent: ",
+    "ERROR_MALFORMED_MAIL": "An error has occurred: the request is in the wrong format!"
+}

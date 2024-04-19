@@ -1,0 +1,33 @@
+	<footer class="text-muted py-5">
+	<div class="container">
+		<div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 g-3">
+
+			<div class="col">
+				<p class="h5">{{ $.Site.Params.addressPartTitle }}</p>
+				<div>{{ $.Site.Params.addressName }}</div>
+				<div>{{ $.Site.Params.addressOwner }}</div>
+				<div>{{ $.Site.Params.addressStreet }}</div>
+				<div>{{ $.Site.Params.addressPostcode }} {{ $.Site.Params.addressCity }}</div>
+				<div>{{ $.Site.Params.addressCountry }}</div>
+			</div>
+			<div class="col">
+				<p class="h5" id="legalnotice">{{ $.Site.Params.legalnoticeTitle }}</p>
+				{{ range .Site.Menus.legalnotice }}
+				<div><a href="{{ .URL }}">{{.Name }}</a></div>
+				{{ end }}
+			</div>
+			<div class="col">
+				<p class="h5">{{ $.Site.Params.approachRouteTitle }}</p>
+				<a href="{{ $.Site.Params.googleMapsLink  }}" target="_blank">
+					<img src="{{ $.Site.Params.approachRoute }}" alt="{{ $.Site.Params.approachRouteAltTag }}" width="300" height="150" />
+				</a>
+			</div>
+
+		</div>
+	</div>
+
+	{{ if isset $.Site.Params "promotion" }}
+        {{ if eq $.Site.Params.promotion true }} {{- partial "promotion.html" . -}} {{ end }}
+	{{ end }}
+	</footer>
+

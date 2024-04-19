@@ -6,9 +6,8 @@ a standalone CMS with online editor to write Hugo compatible content using Markd
 ## Requirements
 
 - current browser
+- web hosting or web server with linux
 - php from version 7.4
-- Hugo
-- PurgeCSS
 
 ## Dependencies
 
@@ -23,41 +22,23 @@ Dependencies on other open source projects:
 
 ## Installation
 
-### Short instructions for webmasters
+### Short instructions
 
-1. Download the tarball and unpack it into the working directory on the web server. [Download here](https://github.com/hugoeditor/hugocms/releases/)
+1. Download the tarball and unpack it or clone the git repo into the working directory on the web server. [Download here](https://github.com/hugoeditor/hugocms/releases/)
 
-2. Configure the website's document directory. The directory is the 'public ' directory.
+2. Configure the website's document directory with your web host. The directory is the “public” directory (a symbolic link to '_default_project/public/'.
 
 3. Call up the CMS via your own domain with '/edit' appended.
 
-4. (Optional) Copy the license files sent by email into the “hugocms” directory to use the full functionality of the Pro version.
+4. Set the password and startup settings for the CMS.
 
-5. Set the password and startup settings for the CMS.
+### Pro version
 
-### Short instructions for developers
+If you want to support us you can buy a license for the pro version with full functionality.
 
-Starting from the working folder to be used with Hugo:
+### Complete documentation
 
-1. Install [Hugo](https://gohugo.io/) in the folder named 'hugo'
-
-2. Create the new website with Hugo.
-
-3. Clone the *HugoCMS* repo into the 'static/edit/' directory, for example.
-
-4. Create a folder named 'hugocms' in the working folder.
-
-5. (Optional) Copy the license files sent by email into the “hugocms” directory to use the full functionality of the Pro version.
-
-6. Create the *Hugo* configuration file (*config.json*).
-
-7. Create the the website with *Hugo*.
-
-8. Call up the CMS via your own domain with '/edit' appended.
-
-9. Set the password and startup settings for the CMS.
-
-[Read more](https://hugocms.com/en/docs/install-use/)
+[You can read here >>.](https://hugocms.com/en/docs/install-use/)
 
 ## License
 

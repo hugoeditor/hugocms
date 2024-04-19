@@ -1,0 +1,45 @@
+{{ define "main" }}
+	<main id="main_section">
+		<div class="album py-5 bg-body">
+	    <div class="container">
+			{{ if eq .Section "blog" }}
+				<h1>{{ .Site.Params.Blog | default "Blog"}}</h1>
+				{{ range where .Site.RegularPages "Section" "blog" }}
+				<p class="pt-2">
+					<h2><a href="{{ .RelPermalink }}">{{ .Title }}</a></h2>
+					<p>{{ .Summary }}</p>
+				</p>
+				{{ end }}
+			{{ end }}
+			{{ if eq .Section "infos" }}
+				<h1>{{ .Site.Params.NewsAndInfos | default "News & Infos"}}</h1>
+				{{ range where .Site.RegularPages "Section" "infos" }}
+				<p class="pt-2">
+					<h2><a href="{{ .RelPermalink }}">{{ .Title }}</a></h2>
+					<p>{{ .Summary }}</p>
+				</p>
+				{{ end }}
+			{{ end }}
+			{{ if eq .Section "job-karriere" }}
+				<h1>{{ .Site.Params.Karriere | default "Jobs & Karriere"}}</h1>
+				{{ range where .Site.RegularPages "Section" "job-karriere" }}
+				<p class="pt-2">
+					<h2><a href="{{ .RelPermalink }}">{{ .Title }}</a></h2>
+					<p>{{ .Summary }}</p>
+				</p>
+				{{ end }}
+			{{ end }}
+			{{ if eq .Section "kontakt" }}
+				<h1>{{ .Site.Params.Kontakt | default "Kontakt"}}</h1>
+				{{ .Content }}
+				{{ range where .Site.RegularPages "Section" "kontakt" }}
+				<p class="pt-2">
+					<h2><a href="{{ .RelPermalink }}">{{ .Title }}</a></h2>
+					<p>{{ .Summary }}</p>
+				</p>
+				{{ end }}
+			{{ end }}
+		</div>
+		</div>
+	</main>
+{{ end }}

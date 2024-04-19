@@ -1,0 +1,46 @@
+{{ define "main" }}
+	<main id="main_section">
+		<div class="album py-5 bg-body">
+		    <div class="container">
+				{{ if isset .Params "homelink" }}
+					<a href="{{ .Param "homelink" }}">{{ if isset .Params "category"  }}{{ .Param "category" }}{{ else  }}{{ (.Site.GetPage .Section).Title }}{{ end }}</a> &gt; {{ .Title  }}</p>
+				{{ else }}
+					{{ if ne .Section "" }}
+						<a href="{{ $.Section | absURL  }}">{{ if isset .Params "category"  }}{{ .Param "category" }}{{ else  }}{{ (.Site.GetPage .Section).Title }}{{ end }}</a> &gt; {{ .Title  }}</p>
+					{{ else }}
+						<a href="{{ $.Site.Params.BaseURL | absURL }}">{{ if isset .Params "category"  }}{{ .Param "category" }}{{ else  }}{{ (.Site.GetPage .Section).Title }}{{ end }}</a> &gt; {{ .Title  }}</p>
+					{{ end }}
+				{{ end }}
+				{{ if isset .Params "jumbotron-image" }}
+				<section class="jumbotron text-center">
+					<div class="container">
+						<img src="{{ .Param "jumbotron-image"  }}" width="1272" height="541" {{ if isset .Params "jumbotron-image-sizes" }} sizes="{{ .Param "jumbotron-image-sizes"  }}" {{ end  }} {{ if isset .Params "jumbotron-image-srcset" }} srcset="{{ .Param "jumbotron-image-srcset"  }}" {{ end  }} alt="{{ .Param "jumbotron-image-alt" }}" class="id-jumbotron-image">
+					</div>
+				</section>
+				{{ end }}
+                {{ if isset .Params "feature-image" }}
+                <div class="row feature">
+                    <div class="col-md-5{{ if .Param "feature-image-left" }} order-md-2{{ end }}">
+                        <h1 class="featurette-heading" style="margin-top:0.5em;">{{ .Title }}</h1><div class="h3 text-muted">{{ .Params.description }}</div>
+                        <div class="lead">{{ .Param "feature" }}</div>
+                    </div>
+                    <div class="col-md-7{{ if .Param "feature-image-left" }} order-md-1{{ end }} pt-4">
+                        <img class="featurette-img" src="{{ .Param "feature-image" }}" width="796" height="346" alt="{{ .Param "feature-image-alt" }}">
+                        {{ if isset .Params "feature-image-caption" }}<a href="{{ .Param "feature-image-source" }}" target="_blank" class="small link-secondary">{{ .Param "feature-image-caption" }}</a>{{ end }}
+                     </div>
+                 </div>
+                {{ else }}
+				<section class="container py-5">
+				<h1>{{ .Title }}</h1>
+				    {{ if isset .Params "description" }}
+					<p class="h4">{{ .Params.description }}</p>
+    				{{ end }}
+                {{ end }}
+				<div>
+					{{ .Content }}
+				</div>
+				</section>
+			</div>
+		</div>
+	</main>
+{{ end }}

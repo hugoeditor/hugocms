@@ -1,0 +1,24 @@
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		{{ if .IsHome }}<meta name="description" content="{{ $.Site.Params.metaDescription }}">{{ else }}{{ if .Params.metaDescription }}<meta name="description" content="{{ .Params.metaDescription }}">{{ end }}{{ end }}
+		{{ if .IsHome }}<meta name="keywords" content="{{ range $index, $keyword := .Site.Params.keywords }}{{ if $index }}, {{ end }}{{ $keyword }}{{ end }}">{{ else }}{{ if .Params.keywords }}<meta name="keywords" content="{{ range $index, $keyword := .Params.keywords }}{{ if $index }}, {{ end }}{{ $keyword }}{{ end }}">{{ end }}{{ end }}
+		<meta property="og:type" content="website">
+		<meta property="og:url" content="{{ $.RelPermalink | absURL }}">
+		<meta property="og:title" content="{{ .Title }}">
+		{{ if .IsHome }}<meta property="og:image" content="{{ $.Site.Params.schemaLogoURL | absURL }}">{{ else }}{{ if isset .Params "jumbotron-image" }}<meta property="og:image" content="{{ .Param "jumbotron-image" | absURL }}">{{ end }}{{ end }}
+		{{ if .IsHome }}<meta property="og:description" content="{{ $.Site.Params.metaDescription }}">{{ else }}{{ if .Params.metaDescription }}<meta property="og:description" content="{{ .Params.metaDescription }}">{{ end }}{{ end }}
+		<title>{{ .Title }}</title>
+		{{ with $.Site.Params.minimizedCSS }}
+		<link href="/css/minimized.css" rel="stylesheet">
+		{{ else }}
+		<link href="/css/bootstrap/bootstrap.min.css" rel="stylesheet">
+		{{ end }}
+		<link href="/css/theme.css" rel="stylesheet">
+		<link href="{{ $.Site.Params.customCSS }}" rel="stylesheet">
+		<link rel="apple-touch-icon" sizes="180x180" href="/favicon/apple-touch-icon.png">
+		<link rel="icon" type="image/png" sizes="32x32" href="/favicon/favicon-32x32.png">
+		<link rel="icon" type="image/png" sizes="16x16" href="/favicon/favicon-16x16.png">
+		<link rel="manifest" href="/favicon/site.webmanifest">
+		<meta name="msapplication-TileColor" content="#da532c">
+		<meta name="theme-color" content="#ffffff">
+
