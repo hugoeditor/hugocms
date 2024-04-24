@@ -178,43 +178,46 @@ function writeUserSetup($data)
         return;
     }
 
-    // Prüft, ob die Konfigurationsdatei existiert
-    if(!file_exists(CONFIG_FILE))
+    if(isset($data['purgecss']))
     {
-        resultInfo(false, "The configuration file file does not exist.");
-        return;
-    }
+        // Prüft, ob die Konfigurationsdatei existiert
+        if(!file_exists(CONFIG_FILE))
+        {
+            resultInfo(false, "The configuration file file does not exist.");
+            return;
+        }
 
-    // Liest den Inhalt der Datei
-    $content = file_get_contents(CONFIG_FILE);
-    // Wandelt den JSON-Inhalt in ein PHP-Array um
-    $config = json_decode($content, true);
+        // Liest den Inhalt der Datei
+        $content = file_get_contents(CONFIG_FILE);
+        // Wandelt den JSON-Inhalt in ein PHP-Array um
+        $config = json_decode($content, true);
 
-    // Prüft, ob der Schlüssel 'params' existiert und ein Array ist
-    if(isset($config['params']) && is_array($config['params']))
-    {
-        // Setzt den Wert von 'minimizeCSS' auf den übergebenen Wert
-        $config['params']['minimizedCSS'] = (strcmp($data['purgecss'], 'true') === 0) ? true : false;
-    }
-    else
-    {
-        resultInfo(false, "The configuration file is in the wrong format.");
-        return;
-    }
+        // Prüft, ob der Schlüssel 'params' existiert und ein Array ist
+        if(isset($config['params']) && is_array($config['params']))
+        {
+            // Setzt den Wert von 'minimizeCSS' auf den übergebenen Wert
+            $config['params']['minimizedCSS'] = (strcmp($data['purgecss'], 'true') === 0) ? true : false;
+        }
+        else
+        {
+            resultInfo(false, "The configuration file is in the wrong format.");
+            return;
+        }
 
-    // Wandelt das PHP-Array zurück in einen JSON-String
-    $newContent = json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-    if($newContent === false)
-    {
-        resultInfo(false, "Error converting configuration to JSON.");
-        return;
-    }
+        // Wandelt das PHP-Array zurück in einen JSON-String
+        $newContent = json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        if($newContent === false)
+        {
+            resultInfo(false, "Error converting configuration to JSON.");
+            return;
+        }
 
-    // Schreibt den neuen JSON-Inhalt zurück in die Datei
-    if(file_put_contents(CONFIG_FILE, $newContent) === false)
-    {
-        resultInfo(false, "Error writing updated configuration to file.");
-        return;
+        // Schreibt den neuen JSON-Inhalt zurück in die Datei
+        if(file_put_contents(CONFIG_FILE, $newContent) === false)
+        {
+            resultInfo(false, "Error writing updated configuration to file.");
+            return;
+        }
     }
     
     //Write the new license data, if an error occurs, the user can be canceled

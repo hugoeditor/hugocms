@@ -145,8 +145,7 @@ function access($attr, $path, $data, $volume, $isDir, $relpath) {
 // https://github.com/Studio-42/elFinder/wiki/Connector-configuration-options
 require __DIR__.'/editor.restricted.php';  //Angedacht: der Admin-User kann alles, andere nur bestimmte Dateien/Modies (Easy und Normal), der zuerst angelegte User wird Admin
 
-
-$cmsroot_dir = PROJECT_DIR; // CMS root directory (Working directory)
+$cmsroot_dir = $project_dir; // CMS root directory (Working directory)
 $content_dir = $cmsroot_dir.'content/';
 $static_dir = $cmsroot_dir.'static/';
 $trash_dir = $cmsroot_dir.'.trash/';

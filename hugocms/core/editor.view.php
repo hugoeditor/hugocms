@@ -25,6 +25,75 @@
 			.editor-btn {
 				margin-bottom: 1em;
 			}
+
+            /* Dropdown Button */
+            .dropbtn {
+                background-color: white;
+                color: black;
+                padding: 8px;
+                font-size: 12px;
+                border: solid 1px;
+                border-radius: 4px;
+                border-color: #ccc;
+                cursor: pointer;
+            }
+
+            /* Dropdown button on hover & focus */
+            .dropbtn:hover, .dropbtn:focus {
+                background-color: #286090;
+                color: #fff;
+            }
+
+            /* The container <div> - needed to position the dropdown content */
+            .dropdown {
+                position: relative;
+                display: inline-block;
+            }
+
+            /* Dropdown Content (Hidden by Default) */
+            .dropdown-content {
+                display: none;
+                position: absolute;
+                background-color: white;
+                min-width: 160px;
+                box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.4);
+                z-index: 1;
+            }
+
+            /* Links inside the dropdown */
+            .dropdown-content a {
+                color: black;
+                padding: 12px 16px;
+                text-decoration: none;
+                display: block;
+            }
+
+            /* Change color of dropdown links on hover */
+            .dropdown-content a:hover {
+                background-color: #ddd;
+            }
+
+            /* Show the dropdown menu (use JS to add this class to the .dropdown-content container when the user clicks on the dropdown button) */
+            .show {
+                display:block;
+            }
+
+            .overlay {
+                position: absolute;
+                background: rgba(0, 0, 0, .5);
+                z-index: 99999999;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+            }
+
+            .overlay-info {
+                padding: 1em;
+                background: white;
+                font-size: 1.1em;
+                text-align: center;
+            }
         </style>
     </head>
     <body>
@@ -32,9 +101,26 @@
         <div id="view-header" class="container">
             <div class="row">
                 <div class="col-md-6" style="margin-top: 10px;"><?php if(!empty($license_error)) echo '<span class="bg-danger">'.$license_error.'</span>'; else echo '<span class="text-muted" id="license-text"></span> <span class="text-muted">'.$license_user.'</span>'; ?>  <?php if(!$setup_no_cancel) echo '/ <span id="show-mode"></span>'; ?></div>
-                <div class="col-md-6 text-right" style="margin-top: 10px;"><span id="lang-en">English</span> / <span id="lang-fr">Français</span> / <span id="lang-de">Deutsch</span></div>
+                <div class="col-md-6 text-right" style="margin-top: 10px;">
+                    <div class="dropdown text-left">
+                        <button onclick="toggleLanguageMenu()" class="dropbtn">Language</button>
+                        <div id="language-menu" class="dropdown-content">
+                            <a id="lang-en" href="#">English</a>
+                            <a id="lang-fr" href="#">Français</a>
+                            <a id="lang-de" href="#">Deutsch</a>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
+
+        <div class="overlay" <?php if(!$setup_ready) echo 'style="display:none;"'; ?>>
+            <div class="overlay-info">
+                <div id="setup-ready" style="padding:.5em; display:inline-block"></div>
+                <button id="setup-ready-button" onclick="reloadAfterSetup()" class="btn btn-primary">Reload</button>
+            </div>
+        </div>
+
         <div id="directory-view" class="container" <?php if($setup) echo 'style="display:none;"'; ?>>
             <nav class="navbar navbar-default" style="margin-top: 10px;">
                 <div class="container-fluid">
@@ -63,7 +149,9 @@
                     </div>
                 </div>
             </nav>
-            <div id="elfinder"></div>
+            <div id="elfinder-wrapper">
+                <div id="elfinder"></div>
+            </div>
         </div>
         <div id="editor-view" class="container" style="display:none">
             <nav class="navbar navbar-default" style="margin-top: 10px;">

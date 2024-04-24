@@ -14,6 +14,16 @@ function removeFrontMatterVariables(e)
     return false;
 }
 
+function toggleLanguageMenu()
+{
+    document.getElementById("language-menu").classList.toggle("show");
+}
+
+function reloadAfterSetup()
+{
+    window.open('./', '_self');
+}
+
 $(document).ready(function()
 {
     var cmsMode = 'easy';
@@ -23,6 +33,24 @@ $(document).ready(function()
     var cmsFrontMatterTemplate = {};
     var cmsMarkdownEditor = true;
 	var cmsHideFrontMatter = true;
+
+    // Close the dropdown menu if the user clicks outside of it
+    window.onclick = function(event)
+    {
+        if (!event.target.matches('.dropbtn'))
+        {
+            var dropdowns = document.getElementsByClassName("dropdown-content");
+            var i;
+            for (i = 0; i < dropdowns.length; i++)
+            {
+            var openDropdown = dropdowns[i];
+            if (openDropdown.classList.contains('show'))
+            {
+                openDropdown.classList.remove('show');
+            }
+            }
+        }
+    }
 
     function initTinyMCE()
     {
@@ -537,6 +565,9 @@ $(document).ready(function()
             {
                 lang: cmsLang,
 
+                rememberLastDir: false,
+                useBrowserHistory: false,
+
                 // Disable CSS auto loading
                 cssAutoLoad : false,
 
@@ -544,7 +575,6 @@ $(document).ready(function()
                 baseUrl : './',
 
                 // Connector URL
-                //url : 'hugocms/plugins/elfinder/php/editor.connector.php' + '?mode=' + cmsMode + '&client=' + $('#hugocms-client').val(),
                 url : 'index.php' + '?action=elfinder&mode=' + cmsMode + '&client=' + $('#hugocms-client').val(),
 
                 commands : [
@@ -580,17 +610,23 @@ $(document).ready(function()
             elFinder.prototype.i18.en.messages.errLogout = "Session is expired!",
 
             // 2nd Arg - before boot up function
-            function(fm, extraObj) {
+            function(fm, extraObj)
+            {
                 // `init` event callback function
-                fm.bind('init', function() {
+                fm.bind('init', function()
+                {
                     // Optional for Japanese decoder "extras/encoding-japanese.min"
                     delete fm.options.rawStringDecoder;
-                    if (fm.lang === 'ja') {
+                    if (fm.lang === 'ja')
+                    {
                         fm.loadScript(
                             [ fm.baseUrl + 'js/extras/encoding-japanese.min.js' ],
-                            function() {
-                                if (window.Encoding && Encoding.convert) {
-                                    fm.options.rawStringDecoder = function(s) {
+                            function()
+                            {
+                                if (window.Encoding && Encoding.convert)
+                                {
+                                    fm.options.rawStringDecoder = function(s)
+                                    {
                                         return Encoding.convert(s,{to:'UNICODE',type:'string'});
                                     };
                                 }
@@ -602,14 +638,17 @@ $(document).ready(function()
 
                 // Optional for set document.title dynamically.
                 var title = document.title;
-                fm.bind('open', function() {
+                fm.bind('open', function()
+                {
                     var path = '',
                         cwd  = fm.cwd();
-                    if (cwd) {
+                    if (cwd)
+                    {
                         path = fm.path(cwd.hash) || null;
                     }
                     document.title = path? path + ' - ' + title : title;
-                }).bind('destroy', function() {
+                }).bind('destroy', function()
+                {
                     document.title = title;
                 });
             }
@@ -894,8 +933,7 @@ $(document).ready(function()
         }
 
         changeLang();
-        $('#elfinder').elfinder('destroy');
-        $('#elfinder').openFileBrowser();
+        $('#elfinder').elfinder('destroy').openFileBrowser();
     }
 
     $("#lang-en, #setup-lang-en").click(function()
@@ -983,6 +1021,8 @@ $(document).ready(function()
         $('#licensee-input').attr('placeholder', translate('Enter the name of the licensee'));
         $('#license-key-label').html(translate('License key'));
         $('#license-key-input').attr('placeholder', translate('Enter the license key'));
+        $('#setup-ready').html(translate('The setup was successful and can now be completed.'));
+        $('#setup-ready-button').html(translate('Continue'));
         //Editor for front matter variables
         $('#toggle-front-matter').text(translate('Show Front matter variables'));
         $('#editor-view-var-section').text(translate('Front matter variables'));
@@ -996,6 +1036,24 @@ $(document).ready(function()
         elFinder.prototype.i18.en.messages['cmdcms_edit_html'] = "Open in HTML editor";
         elFinder.prototype.i18.en.messages['untitled folder'] = 'new_folder';
         elFinder.prototype.i18.en.messages['untitled file'] = 'new_file.$1';
+    }
+
+    function logout()
+    {
+        $.ajax({
+            url: 'index.php',
+            type: 'POST',
+            data: { action: 'editor\\logout', client: $('#hugocms-client').val() },
+            success: function(data)
+            {
+                window.open('./', '_self');
+            },
+            error: function()
+            {
+                console.log('logout ajax call error');
+                $('#message-dialog').showMessageDialog('error', translate('Connection to the server'), translate('The server could not process the request!'));
+            }
+        });
     }
 
     $('#logout').click(function()
@@ -1142,7 +1200,10 @@ $(document).ready(function()
                 if(data.success)
                 {
                     //alert(translate('The setup was successful!'));
-                    window.open('./', '_self');
+                    //if('running' == $('#hugocms-initial-setup').val()) logout();
+                    //else window.open('./', '_self');
+                    //localStorage.removeItem('/edit/-elfinder-toolbarhideselfinder');
+                    window.open('./?action=setup_ready', '_self');
                 }
                 else
                 {
