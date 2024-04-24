@@ -19,6 +19,7 @@ Dependencies on other open source projects:
 - [TinyMCE](https://www.tiny.cloud/)
 - [marked](https://github.com/markedjs/marked)
 - [ACE](https://ace.c9.io/)
+- [Bash](https://www.gnu.org/software/bash/)
 
 ## Installation
 
