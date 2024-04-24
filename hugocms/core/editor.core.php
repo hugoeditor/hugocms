@@ -23,6 +23,8 @@ if($action)
     elseif(strcmp($action, "setup_ready") === 0)
     {
         $setup_ready = true;
+        opcache_reset();
+        
         require 'editor.config.php';
         require 'editor.init.php';
         require 'editor.auth.php';
