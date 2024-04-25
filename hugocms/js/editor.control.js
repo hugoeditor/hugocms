@@ -19,6 +19,11 @@ function toggleLanguageMenu()
     document.getElementById("language-menu").classList.toggle("show");
 }
 
+function toggleModeMenu()
+{
+    document.getElementById("set-mode-menu").classList.toggle("show");
+}
+
 function reloadAfterSetup()
 {
     window.open('./', '_self');
@@ -43,11 +48,11 @@ $(document).ready(function()
             var i;
             for (i = 0; i < dropdowns.length; i++)
             {
-            var openDropdown = dropdowns[i];
-            if (openDropdown.classList.contains('show'))
-            {
-                openDropdown.classList.remove('show');
-            }
+                var openDropdown = dropdowns[i];
+                if (openDropdown.classList.contains('show'))
+                {
+                    openDropdown.classList.remove('show');
+                }
             }
         }
     }
@@ -130,6 +135,7 @@ $(document).ready(function()
         {
             const date = new Date();
             $('#commit-msg').val(translate('Changed on') + ' ' + date.toLocaleString());
+            $('#commit-msg').click();
         },
         buttons:
         [{
@@ -189,6 +195,10 @@ $(document).ready(function()
         modal: true,
         title: 'Versioning',
         position: { my: "left top", at: "left bottom", of: '#new-project' },
+        open: function()
+        {
+            $('#new-project-input').click();
+        },
         buttons:
         [{
             text: 'Ok',
@@ -974,6 +984,10 @@ $(document).ready(function()
         $('#reset').html(translate('Restore'));
         $('#config').html(translate('Configuration'));
         $('#publish').html(translate('Publish'));
+        $('#set-mode-button').html(translate('Change mode'));
+        $('#set-normal-mode').html(translate('Normal mode'));
+        $('#set-admin-mode').html(translate('Admin mode'));
+        $('#set-easy-mode').html(translate('Easy mode'));
 		$('.navbar-nav').show();
         // Editor buttons
         $('#close-no-saving').html(translate('Close without saving!'));
@@ -984,9 +998,6 @@ $(document).ready(function()
         $('#spellcheck').html(translate('Spellcheck'));
         $('#logout').text(translate('Logout'));
         $('#setup').text(translate('Setup'));
-        if('easy' == cmsMode) $('#set-mode').html(translate('Normal mode'));
-        else if('normal' == cmsMode) $('#set-mode').html(translate('Admin mode'));
-        else $('#set-mode').html(translate('Easy mode'));
         // Dialogs
         $('#message-dialog-error').html(translate('An error has occurred'));
         $('.dlg-btn-save').text(translate('Save'));
@@ -1082,9 +1093,9 @@ $(document).ready(function()
 
     $('#setup').click(function()
     {
-        $("#easy-mode-input").attr('checked', (('easy' == cmsMode)? 'checked' : ''));
-        $("#normal-mode-input").attr('checked', (('normal' == cmsMode)? 'checked' : ''));
-        $("#admin-mode-input").attr('checked', (('admin' == cmsMode)? 'checked' : ''));
+        document.getElementById('easy-mode-input').checked = (('easy' == cmsMode)? 'checked' : '');
+        document.getElementById('normal-mode-input').checked = (('normal' == cmsMode)? 'checked' : '');
+        document.getElementById('admin-mode-input').checked = (('admin' == cmsMode)? 'checked' : '');
         $("#username-input").val(cmsUser);
         document.getElementById('use-purgecss').checked = cmsUsePurgeCSS;
 
@@ -1221,16 +1232,15 @@ $(document).ready(function()
 
     $('#setup-cancel-btn').click(function()
     {
+        document.getElementById('set-password').checked = false;
         $('#setup-error').html('');
         $( '#directory-view' ).show();
         $( '#setup-view' ).hide();
     });
 
-    $('#set-mode').click(function()
+    function setMode(mode)
     {
-        if('easy' === cmsMode) cmsMode = 'normal';
-        else if('normal' === cmsMode) cmsMode = 'admin';
-        else if('admin' === cmsMode) cmsMode = 'easy';
+        cmsMode = mode;
         $.ajax({
             url: 'index.php',
             type: 'POST',
@@ -1242,6 +1252,21 @@ $(document).ready(function()
             }
         });
         showMode();
+    }
+
+    $('#set-easy-mode').click(function()
+    {
+        setMode('easy');
+    });
+
+    $('#set-normal-mode').click(function()
+    {
+        setMode('normal');
+    });
+
+    $('#set-admin-mode').click(function()
+    {
+        setMode('admin');
     });
 
     $('#set-password').click(function()

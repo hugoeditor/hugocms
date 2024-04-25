@@ -109,7 +109,8 @@ languageMap = {
     "Variable value": "Valeur de la variable",
     "Versioning": "Versionnement",
     "The setup was successful and can now be completed.": "La configuration a réussi et peut maintenant être terminée",
-    "Continue": "Continuer"
+    "Continue": "Continuer",
+    "Change mode": "Changer le mode"
 };
 
 elFinder.prototype.i18.fr.messages.errLogout = "Session expirée!";

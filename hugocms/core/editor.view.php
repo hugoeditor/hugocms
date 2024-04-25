@@ -30,8 +30,8 @@
             .dropbtn {
                 background-color: white;
                 color: black;
-                padding: 8px;
-                font-size: 12px;
+                padding: 6px;
+                /*font-size: 12px;*/
                 border: solid 1px;
                 border-radius: 4px;
                 border-color: #ccc;
@@ -142,7 +142,14 @@
                             <button type="button" id="publish" class="btn btn-default navbar-btn"></button>
                             <button type="button" id="setup" class="btn btn-default navbar-btn"></button>
                             <button type="button" id="new-project" class="btn btn-default navbar-btn"></button>
-                            <button type="button" id="set-mode" class="btn btn-default navbar-btn"></button>
+                            <div class="dropdown text-left">
+                                <button id="set-mode-button" onclick="toggleModeMenu()" class="dropbtn"></button>
+                                <div id="set-mode-menu" class="dropdown-content">
+                                    <a id="set-easy-mode" href="#"></a>
+                                    <a id="set-normal-mode" href="#"></a>
+                                    <a id="set-admin-mode" href="#"></a>
+                                </div>
+                            </div>
                             <button type="button" id="logout" class="btn btn-default navbar-btn" style="margin-left:1em;"></button>
                         </li>
                     </ul>

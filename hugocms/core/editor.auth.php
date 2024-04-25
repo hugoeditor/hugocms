@@ -45,7 +45,8 @@ elseif(!isset($_SESSION['hugocms_login']))
 
     if(!isset($_SESSION['hugocms_login']))
     {
-        showMessage("danger", "Invalid login data!");
+        global $error_msg;
+        $error_msg = "Invalid login data!";
         require 'editor.login.php';
         exit;
     }

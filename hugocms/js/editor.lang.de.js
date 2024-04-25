@@ -109,7 +109,8 @@ languageMap = {
     "Variable value": "Variablenwert",
     "Versioning": "Versionierung",
     "The setup was successful and can now be completed.": "Das Setup war erfolgreich und kann nun abgeschlossen werden",
-    "Continue": "Fortfahren"
+    "Continue": "Fortfahren",
+    "Change mode": "Modus ändern"
 };
 
 elFinder.prototype.i18.de.messages.errLogout = "Sitzung ist abgelaufen!";
