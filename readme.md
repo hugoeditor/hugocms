@@ -25,7 +25,7 @@ Dependencies on other open source projects:
 
 ### Short instructions
 
-1. Download the tarball and unpack it or clone the git repo into the working directory on the web server. Clone the git repository and chechout the latest stable release.
+1. Download the tarball and unpack it or clone the git repo into the working directory on the web server. To clone the git repo and chechout the latest stable release.
 
     `git clone https://github.com/hugoeditor/hugocms.git . && git checkout $(git describe --tags $(git rev-list --tags --max-count=1))`
 
