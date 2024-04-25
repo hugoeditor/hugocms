@@ -1,5 +1,5 @@
 var type = self.data.type,
-	bin = new Uint8Array(self.data.bin),
+	bin = self.data.bin,
 	unzipFiles = function() {
 		/** @type {Array.<string>} */
 		var filenameList = [];
