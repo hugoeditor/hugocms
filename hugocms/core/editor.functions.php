@@ -83,7 +83,7 @@ function getSetup()
         if(isset($config['params']) && is_array($config['params']))
         {
             // Setzt den Wert von 'minimizeCSS' auf den übergebenen Wert
-            $purgecss = $config['params']['minimizedCSS'];
+            if(array_key_exists('minimizedCSS', $config['params'])) $purgecss = $config['params']['minimizedCSS'];
         }
         else
         {
