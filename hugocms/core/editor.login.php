@@ -107,6 +107,8 @@
     <script>
         var cmsLoginLang = "<?php if(isset($_COOKIE['hugocms_lang'])) echo $_COOKIE['hugocms_lang']; ?>";
 
+        $('#username').focus();
+
         function toggleLanguageMenu()
         {
             document.getElementById("language-menu").classList.toggle("show");

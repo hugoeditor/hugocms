@@ -25,7 +25,9 @@ Dependencies on other open source projects:
 
 ### Short instructions
 
-1. Download the tarball and unpack it or clone the git repo into the working directory on the web server. [Download here](https://github.com/hugoeditor/hugocms/releases/)
+1. Download the tarball and unpack it or clone the git repo into the working directory on the web server. To clone the git repo and chechout the latest stable release.
+
+    `git clone https://github.com/hugoeditor/hugocms.git . && git checkout $(git describe --tags $(git rev-list --tags --max-count=1))`
 
 2. Configure the website's document directory with your web host. The directory is the “public” directory (a symbolic link to '_default_project/public/'.
 
