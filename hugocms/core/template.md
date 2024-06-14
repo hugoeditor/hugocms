@@ -13,5 +13,9 @@ jumbotron-image-srcset: ""
 keywords: [ "Schlüsselwort1", "Schlüsselwort2", "..." ]
 menu: "portfolio"
 menuitem-name: ""
+feature-image: "Pfad/Dateiname"
+feature-image-alt: ""
+feature-image-left: true
+tags:   [ "Tag1", "Tag2", "..." ]
 draft: true
 ---

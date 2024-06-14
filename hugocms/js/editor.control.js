@@ -451,6 +451,13 @@ $(document).ready(function()
         else openEditor(file, true, false, false);
     }
 
+    const countCharacters = function()
+    {
+        var inputField = document.getElementById("inputField");
+        var charCount = document.getElementById("charCount");
+        charCount.textContent = inputField.value.length + " Zeichen";
+    }
+
     const openEditor = function(file, markdownEditor = true, editFrontMatter = true, editContent = true)
 	{
         $.ajax(
@@ -489,7 +496,22 @@ $(document).ready(function()
                     {
                         $.each(frontmater, function(frontmater_key, frontmater_value)
                         {
-                            $('#editor-view-var-table > tbody').append('<tr><td><input type="text" class="front-matter-key" style="width: 100%" value="' + frontmater_key + '"></input></td><td><input type="text" class="front-matter-value" style="width: 100%" value="' + frontmater_value + '"></input></td><td><button class="remove-front-matter-var-btn" onclick="removeFrontMatterVariables(this);">' + translate('Remove') + '</button></td></tr>');
+                            let frontmatter_input = '<tr><td><input type="text" class="front-matter-key" style="width: 100%" value="' + frontmater_key + '"></td>' +
+                            '<td><input type="text" class="front-matter-value" style="width: 100%" value="' + frontmater_value + '"></td>' + 
+                            '<td><span class="charCount">0</span></td>' +
+                            '<td><button class="remove-front-matter-var-btn" onclick="removeFrontMatterVariables(this);">' + translate('Remove') + '</button></td></tr>';
+                            $('#editor-view-var-table > tbody').append(frontmatter_input);
+
+                            // Aktualisieren Sie die Zeichenanzahl für neu hinzugefügte Eingabefelder
+                            $('#editor-view-var-table > tbody tr:last-child .front-matter-value').each(function() {
+                                var charCount = $(this).val().length;
+                                $(this).closest('td').next('td').find('.charCount').text(charCount);
+                            });
+
+                            $('#editor-view-var-table > tbody').on('input', '.front-matter-value', function() {
+                                var charCount = $(this).val().length;
+                                $(this).closest('td').next('td').find('.charCount').text(charCount);
+                            });
                         });
                         data = data.replace(/---([\s\S]*?)---\n/s, '');
                     }
@@ -1039,8 +1061,9 @@ $(document).ready(function()
         $('#editor-view-var-section').text(translate('Front matter variables'));
         $('#editor-view-var-key').html(translate('Variable name'));
         $('#editor-view-var-value').html(translate('Variable value'));
+        $('#editor-view-var-char-count').html(translate('Count'));
         $('#add-front-matter-var').text(translate('Add variable'));
-        $('.remove-front-matter-var-btn').text(translate('Remove'));
+        $('.remove-front-matter-var-btn').text(translate('X'));
         $('#use-front-matter-temp').text(translate('Use template'));
 
         elFinder.prototype.i18.en.messages['cmdcms_edit_md'] = "Open in Markdown editor";

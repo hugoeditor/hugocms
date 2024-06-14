@@ -180,9 +180,10 @@
                         <caption id="editor-view-var-section"></caption>
                         <thead>
                             <tr>
-                                <th style="width: 33%;"><span id="editor-view-var-key"></span></th>
-                                <th style="width: 60%;"><span id="editor-view-var-value"></span></th>
-                                <th style="width: 7%;"></th>
+                                <th style="width: 15%;"><span id="editor-view-var-key"></span></th>
+                                <th style="width: 80%;"><span id="editor-view-var-value"></span></th>
+                                <th style="width: 3%;"><span id="editor-view-var-char-count"></span></th>
+                                <th style="width: 2%;"></th>
                             </tr>
                         </thead>
                         <tbody>
