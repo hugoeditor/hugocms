@@ -458,6 +458,30 @@ $(document).ready(function()
         charCount.textContent = inputField.value.length + " Zeichen";
     }
 
+    function getFrontMatterVariablesRow(key, value)
+    {
+        let frontmatter_input = '<tr><td><input type="text" class="front-matter-key" style="width: 100%" value="' + key + '"></td>' +
+        '<td><input type="text" class="front-matter-value" style="width: 100%" value="' + value + '"></td>' + 
+        '<td><span class="charCount">0</span></td>' +
+        '<td><button class="remove-front-matter-var-btn" onclick="removeFrontMatterVariables(this);">' + translate('X') + '</button></td></tr>';
+        return frontmatter_input;
+    }
+
+    function frontMatterVariblesCounter()
+    {
+        $('#editor-view-var-table > tbody tr .front-matter-value').each(function()
+        {
+            var charCount = $(this).val().length;
+            $(this).closest('td').next('td').find('.charCount').text(charCount);
+        });
+
+        $('#editor-view-var-table > tbody').on('input', '.front-matter-value', function()
+        {
+            var charCount = $(this).val().length;
+            $(this).closest('td').next('td').find('.charCount').text(charCount);
+        });
+    }
+
     const openEditor = function(file, markdownEditor = true, editFrontMatter = true, editContent = true)
 	{
         $.ajax(
@@ -496,35 +520,22 @@ $(document).ready(function()
                     {
                         $.each(frontmater, function(frontmater_key, frontmater_value)
                         {
-                            let frontmatter_input = '<tr><td><input type="text" class="front-matter-key" style="width: 100%" value="' + frontmater_key + '"></td>' +
-                            '<td><input type="text" class="front-matter-value" style="width: 100%" value="' + frontmater_value + '"></td>' + 
-                            '<td><span class="charCount">0</span></td>' +
-                            '<td><button class="remove-front-matter-var-btn" onclick="removeFrontMatterVariables(this);">' + translate('Remove') + '</button></td></tr>';
-                            $('#editor-view-var-table > tbody').append(frontmatter_input);
-
-                            // Aktualisieren Sie die Zeichenanzahl für neu hinzugefügte Eingabefelder
-                            $('#editor-view-var-table > tbody tr:last-child .front-matter-value').each(function() {
-                                var charCount = $(this).val().length;
-                                $(this).closest('td').next('td').find('.charCount').text(charCount);
-                            });
-
-                            $('#editor-view-var-table > tbody').on('input', '.front-matter-value', function() {
-                                var charCount = $(this).val().length;
-                                $(this).closest('td').next('td').find('.charCount').text(charCount);
-                            });
+                            $('#editor-view-var-table > tbody').append(getFrontMatterVariablesRow(frontmater_key, frontmater_value));
+                            frontMatterVariblesCounter();
                         });
                         data = data.replace(/---([\s\S]*?)---\n/s, '');
                     }
-                    $('#editor-view-var-table > tbody').append('<tr><td colspan="2"><select id="frontmatter-keys" style="min-height: 1.8em; min-width:15em;"><option value=""></option></select><button id="add-front-matter-var" style="margin-left: 1em;">' + translate('Add variable') + '</button><button id="use-front-matter-temp" style="margin-left: 1em;">' + translate('Use template') + '</button></td><td></td></tr>');
+                    $('#editor-view-var-table > tbody').append('<tr><td colspan="2"><select id="frontmatter-keys" style="min-height: 1.8em; min-width:10em;"><option value=""></option></select><button id="add-front-matter-var" style="margin-left: 1em;">' + translate('Add variable') + '</button><button id="use-front-matter-temp" style="margin-left: 1em;">' + translate('Use template') + '</button></td><td></td></tr>');
                     $.each(cmsFrontMatterTemplate, function(frontmater_key, frontmater_value)
                     {
                         $('#frontmatter-keys').append('<option value="' + frontmater_key + '">' + frontmater_key + '</option>');
                     });
                     $('#add-front-matter-var').click(function()
                     {
-                        const row = '<tr><td><input type="text" class="front-matter-key" style="width: 100%" value=""></input></td><td><input type="text" class="front-matter-value" style="width: 100%" value=""></input></td><td><button onclick="removeFrontMatterVariables(this);">' + translate('Remove') + '</button></td></tr>';
+                        let row = getFrontMatterVariablesRow('', '');
                         if($(this).closest('table').find('tr:last').prev().length === 0) $(this).closest('table').find('tr:last').before(row);
                         else $(this).closest('table').find('tr:last').prev().after(row);
+                        frontMatterVariblesCounter();
                         return false;
                     });
                     $('#frontmatter-keys').change(function()
@@ -534,11 +545,13 @@ $(document).ready(function()
                         {
                             let value = cmsFrontMatterTemplate[key];
                             if(!exists(value)) value = '';
-                            const row = '<tr><td><input type="text" class="front-matter-key" style="width: 100%" value="' + key + '"></input></td><td><input type="text" class="front-matter-value" style="width: 100%" value="' + value + '"></input></td><td><button onclick="removeFrontMatterVariables(this);">' + translate('Remove') + '</button></td></tr>';
-                            console.log($(this).closest('table'));
+                            const row = getFrontMatterVariablesRow(key, value);
+                            //console.log($(this).closest('table'));
                             if($(this).closest('table').find('tr:last').prev().length === 0) $(this).closest('table').find('tr:last').before(row);
                             else $(this).closest('table').find('tr:last').prev().after(row);
+                            frontMatterVariblesCounter();
                         }
+                        $("#frontmatter-keys").val($("#frontmatter-keys option:first").val());
                     });
                     $('#use-front-matter-temp').click(function()
                     {
@@ -550,9 +563,10 @@ $(document).ready(function()
                         for (const [key, value] of Object.entries(cmsFrontMatterTemplate))
                         {
                             if(usedKeys.includes(key)) continue;
-                            const row = '<tr><td><input type="text" class="front-matter-key" style="width: 100%" value="' + key + '"></input></td><td><input type="text" class="front-matter-value" style="width: 100%" value="' + value + '"></input></td><td><button onclick="removeFrontMatterVariables(this);">' + translate('Remove') + '</button></td></tr>';
+                            const row = getFrontMatterVariablesRow(key, value);
                             if($(this).closest('table').find('tr:last').prev().length === 0) $(this).closest('table').find('tr:last').before(row);
                             else $(this).closest('table').find('tr:last').prev().after(row);
+                            frontMatterVariblesCounter();
                         }
                         return false;
                     });
