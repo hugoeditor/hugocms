@@ -310,16 +310,22 @@ $(document).ready(function()
     {
         saveFile(function()
         {
-            $('#publish').click();
+            publish(currentFile.getContentFile());
         });
     });
 
     $('#publish').click(function()
     {
+        publish();
+        return false;
+    });
+
+    function publish(filename = '')
+    {
         $.ajax({
             url: 'index.php',
             type: 'POST',
-            data: { action: 'editor\\publish', client: $('#hugocms-client').val() },
+            data: { action: 'editor\\publish', client: $('#hugocms-client').val(), data: { 'file': filename } },
             success: function(data)
             {
                 if(data.hasOwnProperty('session_expired'))
@@ -339,7 +345,8 @@ $(document).ready(function()
                 }
                 if(!data.success)
                 {
-                    $('#message-dialog').showMessageDialog('error', translate('Publish'), translate('The website could not be published!'), (data.hasOwnProperty('debug'))? data.debug : null);
+                    if(!data.warning) $('#message-dialog').showMessageDialog('error', translate('Publish'), translate('The website could not be published!'), (data.hasOwnProperty('debug'))? data.debug : null);
+                    else $('#message-dialog').showMessageDialog('warning', translate('Publish'), translate('The website has been published.'), (data.hasOwnProperty('debug'))? data.debug : null);
                     return;
                 }
 
@@ -379,10 +386,9 @@ $(document).ready(function()
             {
                 console.log('publish ajax call error');
                 $('#message-dialog').showMessageDialog('error', translate('Connection to the server'), translate('The server could not process the request!'));
-         }
+            }
         });
-        return false;
-    });
+    }
 
 	$('#toggle-front-matter').click(function()
 	{
@@ -458,8 +464,27 @@ $(document).ready(function()
         charCount.textContent = inputField.value.length + " Zeichen";
     }
 
+    function getHugoDateTime()
+    {
+        const date = new Date();
+        const year = date.getFullYear();
+        const month = ('0' + (date.getMonth() + 1)).slice(-2);
+        const day = ('0' + date.getDate()).slice(-2);
+        const hours = ('0' + date.getHours()).slice(-2);
+        const minutes = ('0' + date.getMinutes()).slice(-2);
+        const seconds = ('0' + date.getSeconds()).slice(-2);
+      
+        const timezoneOffset = -date.getTimezoneOffset();
+        const sign = timezoneOffset >= 0 ? '+' : '-';
+        const offsetHours = ('0' + Math.floor(Math.abs(timezoneOffset) / 60)).slice(-2);
+        const offsetMinutes = ('0' + (Math.abs(timezoneOffset) % 60)).slice(-2);
+      
+        return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${sign}${offsetHours}:${offsetMinutes}`;
+    }
+      
     function getFrontMatterVariablesRow(key, value)
     {
+        if('' == value) value = getHugoDateTime();
         let frontmatter_input = '<tr><td><input type="text" class="front-matter-key" style="width: 100%" value="' + key + '"></td>' +
         '<td><input type="text" class="front-matter-value" style="width: 100%" value="' + value + '"></td>' + 
         '<td><span class="charCount">0</span></td>' +
@@ -1047,6 +1072,7 @@ $(document).ready(function()
         $('#new-project-dialog').dialog('option', 'title', translate('New project/ Domain'));
         $('#new-project-label').text(translate('Project name'));
         $('#new-project').text(translate('New project/ Domain'));
+        $('#check-html5').text(translate('Check HTML5'));
         // Setup
         $('#title').html(translate('Setup'));
         $('#username-label').html(translate('Login*'));

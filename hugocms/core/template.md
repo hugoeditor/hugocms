@@ -19,5 +19,6 @@ feature-image-left: true
 tags:   [ "Tag1", "Tag2", "..." ]
 firmImageURL: "Pfad/Dateiname"
 priceRange: "1€ - 2€"
+date: ""
 draft: true
 ---

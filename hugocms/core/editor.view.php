@@ -142,6 +142,7 @@
                             <button type="button" id="publish" class="btn btn-default navbar-btn"></button>
                             <button type="button" id="setup" class="btn btn-default navbar-btn"></button>
                             <button type="button" id="new-project" class="btn btn-default navbar-btn"></button>
+                            <button type="button" id="check-html5" class="btn btn-default navbar-btn"></button>
                             <div class="dropdown text-left">
                                 <button id="set-mode-button" onclick="toggleModeMenu()" class="dropbtn"></button>
                                 <div id="set-mode-menu" class="dropdown-content">

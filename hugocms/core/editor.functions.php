@@ -4,21 +4,24 @@ namespace editor;
 define("STDERR_REDIRECT", " 2>&1");
 define("PUBLISH_COMMAND", "err=$(".ROOT_DIR."hugo/hugo --cleanDestinationDir -DEF -s ".PROJECT_DIR." -d ".PUBLIC_DIR.STDERR_REDIRECT."); ret=$?; cd ".EDITOR_DIR." && ln -s ".PUBLIC_DIR."../../hugocms hugocms > /dev/null".'; echo $err; exit $ret');
 define("PREVIEW_COMMAND", ROOT_DIR."hugo/hugo --cleanDestinationDir -DEF -s ".PROJECT_DIR." -d ".PREVIEW_DIR.STDERR_REDIRECT);
+define("HTMLCHECK_COMMAND", "php ".$project_dir."../hugocms/htmlchecker/checkhtml5.php ".$project_dir);
 
 const FILE_NO_ACCESS = 0;
 const FILE_WRITE_PROTECTED = 1;
 const FILE_FULL_ACCESS = 2;
 
-function resultInfo($success, $text = '', $debug = false)
+function resultInfo($success, $text = '', $debug = false, $error_to_warning = false)
 {
     $info = '{ "success":'.(($success)? 'true' : 'false');
+    if($error_to_warning && !$success) $info .= ', "warning":true';
     if(!empty($text)) if(!$success || $debug) $info .= ', "debug":"'.$text.'"';
     echo $info.' }';
 }
 
-function publish()
+function publish($data)
 {
-    execute(PUBLISH_COMMAND);
+    // Wenn der Befehl erfolgreich ausgeführt wurde, wird der HTML-Checker aufgerufen und nur das Ergebnis vom HTML-Checker ausgegeben
+    if(execute(PUBLISH_COMMAND, true)) execute(HTMLCHECK_COMMAND." ".$data['file']."; exit 1", false, true, true);
 }
 
 function preview()
@@ -26,12 +29,12 @@ function preview()
     execute(PREVIEW_COMMAND);
 }
 
-function execute($command, $silent_success = false)
+function execute($command, $silent_success = false, $debug = false, $error_to_warning = false)
 {
     exec($command, $output, $retv);
     $text = "";
     $output = str_replace('"', "'", $output);
-    foreach($output as $line) if(!empty($line)) $text .= $line.' <br />';
+    foreach($output as $line) if(!empty($line)) $text .= htmlspecialchars($line).' <br />';
     if($retv === 0)
     {
         if(!$silent_success) resultInfo(true);
@@ -39,7 +42,7 @@ function execute($command, $silent_success = false)
     }
     else
     {
-        resultInfo(false, $text);
+        resultInfo(false, $text, $debug, $error_to_warning);
         return false;
     }
 }
