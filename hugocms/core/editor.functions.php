@@ -12,16 +12,22 @@ const FILE_FULL_ACCESS = 2;
 
 function resultInfo($success, $text = '', $debug = false, $error_to_warning = false)
 {
-    $info = '{ "success":'.(($success)? 'true' : 'false');
-    if($error_to_warning && !$success) $info .= ', "warning":true';
-    if(!empty($text)) if(!$success || $debug) $info .= ', "debug":"'.$text.'"';
-    echo $info.' }';
+    $info = array( "success" => $success );
+    if($error_to_warning && !$success) $info["warning"] = true;
+    if(!empty($text)) if(!$success || $debug) $info["debug"] = $text;
+    echo json_encode($info);
 }
 
 function publish($data)
 {
     // Wenn der Befehl erfolgreich ausgeführt wurde, wird der HTML-Checker aufgerufen und nur das Ergebnis vom HTML-Checker ausgegeben
-    if(execute(PUBLISH_COMMAND, true)) execute(HTMLCHECK_COMMAND." ".$data['file']."; exit 1", false, true, true);
+    //if(execute(PUBLISH_COMMAND, true)) execute(HTMLCHECK_COMMAND." ".$data['file']."; exit 1", false, true, true);
+    execute(PUBLISH_COMMAND);
+}
+
+function htmlcheck($data)
+{
+    execute(HTMLCHECK_COMMAND." ".$data['file']."; exit 1", false, true, true);
 }
 
 function preview()

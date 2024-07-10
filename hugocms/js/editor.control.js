@@ -115,6 +115,9 @@ $(document).ready(function()
 
     $.fn.showMessageDialog = function(style, title, message, debug=null)
     {
+        $('#message-dialog-text').html('');
+        $('#message-dialog-debug').html('');
+        
         $(this).dialog('option', 'title', title).dialog('open').parent().addClass('ui-state-' + style);
         if('error' === style) $('#message-dialog-error').css('display', '');
         $('#message-dialog-text').html(message);
@@ -380,6 +383,43 @@ $(document).ready(function()
                             $('#message-dialog').showMessageDialog('error', translate('Connection to the server'), translate('The server could not process the request!'));
                         }
                     });
+                }
+            },
+            error: function()
+            {
+                console.log('publish ajax call error');
+                $('#message-dialog').showMessageDialog('error', translate('Connection to the server'), translate('The server could not process the request!'));
+            }
+        });
+    }
+
+    $('#check-html5').click(function()
+    {
+        // Check single HTML file: htmlcheck(currentFile.getContentFile());
+        htmlcheck();
+        return false;
+    });
+
+    // Check HTML file(s)
+    function htmlcheck(filename = '')
+    {
+        $.ajax({
+            url: 'index.php',
+            type: 'POST',
+            data: { action: 'editor\\htmlcheck', client: $('#hugocms-client').val(), data: { 'file': filename } },
+            success: function(data)
+            {
+                if(data.hasOwnProperty('session_expired'))
+                {
+                    alert(translate('Session is expired!'));
+                    window.open('./', '_self');
+                    return;
+                }
+                if(!data.success)
+                {
+                    if(!data.warning) $('#message-dialog').showMessageDialog('error', translate('Publish'), translate('The website could not be published!'), (data.hasOwnProperty('debug'))? data.debug : null);
+                    else $('#message-dialog').showMessageDialog('warning', translate('Publish'), translate('The website has been published.'), (data.hasOwnProperty('debug'))? data.debug : null);
+                    return;
                 }
             },
             error: function()
