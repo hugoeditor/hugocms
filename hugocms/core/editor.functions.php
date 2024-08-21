@@ -2,7 +2,7 @@
 namespace editor;
 
 define("STDERR_REDIRECT", " 2>&1");
-define("PUBLISH_COMMAND", "err=$(".ROOT_DIR."hugo/hugo --cleanDestinationDir -DEF -s ".PROJECT_DIR." -d ".PUBLIC_DIR.STDERR_REDIRECT."); ret=$?; cd ".EDITOR_DIR." && ln -s ".PUBLIC_DIR."../../hugocms hugocms > /dev/null".'; echo $err; exit $ret');
+define("PUBLISH_COMMAND", "err=$(".ROOT_DIR."hugo/hugo --cleanDestinationDir -s ".PROJECT_DIR." -d ".PUBLIC_DIR.STDERR_REDIRECT."); ret=$?; cd ".EDITOR_DIR." && ln -s ".PUBLIC_DIR."../../hugocms hugocms > /dev/null".'; echo $err; exit $ret');
 define("PREVIEW_COMMAND", ROOT_DIR."hugo/hugo --cleanDestinationDir -DEF -s ".PROJECT_DIR." -d ".PREVIEW_DIR.STDERR_REDIRECT);
 define("HTMLCHECK_COMMAND", "php ".$project_dir."../hugocms/htmlchecker/checkhtml5.php ".$project_dir);
 
@@ -290,4 +290,10 @@ function newProject($data)
         return;
     }   
     createProject($data['project_name'], $data['username'], false);
+}
+
+function refreshSession()
+{
+    if(isset($_SESSION['hugocms_login'])) $_SESSION['hugocms_login'] = $_SESSION['hugocms_login'];
+    resultInfo(true);
 }

@@ -1,25 +1,25 @@
 ---
-title: "Title und Überschrift"
-type: "portfolio"
-weight: 100
-description: "Beschreibung"
-metaDescription: "HugoCMS Editor - Seiten so einfachn wie in Wordpress editieren✓ Hocheffizentes, nachhaltiges Hugo-Theme✓ ...✓"
-card-image: "Pfad/Dateiname"
 card-image-alt: ""
+card-image: "Pfad/Dateiname"
 category: "Leistungen"
-jumbotron-image: "Pfad/Dateiname"
+date: ""
+description: "Beschreibung"
+draft: true
+feature-image-alt: ""
+feature-image-left: true
+feature-image: "Pfad/Dateiname"
+firmImageURL: "Pfad/Dateiname"
 jumbotron-image-alt: ""
 jumbotron-image-srcset: ""
+jumbotron-image: "Pfad/Dateiname"
 keywords: [ "Schlüsselwort1", "Schlüsselwort2", "..." ]
 menu: "portfolio"
 menuitem-name: ""
-feature-image: "Pfad/Dateiname"
-feature-image-alt: ""
-feature-image-left: true
-tags:   [ "Tag1", "Tag2", "..." ]
-firmImageURL: "Pfad/Dateiname"
+metaDescription: "HugoCMS Editor - Seiten so einfachn wie in Wordpress editieren✓ Hocheffizentes, nachhaltiges Hugo-Theme✓ ...✓"
 priceRange: "1€ - 2€"
-date: ""
 schemaBusinessType: "Service"
-draft: true
+tags:   [ "Tag1", "Tag2", "..." ]
+title: "Title und Überschrift"
+type: "portfolio"
+weight: 100
 ---

@@ -221,7 +221,7 @@
             <form>
                 <fieldset>
                     <label id="commit-msg-label" for="commit-msg"></label>
-                    <input type="text" name="commit-msg" id="commit-msg" class="text ui-widget-content ui-corner-all" placeholder="" />
+                    <input type="text" name="commit-msg" id="commit-msg" class="text ui-widget-content ui-corner-all" placeholder="" size="60"/>
                 </fieldset>
             </form>
         </div>

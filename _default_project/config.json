@@ -49,11 +49,11 @@
         "schemaLogoURL": "http://localhost/images/logo.webp",
         "schemaBusinessType": "MyBusiness",
         "keywords": [
-            "Keyword1",
-            "Keyword2",
-            "Keyword3"
+            "keyword1",
+            "keyword2",
+            "keyword3"
         ],
-        "metaDescription": "My website with blog\u2713",
+        "metaDescription": "My website with blog✓",
         "customCSS": "/css/custom.css",
         "navbarClass": "navbar-light id-custom-navbar",
         "searchInputLabel": "Search",

@@ -29,6 +29,24 @@ function reloadAfterSetup()
     window.open('./', '_self');
 }
 
+// Session keep alive, until logout
+var sessionKeepAlive = function ()
+{
+    var time = 600000; // 10 mins
+    setTimeout(
+        function ()
+        {
+            $.ajax({
+                url: 'index.php',
+                type: 'POST',
+                data: { action: 'editor\\refreshSession', client: $('#hugocms-client').val() },
+                cache: false,
+                complete: function () { sessionKeepAlive(); }
+            });
+        }, time
+    );
+};
+
 $(document).ready(function()
 {
     var cmsMode = 'easy';
@@ -38,6 +56,9 @@ $(document).ready(function()
     var cmsFrontMatterTemplate = {};
     var cmsMarkdownEditor = true;
 	var cmsHideFrontMatter = true;
+
+    // Session keep alive
+    sessionKeepAlive();
 
     // Close the dropdown menu if the user clicks outside of it
     window.onclick = function(event)
@@ -128,7 +149,7 @@ $(document).ready(function()
     $('#commit-msg-dialog').dialog(
     {
         autoOpen: false,
-        resizable: false,
+        resizable: true,
         width: 'auto',
         height: 'auto',
         modal: true,
@@ -140,6 +161,11 @@ $(document).ready(function()
             $('#commit-msg').val(translate('Changed on') + ' ' + date.toLocaleString());
             $('#commit-msg').click();
         },
+        resize: function( event, ui )
+        { 
+            console.info('resize');
+            $('#commit-msg').width($('#commit-msg-dialog').width() - 10);
+        }, 
         buttons:
         [{
             text: 'Ok',

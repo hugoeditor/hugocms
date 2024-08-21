@@ -1,5 +1,6 @@
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="HugoCMS - hugocms.com">
 		{{ if .IsHome }}<meta name="description" content="{{ $.Site.Params.metaDescription }}">{{ else }}{{ if .Params.metaDescription }}<meta name="description" content="{{ .Params.metaDescription }}">{{ end }}{{ end }}
 		{{ if .IsHome }}<meta name="keywords" content="{{ range $index, $keyword := .Site.Params.keywords }}{{ if $index }}, {{ end }}{{ $keyword }}{{ end }}">{{ else }}{{ if .Params.keywords }}<meta name="keywords" content="{{ range $index, $keyword := .Params.keywords }}{{ if $index }}, {{ end }}{{ $keyword }}{{ end }}">{{ end }}{{ end }}
 		<meta property="og:type" content="website">
