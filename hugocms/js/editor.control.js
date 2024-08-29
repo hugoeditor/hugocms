@@ -494,7 +494,7 @@ $(document).ready(function()
 					{
 						for(let s = 2; s < frontmater_key_value.length; s++) value += (':' + frontmater_key_value[s]).trim();
 					}
-                    if(value.startsWith('[') && value.endsWith(']'))
+                    if((value.startsWith('[') && value.endsWith(']') ) || (value.startsWith('{') && value.endsWith('}') ))
                     {
                         const value_array = value.split(',');
                         for(let s = 0; s < value_array.length; s++)
@@ -550,7 +550,7 @@ $(document).ready(function()
       
     function getFrontMatterVariablesRow(key, value)
     {
-        if('' == value) value = getHugoDateTime();
+        if('' == value && 'date' == key) value = getHugoDateTime();
         let frontmatter_input = '<tr><td><input type="text" class="front-matter-key" style="width: 100%" value="' + key + '"></td>' +
         '<td><input type="text" class="front-matter-value" style="width: 100%" value="' + value + '"></td>' + 
         '<td><span class="charCount">0</span></td>' +
@@ -857,6 +857,7 @@ $(document).ready(function()
         saveFile();
     });
 
+    // Save file
     function saveFile(fx = null)
     {
         let frontmatter = '';
@@ -870,12 +871,22 @@ $(document).ready(function()
                 value = value.trim();
                 if('' != key)
                 {
-                    if(value.startsWith('[') && value.endsWith(']') || 'false' == value || 'true' == value) frontmatter += key + ': ' + value + '\n';
-                    else frontmatter += key + ': "' + value + '"\n';
+                    try {
+                        // Versuche, den Wert als JSON zu parsen
+                        let parsedValue = JSON.parse(value);
+                        // Wenn erfolgreich, formatiere den Wert als JSON-String
+                        frontmatter += key + ': ' + JSON.stringify(parsedValue) + '\n';
+                    } catch (e) {
+                        // Wenn das Parsen fehlschlägt, behandle den Wert als normalen String
+                        if((value.startsWith('[') && value.endsWith(']')) || (value.startsWith('{') && value.endsWith('}')) || 'false' == value || 'true' == value) 
+                            frontmatter += key + ': ' + value + '\n';
+                        else 
+                            frontmatter += key + ': "' + value + '"\n';
+                    }
                 }
             }
         });
-
+        
         if('' != frontmatter) frontmatter = '---\n' + frontmatter + '---\n';
         let text = frontmatter + ((cmsMarkdownEditor)? $('#editor').val() : tinymce.get("wysiwyg-editor").getContent());
 
