@@ -76,31 +76,32 @@ function getSetup()
         }
     }
 
-        // Prüft, ob die Konfigurationsdatei existiert
-        if(!file_exists(CONFIG_FILE))
-        {
-            resultInfo(false, "The configuration file file does not exist.");
-            return;
-        }
-    
-        // Liest den Inhalt der Datei
-        $content = file_get_contents(CONFIG_FILE);
-        // Wandelt den JSON-Inhalt in ein PHP-Array um
-        $config = json_decode($content, true);
-    
-        // Prüft, ob der Schlüssel 'params' existiert und ein Array ist
-        if(isset($config['params']) && is_array($config['params']))
-        {
-            // Setzt den Wert von 'minimizeCSS' auf den übergebenen Wert
-            if(array_key_exists('minimizedCSS', $config['params'])) $purgecss = $config['params']['minimizedCSS'];
-        }
-        else
-        {
-            resultInfo(false, "The configuration file is in the wrong format.");
-            return;
-        }
-    
-    echo '{ "lang": "'.$lang.'", "mode": "'.$mode.'", "purgecss":"'.$purgecss.'", "login": "'.$_SESSION['hugocms_login'].'" }';
+    // Prüft, ob die Konfigurationsdatei existiert
+    if(!file_exists(CONFIG_FILE))
+    {
+        resultInfo(false, "The configuration file file does not exist.");
+        return;
+    }
+
+    // Liest den Inhalt der Datei
+    $content = file_get_contents(CONFIG_FILE);
+    // Wandelt den JSON-Inhalt in ein PHP-Array um
+    $config = json_decode($content, true);
+
+    // Prüft, ob der Schlüssel 'params' existiert und ein Array ist
+    if(isset($config['params']) && is_array($config['params']))
+    {
+        // Setzt den Wert von 'minimizeCSS' auf den übergebenen Wert
+        if(array_key_exists('minimizedCSS', $config['params'])) $purgecss = $config['params']['minimizedCSS'];
+    }
+    else
+    {
+        resultInfo(false, "The configuration file is in the wrong format.");
+        return;
+    }
+
+    $result = array( "lang" => $lang, "mode" => $mode, "purgecss" => $purgecss, "login" => $_SESSION['hugocms_login'] );
+    echo json_encode($result);
 }
 
 function getLicense()

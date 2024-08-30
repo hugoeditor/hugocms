@@ -163,7 +163,6 @@ $(document).ready(function()
         },
         resize: function( event, ui )
         { 
-            console.info('resize');
             $('#commit-msg').width($('#commit-msg-dialog').width() - 10);
         }, 
         buttons:
@@ -1456,6 +1455,7 @@ $(document).ready(function()
                 cmsUser = data.login;
                 cmsLang = data.lang;
                 cmsUsePurgeCSS = ('true' === data.purgecss || '1' === data.purgecss)? true : false;
+                console.info('cmsUsePurgeCSS: ' + cmsUsePurgeCSS);
 
                 $.ajax({
                     url: 'index.php?action=template',
