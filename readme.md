@@ -1,3 +1,4 @@
+Auf DE MACHEN!!
 # HugoCMS (Online-Editor)
 a standalone CMS with online editor to write Hugo compatible content using Markdown and HTML.
 
