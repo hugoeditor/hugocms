@@ -1,0 +1,33 @@
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+
+# PHP
+vendor/
+
+# Sitzungen / temporär
+*.log
+log/*.log
+var/sessions/
+.DS_Store
+
+# Beispiel-Datenverzeichnis (in echten Installationen nicht versionieren)
+daten/
+
+# Repo mit dem fertigen Produkt
+packaging/
+
+# Installationsspezifische Konfigurationsdateien (Vorlagen *.ini.beispiel
+# bleiben versioniert, da sie nicht auf .ini enden).
+*.ini
+
+# Persönliche/Umgebungs-Konfiguration im Projektwurzelverzeichnis
+# (Shell-rc, Editor- und Tool-Configs wie .bashrc, .mcp.json, .idea, .vscode …).
+# Führender / = nur Wurzelebene, damit .htaccess/.gitkeep in Unterordnern
+# erhalten bleiben. Was ins Repo gehört, wird ausgenommen.
+/.*
+!/.gitignore
+!/.gitmodules
+!/.claude/

@@ -1,0 +1,5 @@
+# Apache: kein direkter Zugriff auf Logdateien.
+# Nginx wertet diese Datei NICHT aus — dort den location-Block aus
+# beispiel-konfigurationen/nginx.conf verwenden oder das Log-Verzeichnis
+# außerhalb des Web-Wurzelverzeichnisses ablegen.
+Require all denied

@@ -1,0 +1,36 @@
+; HugoCMS – Hauptkonfiguration
+; ===========================================================================
+; Wird dem Connector übergeben:
+;
+;     $connector = new Connector(['config' => __DIR__ . '/hugocms.ini']);
+;
+; Enthält Authentifizierung, Sitzungsverzeichnis und Logging. Die Mounts
+; stehen separat in mounts.ini (siehe mounts.ini.beispiel).
+; Relative Pfade gelten relativ zu DIESER Datei.
+; ===========================================================================
+
+[auth]
+; Authentifizierungsverfahren. Eingebaut: singleuser.
+; Weitere AuthInterface-Implementierungen lassen sich über die Connector-
+; Option "authDrivers" registrieren (siehe index.php) und hier per driver
+; auswählen.
+driver = singleuser
+
+; Felder für driver=singleuser:
+; Anmeldename.
+username = admin
+; Passwort-HASH (NIEMALS das Klartextpasswort). Erzeugen mit:
+;   php -r "echo password_hash('DEIN-PASSWORT', PASSWORD_DEFAULT), PHP_EOL;"
+; Wegen der $-Zeichen in doppelte Anführungszeichen setzen.
+password_hash = "HIER-PASSWORT-HASH-EINTRAGEN"
+
+[session]
+; Verzeichnis für die PHP-Sitzungsdateien (muss für den Webserver-Benutzer
+; beschreibbar sein). Bleibt das Feld leer, gilt die PHP-Voreinstellung.
+path = var/sessions
+
+[log]
+; Logdatei und Stufe: debug | info | warning | error
+; Ohne 'file' fällt das Logging auf das PHP-eigene error_log zurück.
+file = log/hugocms.log
+level = error

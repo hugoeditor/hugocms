@@ -1,0 +1,35 @@
+; HugoCMS – Mount-Konfiguration
+; ===========================================================================
+; Alternative zum manuellen $connector->mount(...) in der index.php.
+; Übergabe an den Connector:
+;
+;     $connector->mountsFromFile(__DIR__ . '/mounts.ini');
+;
+; Regeln:
+;   • Jede [Sektion] ist ein Mount. Der Sektionsname ist die interne ID
+;     (kurz, ohne Leer- und Sonderzeichen).
+;   • path        (Pflicht)  Verzeichnis des Mounts. Relative Pfade gelten
+;                            relativ zu DIESER Datei. Absolute Pfade empfohlen.
+;   • label       (optional) Anzeigename im Client. Standard: Sektionsname.
+;   • permissions (optional) Kommaliste. Werte: read, write, upload, delete,
+;                            mkdir, rename, copy, move. Fehlt sie: alle Rechte.
+;   • accept      (optional) Kommaliste erlaubter Endungen (ohne Punkt).
+;                            Leer oder fehlend: alle Endungen erlaubt.
+;   • readonly    (optional) true = nur Lesen (überschreibt permissions).
+;
+; Werte mit Sonderzeichen bei Bedarf in "doppelte Anführungszeichen" setzen.
+; ===========================================================================
+
+[inhalte]
+path = daten/inhalte
+label = Inhalte
+accept = md, markdown, html, htm, png, jpg, jpeg, gif, webp, svg
+
+[vorlagen]
+path = daten/vorlagen
+label = Vorlagen
+permissions = read, write
+
+[medien]
+path = daten/medien
+label = Medien
