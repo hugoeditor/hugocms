@@ -1,0 +1,51 @@
+<?php
+/**
+ * custom.php – anwenderspezifischer Bootstrap (optional).
+ *
+ * Wird von der index.php des Backends automatisch eingebunden, FALLS diese
+ * Datei existiert, und übernimmt dann die komplette Konfiguration: Connector
+ * instanzieren, Mounts festlegen, run() aufrufen. Der Autoloader ist bereits
+ * geladen.
+ *
+ * Dies ist die flexible Alternative zu den INI-Dateien — z. B. für eigene
+ * AuthInterface-Implementierungen oder dynamisch ermittelte Mounts.
+ *
+ * Zum Verwenden: nach custom.php kopieren und anpassen.
+ */
+
+declare(strict_types=1);
+
+use HugoCMS\FileManager\Connector;
+use HugoCMS\FileManager\Auth\SingleUser;
+
+// --- Empfohlen: Infrastruktur aus hugocms.ini, Mounts hier programmatisch ---
+// So kommen Session-Verzeichnis, Logging und Anmeldung weiterhin aus der
+// gut lesbaren hugocms.ini, während die Mounts dynamisch entstehen können.
+$connector = new Connector(['config' => __DIR__ . '/hugocms.ini']);
+
+$connector->mount('inhalte', __DIR__ . '/daten/inhalte', [
+    'label' => 'Inhalte',
+    'accept' => ['md', 'markdown', 'html', 'htm', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'],
+]);
+$connector->mount('vorlagen', __DIR__ . '/daten/vorlagen', [
+    'label' => 'Vorlagen',
+    'permissions' => ['read', 'write'],
+]);
+$connector->mount('medien', __DIR__ . '/daten/medien', [
+    'label' => 'Medien',
+]);
+
+$connector->run();
+
+// --- Alternative: vollständig programmatisch (ohne hugocms.ini) ---
+// Dann das Sitzungsverzeichnis selbst setzen (vor dem ersten session_start):
+//
+//     $sessionPath = __DIR__ . '/var/sessions';
+//     if (is_dir($sessionPath)) { session_save_path($sessionPath); }
+//
+//     $connector = new Connector([
+//         'auth' => new SingleUser('admin', 'PASSWORT-HASH'),
+//         'log' => __DIR__ . '/log/hugocms.log',
+//         'logLevel' => 'error',
+//     ]);
+//     // ... mount() ... $connector->run();

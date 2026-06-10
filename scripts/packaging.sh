@@ -6,7 +6,8 @@
 #   packaging/
 #   ├── edit/                (gebautes Frontend = Client, läuft unter /edit/)
 #   ├── backend/             (PHP-Quellen)
-#   ├── index.php.beispiel   (Bootstrap-Vorlage, ohne echte Geheimnisse)
+#   ├── index.php            (fester Einstiegspunkt; Endpunkt /cms-api/)
+#   ├── custom.php.beispiel  (Vorlage: anwenderspezifischer Bootstrap)
 #   ├── hugocms.ini.beispiel (Vorlage: Anmeldung, Session, Logging)
 #   ├── mounts.ini.beispiel  (Vorlage: Mount-Konfiguration)
 #   ├── log/                 (Laufzeit; .htaccess + .gitkeep)
@@ -81,84 +82,17 @@ Require all denied
 HT
 fi
 
-# 5. Bootstrap-Vorlage schreiben (ohne echte Geheimnisse)
-echo "5. Vorlage  -> $PKG/index.php.beispiel"
-cat > "$PKG/index.php.beispiel" <<'PHP'
-<?php
-/**
- * Bootstrap-Vorlage für den HugoCMS-Connector (Auslieferungspaket).
- *
- * Diese Datei NICHT unverändert verwenden:
- *   1. Nach index.php kopieren.
- *   2. hugocms.ini.beispiel nach hugocms.ini kopieren und dort Anmeldung,
- *      Sitzungsverzeichnis und Logging eintragen (Passwort als HASH).
- *   3. Mounts festlegen — wahlweise über mounts.ini (siehe mounts.ini.beispiel)
- *      oder programmatisch. Pfade möglichst AUSSERHALB des Web-Wurzelver-
- *      zeichnisses.
- *
- * Erwartete Paketstruktur (Document-Root = Paketwurzel):
- *   ./
- *   ├── edit/                (Client; erreichbar unter /edit/)
- *   ├── backend/             (PHP-Quellen)
- *   ├── log/
- *   ├── var/sessions/
- *   ├── hugocms.ini.beispiel (Vorlage: Anmeldung, Session, Logging)
- *   ├── mounts.ini.beispiel  (Vorlage: Mount-Konfiguration)
- *   └── index.php            (diese Datei; Endpunkt /cms-api/)
- *
- * Der Webserver muss den Endpunkt /cms-api/ auf diese Datei lenken und den
- * direkten Zugriff auf backend/, log/ und var/ unterbinden (Vorlagen für
- * Apache und Nginx im Quell-Repository unter beispiel-konfigurationen/).
- */
+# 5. Fester Einstiegspunkt (index.php) — gehört zum Backend, nicht anpassen.
+#    Eine eventuell aus früheren Paketläufen verbliebene Vorlage entfernen.
+echo "5. Einstiegspunkt -> $PKG/index.php"
+rm -f "$PKG/index.php.beispiel"
+cp "$PROJECT_DIR/index.php" "$PKG/index.php"
 
-declare(strict_types=1);
-
-require __DIR__ . '/backend/autoload.php';
-
-use HugoCMS\FileManager\Connector;
-
-// Anmeldung, Sitzungsverzeichnis und Logging stammen aus hugocms.ini. Der
-// Connector liest die Datei, setzt das Sitzungsverzeichnis und erzeugt die
-// Authentifizierung (driver-abhängig).
-$connector = new Connector([
-    'config' => __DIR__ . '/hugocms.ini',
-    //
-    // Eigene AuthInterface-Implementierungen registrieren und in hugocms.ini
-    // per [auth] driver = ... auswählen:
-    // 'authDrivers' => [
-    //     'ldap' => fn (array $cfg) => new \Meine\LdapAuth($cfg['host']),
-    // ],
-]);
-
-// Mounts festlegen — zwei Wege, beliebig kombinierbar:
-//
-// A) Aus einer Konfigurationsdatei (gut lesbar, ohne Code-Änderung pflegbar).
-//    mounts.ini.beispiel nach mounts.ini kopieren und anpassen:
-//
-//        $connector->mountsFromFile(__DIR__ . '/mounts.ini');
-//
-// B) Programmatisch — Pfade möglichst außerhalb des Web-Wurzelverzeichnisses:
-$connector->mount('inhalte', __DIR__ . '/daten/inhalte', [
-    'label' => 'Inhalte',
-    'accept' => ['md', 'markdown', 'html', 'htm', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'],
-]);
-
-$connector->mount('vorlagen', __DIR__ . '/daten/vorlagen', [
-    'label' => 'Vorlagen',
-    'permissions' => ['read', 'write'],
-]);
-
-$connector->mount('medien', __DIR__ . '/daten/medien', [
-    'label' => 'Medien',
-]);
-
-$connector->run();
-PHP
-
-# 5b. Konfigurationsvorlagen mitliefern
-echo "5b. Vorlagen -> $PKG/hugocms.ini.beispiel, $PKG/mounts.ini.beispiel"
-cp "$PROJECT_DIR/hugocms.ini.beispiel" "$PKG/hugocms.ini.beispiel"
-cp "$PROJECT_DIR/mounts.ini.beispiel" "$PKG/mounts.ini.beispiel"
+# 5b. Vorlagen mitliefern: Anwender-Bootstrap und Konfiguration.
+echo "5b. Vorlagen -> $PKG/{custom.php.beispiel, hugocms.ini.beispiel, mounts.ini.beispiel}"
+cp "$PROJECT_DIR/custom.php.beispiel"   "$PKG/custom.php.beispiel"
+cp "$PROJECT_DIR/hugocms.ini.beispiel"  "$PKG/hugocms.ini.beispiel"
+cp "$PROJECT_DIR/mounts.ini.beispiel"   "$PKG/mounts.ini.beispiel"
 
 # 6. Berechtigungen vereinheitlichen
 find "$PKG/edit" "$PKG/backend" -type d -exec chmod 775 {} \; 2>/dev/null || true

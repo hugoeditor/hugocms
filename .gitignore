@@ -23,6 +23,9 @@ packaging/
 # bleiben versioniert, da sie nicht auf .ini enden).
 *.ini
 
+# Anwenderspezifischer Bootstrap (Vorlage: custom.php.beispiel).
+custom.php
+
 # Persönliche/Umgebungs-Konfiguration im Projektwurzelverzeichnis
 # (Shell-rc, Editor- und Tool-Configs wie .bashrc, .mcp.json, .idea, .vscode …).
 # Führender / = nur Wurzelebene, damit .htaccess/.gitkeep in Unterordnern
