@@ -2,13 +2,15 @@
 # packaging.sh - Aktualisiert das Auslieferungs-Repo unter ./packaging/
 # mit der neusten Version von Client (Frontend-Build) und Backend.
 #
-# Erzeugt/erneuert die Struktur:
-#   packaging/hugocms/
-#   ├── edit/               (gebautes Frontend = Client, läuft unter /edit/)
-#   ├── backend/            (PHP-Quellen)
-#   ├── index.php.beispiel  (Bootstrap-Vorlage, ohne echte Geheimnisse)
-#   ├── log/                (Laufzeit; .htaccess + .gitkeep)
-#   └── var/sessions/       (Laufzeit; .gitkeep)
+# Erzeugt/erneuert die Struktur direkt im Repo-Wurzelverzeichnis:
+#   packaging/
+#   ├── edit/                (gebautes Frontend = Client, läuft unter /edit/)
+#   ├── backend/             (PHP-Quellen)
+#   ├── index.php.beispiel   (Bootstrap-Vorlage, ohne echte Geheimnisse)
+#   ├── hugocms.ini.beispiel (Vorlage: Anmeldung, Session, Logging)
+#   ├── mounts.ini.beispiel  (Vorlage: Mount-Konfiguration)
+#   ├── log/                 (Laufzeit; .htaccess + .gitkeep)
+#   └── var/sessions/        (Laufzeit; .gitkeep)
 #
 # Es wird NICHT committet — nach dem Lauf zeigt das Skript 'git status' des
 # Paket-Repos an; Commit und Push bleiben dir überlassen.
@@ -18,7 +20,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PKG_REPO="$PROJECT_DIR/packaging"
-PKG="$PKG_REPO/hugocms"
+# Die Paketdateien liegen direkt im Repo-Wurzelverzeichnis (kein hugocms/).
+PKG="$PKG_REPO"
 
 echo "========================================="
 echo "HugoCMS - Packaging"
@@ -32,6 +35,12 @@ if [ ! -d "$PKG_REPO/.git" ]; then
     echo "❌ '$PKG_REPO' ist kein Git-Repo (.git fehlt). Abbruch."
     echo "   Repo anlegen mit:  git -C '$PKG_REPO' init"
     exit 1
+fi
+
+# 0b. Alte Struktur (hugocms/-Zwischenordner) entfernen, falls noch vorhanden.
+if [ -d "$PKG_REPO/hugocms" ]; then
+    echo "Alte Struktur packaging/hugocms/ wird entfernt."
+    rm -rf "$PKG_REPO/hugocms"
 fi
 
 # 1. Frontend bauen (erzeugt frontend/dist über das vorhandene build.sh)
@@ -87,8 +96,8 @@ cat > "$PKG/index.php.beispiel" <<'PHP'
  *      oder programmatisch. Pfade möglichst AUSSERHALB des Web-Wurzelver-
  *      zeichnisses.
  *
- * Erwartete Paketstruktur (Document-Root = hugocms/):
- *   hugocms/
+ * Erwartete Paketstruktur (Document-Root = Paketwurzel):
+ *   ./
  *   ├── edit/                (Client; erreichbar unter /edit/)
  *   ├── backend/             (PHP-Quellen)
  *   ├── log/
