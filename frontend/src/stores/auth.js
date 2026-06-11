@@ -6,6 +6,7 @@ export const useAuthStore = defineStore('auth', {
     user: null,
     authenticated: false,
     ready: false, // true, sobald der erste whoami-Aufruf beantwortet wurde
+    warnings: [], // Einrichtungs-Hinweise des Servers (z. B. fehlende Verzeichnisse)
   }),
 
   actions: {
@@ -13,6 +14,7 @@ export const useAuthStore = defineStore('auth', {
       const data = await api.get('whoami')
       this.authenticated = data.authenticated
       this.user = data.user
+      this.warnings = data.warnings ?? []
       this.ready = true
     },
 

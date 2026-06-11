@@ -1,57 +1,12 @@
 <?php
 /**
- * HugoCMS – fester Einstiegspunkt (Endpunkt /cms-api/).
+ * HugoCMS – Einstiegspunkt im Wurzelverzeichnis.
  *
- * Diese Datei gehört zum Backend und wird NICHT vom Anwender bearbeitet.
- * Sie bestimmt, wie der Connector aufgebaut wird — in dieser Reihenfolge:
- *
- *   1. Gibt es eine custom.php, übernimmt diese die gesamte Konfiguration
- *      (Connector instanzieren, Mounts festlegen, run() aufrufen). Der
- *      Autoloader ist dann bereits geladen. Vorlage: custom.php.beispiel.
- *   2. Sonst wird der Connector aus den INI-Dateien erzeugt:
- *        - hugocms.ini  (Anmeldung, Session, Logging)  — erforderlich
- *        - mounts.ini   (Mount-Punkte)                 — optional
- *   3. Fehlt beides, wird ein Einrichtungsfehler an den Client gemeldet.
- *      (Ein Einrichtungs-Setup, das die INI-Dateien erzeugt, folgt später.)
+ * Bindet ausschließlich den festen Backend-Einstiegspunkt ein. Die gesamte
+ * Logik liegt in backend/core/hugocms.php; dort werden auch custom.php
+ * (backend/custom/), hugocms.ini und mounts.ini (backend/) gesucht.
  */
 
 declare(strict_types=1);
 
-require __DIR__ . '/backend/autoload.php';
-
-use HugoCMS\FileManager\Connector;
-use HugoCMS\FileManager\Exception\ApiException;
-use HugoCMS\FileManager\Response;
-
-// 1. Anwenderspezifischer Bootstrap hat Vorrang.
-$customBootstrap = __DIR__ . '/custom.php';
-if (is_file($customBootstrap)) {
-    require $customBootstrap;
-    return;
-}
-
-// 2. Aus den INI-Dateien aufbauen, sofern die Hauptkonfiguration vorliegt.
-$configFile = __DIR__ . '/hugocms.ini';
-$mountsFile = __DIR__ . '/mounts.ini';
-
-if (is_file($configFile)) {
-    try {
-        $connector = new Connector(['config' => $configFile]);
-    } catch (ApiException $e) {
-        // Konfigurationsfehler vor dem Aufbau des Connectors sauber melden.
-        Response::error($e->errorCode(), $e->getMessage(), $e->httpStatus());
-    }
-    if (is_file($mountsFile)) {
-        $connector->mountsFromFile($mountsFile);
-    }
-    $connector->run();
-    return;
-}
-
-// 3. Keine Konfiguration vorhanden — die Einrichtung steht noch aus.
-Response::error(
-    'ESETUP',
-    'HugoCMS ist noch nicht eingerichtet: weder custom.php noch hugocms.ini gefunden. '
-    . 'Das Einrichtungs-Setup folgt.',
-    503,
-);
+require __DIR__ . '/backend/core/hugocms.php';

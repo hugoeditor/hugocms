@@ -9,8 +9,8 @@ vendor/
 
 # Sitzungen / temporär
 *.log
-log/*.log
-var/sessions/
+backend/log/*.log
+backend/var/sessions/
 .DS_Store
 
 # Beispiel-Datenverzeichnis (in echten Installationen nicht versionieren)

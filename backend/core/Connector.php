@@ -24,6 +24,9 @@ final class Connector
     private readonly ?string $cors;
     private readonly Logger $logger;
 
+    /** Hinweise zur Einrichtung (z. B. fehlende Verzeichnisse), an den Client gemeldet. */
+    private array $setupWarnings = [];
+
     public function __construct(array $options)
     {
         // Hauptkonfiguration (hugocms.ini) ggf. zuerst einlesen — daraus
@@ -36,10 +39,18 @@ final class Connector
             $cfg = Config::load((string) $options['config']);
 
             // Sitzungsverzeichnis VOR dem ersten session_start() setzen
-            // (dieses erfolgt bei der Auth-Erzeugung weiter unten).
+            // (dieses erfolgt bei der Auth-Erzeugung weiter unten). Fehlt das
+            // Verzeichnis, bleibt es bei PHP-Voreinstellung — mit Hinweis.
             $sessionPath = $cfg['session']['path'];
-            if ($sessionPath !== null && is_dir($sessionPath)) {
-                session_save_path($sessionPath);
+            if ($sessionPath !== null) {
+                if (is_dir($sessionPath)) {
+                    session_save_path($sessionPath);
+                } else {
+                    $this->setupWarnings[] = sprintf(
+                        'Sitzungsverzeichnis fehlt: %s — Anmeldungen sind mglw. nicht von Dauer.',
+                        $sessionPath,
+                    );
+                }
             }
 
             // Log nur aus der Datei übernehmen, wenn nicht explizit gesetzt.
@@ -52,6 +63,15 @@ final class Connector
         // Erzeugung, in mount() und im weiteren Konstruktor erfasst.
         $this->logger = new Logger($options['log'] ?? null, $options['logLevel'] ?? 'error');
         $this->registerErrorHandlers();
+
+        // Fehlt das Log-Verzeichnis, schreibt der Logger ins Server-Log — Hinweis.
+        $logFile = $options['log'] ?? null;
+        if ($logFile !== null && !is_dir(dirname($logFile))) {
+            $this->setupWarnings[] = sprintf(
+                'Log-Verzeichnis fehlt: %s — Meldungen gehen ins Server-Log.',
+                dirname($logFile),
+            );
+        }
 
         // Authentifizierung: entweder direkt übergeben oder aus der
         // Konfiguration über die AuthFactory erzeugen (driver-abhängig).
@@ -194,6 +214,7 @@ final class Connector
         return [
             'authenticated' => $this->auth->isAuthenticated(),
             'user' => $this->auth->currentUser(),
+            'warnings' => $this->setupWarnings,
         ];
     }
 

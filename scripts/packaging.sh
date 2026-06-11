@@ -5,13 +5,15 @@
 # Erzeugt/erneuert die Struktur direkt im Repo-Wurzelverzeichnis:
 #   packaging/
 #   ├── app/                 (gebautes Frontend = Client; URL-Pfad via Installationsroutine)
-#   ├── backend/             (PHP-Quellen)
-#   ├── index.php            (fester Einstiegspunkt; Endpunkt /cms-api/)
-#   ├── custom.php.beispiel  (Vorlage: anwenderspezifischer Bootstrap)
-#   ├── hugocms.ini.beispiel (Vorlage: Anmeldung, Session, Logging)
-#   ├── mounts.ini.beispiel  (Vorlage: Mount-Konfiguration)
-#   ├── log/                 (Laufzeit; .htaccess + .gitkeep)
-#   └── var/sessions/        (Laufzeit; .gitkeep)
+#   ├── backend/
+#   │     ├── core/                (Kern-Bibliothek inkl. autoload.php + hugocms.php)
+#   │     ├── custom/
+#   │     │     └── custom.php.beispiel  (Vorlage: anwenderspezifischer Bootstrap)
+#   │     ├── log/                       (Laufzeit; .htaccess + .gitkeep)
+#   │     ├── var/sessions/              (Laufzeit; .gitkeep)
+#   │     ├── hugocms.ini.beispiel       (Vorlage: Anmeldung, Session, Logging)
+#   │     └── mounts.ini.beispiel        (Vorlage: Mount-Konfiguration)
+#   └── index.php            (dünner Einstiegspunkt; bindet backend/core/hugocms.php ein)
 #
 # Es wird NICHT committet — nach dem Lauf zeigt das Skript 'git status' des
 # Paket-Repos an; Commit und Push bleiben dir überlassen.
@@ -63,38 +65,40 @@ rm -rf "$PKG/edit" "$PKG/hugocms-app" "$PKG/app"
 mkdir -p "$PKG/app"
 cp -r "$PROJECT_DIR/frontend/dist/." "$PKG/app/"
 
-# 3. Backend übernehmen (backend/) — vollständig ersetzen
+# 3. Backend übernehmen (backend/) — vollständig ersetzen.
+#    Enthält die Kern-Bibliothek unter core/ (inkl. autoload.php + hugocms.php),
+#    die Bootstrap-Vorlage unter custom/custom.php.beispiel sowie die ini-
+#    Vorlagen direkt in backend/ — alles kommt automatisch mit und wird nicht
+#    mehr separat kopiert.
 echo "3. Backend -> $PKG/backend"
 rm -rf "$PKG/backend"
 mkdir -p "$PKG/backend"
 cp -r "$PROJECT_DIR/backend/." "$PKG/backend/"
 
-# 4. Laufzeitverzeichnisse sicherstellen (Inhalt bleibt unversioniert)
-echo "4. Laufzeitverzeichnisse sicherstellen (log/, var/sessions/)"
-mkdir -p "$PKG/log" "$PKG/var/sessions"
-[ -e "$PKG/log/.gitkeep" ] || touch "$PKG/log/.gitkeep"
-[ -e "$PKG/var/sessions/.gitkeep" ] || touch "$PKG/var/sessions/.gitkeep"
-if [ ! -e "$PKG/log/.htaccess" ]; then
-    cat > "$PKG/log/.htaccess" <<'HT'
+# 4. Laufzeitverzeichnisse unter backend/ sicherstellen (Inhalt unversioniert).
+#    Beim Backend-Kopieren (Schritt 3) mitgewanderte Entwicklungsinhalte
+#    (Logdatei, Session-Dateien) sowie aus dem früheren Layout verbliebene
+#    log/ und var/ im Paket-Wurzelverzeichnis werden entfernt.
+echo "4. Laufzeitverzeichnisse sicherstellen (backend/log/, backend/var/sessions/)"
+rm -rf "$PKG/backend/log" "$PKG/backend/var" "$PKG/log" "$PKG/var"
+mkdir -p "$PKG/backend/log" "$PKG/backend/var/sessions"
+touch "$PKG/backend/log/.gitkeep" "$PKG/backend/var/sessions/.gitkeep"
+cat > "$PKG/backend/log/.htaccess" <<'HT'
 # Apache: kein direkter Zugriff auf Logdateien.
 # Nginx wertet diese Datei NICHT aus — dort den location-Block aus
 # beispiel-konfigurationen/nginx.conf verwenden oder das Log-Verzeichnis
 # außerhalb des Web-Wurzelverzeichnisses ablegen.
 Require all denied
 HT
-fi
 
-# 5. Fester Einstiegspunkt (index.php) — gehört zum Backend, nicht anpassen.
-#    Eine eventuell aus früheren Paketläufen verbliebene Vorlage entfernen.
+# 5. Dünner Einstiegspunkt (index.php) — bindet backend/core/hugocms.php ein,
+#    gehört zum Backend, nicht anpassen.
+#    Aus dem früheren Paket-Layout im Wurzelverzeichnis verbliebene Dateien
+#    entfernen: index.php.beispiel sowie die nach backend/ gewanderten Vorlagen.
 echo "5. Einstiegspunkt -> $PKG/index.php"
-rm -f "$PKG/index.php.beispiel"
+rm -f "$PKG/index.php.beispiel" \
+      "$PKG/custom.php.beispiel" "$PKG/hugocms.ini.beispiel" "$PKG/mounts.ini.beispiel"
 cp "$PROJECT_DIR/index.php" "$PKG/index.php"
-
-# 5b. Vorlagen mitliefern: Anwender-Bootstrap und Konfiguration.
-echo "5b. Vorlagen -> $PKG/{custom.php.beispiel, hugocms.ini.beispiel, mounts.ini.beispiel}"
-cp "$PROJECT_DIR/custom.php.beispiel"   "$PKG/custom.php.beispiel"
-cp "$PROJECT_DIR/hugocms.ini.beispiel"  "$PKG/hugocms.ini.beispiel"
-cp "$PROJECT_DIR/mounts.ini.beispiel"   "$PKG/mounts.ini.beispiel"
 
 # 6. Berechtigungen vereinheitlichen
 find "$PKG/app" "$PKG/backend" -type d -exec chmod 775 {} \; 2>/dev/null || true

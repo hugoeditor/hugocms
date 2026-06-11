@@ -11,6 +11,7 @@ const auth = useAuthStore()
 const files = useFilesStore()
 const drawer = ref(true)
 const error = ref(null)
+const warningsVisible = ref(false)
 
 async function loadMounts() {
   error.value = null
@@ -37,6 +38,7 @@ async function loadMounts() {
 onMounted(async () => {
   try {
     await auth.check()
+    if (auth.warnings.length > 0) warningsVisible.value = true
   } catch (e) {
     error.value = e.message
   }
@@ -90,6 +92,23 @@ async function logout() {
 
     <v-snackbar :model-value="!!error" color="error" @update:model-value="error = null">
       {{ error }}
+    </v-snackbar>
+
+    <v-snackbar
+      :model-value="warningsVisible"
+      color="warning"
+      location="top"
+      :timeout="-1"
+      multi-line
+      @update:model-value="warningsVisible = false"
+    >
+      <div class="font-weight-medium mb-1">Server-Hinweis zur Einrichtung</div>
+      <ul class="ms-4">
+        <li v-for="(w, i) in auth.warnings" :key="i">{{ w }}</li>
+      </ul>
+      <template #actions>
+        <v-btn variant="text" @click="warningsVisible = false">Schließen</v-btn>
+      </template>
     </v-snackbar>
   </v-app>
 </template>
