@@ -1,9 +1,20 @@
-; HugoCMS – Mount-Konfiguration
+; HugoCMS – Mount-Konfiguration (Vorlage)
 ; ===========================================================================
-; Alternative zum manuellen $connector->mount(...) in der index.php.
-; Übergabe an den Connector:
+; HugoCMS verwaltet mehrere Webseiten. Die Mounts der aufgerufenen Webseite
+; stehen in einer host-spezifischen Datei:
 ;
-;     $connector->mountsFromFile(__DIR__ . '/mounts.ini');
+;     backend/mounts/<hash>.ini
+;
+; Den <hash> bildet das Backend aus Host + Endpunkt-Pfad (siehe SiteKey).
+; Den exakten Dateinamen nennt die Einrichtungs-/Fehlermeldung des Clients
+; oder das Hilfsskript:  scripts/site-hash.sh <host><endpunkt-pfad>
+;
+; Fehlt die host-spezifische Datei, gilt backend/mounts.ini als RÜCKFALL
+; (mit Hinweis an den Client). Fehlt auch diese, meldet das Backend die
+; Webseite als unbekannt (404). Das Format ist überall identisch.
+;
+; Zum Verwenden: nach backend/mounts/<hash>.ini (je Webseite) oder nach
+; backend/mounts.ini (Rückfall) kopieren und anpassen.
 ;
 ; Regeln:
 ;   • Jede [Sektion] ist ein Mount. Der Sektionsname ist die interne ID

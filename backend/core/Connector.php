@@ -134,6 +134,18 @@ final class Connector
     }
 
     /**
+     * Fügt einen Einrichtungs-Hinweis hinzu, der über whoami an den Client
+     * gemeldet wird (z. B. Rückfall auf die Standard-mounts.ini). Für Hinweise
+     * aus der Boot-Schicht, die nicht im Konstruktor entstehen.
+     */
+    public function addSetupWarning(string $message): self
+    {
+        $this->setupWarnings[] = $message;
+
+        return $this;
+    }
+
+    /**
      * Liest die Anfrage, führt den Befehl aus und gibt JSON zurück.
      */
     public function run(): void

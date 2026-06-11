@@ -100,15 +100,28 @@ async function logout() {
       location="top"
       :timeout="-1"
       multi-line
+      class="warning-snackbar"
       @update:model-value="warningsVisible = false"
     >
       <div class="font-weight-medium mb-1">Server-Hinweis zur Einrichtung</div>
       <ul class="ms-4">
         <li v-for="(w, i) in auth.warnings" :key="i">{{ w }}</li>
       </ul>
-      <template #actions>
+      <div class="d-flex justify-end mt-3">
         <v-btn variant="text" @click="warningsVisible = false">Schließen</v-btn>
-      </template>
+      </div>
     </v-snackbar>
   </v-app>
 </template>
+
+<style scoped>
+/* Hinweis-Snackbar breiter und mit etwas mehr Innenabstand, damit längere
+   Meldungen (z. B. erwarteter Dateiname) lesbar sind. */
+.warning-snackbar :deep(.v-snackbar__wrapper) {
+  max-width: 720px;
+}
+.warning-snackbar :deep(.v-snackbar__content) {
+  width: 100%;
+  padding-block: 16px;
+}
+</style>
