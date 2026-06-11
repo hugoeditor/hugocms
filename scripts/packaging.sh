@@ -4,7 +4,7 @@
 #
 # Erzeugt/erneuert die Struktur direkt im Repo-Wurzelverzeichnis:
 #   packaging/
-#   ├── edit/                (gebautes Frontend = Client, läuft unter /edit/)
+#   ├── app/                 (gebautes Frontend = Client; URL-Pfad via Installationsroutine)
 #   ├── backend/             (PHP-Quellen)
 #   ├── index.php            (fester Einstiegspunkt; Endpunkt /cms-api/)
 #   ├── custom.php.beispiel  (Vorlage: anwenderspezifischer Bootstrap)
@@ -53,13 +53,15 @@ if [ ! -f "$PROJECT_DIR/frontend/dist/index.html" ]; then
 fi
 echo ""
 
-# 2. Client übernehmen (edit/) — alte (gehashte) Assets vollständig ersetzen.
-#    Der Build setzt base=/edit/, daher trägt das Verzeichnis denselben Namen
-#    wie der URL-Pfad. Frühere app/ bzw. hugocms-app/ werden mit entfernt.
-echo "2. Client  -> $PKG/edit"
-rm -rf "$PKG/app" "$PKG/hugocms-app" "$PKG/edit"
-mkdir -p "$PKG/edit"
-cp -r "$PROJECT_DIR/frontend/dist/." "$PKG/edit/"
+# 2. Client übernehmen (app/) — alte (gehashte) Assets vollständig ersetzen.
+#    Der Build setzt base=/edit/ (Asset-Referenzen); das Auslieferungs-
+#    verzeichnis heißt app/ und wird im Produktivsystem über die
+#    Installationsroutine auf den URL-Pfad abgebildet. Frühere edit/ bzw.
+#    hugocms-app/ werden mit entfernt.
+echo "2. Client  -> $PKG/app"
+rm -rf "$PKG/edit" "$PKG/hugocms-app" "$PKG/app"
+mkdir -p "$PKG/app"
+cp -r "$PROJECT_DIR/frontend/dist/." "$PKG/app/"
 
 # 3. Backend übernehmen (backend/) — vollständig ersetzen
 echo "3. Backend -> $PKG/backend"
@@ -95,8 +97,8 @@ cp "$PROJECT_DIR/hugocms.ini.beispiel"  "$PKG/hugocms.ini.beispiel"
 cp "$PROJECT_DIR/mounts.ini.beispiel"   "$PKG/mounts.ini.beispiel"
 
 # 6. Berechtigungen vereinheitlichen
-find "$PKG/edit" "$PKG/backend" -type d -exec chmod 775 {} \; 2>/dev/null || true
-find "$PKG/edit" "$PKG/backend" -type f -exec chmod 664 {} \; 2>/dev/null || true
+find "$PKG/app" "$PKG/backend" -type d -exec chmod 775 {} \; 2>/dev/null || true
+find "$PKG/app" "$PKG/backend" -type f -exec chmod 664 {} \; 2>/dev/null || true
 
 echo ""
 echo "========================================="
