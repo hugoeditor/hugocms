@@ -22,10 +22,26 @@
 #                             install.sh kopiert ihn als API-Endpunkt nach
 #                             <publish>/cms-api/index.php neben einen backend-Symlink.)
 #
-# Es wird NICHT committet — nach dem Lauf zeigt das Skript 'git status' des
-# Paket-Repos an; Commit und Push bleiben dir überlassen.
+# Aufruf:
+#   packaging.sh            nur bauen; danach 'git status' des Release-Repos.
+#   packaging.sh --commit   zusätzlich im Release-Repo committen (Commit-
+#                           Message wird aus dem Quell-Commit abgeleitet).
+#   packaging.sh --push     committen UND pushen.
+# Ohne Flag wird NICHT committet — Commit/Push bleiben dir überlassen.
 
 set -euo pipefail
+
+# --- Argumente -------------------------------------------------------------
+DO_COMMIT=0
+DO_PUSH=0
+for arg in "$@"; do
+    case "$arg" in
+        --commit) DO_COMMIT=1 ;;
+        --push)   DO_COMMIT=1; DO_PUSH=1 ;;
+        -h|--help) echo "Aufruf: $0 [--commit] [--push]"; exit 0 ;;
+        *) echo "Unbekannte Option: $arg" >&2; exit 1 ;;
+    esac
+done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -136,6 +152,30 @@ echo "Änderungen im Paket-Repo ($PKG_REPO):"
 echo "-----------------------------------------"
 git -C "$PKG_REPO" status -s
 echo "-----------------------------------------"
-echo "Zum Übernehmen z. B.:"
-echo "  git -C '$PKG_REPO' add -A && git -C '$PKG_REPO' commit -m 'Release: aktueller Client + Backend'"
+
+if [ "$DO_COMMIT" = 1 ]; then
+    # Commit-Message aus dem Quell-Commit ableiten (Rückverfolgbarkeit). Ist der
+    # Arbeitsbaum des Quell-Repos nicht sauber, wird der Stand als -dirty markiert.
+    SRC_REV="$(git -C "$PROJECT_DIR" rev-parse --short HEAD 2>/dev/null || echo '?')"
+    SRC_SUBJ="$(git -C "$PROJECT_DIR" log -1 --pretty=%s 2>/dev/null || echo 'Release')"
+    if ! git -C "$PROJECT_DIR" diff --quiet HEAD 2>/dev/null; then
+        SRC_REV="${SRC_REV}-dirty"
+    fi
+    MSG="Release aus ${SRC_REV}: ${SRC_SUBJ}"
+
+    git -C "$PKG_REPO" add -A
+    if git -C "$PKG_REPO" diff --cached --quiet; then
+        echo "Release-Repo unverändert — kein Commit nötig."
+    else
+        git -C "$PKG_REPO" commit -q -m "$MSG"
+        echo "Commit erstellt: $MSG"
+    fi
+    if [ "$DO_PUSH" = 1 ]; then
+        echo "Push…"
+        git -C "$PKG_REPO" push
+    fi
+else
+    echo "Zum Übernehmen: git -C '$PKG_REPO' add -A && git -C '$PKG_REPO' commit"
+    echo "  oder bequemer: scripts/packaging.sh --commit   (bzw. --push)"
+fi
 echo "========================================="

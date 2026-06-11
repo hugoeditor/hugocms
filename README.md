@@ -195,8 +195,18 @@ git clone <DEINE-RELEASE-REPO-URL> hugocms-release
 ```
 
 Danach aktualisiert jeder `scripts/packaging.sh`-Lauf den Inhalt von
-`hugocms-release/`. Es wird nichts automatisch committet — Commit und Push im
-Release-Repo bleiben dir überlassen.
+`hugocms-release/`. Das Pflegen des Release-Repos lässt sich dabei mitnehmen —
+du fasst es nie von Hand an:
+
+```bash
+scripts/packaging.sh            # nur bauen; danach 'git status' des Release-Repos
+scripts/packaging.sh --commit   # zusätzlich committen (Message aus dem Quell-Commit)
+scripts/packaging.sh --push     # committen und pushen
+```
+
+Die Commit-Message wird aus dem Quell-Commit abgeleitet (z. B. `Release aus
+a1b2c3d: <Betreff>`); ist der Quell-Arbeitsbaum nicht sauber, wird der Stand
+als `-dirty` markiert. Ohne Flag committet das Skript nichts.
 
 ### Webseite einrichten: `bin/install.sh`
 
