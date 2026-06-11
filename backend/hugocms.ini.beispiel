@@ -33,4 +33,4 @@ path = var/sessions
 ; Logdatei und Stufe: debug | info | warning | error
 ; Ohne 'file' fällt das Logging auf das PHP-eigene error_log zurück.
 file = log/hugocms.log
-level = error
+level = warning

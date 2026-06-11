@@ -65,7 +65,9 @@ if (is_file($configFile)) {
     if (is_file($hostMounts)) {
         $connector->mountsFromFile($hostMounts);
     } elseif (is_file($mountsFile)) {
-        $connector->addSetupWarning(sprintf(
+        // Kurzer Hinweis an den Client, ausführlicher Kontext ins Log.
+        $connector->addSetupWarning(sprintf('Keine eigene Mount-Konfiguration für „%s".', $siteKey));
+        $connector->logWarning(sprintf(
             'Keine eigene Mount-Konfiguration für „%s" (erwartet: mounts/%s.ini). '
             . 'Es gilt der Rückfall mounts.ini.',
             $siteKey,

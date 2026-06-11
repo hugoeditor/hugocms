@@ -150,6 +150,17 @@ final class Connector
     }
 
     /**
+     * Schreibt eine Warnung ins Log — etwa den ausführlichen Kontext zu einem
+     * an den Client gemeldeten Kurzhinweis. Für Meldungen aus der Boot-Schicht.
+     */
+    public function logWarning(string $message): self
+    {
+        $this->logger->warning($message);
+
+        return $this;
+    }
+
+    /**
      * Liest die Anfrage, führt den Befehl aus und gibt JSON zurück.
      */
     public function run(): void
