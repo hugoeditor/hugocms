@@ -11,6 +11,7 @@ const auth = useAuthStore()
 const files = useFilesStore()
 const drawer = ref(true)
 const error = ref(null)
+const fatalError = ref(null)
 const warningsVisible = ref(false)
 
 async function loadMounts() {
@@ -35,14 +36,20 @@ async function loadMounts() {
   }
 }
 
-onMounted(async () => {
+// Anfangsprüfung (whoami) — läuft vor dem Login. Schlägt sie fehl, ist es ein
+// Setup-/Verbindungsfehler, der erst behoben werden muss; er bleibt darum
+// dauerhaft sichtbar (fatalError) statt als flüchtiger Snackbar zu verschwinden.
+async function init() {
+  fatalError.value = null
   try {
     await auth.check()
     if (auth.warnings.length > 0) warningsVisible.value = true
   } catch (e) {
-    error.value = e.message
+    fatalError.value = e.message
   }
-})
+}
+
+onMounted(init)
 
 // Mounts laden, sobald die Anmeldung steht — gleicher Pfad für die anfängliche
 // Sitzungsprüfung (Reload) wie für ein erfolgreiches Login. Bewusst reaktiv über
@@ -60,7 +67,17 @@ async function logout() {
 
 <template>
   <v-app>
-    <template v-if="!auth.ready">
+    <template v-if="fatalError">
+      <v-main class="d-flex align-center justify-center pa-6">
+        <v-alert type="error" prominent border="start" class="fatal-alert">
+          <div class="text-h6 mb-2">HugoCMS ist nicht einsatzbereit</div>
+          <p class="mb-4">{{ fatalError }}</p>
+          <v-btn variant="outlined" @click="init">Erneut prüfen</v-btn>
+        </v-alert>
+      </v-main>
+    </template>
+
+    <template v-else-if="!auth.ready">
       <v-main class="d-flex align-center justify-center">
         <v-progress-circular indeterminate color="primary" />
       </v-main>
@@ -115,6 +132,11 @@ async function logout() {
 </template>
 
 <style scoped>
+/* Dauerhafter Fehler-Block (Setup-/Pre-Login-Fehler): zentriert, begrenzt. */
+.fatal-alert {
+  max-width: 600px;
+}
+
 /* Hinweis-Snackbar breiter und mit etwas mehr Innenabstand, damit längere
    Meldungen (z. B. erwarteter Dateiname) lesbar sind. */
 .warning-snackbar :deep(.v-snackbar__wrapper) {

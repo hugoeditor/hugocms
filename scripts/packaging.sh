@@ -5,6 +5,10 @@
 # Erzeugt/erneuert die Struktur direkt im Repo-Wurzelverzeichnis:
 #   packaging/
 #   ├── app/                 (gebautes Frontend = Client; URL-Pfad via Installationsroutine)
+#   ├── bin/
+#   │     ├── get-hugo.sh          (lädt das Hugo-Binary nach bin/hugo/)
+#   │     └── install.sh           (richtet eine Webseite ein: Symlinks + mounts/<hash>.ini)
+#   │     (hugo/ wird NICHT mitgeliefert — install.sh holt es per get-hugo.sh)
 #   ├── backend/
 #   │     ├── core/                (Kern-Bibliothek inkl. autoload.php + hugocms.php)
 #   │     ├── custom/
@@ -14,7 +18,9 @@
 #   │     ├── var/sessions/              (Laufzeit; .gitkeep)
 #   │     ├── hugocms.ini.beispiel       (Vorlage: Anmeldung, Session, Logging)
 #   │     └── mounts.ini.beispiel        (Vorlage: Mount-Konfiguration, Rückfall)
-#   └── index.php            (dünner Einstiegspunkt; bindet backend/core/hugocms.php ein)
+#   └── index.php            (Einstiegspunkt; bindet backend/core/hugocms.php ein.
+#                             install.sh kopiert ihn als API-Endpunkt nach
+#                             <publish>/cms-api/index.php neben einen backend-Symlink.)
 #
 # Es wird NICHT committet — nach dem Lauf zeigt das Skript 'git status' des
 # Paket-Repos an; Commit und Push bleiben dir überlassen.
@@ -103,6 +109,15 @@ echo "5. Einstiegspunkt -> $PKG/index.php"
 rm -f "$PKG/index.php.beispiel" \
       "$PKG/custom.php.beispiel" "$PKG/hugocms.ini.beispiel" "$PKG/mounts.ini.beispiel"
 cp "$PROJECT_DIR/index.php" "$PKG/index.php"
+
+# 5b. bin/ ausliefern — nur die Skripte (install.sh, get-hugo.sh). Das Hugo-
+#     Binary wird NICHT mitgeliefert; install.sh lädt es per get-hugo.sh im
+#     Produktivsystem nach (bin/hugo/ ist in beiden Repos ignoriert).
+echo "5b. bin -> $PKG/bin (ohne Hugo-Binary)"
+rm -rf "$PKG/bin"
+cp -r "$PROJECT_DIR/bin" "$PKG/bin"
+rm -rf "$PKG/bin/hugo"
+chmod +x "$PKG/bin/"*.sh 2>/dev/null || true
 
 # 6. Berechtigungen vereinheitlichen
 find "$PKG/app" "$PKG/backend" -type d -exec chmod 775 {} \; 2>/dev/null || true

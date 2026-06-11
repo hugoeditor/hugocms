@@ -23,6 +23,8 @@ final class Connector
     private readonly FileService $files;
     private readonly ?string $cors;
     private readonly Logger $logger;
+    /** Konfiguriertes Sitzungsverzeichnis (für die Rechteprüfung in whoami). */
+    private readonly ?string $sessionDir;
 
     /** Hinweise zur Einrichtung (z. B. fehlende Verzeichnisse), an den Client gemeldet. */
     private array $setupWarnings = [];
@@ -35,6 +37,7 @@ final class Connector
         // ungültig) werden direkt als JSON beantwortet, da der Logger und die
         // Fehler-Handler noch nicht stehen.
         $authConfig = null;
+        $sessionPath = null;
         if (isset($options['config'])) {
             $cfg = Config::load((string) $options['config']);
 
@@ -58,6 +61,7 @@ final class Connector
             $options['logLevel'] ??= $cfg['log']['level'] ?? 'error';
             $authConfig = $cfg['auth'];
         }
+        $this->sessionDir = $sessionPath;
 
         // Logger und Fehler-Handler: danach werden auch Fehler in der Auth-
         // Erzeugung, in mount() und im weiteren Konstruktor erfasst.
@@ -223,6 +227,22 @@ final class Connector
 
     private function cmdWhoami(): array
     {
+        // Kritische Rechte VOR dem Login melden: Ist das Sitzungsverzeichnis
+        // nicht les-/beschreibbar, kann PHP die Anmelde-Session nicht
+        // speichern. Der Login scheint zu klappen, die Folgeanfrage hat aber
+        // keine Session mehr und endet mit einem irreführenden 401. Hier wird
+        // stattdessen die wahre Ursache gemeldet.
+        if ($this->sessionDir !== null && is_dir($this->sessionDir)
+            && (!is_readable($this->sessionDir) || !is_writable($this->sessionDir))) {
+            throw new ApiException(
+                "Sitzungsverzeichnis nicht les-/beschreibbar: {$this->sessionDir}. "
+                . 'Eine Anmeldung ist nicht möglich — bitte Lese- und Schreibrechte für '
+                . 'den Webserver-Benutzer setzen.',
+                'ESESSION',
+                500,
+            );
+        }
+
         return [
             'authenticated' => $this->auth->isAuthenticated(),
             'user' => $this->auth->currentUser(),

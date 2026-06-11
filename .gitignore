@@ -7,6 +7,9 @@ frontend/.env.local
 # PHP
 vendor/
 
+# Hugo-Binary (wird per bin/get-hugo.sh geholt, nicht versioniert)
+bin/hugo/
+
 # Sitzungen / temporär
 *.log
 backend/log/*.log
