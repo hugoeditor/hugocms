@@ -19,8 +19,8 @@ backend/var/sessions/
 # Beispiel-Datenverzeichnis (in echten Installationen nicht versionieren)
 daten/
 
-# Repo mit dem fertigen Produkt
-packaging/
+# Auslieferungs-Repo mit dem fertigen Produkt (eigenes Repo: hugocms-release)
+hugocms-release/
 
 # Installationsspezifische Konfigurationsdateien (Vorlagen *.ini.beispiel
 # bleiben versioniert, da sie nicht auf .ini enden).

@@ -18,13 +18,13 @@
 #      verzeichnis (Elternverzeichnis des Publish-Ordners). Pfade bei Bedarf
 #      anpassen.
 #   2. Richtet den Publish-Ordner ein:
-#        edit/             -> <packaging>/app       (Symlink; Frontend, URL /edit/)
+#        edit/             -> <hugocms-release>/app       (Symlink; Frontend, URL /edit/)
 #        cms-api/          (echtes Verzeichnis;     API-Endpunkt, URL /cms-api/)
 #          ├── index.php   (Kopie der Release-index.php)
-#          └── backend     -> <packaging>/backend   (Symlink)
+#          └── backend     -> <hugocms-release>/backend   (Symlink)
 #      So bleibt der Code im Release; nur die kleine index.php wird kopiert.
 #
-# Das Skript liegt im bin/ des packaging-Repos und ermittelt dessen Wurzel
+# Das Skript liegt im bin/ des Release-Repos und ermittelt dessen Wurzel
 # relativ zu sich selbst — das Repo darf an beliebiger Stelle liegen.
 
 set -euo pipefail
@@ -36,7 +36,7 @@ BACKEND_LINK="backend"  # Symlink in cms-api/ auf das Release-backend/. Der Name
                         # muss zu require '…/backend/core/hugocms.php' in der
                         # kopierten index.php passen.
 
-# --- packaging-Wurzel relativ zum Skript -----------------------------------
+# --- Release-Wurzel relativ zum Skript -----------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 APP_DIR="$PKG_ROOT/app"
@@ -60,11 +60,11 @@ if printf '%s' "$HOST" | grep -qE '[/:[:space:]]'; then
     exit 1
 fi
 
-# Voraussetzungen: packaging-Struktur und Publish-Ordner.
+# Voraussetzungen: Release-Struktur und Publish-Ordner.
 for d in "$APP_DIR" "$BACKEND_DIR"; do
     if [ ! -d "$d" ]; then
         echo "❌ Erwartetes Verzeichnis fehlt: $d" >&2
-        echo "   Liegt install.sh wirklich im bin/ des packaging-Repos?" >&2
+        echo "   Liegt install.sh wirklich im bin/ des Release-Repos?" >&2
         exit 1
     fi
 done
@@ -81,7 +81,7 @@ PUBLISH_ABS="$(cd "$PUBLISH" && pwd)"
 echo "========================================="
 echo "HugoCMS - Webseite einrichten"
 echo "========================================="
-echo "packaging-Repo: $PKG_ROOT"
+echo "Release-Repo: $PKG_ROOT"
 echo "Webseite:       $HOST"
 echo "Publish-Ordner: $PUBLISH_ABS"
 echo ""

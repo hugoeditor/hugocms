@@ -104,6 +104,26 @@ zeigen (Vorlagen für Apache und Nginx in `beispiel-konfigurationen/`). Der
 Standard von `VITE_API_BASE` ist bereits `/cms-api/`; nur bei abweichendem Pfad
 in `frontend/.env.production` anpassen.
 
+## Auslieferungs-Repo (hugocms-release)
+
+`scripts/packaging.sh` baut das fertige Produkt — gebautes Frontend (`app/`),
+Backend, `bin/` und `index.php` — in ein **eigenes Git-Repo** im Projektwurzel-
+verzeichnis: `hugocms-release/`. Dieses Repo wird auf das Produktivsystem
+ausgerollt; im Hauptrepo ist es über `.gitignore` ausgeschlossen.
+
+Das Skript klont das Repo **nicht** selbst (die Repo-URL ist je Installation
+verschieden). Lege es daher **einmalig** als Klon deines Auslieferungs-Repos an
+— der Ordner muss `hugocms-release` heißen:
+
+```bash
+git clone <DEINE-RELEASE-REPO-URL> hugocms-release
+```
+
+Danach aktualisiert jeder `scripts/packaging.sh`-Lauf den Inhalt von
+`hugocms-release/`. Es wird nichts automatisch committet — Commit und Push im
+Release-Repo bleiben dir überlassen. Auf dem Produktivsystem richtet dann
+`hugocms-release/bin/install.sh <host> <hugo-publish-ordner>` eine Webseite ein.
+
 ## API-Befehle (Stufe 1)
 
 | Befehl   | Methode | Parameter            | Zweck                          |

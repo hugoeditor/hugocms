@@ -1,9 +1,9 @@
 #!/bin/bash
-# packaging.sh - Aktualisiert das Auslieferungs-Repo unter ./packaging/
+# packaging.sh - Aktualisiert das Auslieferungs-Repo unter ./hugocms-release/
 # mit der neusten Version von Client (Frontend-Build) und Backend.
 #
 # Erzeugt/erneuert die Struktur direkt im Repo-Wurzelverzeichnis:
-#   packaging/
+#   hugocms-release/
 #   ├── app/                 (gebautes Frontend = Client; URL-Pfad via Installationsroutine)
 #   ├── bin/
 #   │     ├── get-hugo.sh          (lädt das Hugo-Binary nach bin/hugo/)
@@ -29,7 +29,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-PKG_REPO="$PROJECT_DIR/packaging"
+PKG_REPO="$PROJECT_DIR/hugocms-release"
 # Die Paketdateien liegen direkt im Repo-Wurzelverzeichnis (kein hugocms/).
 PKG="$PKG_REPO"
 
@@ -40,16 +40,20 @@ echo "Projektverzeichnis: $PROJECT_DIR"
 echo "Paketverzeichnis:   $PKG"
 echo ""
 
-# 0. Voraussetzungen prüfen
+# 0. Auslieferungs-Repo muss als eigenes Git-Repo unter hugocms-release/
+#    vorliegen. Das Skript klont es bewusst NICHT selbst — die Repo-URL ist
+#    installationsspezifisch (siehe README.md).
 if [ ! -d "$PKG_REPO/.git" ]; then
-    echo "❌ '$PKG_REPO' ist kein Git-Repo (.git fehlt). Abbruch."
-    echo "   Repo anlegen mit:  git -C '$PKG_REPO' init"
+    echo "❌ Auslieferungs-Repo fehlt: $PKG_REPO"
+    echo "   Das Repo 'hugocms-release' muss vorhanden sein, bevor das Paket"
+    echo "   gebaut werden kann."
+    echo "   Einrichtung siehe README.md, Abschnitt 'Auslieferungs-Repo'."
     exit 1
 fi
 
 # 0b. Alte Struktur (hugocms/-Zwischenordner) entfernen, falls noch vorhanden.
 if [ -d "$PKG_REPO/hugocms" ]; then
-    echo "Alte Struktur packaging/hugocms/ wird entfernt."
+    echo "Alte Struktur hugocms-release/hugocms/ wird entfernt."
     rm -rf "$PKG_REPO/hugocms"
 fi
 
