@@ -53,7 +53,7 @@ if (is_file($configFile)) {
         $connector = new Connector(['config' => $configFile]);
     } catch (ApiException $e) {
         // Konfigurationsfehler vor dem Aufbau des Connectors sauber melden.
-        Response::error($e->errorCode(), $e->getMessage(), $e->httpStatus());
+        Response::fromException($e);
     }
 
     // Mounts host-spezifisch laden: Die aufgerufene Webseite bestimmt über
@@ -67,8 +67,8 @@ if (is_file($configFile)) {
     if (is_file($hostMounts)) {
         $connector->mountsFromFile($hostMounts);
     } elseif (is_file($mountsFile)) {
-        // Kurzer Hinweis an den Client, ausführlicher Kontext ins Log.
-        $connector->addSetupWarning(sprintf('Keine eigene Mount-Konfiguration für „%s".', $siteKey));
+        // Kurzer Hinweis an den Client (übersetzbar), ausführlicher Kontext ins Log.
+        $connector->addSetupWarning('MOUNT-CONFIG-MISSING', [$siteKey]);
         $connector->logWarning(sprintf(
             'Keine eigene Mount-Konfiguration für „%s" (erwartet: mounts/%s.ini). '
             . 'Es gilt der Rückfall mounts.ini.',
@@ -77,16 +77,7 @@ if (is_file($configFile)) {
         ));
         $connector->mountsFromFile($mountsFile);
     } else {
-        Response::error(
-            'ESITE',
-            sprintf(
-                'Unbekannte Webseite „%s": weder mounts/%s.ini noch der Rückfall '
-                . 'mounts.ini vorhanden. Die Einrichtung folgt.',
-                $siteKey,
-                $hash,
-            ),
-            404,
-        );
+        Response::error('ESITE', null, 404, [$siteKey, $hash]);
     }
 
     $connector->run();

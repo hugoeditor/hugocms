@@ -4,10 +4,17 @@ declare(strict_types=1);
 
 namespace HugoCMS\FileManager;
 
+use HugoCMS\FileManager\Exception\ApiException;
+
 /**
  * Einheitliche JSON-Antworten.
  * Erfolg:  { "ok": true,  "data": ... }
- * Fehler:  { "ok": false, "error": { "code": ..., "message": ... } }
+ * Fehler:  { "ok": false, "error": { "code": ..., "key"?: ..., "params": [...] } }
+ *
+ * Der Fehler trägt keinen übersetzten Text: "code" ist die Fehlerklasse,
+ * "key" der optionale Übersetzungsschlüssel (entfällt, wenn der Code die
+ * Meldung eindeutig bestimmt), "params" die einzusetzenden dynamischen Teile.
+ * Der Client übersetzt darüber und setzt die Meldung zusammen.
  */
 final class Response
 {
@@ -16,12 +23,24 @@ final class Response
         self::send(200, ['ok' => true, 'data' => $data]);
     }
 
-    public static function error(string $code, string $message, int $httpStatus = 400): never
+    /**
+     * @param array<int, mixed> $params
+     */
+    public static function error(string $code, ?string $key = null, int $httpStatus = 400, array $params = []): never
     {
-        self::send($httpStatus, [
-            'ok' => false,
-            'error' => ['code' => $code, 'message' => $message],
-        ]);
+        $error = ['code' => $code];
+        if ($key !== null) {
+            $error['key'] = $key;
+        }
+        $error['params'] = array_values($params);
+
+        self::send($httpStatus, ['ok' => false, 'error' => $error]);
+    }
+
+    /** Bequemlichkeit: baut die Fehlerantwort direkt aus einer ApiException. */
+    public static function fromException(ApiException $e): never
+    {
+        self::error($e->errorCode(), $e->messageKey(), $e->httpStatus(), $e->params());
     }
 
     private static function send(int $httpStatus, array $payload): never

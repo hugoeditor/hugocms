@@ -23,10 +23,10 @@ final class MountResolver
     {
         $name = $mount->name();
         if (!preg_match('/^[A-Za-z0-9_-]+$/', $name)) {
-            throw ApiException::badRequest("Ungültiger Mount-Name: {$name}");
+            throw ApiException::badRequest('MOUNT-NAME-INVALID', [$name]);
         }
         if (isset($this->mounts[$name])) {
-            throw ApiException::badRequest("Mount bereits vergeben: {$name}");
+            throw ApiException::badRequest('MOUNT-NAME-TAKEN', [$name]);
         }
         $this->mounts[$name] = $mount;
     }
@@ -40,7 +40,7 @@ final class MountResolver
     public function get(string $name): Mount
     {
         return $this->mounts[$name]
-            ?? throw ApiException::notFound("Unbekannter Mount: {$name}");
+            ?? throw ApiException::notFound('MOUNT-UNKNOWN', [$name]);
     }
 
     public function encodeId(string $mountName, string $relPath): string
@@ -57,7 +57,7 @@ final class MountResolver
     {
         $raw = base64_decode(strtr($id, '-_', '+/'), true);
         if ($raw === false || !str_contains($raw, ':')) {
-            throw ApiException::badRequest('Ungültige ID.');
+            throw ApiException::badRequest('ID-INVALID');
         }
 
         [$mountName, $relPath] = explode(':', $raw, 2);
@@ -82,7 +82,7 @@ final class MountResolver
         if ($mustExist) {
             $real = realpath($candidate);
             if ($real === false) {
-                throw ApiException::notFound('Datei oder Verzeichnis nicht gefunden.');
+                throw ApiException::notFound('PATH-NOT-FOUND');
             }
             $this->assertInside($mount, $real);
 
@@ -92,7 +92,7 @@ final class MountResolver
         // Für neue Ziele: Elternverzeichnis muss existieren und im Mount liegen.
         $parentReal = realpath(dirname($candidate));
         if ($parentReal === false) {
-            throw ApiException::notFound('Zielverzeichnis nicht gefunden.');
+            throw ApiException::notFound('TARGET-DIR-NOT-FOUND');
         }
         $this->assertInside($mount, $parentReal);
 
@@ -115,7 +115,7 @@ final class MountResolver
     {
         $root = $mount->root();
         if ($real !== $root && !str_starts_with($real, $root . DIRECTORY_SEPARATOR)) {
-            throw ApiException::denied('Pfad liegt außerhalb des Mounts.');
+            throw ApiException::denied('PATH-OUTSIDE-MOUNT');
         }
     }
 
@@ -126,7 +126,7 @@ final class MountResolver
     private function sanitizeRelPath(string $rel): string
     {
         if (str_contains($rel, "\0")) {
-            throw ApiException::badRequest('Ungültiges Zeichen im Pfad.');
+            throw ApiException::badRequest('PATH-INVALID-CHAR');
         }
 
         $rel = str_replace('\\', '/', $rel);
@@ -136,7 +136,7 @@ final class MountResolver
                 continue;
             }
             if ($segment === '..') {
-                throw ApiException::denied('Übergeordnete Pfade sind nicht erlaubt.');
+                throw ApiException::denied('PARENT-PATH-NOT-ALLOWED');
             }
             $segments[] = $segment;
         }

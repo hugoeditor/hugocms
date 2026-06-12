@@ -35,12 +35,12 @@ final class MountConfig
     public static function load(string $configPath): array
     {
         if (!is_file($configPath) || !is_readable($configPath)) {
-            throw new ApiException("Mount-Konfiguration nicht lesbar: {$configPath}", 'ECONFIG', 500);
+            throw new ApiException('ECONFIG', 500, 'MOUNTS-NOT-READABLE', [$configPath]);
         }
 
         $raw = @parse_ini_file($configPath, true, INI_SCANNER_TYPED);
         if (!is_array($raw)) {
-            throw new ApiException("Mount-Konfiguration ist kein gültiges INI: {$configPath}", 'ECONFIG', 500);
+            throw new ApiException('ECONFIG', 500, 'MOUNTS-INVALID-INI', [$configPath]);
         }
 
         $baseDir = dirname($configPath);
@@ -48,16 +48,12 @@ final class MountConfig
 
         foreach ($raw as $name => $section) {
             if (!is_array($section)) {
-                throw new ApiException(
-                    "Mount-Konfiguration: Eintrag \"{$name}\" steht außerhalb einer [Sektion].",
-                    'ECONFIG',
-                    500,
-                );
+                throw new ApiException('ECONFIG', 500, 'MOUNTS-ENTRY-OUTSIDE-SECTION', [(string) $name]);
             }
 
             $path = isset($section['path']) ? trim((string) $section['path']) : '';
             if ($path === '') {
-                throw new ApiException("Mount \"{$name}\": Pflichtfeld \"path\" fehlt.", 'ECONFIG', 500);
+                throw new ApiException('ECONFIG', 500, 'MOUNTS-PATH-REQUIRED', [(string) $name]);
             }
             if (!self::isAbsolute($path)) {
                 $path = $baseDir . '/' . $path;
@@ -81,7 +77,7 @@ final class MountConfig
         }
 
         if ($mounts === []) {
-            throw new ApiException("Mount-Konfiguration enthält keine [Sektion]: {$configPath}", 'ECONFIG', 500);
+            throw new ApiException('ECONFIG', 500, 'MOUNTS-NO-SECTION', [$configPath]);
         }
 
         return $mounts;

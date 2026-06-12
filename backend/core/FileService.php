@@ -33,7 +33,7 @@ final class FileService
     public function listDir(Mount $mount, string $rel, string $abs): array
     {
         if (!is_dir($abs)) {
-            throw ApiException::badRequest('Kein Verzeichnis.');
+            throw ApiException::badRequest('NOT-A-DIRECTORY');
         }
 
         $entries = [];
@@ -64,20 +64,20 @@ final class FileService
     public function readText(Mount $mount, string $abs): array
     {
         if (!is_file($abs)) {
-            throw ApiException::notFound('Datei nicht gefunden.');
+            throw ApiException::notFound('FILE-NOT-FOUND');
         }
         $name = basename($abs);
         if (!$this->isEditable($name)) {
-            throw ApiException::denied('Dieser Dateityp kann nicht im Editor geöffnet werden.');
+            throw ApiException::denied('FILETYPE-NOT-EDITABLE');
         }
         $size = filesize($abs);
         if ($size !== false && $size > $this->maxEditableBytes) {
-            throw ApiException::denied('Datei ist zu groß für den Editor.');
+            throw ApiException::denied('FILE-TOO-LARGE');
         }
 
         $content = file_get_contents($abs);
         if ($content === false) {
-            throw new ApiException('Datei konnte nicht gelesen werden.', 'EIO', 500);
+            throw new ApiException('EIO', 500, 'FILE-READ-FAILED');
         }
 
         return [
@@ -97,23 +97,23 @@ final class FileService
     {
         $name = basename($abs);
         if (!$this->isEditable($name)) {
-            throw ApiException::denied('Dieser Dateityp kann nicht im Editor gespeichert werden.');
+            throw ApiException::denied('FILETYPE-NOT-SAVABLE');
         }
         if (!$mount->accepts($name)) {
-            throw ApiException::denied('Dieser Dateityp ist auf diesem Mount nicht erlaubt.');
+            throw ApiException::denied('FILETYPE-NOT-ALLOWED-MOUNT');
         }
         if (strlen($content) > $this->maxEditableBytes) {
-            throw ApiException::denied('Inhalt ist zu groß.');
+            throw ApiException::denied('CONTENT-TOO-LARGE');
         }
 
         $dir = dirname($abs);
         $tmp = @tempnam($dir, '.hugofm');
         if ($tmp === false) {
-            throw new ApiException('Temporäre Datei konnte nicht angelegt werden.', 'EIO', 500);
+            throw new ApiException('EIO', 500, 'TEMPFILE-FAILED');
         }
         if (@file_put_contents($tmp, $content) === false || !@rename($tmp, $abs)) {
             @unlink($tmp);
-            throw new ApiException('Datei konnte nicht gespeichert werden.', 'EIO', 500);
+            throw new ApiException('EIO', 500, 'FILE-SAVE-FAILED');
         }
         @chmod($abs, 0644);
         clearstatcache(true, $abs);

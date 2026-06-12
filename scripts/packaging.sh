@@ -106,13 +106,22 @@ cp -r "$PROJECT_DIR/backend/." "$PKG/backend/"
 #    unversioniert). Beim Backend-Kopieren (Schritt 3) mitgewanderte
 #    Entwicklungsinhalte (Logdatei, Session-Dateien, site-spezifische
 #    mounts/<hash>.ini) sowie aus dem früheren Layout verbliebene log/ und var/
-#    im Paket-Wurzelverzeichnis werden entfernt. Die Rückfall-mounts.ini bleibt
-#    (liegt direkt in backend/, nicht in backend/mounts/).
+#    im Paket-Wurzelverzeichnis werden entfernt.
 echo "4. Laufzeitverzeichnisse sicherstellen (backend/log/, backend/var/sessions/, backend/mounts/)"
 rm -rf "$PKG/backend/log" "$PKG/backend/var" "$PKG/log" "$PKG/var"
 rm -f "$PKG/backend/mounts/"*.ini
 mkdir -p "$PKG/backend/log" "$PKG/backend/var/sessions" "$PKG/backend/mounts"
 touch "$PKG/backend/log/.gitkeep" "$PKG/backend/var/sessions/.gitkeep" "$PKG/backend/mounts/.gitkeep"
+
+# 4b. Live-Instanzkonfiguration darf NIEMALS ins Release: hugocms.ini enthält
+#     den Passwort-Hash, mounts.ini die instanzspezifischen Pfade. Beim
+#     vollständigen Kopieren (Schritt 3) wandern sie mit, obwohl sie im Quell-
+#     Repo als *.ini/*.bak gitignored sind. Es bleiben ausschließlich die
+#     *.beispiel-Vorlagen. Eine frische Installation läuft so ins Setup statt
+#     fremde Konfiguration zu erben.
+echo "4b. Instanzkonfiguration entfernen (nur *.beispiel bleibt)"
+rm -f "$PKG/backend/hugocms.ini" "$PKG/backend/mounts.ini"
+find "$PKG/backend" -name '*.bak' -type f -delete
 cat > "$PKG/backend/log/.htaccess" <<'HT'
 # Apache: kein direkter Zugriff auf Logdateien.
 # Nginx wertet diese Datei NICHT aus — dort den location-Block aus

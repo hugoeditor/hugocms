@@ -1,8 +1,11 @@
 <script setup>
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useFilesStore } from '../stores/files'
+import { errorText } from '../i18n/apiMessage'
 import CodeMirrorEditor from './CodeMirrorEditor.vue'
 
+const { t } = useI18n()
 const files = useFilesStore()
 
 const draft = ref('')
@@ -31,14 +34,14 @@ async function save() {
   try {
     await files.saveOpenFile(draft.value)
   } catch (e) {
-    error.value = e.message
+    error.value = errorText(t, e)
   } finally {
     saving.value = false
   }
 }
 
 function close() {
-  if (files.dirty && !confirm('Ungespeicherte Änderungen verwerfen?')) return
+  if (files.dirty && !confirm(t('editor.discardConfirm'))) return
   files.closeFile()
 }
 </script>
@@ -61,7 +64,7 @@ function close() {
           :loading="saving"
           :disabled="!files.dirty"
           @click="save"
-        >Speichern</v-btn>
+        >{{ $t('editor.save') }}</v-btn>
         <v-btn icon="mdi-close" variant="text" @click="close" />
       </v-toolbar>
 

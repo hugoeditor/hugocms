@@ -49,10 +49,7 @@ final class Connector
                 if (is_dir($sessionPath)) {
                     session_save_path($sessionPath);
                 } else {
-                    $this->setupWarnings[] = sprintf(
-                        'Sitzungsverzeichnis fehlt: %s — Anmeldungen sind mglw. nicht von Dauer.',
-                        $sessionPath,
-                    );
+                    $this->setupWarnings[] = ['key' => 'SESSION-DIR-MISSING', 'params' => [$sessionPath]];
                 }
             }
 
@@ -71,10 +68,7 @@ final class Connector
         // Fehlt das Log-Verzeichnis, schreibt der Logger ins Server-Log — Hinweis.
         $logFile = $options['log'] ?? null;
         if ($logFile !== null && !is_dir(dirname($logFile))) {
-            $this->setupWarnings[] = sprintf(
-                'Log-Verzeichnis fehlt: %s — Meldungen gehen ins Server-Log.',
-                dirname($logFile),
-            );
+            $this->setupWarnings[] = ['key' => 'LOG-DIR-MISSING', 'params' => [dirname($logFile)]];
         }
 
         // Authentifizierung: entweder direkt übergeben oder aus der
@@ -88,11 +82,7 @@ final class Connector
         }
 
         if (!isset($options['auth']) || !$options['auth'] instanceof AuthInterface) {
-            throw new ApiException(
-                'Authentifizierung fehlt: Option "auth" (AuthInterface) übergeben oder über "config" konfigurieren.',
-                'ECONFIG',
-                500,
-            );
+            throw new ApiException('ECONFIG', 500, 'AUTH-MISSING');
         }
 
         $this->auth = $options['auth'];
@@ -142,9 +132,9 @@ final class Connector
      * gemeldet wird (z. B. Rückfall auf die Standard-mounts.ini). Für Hinweise
      * aus der Boot-Schicht, die nicht im Konstruktor entstehen.
      */
-    public function addSetupWarning(string $message): self
+    public function addSetupWarning(string $key, array $params = []): self
     {
-        $this->setupWarnings[] = $message;
+        $this->setupWarnings[] = ['key' => $key, 'params' => array_values($params)];
 
         return $this;
     }
@@ -179,16 +169,16 @@ final class Connector
                 'list' => $this->cmdList($request),
                 'read' => $this->cmdRead($request),
                 'write' => $this->cmdWrite($request),
-                default => throw ApiException::badRequest("Unbekannter Befehl: {$cmd}"),
+                default => throw ApiException::badRequest('UNKNOWN-COMMAND', [$cmd]),
             };
 
             Response::ok($data);
         } catch (ApiException $e) {
             $this->logger->warning($e->getMessage(), ['code' => $e->errorCode(), 'cmd' => $cmd ?? null]);
-            Response::error($e->errorCode(), $e->getMessage(), $e->httpStatus());
+            Response::fromException($e);
         } catch (Throwable $e) {
             $this->logger->exception($e);
-            Response::error('EINTERNAL', 'Interner Fehler.', 500);
+            Response::error('EINTERNAL', null, 500);
         }
     }
 
@@ -207,10 +197,10 @@ final class Connector
                     'code' => $e->errorCode(),
                     'at' => $e->getFile() . ':' . $e->getLine(),
                 ]);
-                Response::error($e->errorCode(), $e->getMessage(), $e->httpStatus());
+                Response::fromException($e);
             }
             $this->logger->exception($e);
-            Response::error('EINTERNAL', 'Interner Fehler.', 500);
+            Response::error('EINTERNAL', null, 500);
         });
 
         // Warnungen/Notices protokollieren, aber PHP normal weiterarbeiten lassen.
@@ -228,7 +218,7 @@ final class Connector
             if ($err !== null && in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
                 $this->logger->error('Fataler Fehler: ' . $err['message'], ['at' => $err['file'] . ':' . $err['line']]);
                 if (!headers_sent()) {
-                    Response::error('EFATAL', 'Interner Fehler.', 500);
+                    Response::error('EFATAL', null, 500);
                 }
             }
         });
@@ -245,13 +235,7 @@ final class Connector
         // stattdessen die wahre Ursache gemeldet.
         if ($this->sessionDir !== null && is_dir($this->sessionDir)
             && (!is_readable($this->sessionDir) || !is_writable($this->sessionDir))) {
-            throw new ApiException(
-                "Sitzungsverzeichnis nicht les-/beschreibbar: {$this->sessionDir}. "
-                . 'Eine Anmeldung ist nicht möglich — bitte Lese- und Schreibrechte für '
-                . 'den Webserver-Benutzer setzen.',
-                'ESESSION',
-                500,
-            );
+            throw new ApiException('ESESSION', 500, null, [$this->sessionDir]);
         }
 
         return [
@@ -269,7 +253,7 @@ final class Connector
             (string) ($request['password'] ?? ''),
         );
         if (!$ok) {
-            throw ApiException::unauthorized('Benutzername oder Passwort falsch.');
+            throw ApiException::unauthorized('LOGIN-FAILED');
         }
 
         return ['authenticated' => true, 'user' => $this->auth->currentUser()];
@@ -328,7 +312,7 @@ final class Connector
 
         $content = $request['content'] ?? null;
         if (!is_string($content)) {
-            throw ApiException::badRequest('Parameter "content" fehlt.');
+            throw ApiException::badRequest('PARAM-MISSING', ['content']);
         }
 
         return $this->files->writeText($target['mount'], $target['rel'], $target['abs'], $content);
@@ -346,14 +330,14 @@ final class Connector
     private function requirePermission(Mount $mount, string $permission): void
     {
         if (!$mount->allows($permission) || !$this->auth->can('file.' . $permission)) {
-            throw ApiException::denied("Operation '{$permission}' auf diesem Mount nicht erlaubt.");
+            throw ApiException::denied('OPERATION-NOT-ALLOWED', [$permission]);
         }
     }
 
     private function requireMethod(string $method): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== $method) {
-            throw new ApiException("Diese Operation erfordert {$method}.", 'EMETHOD', 405);
+            throw new ApiException('EMETHOD', 405, 'METHOD-REQUIRED', [$method]);
         }
     }
 
@@ -361,7 +345,7 @@ final class Connector
     {
         $value = $request[$name] ?? null;
         if (!is_string($value) || $value === '') {
-            throw ApiException::badRequest("Parameter \"{$name}\" fehlt.");
+            throw ApiException::badRequest('PARAM-MISSING', [$name]);
         }
 
         return $value;

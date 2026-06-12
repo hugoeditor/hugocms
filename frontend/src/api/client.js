@@ -15,10 +15,15 @@ function normalizeBase(value) {
 
 const BASE = normalizeBase(import.meta.env.VITE_API_BASE)
 
+// Fehler trägt die Übersetzungsdaten des Backends: code (Fehlerklasse),
+// optionaler key (genauerer Meldungsschlüssel) und params. Der lesbare Text
+// entsteht erst im Frontend über die i18n-Wörterbücher (siehe i18n/apiMessage).
 export class ApiError extends Error {
-  constructor(code, message) {
-    super(message)
+  constructor({ code = 'EUNKNOWN', key = null, params = [] } = {}) {
+    super(key || code)
     this.code = code
+    this.key = key
+    this.params = params ?? []
   }
 }
 
@@ -27,10 +32,10 @@ async function handle(response) {
   try {
     payload = await response.json()
   } catch {
-    throw new ApiError('ENETWORK', `Ungültige Antwort (HTTP ${response.status}).`)
+    throw new ApiError({ code: 'ENETWORK', params: [String(response.status)] })
   }
   if (!payload.ok) {
-    throw new ApiError(payload.error?.code ?? 'EUNKNOWN', payload.error?.message ?? 'Unbekannter Fehler.')
+    throw new ApiError(payload.error ?? { code: 'EUNKNOWN' })
   }
   return payload.data
 }

@@ -33,7 +33,7 @@ final class Mount
     ) {
         $real = realpath($path);
         if ($real === false || !is_dir($real)) {
-            throw ApiException::badRequest("Mount-Pfad existiert nicht oder ist kein Verzeichnis: {$path}");
+            throw ApiException::badRequest('MOUNT-PATH-MISSING', [$path]);
         }
         $this->root = $real;
 

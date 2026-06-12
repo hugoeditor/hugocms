@@ -35,12 +35,12 @@ final class Config
     public static function load(string $configPath): array
     {
         if (!is_file($configPath) || !is_readable($configPath)) {
-            throw new ApiException("Konfiguration nicht lesbar: {$configPath}", 'ECONFIG', 500);
+            throw new ApiException('ECONFIG', 500, 'CONFIG-NOT-READABLE', [$configPath]);
         }
 
         $raw = @parse_ini_file($configPath, true, INI_SCANNER_TYPED);
         if (!is_array($raw)) {
-            throw new ApiException("Konfiguration ist kein gültiges INI: {$configPath}", 'ECONFIG', 500);
+            throw new ApiException('ECONFIG', 500, 'CONFIG-INVALID-INI', [$configPath]);
         }
 
         $baseDir = dirname($configPath);
@@ -66,15 +66,7 @@ final class Config
             $missing[] = '[log] level';
         }
         if ($missing !== []) {
-            throw new ApiException(
-                sprintf(
-                    'Unvollständige Konfiguration in %s: Folgende Pflichtfelder fehlen oder sind leer: %s.',
-                    $configPath,
-                    implode(', ', $missing),
-                ),
-                'ECONFIG',
-                500,
-            );
+            throw new ApiException('ECONFIG', 500, 'CONFIG-INCOMPLETE', [$configPath, implode(', ', $missing)]);
         }
 
         return [

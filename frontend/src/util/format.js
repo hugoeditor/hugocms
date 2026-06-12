@@ -10,9 +10,11 @@ export function formatSize(bytes) {
   return `${value.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`
 }
 
+import { i18n } from '../i18n'
+
 export function formatDate(epochSeconds) {
   if (!epochSeconds) return '–'
-  return new Date(epochSeconds * 1000).toLocaleString('de-DE', {
+  return new Date(epochSeconds * 1000).toLocaleString(i18n.global.locale.value, {
     dateStyle: 'short',
     timeStyle: 'short',
   })

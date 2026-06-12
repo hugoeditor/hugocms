@@ -1,8 +1,11 @@
 <script setup>
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useFilesStore } from '../stores/files'
 import { formatSize, formatDate, iconFor } from '../util/format'
+import { errorText } from '../i18n/apiMessage'
 
+const { t } = useI18n()
 const files = useFilesStore()
 const error = ref(null)
 
@@ -16,7 +19,7 @@ async function activate(entry) {
     }
     // Bilder/Binärdateien: Anzeige folgt in Stufe 3.
   } catch (e) {
-    error.value = e.message
+    error.value = errorText(t, e)
   }
 }
 
@@ -28,7 +31,7 @@ function crumb(b) {
 <template>
   <div class="pa-4">
     <div v-if="!files.cwd" class="text-medium-emphasis text-body-1 mt-8 text-center">
-      Wähle links einen Mount.
+      {{ $t('files.chooseMount') }}
     </div>
 
     <template v-else>
@@ -43,14 +46,14 @@ function crumb(b) {
       <v-table density="comfortable" hover>
         <thead>
           <tr>
-            <th>Name</th>
-            <th class="text-right" style="width: 120px">Größe</th>
-            <th style="width: 180px">Geändert</th>
+            <th>{{ $t('files.colName') }}</th>
+            <th class="text-right" style="width: 120px">{{ $t('files.colSize') }}</th>
+            <th style="width: 180px">{{ $t('files.colModified') }}</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="files.entries.length === 0">
-            <td colspan="3" class="text-medium-emphasis text-center py-6">Leeres Verzeichnis</td>
+            <td colspan="3" class="text-medium-emphasis text-center py-6">{{ $t('files.emptyDir') }}</td>
           </tr>
           <tr
             v-for="entry in files.entries"

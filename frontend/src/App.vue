@@ -1,13 +1,17 @@
 <script setup>
 import { onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from './stores/auth'
 import { useFilesStore } from './stores/files'
+import { errorText, warningText } from './i18n/apiMessage'
 import LoginView from './components/LoginView.vue'
 import SetupView from './components/SetupView.vue'
 import MountSidebar from './components/MountSidebar.vue'
 import FileBrowser from './components/FileBrowser.vue'
 import EditorPanel from './components/EditorPanel.vue'
+import LanguageSwitcher from './components/LanguageSwitcher.vue'
 
+const { t } = useI18n()
 const auth = useAuthStore()
 const files = useFilesStore()
 const drawer = ref(true)
@@ -29,11 +33,11 @@ async function loadMounts() {
         await files.loadMounts()
         return
       } catch (retryError) {
-        error.value = retryError.message
+        error.value = errorText(t, retryError)
         return
       }
     }
-    error.value = e.message
+    error.value = errorText(t, e)
   }
 }
 
@@ -46,7 +50,7 @@ async function init() {
     await auth.check()
     if (auth.warnings.length > 0) warningsVisible.value = true
   } catch (e) {
-    fatalError.value = e.message
+    fatalError.value = errorText(t, e)
   }
 }
 
@@ -69,11 +73,14 @@ async function logout() {
 <template>
   <v-app>
     <template v-if="fatalError">
-      <v-main class="d-flex align-center justify-center pa-6">
+      <v-main class="d-flex flex-column align-center justify-center pa-6">
+        <div class="d-flex justify-end fatal-alert mb-2">
+          <LanguageSwitcher />
+        </div>
         <v-alert type="error" prominent border="start" class="fatal-alert">
-          <div class="text-h6 mb-2">HugoCMS ist nicht einsatzbereit</div>
+          <div class="text-h6 mb-2">{{ $t('app.notReady') }}</div>
           <p class="mb-4">{{ fatalError }}</p>
-          <v-btn variant="outlined" @click="init">Erneut prüfen</v-btn>
+          <v-btn variant="outlined" @click="init">{{ $t('app.retry') }}</v-btn>
         </v-alert>
       </v-main>
     </template>
@@ -95,10 +102,11 @@ async function logout() {
     <template v-else>
       <v-app-bar color="primary" density="comfortable" flat>
         <v-app-bar-nav-icon @click="drawer = !drawer" />
-        <v-app-bar-title>HugoCMS – Dateimanager</v-app-bar-title>
+        <v-app-bar-title>{{ $t('app.title') }}</v-app-bar-title>
         <v-spacer />
-        <span class="mr-4 text-body-2">{{ auth.user?.name }}</span>
-        <v-btn variant="text" prepend-icon="mdi-logout" @click="logout">Abmelden</v-btn>
+        <LanguageSwitcher />
+        <span class="mx-4 text-body-2">{{ auth.user?.name }}</span>
+        <v-btn variant="text" prepend-icon="mdi-logout" @click="logout">{{ $t('app.logout') }}</v-btn>
       </v-app-bar>
 
       <v-navigation-drawer v-model="drawer" width="260">
@@ -125,12 +133,12 @@ async function logout() {
       class="warning-snackbar"
       @update:model-value="warningsVisible = false"
     >
-      <div class="font-weight-medium mb-1">Server-Hinweis zur Einrichtung</div>
+      <div class="font-weight-medium mb-1">{{ $t('app.setupWarningTitle') }}</div>
       <ul class="ms-4">
-        <li v-for="(w, i) in auth.warnings" :key="i">{{ w }}</li>
+        <li v-for="(w, i) in auth.warnings" :key="i">{{ warningText(t, w) }}</li>
       </ul>
       <div class="d-flex justify-end mt-3">
-        <v-btn variant="text" @click="warningsVisible = false">Schließen</v-btn>
+        <v-btn variant="text" @click="warningsVisible = false">{{ $t('app.close') }}</v-btn>
       </div>
     </v-snackbar>
   </v-app>

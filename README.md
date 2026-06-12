@@ -74,8 +74,10 @@ require __DIR__ . '/backend/core/hugocms.php';
    flexible, programmatische Alternative (Vorlage: `custom.php.beispiel`).
 2. Sonst wird der Connector aus `backend/hugocms.ini` erzeugt und die Mounts
    **host-spezifisch** geladen (siehe Mandantenfähigkeit).
-3. Fehlt die `hugocms.ini`, meldet das Backend einen Einrichtungsfehler
-   (`ESETUP`).
+3. Fehlt sowohl `custom.php` als auch `hugocms.ini`, übernimmt das
+   **Einrichtungs-Setup** (`ESETUP`/`setupRequired`): Der Client blendet ein
+   Formular ein, aus dem die `hugocms.ini` erzeugt wird; danach ist der
+   Benutzer direkt angemeldet.
 
 ## Konfiguration
 
@@ -93,7 +95,7 @@ username = admin
 password_hash = "$2y$10$..."
 
 [session]
-; Muss für den Webserver-Benutzer beschreibbar sein. Leer = PHP-Voreinstellung.
+; Pflichtfeld; muss für den Webserver-Benutzer beschreibbar sein.
 path = var/sessions
 
 [log]
@@ -133,9 +135,12 @@ stabile Kennung (z. B. `kunde-a.example.com/cms-api`) und daraus einen
 SHA-256-Hash. Geladen wird dann `backend/mounts/<hash>.ini`.
 
 - Fehlt die host-eigene Datei, gilt `backend/mounts.ini` als **Rückfall**
-  (mit Hinweis an den Client; Details im Log).
-- Fehlt auch der Rückfall, meldet das Backend die Webseite als unbekannt
-  (`ESITE`, HTTP 404).
+  (mit Hinweis an den Client; Details im Log) — **sofern** vorhanden. Das
+  Auslieferungs-Repo liefert **keine** fertige `mounts.ini` mit, nur die
+  Vorlage `mounts.ini.beispiel`; im Produktivbetrieb legt `bin/install.sh`
+  ohnehin je Webseite die host-eigene `mounts/<hash>.ini` an.
+- Fehlt host-eigene Datei **und** Rückfall, meldet das Backend die Webseite als
+  unbekannt (`ESITE`, HTTP 404).
 
 Der Hash als Dateiname ist zugleich ein Sicherheitsmerkmal: Er besteht nur aus
 `[0-9a-f]`, sodass ein manipulierter Host-Header keinen Pfad-Ausbruch erzeugen
@@ -185,6 +190,14 @@ Backend, `bin/` und `index.php` — in ein **eigenes Git-Repo** im
 Projektwurzelverzeichnis: `hugocms-release/`. Dieses Repo wird auf das
 Produktivsystem ausgerollt; im Hauptrepo ist es über `.gitignore`
 ausgeschlossen.
+
+Mitgeliefert werden ausschließlich die Vorlagen `hugocms.ini.beispiel` und
+`mounts.ini.beispiel` — **niemals** eine instanzspezifische `hugocms.ini`
+(enthält den Passwort-Hash) oder `mounts.ini`. Das Packaging entfernt solche
+Dateien vor dem Commit, und die `.gitignore` des Release-Repos schließt
+`*.ini`/`*.bak` aus. Eine frische Installation läuft daher zuerst ins
+**Einrichtungs-Setup** (erzeugt die `hugocms.ini`); die Mounts kommen über
+`bin/install.sh` (host-eigene `mounts/<hash>.ini`).
 
 Das Skript klont das Repo **nicht** selbst (die Repo-URL ist je Installation
 verschieden). Lege es daher **einmalig** als Klon deines Auslieferungs-Repos an
@@ -257,8 +270,16 @@ Antwortformat:
 
 ```json
 { "ok": true,  "data": { ... } }
-{ "ok": false, "error": { "code": "EACCES", "message": "..." } }
+{ "ok": false, "error": { "code": "EINVAL", "key": "PARAM-MISSING", "params": ["content"] } }
+{ "ok": false, "error": { "code": "ESITE", "params": ["kunde-a.example.com/cms-api", "<hash>"] } }
 ```
+
+Fehler tragen **keinen** übersetzten Text, sondern nur Codes und Parameter:
+`code` ist die Fehlerklasse, `key` der genauere Übersetzungsschlüssel (entfällt,
+wenn der `code` die Meldung schon eindeutig bestimmt), `params` die einzu-
+setzenden Werte (Hostname, Pfad …). Der Client übersetzt darüber (vue-i18n,
+de/en) und setzt die Meldung zusammen. Auch die Warnungen aus `whoami` sind so
+aufgebaut (`{ "key": …, "params": […] }`).
 
 `whoami` liefert zusätzlich ein `warnings`-Feld mit Einrichtungs-Hinweisen
 (siehe unten).
@@ -266,9 +287,9 @@ Antwortformat:
 ## Logging, Hinweise und Fehlersuche
 
 Der Connector schreibt in die in `hugocms.ini` konfigurierte Logdatei
-(`[log] file` / `level`). Ohne `file` fällt das Logging auf das PHP-eigene
-`error_log` zurück. Das Verzeichnis `backend/log/` ist über `.htaccess`
-(Apache) bzw. einen `location`-Block (Nginx) vor direktem Zugriff geschützt.
+(`[log] file` / `level`, beide Pflichtfelder). Das Verzeichnis `backend/log/`
+ist über `.htaccess` (Apache) bzw. einen `location`-Block (Nginx) vor direktem
+Zugriff geschützt.
 
 ### Einrichtungs-Hinweise im Browser
 

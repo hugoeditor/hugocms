@@ -10,7 +10,7 @@ function open(mount) {
 
 <template>
   <v-list density="comfortable" nav>
-    <v-list-subheader>Mounts</v-list-subheader>
+    <v-list-subheader>{{ $t('files.mounts') }}</v-list-subheader>
     <v-list-item
       v-for="mount in files.mounts"
       :key="mount.id"

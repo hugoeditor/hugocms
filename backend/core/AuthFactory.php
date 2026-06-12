@@ -32,11 +32,7 @@ final class AuthFactory
             $username = isset($cfg['username']) ? (string) $cfg['username'] : '';
             $hash = isset($cfg['password_hash']) ? (string) $cfg['password_hash'] : '';
             if ($username === '' || $hash === '') {
-                throw new ApiException(
-                    '[auth] driver=singleuser: "username" und "password_hash" sind erforderlich.',
-                    'ECONFIG',
-                    500,
-                );
+                throw new ApiException('ECONFIG', 500, 'AUTH-SINGLEUSER-REQUIRED');
             }
 
             return new SingleUser($username, $hash);
@@ -65,12 +61,12 @@ final class AuthFactory
             $driver = 'singleuser';
         }
         if (!isset($this->drivers[$driver])) {
-            throw new ApiException("[auth]: unbekannter driver \"{$driver}\".", 'ECONFIG', 500);
+            throw new ApiException('ECONFIG', 500, 'AUTH-DRIVER-UNKNOWN', [$driver]);
         }
 
         $auth = ($this->drivers[$driver])($authConfig);
         if (!$auth instanceof AuthInterface) {
-            throw new ApiException("[auth]: driver \"{$driver}\" lieferte kein AuthInterface.", 'ECONFIG', 500);
+            throw new ApiException('ECONFIG', 500, 'AUTH-DRIVER-INVALID', [$driver]);
         }
 
         return $auth;

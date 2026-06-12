@@ -40,16 +40,12 @@ final class Setup
             match ($cmd) {
                 'whoami' => self::status(),
                 'setup'  => self::create($backendDir, $request),
-                default  => throw new ApiException(
-                    'HugoCMS ist noch nicht eingerichtet.',
-                    'ESETUP',
-                    503,
-                ),
+                default  => throw new ApiException('ESETUP', 503, 'SETUP-REQUIRED'),
             };
         } catch (ApiException $e) {
-            Response::error($e->errorCode(), $e->getMessage(), $e->httpStatus());
+            Response::fromException($e);
         } catch (Throwable $e) {
-            Response::error('EINTERNAL', 'Interner Fehler bei der Einrichtung.', 500);
+            Response::error('EINTERNAL', null, 500);
         }
     }
 
@@ -75,28 +71,23 @@ final class Setup
     private static function create(string $backendDir, array $request): never
     {
         if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
-            throw new ApiException('Die Einrichtung erfordert POST.', 'EMETHOD', 405);
+            throw new ApiException('EMETHOD', 405, 'SETUP-METHOD-POST');
         }
 
         $configFile = $backendDir . '/hugocms.ini';
         if (is_file($configFile)) {
             // Im Setup-Zweig dürfte das nicht vorkommen; schützt vor einem
             // doppelten Absenden bzw. einem parallelen zweiten Setup-Aufruf.
-            throw new ApiException('Die Konfiguration besteht bereits.', 'ESETUP', 409);
+            throw new ApiException('ESETUP', 409, 'SETUP-ALREADY-CONFIGURED');
         }
         if (!is_writable($backendDir)) {
-            throw new ApiException(
-                "Verzeichnis nicht beschreibbar: {$backendDir} — bitte Schreibrechte "
-                . 'für den Webserver-Benutzer setzen.',
-                'ESETUP',
-                500,
-            );
+            throw new ApiException('ESETUP', 500, 'SETUP-DIR-NOT-WRITABLE', [$backendDir]);
         }
 
-        $username    = self::requireField($request, 'username', 'Benutzername');
+        $username    = self::requireField($request, 'username');
         $password    = self::requirePassword($request);
-        $sessionPath = self::requireField($request, 'sessionPath', 'Sitzungsverzeichnis');
-        $logFile     = self::requireField($request, 'logFile', 'Logdatei');
+        $sessionPath = self::requireField($request, 'sessionPath');
+        $logFile     = self::requireField($request, 'logFile');
         $logLevel    = self::requireLevel($request);
 
         $hash = password_hash($password, PASSWORD_DEFAULT);
@@ -106,7 +97,7 @@ final class Setup
         $content = self::buildIni($username, $hash, $sessionPath, $logFile, $logLevel);
         $handle = @fopen($configFile, 'x');
         if ($handle === false) {
-            throw new ApiException('Die hugocms.ini konnte nicht angelegt werden.', 'ESETUP', 500);
+            throw new ApiException('ESETUP', 500, 'SETUP-INI-WRITE-FAILED');
         }
         fwrite($handle, $content);
         fclose($handle);
@@ -126,11 +117,7 @@ final class Setup
         }
         $auth = (new AuthFactory())->create($cfg['auth']);
         if (!$auth->attemptLogin($username, $password)) {
-            throw new ApiException(
-                'Die automatische Anmeldung nach der Einrichtung ist fehlgeschlagen.',
-                'ESETUP',
-                500,
-            );
+            throw new ApiException('ESETUP', 500, 'SETUP-AUTOLOGIN-FAILED');
         }
 
         Response::ok([
@@ -159,19 +146,19 @@ final class Setup
         return $request;
     }
 
-    /** Pflichtfeld: nicht leer und ohne Zeichen, die die INI sprengen würden. */
-    private static function requireField(array $request, string $key, string $label): string
+    /**
+     * Pflichtfeld: nicht leer und ohne Zeichen, die die INI sprengen würden.
+     * Der Feldname wandert als übersetzbarer Parameter ({t: ...}) in die
+     * Meldung, damit der Client ihn in der gewählten Sprache einsetzt.
+     */
+    private static function requireField(array $request, string $key): string
     {
         $value = trim((string) ($request[$key] ?? ''));
         if ($value === '') {
-            throw new ApiException("Feld „{$label}“ ist erforderlich.", 'EINVAL', 400);
+            throw new ApiException('EINVAL', 400, 'SETUP-FIELD-REQUIRED', [['t' => 'fields.' . $key]]);
         }
         if (preg_match('/["\r\n]/', $value) === 1) {
-            throw new ApiException(
-                "Feld „{$label}“ enthält unzulässige Zeichen (Anführungszeichen oder Zeilenumbruch).",
-                'EINVAL',
-                400,
-            );
+            throw new ApiException('EINVAL', 400, 'SETUP-FIELD-INVALID-CHARS', [['t' => 'fields.' . $key]]);
         }
 
         return $value;
@@ -182,11 +169,7 @@ final class Setup
     {
         $password = (string) ($request['password'] ?? '');
         if (strlen($password) < self::MIN_PASSWORD_LENGTH) {
-            throw new ApiException(
-                sprintf('Das Passwort muss mindestens %d Zeichen lang sein.', self::MIN_PASSWORD_LENGTH),
-                'EINVAL',
-                400,
-            );
+            throw new ApiException('EINVAL', 400, 'SETUP-PASSWORD-TOO-SHORT', [self::MIN_PASSWORD_LENGTH]);
         }
 
         return $password;
@@ -197,11 +180,7 @@ final class Setup
     {
         $level = strtolower(trim((string) ($request['logLevel'] ?? '')));
         if (!in_array($level, self::LOG_LEVELS, true)) {
-            throw new ApiException(
-                'Ungültige Log-Stufe. Erlaubt: ' . implode(', ', self::LOG_LEVELS) . '.',
-                'EINVAL',
-                400,
-            );
+            throw new ApiException('EINVAL', 400, 'SETUP-LOG-LEVEL-INVALID', [implode(', ', self::LOG_LEVELS)]);
         }
 
         return $level;
