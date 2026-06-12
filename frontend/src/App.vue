@@ -7,6 +7,7 @@ import { errorText, warningText } from './i18n/apiMessage'
 import LoginView from './components/LoginView.vue'
 import SetupView from './components/SetupView.vue'
 import MountSidebar from './components/MountSidebar.vue'
+import NemoToolbar from './components/NemoToolbar.vue'
 import FileBrowser from './components/FileBrowser.vue'
 import EditorPanel from './components/EditorPanel.vue'
 import LanguageSwitcher from './components/LanguageSwitcher.vue'
@@ -14,7 +15,6 @@ import LanguageSwitcher from './components/LanguageSwitcher.vue'
 const { t } = useI18n()
 const auth = useAuthStore()
 const files = useFilesStore()
-const drawer = ref(true)
 const error = ref(null)
 const fatalError = ref(null)
 const warningsVisible = ref(false)
@@ -100,22 +100,28 @@ async function logout() {
     </template>
 
     <template v-else>
-      <v-app-bar color="primary" density="comfortable" flat>
-        <v-app-bar-nav-icon @click="drawer = !drawer" />
-        <v-app-bar-title>{{ $t('app.title') }}</v-app-bar-title>
-        <v-spacer />
-        <LanguageSwitcher />
-        <span class="mx-4 text-body-2">{{ auth.user?.name }}</span>
-        <v-btn variant="text" prepend-icon="mdi-logout" @click="logout">{{ $t('app.logout') }}</v-btn>
-      </v-app-bar>
+      <div class="nemo-window">
+        <!-- Fenster-Titelleiste (Marke, Sprache, Benutzer, Abmelden) -->
+        <header class="nemo-titlebar nemo-noselect">
+          <v-icon icon="mdi-folder-multiple-outline" size="20" class="nemo-brand-icon" />
+          <span class="nemo-title">{{ $t('app.title') }}</span>
+          <div class="nemo-titlebar-spacer" />
+          <LanguageSwitcher />
+          <span class="nemo-user">{{ auth.user?.name }}</span>
+          <v-btn variant="text" size="small" prepend-icon="mdi-logout" @click="logout">
+            {{ $t('app.logout') }}
+          </v-btn>
+        </header>
 
-      <v-navigation-drawer v-model="drawer" width="260">
-        <MountSidebar />
-      </v-navigation-drawer>
+        <!-- Nemo-Werkzeugleiste (volle Breite) -->
+        <NemoToolbar />
 
-      <v-main>
-        <FileBrowser />
-      </v-main>
+        <!-- Seitenleiste + Inhalt -->
+        <div class="nemo-body">
+          <aside class="nemo-aside"><MountSidebar /></aside>
+          <main class="nemo-mainarea"><FileBrowser /></main>
+        </div>
+      </div>
 
       <EditorPanel />
     </template>
@@ -145,6 +151,51 @@ async function logout() {
 </template>
 
 <style scoped>
+/* Nemo-Fenster: Titelleiste, Werkzeugleiste, dann Seitenleiste + Inhalt. */
+.nemo-window {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--mint-content);
+}
+
+.nemo-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 46px;
+  padding: 0 10px;
+  background: var(--mint-titlebar);
+  border-bottom: 1px solid var(--mint-border);
+  color: var(--mint-text);
+}
+.nemo-brand-icon { color: var(--mint-green); }
+.nemo-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.nemo-titlebar-spacer { flex: 1 1 auto; }
+.nemo-user {
+  font-size: 0.85rem;
+  color: var(--mint-text-muted);
+  margin: 0 4px 0 8px;
+}
+
+.nemo-body {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+.nemo-aside {
+  flex: 0 0 210px;
+  min-height: 0;
+}
+.nemo-mainarea {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
 /* Dauerhafter Fehler-Block (Setup-/Pre-Login-Fehler): zentriert, begrenzt. */
 .fatal-alert {
   max-width: 600px;

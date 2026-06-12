@@ -42,12 +42,37 @@ export default {
   },
 
   files: {
-    mounts: 'Mounts',
-    chooseMount: 'Wähle links einen Mount.',
+    places: 'Orte',
+    chooseMount: 'Wähle links einen Ort.',
     colName: 'Name',
     colSize: 'Größe',
+    colType: 'Typ',
     colModified: 'Geändert',
-    emptyDir: 'Leeres Verzeichnis',
+    typeFolder: 'Ordner',
+    emptyDir: 'Dieser Ordner ist leer',
+    noMatch: 'Kein Treffer für „{0}“',
+  },
+
+  nav: {
+    back: 'Zurück',
+    forward: 'Vor',
+    up: 'Übergeordneter Ordner',
+    refresh: 'Aktualisieren',
+  },
+
+  view: {
+    icons: 'Symbolansicht',
+    list: 'Listenansicht',
+  },
+
+  toolbar: {
+    filter: 'Im Ordner filtern …',
+  },
+
+  status: {
+    items: '{0} Elemente',
+    itemOne: '1 Element',
+    selected: '{0} ausgewählt',
   },
 
   editor: {

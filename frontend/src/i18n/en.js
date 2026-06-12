@@ -42,12 +42,37 @@ export default {
   },
 
   files: {
-    mounts: 'Mounts',
-    chooseMount: 'Select a mount on the left.',
+    places: 'Places',
+    chooseMount: 'Select a place on the left.',
     colName: 'Name',
     colSize: 'Size',
+    colType: 'Type',
     colModified: 'Modified',
-    emptyDir: 'Empty directory',
+    typeFolder: 'Folder',
+    emptyDir: 'This folder is empty',
+    noMatch: 'No match for “{0}”',
+  },
+
+  nav: {
+    back: 'Back',
+    forward: 'Forward',
+    up: 'Parent folder',
+    refresh: 'Refresh',
+  },
+
+  view: {
+    icons: 'Icon view',
+    list: 'List view',
+  },
+
+  toolbar: {
+    filter: 'Filter in folder …',
+  },
+
+  status: {
+    items: '{0} items',
+    itemOne: '1 item',
+    selected: '{0} selected',
   },
 
   editor: {
