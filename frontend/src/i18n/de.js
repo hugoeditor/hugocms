@@ -75,9 +75,33 @@ export default {
     selected: '{0} ausgewählt',
   },
 
+  ctx: {
+    open: 'Öffnen',
+    cut: 'Ausschneiden',
+    copy: 'Kopieren',
+    paste: 'Einfügen',
+    rename: 'Umbenennen',
+    trash: 'In den Papierkorb',
+    newFolder: 'Neuer Ordner',
+    newFile: 'Neue Datei',
+  },
+
+  dialog: {
+    create: 'Anlegen',
+    rename: 'Umbenennen',
+    cancel: 'Abbrechen',
+    newFolderTitle: 'Neuer Ordner',
+    newFolderLabel: 'Ordnername',
+    newFileTitle: 'Neue Datei',
+    newFileLabel: 'Dateiname',
+    renameTitle: 'Umbenennen',
+    renameLabel: 'Neuer Name',
+  },
+
   editor: {
     save: 'Speichern',
     discardConfirm: 'Ungespeicherte Änderungen verwerfen?',
+    conflictConfirm: 'Die Datei wurde seit dem Öffnen extern geändert. Mit Ihrer Fassung überschreiben?',
   },
 
   // Feldnamen — vom Backend über Parameter {t: "fields.x"} referenziert.
@@ -98,6 +122,7 @@ export default {
     ENOENT: 'Nicht gefunden.',
     EACCES: 'Zugriff verweigert.',
     EINVAL: 'Ungültige Anfrage.',
+    ECONFLICT: 'Konflikt mit dem aktuellen Stand auf dem Server.',
     EINTERNAL: 'Interner Fehler.',
     EFATAL: 'Interner Fehler.',
     ESESSION: 'Sitzungsverzeichnis nicht les-/beschreibbar: {0}. Eine Anmeldung ist nicht möglich — bitte Lese- und Schreibrechte für den Webserver-Benutzer setzen.',
@@ -111,6 +136,7 @@ export default {
     'UNKNOWN-COMMAND': 'Unbekannter Befehl: {0}',
     'LOGIN-FAILED': 'Benutzername oder Passwort falsch.',
     'PARAM-MISSING': 'Parameter „{0}“ fehlt.',
+    'PARAM-INVALID': 'Parameter „{0}“ ist ungültig.',
     'OPERATION-NOT-ALLOWED': 'Operation „{0}“ auf diesem Mount nicht erlaubt.',
     'METHOD-REQUIRED': 'Diese Operation erfordert {0}.',
 
@@ -124,6 +150,19 @@ export default {
     'CONTENT-TOO-LARGE': 'Inhalt ist zu groß.',
     'TEMPFILE-FAILED': 'Temporäre Datei konnte nicht angelegt werden.',
     'FILE-SAVE-FAILED': 'Datei konnte nicht gespeichert werden.',
+    'CONFLICT-MTIME': 'Die Datei wurde seit dem Öffnen extern geändert.',
+
+    'INVALID-NAME': 'Ungültiger Name: „{0}“.',
+    'ALREADY-EXISTS': '„{0}“ existiert bereits.',
+    'MKDIR-FAILED': 'Der Ordner konnte nicht angelegt werden.',
+    'CREATE-FAILED': 'Die Datei konnte nicht angelegt werden.',
+    'RENAME-FAILED': 'Umbenennen fehlgeschlagen.',
+    'COPY-FAILED': 'Kopieren fehlgeschlagen.',
+    'MOVE-FAILED': 'Verschieben fehlgeschlagen.',
+    'DELETE-FAILED': 'Löschen fehlgeschlagen.',
+    'DEST-NOT-DIRECTORY': 'Das Ziel ist kein Ordner.',
+    'CROSS-MOUNT-NOT-ALLOWED': 'Über Mounts hinweg ist diese Aktion nicht möglich.',
+    'CANNOT-MOVE-INTO-SELF': 'Ein Ordner kann nicht in sich selbst verschoben oder kopiert werden.',
 
     'MOUNT-NAME-INVALID': 'Ungültiger Mount-Name: {0}',
     'MOUNT-NAME-TAKEN': 'Mount bereits vergeben: {0}',

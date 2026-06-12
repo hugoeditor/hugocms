@@ -169,6 +169,12 @@ final class Connector
                 'list' => $this->cmdList($request),
                 'read' => $this->cmdRead($request),
                 'write' => $this->cmdWrite($request),
+                'mkdir' => $this->cmdMkdir($request),
+                'newfile' => $this->cmdNewFile($request),
+                'rename' => $this->cmdRename($request),
+                'delete' => $this->cmdDelete($request),
+                'copy' => $this->cmdCopy($request),
+                'move' => $this->cmdMove($request),
                 default => throw ApiException::badRequest('UNKNOWN-COMMAND', [$cmd]),
             };
 
@@ -315,7 +321,114 @@ final class Connector
             throw ApiException::badRequest('PARAM-MISSING', ['content']);
         }
 
-        return $this->files->writeText($target['mount'], $target['rel'], $target['abs'], $content);
+        // Optionaler Konfliktschutz: mtime des Standes, den der Client geladen
+        // hat. Fehlt der Parameter, wird ohne Prüfung geschrieben.
+        $mtime = $request['mtime'] ?? null;
+        if ($mtime !== null && !is_int($mtime)) {
+            throw ApiException::badRequest('PARAM-INVALID', ['mtime']);
+        }
+
+        return $this->files->writeText($target['mount'], $target['rel'], $target['abs'], $content, $mtime);
+    }
+
+    private function cmdMkdir(array $request): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+        $parent = $this->resolver->resolve($this->requireParam($request, 'target'));
+        $this->requirePermission($parent['mount'], 'mkdir');
+
+        return $this->files->makeDir(
+            $parent['mount'],
+            $parent['rel'],
+            $parent['abs'],
+            $this->requireParam($request, 'name'),
+        );
+    }
+
+    private function cmdNewFile(array $request): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+        $parent = $this->resolver->resolve($this->requireParam($request, 'target'));
+        $this->requirePermission($parent['mount'], 'write');
+
+        return $this->files->makeFile(
+            $parent['mount'],
+            $parent['rel'],
+            $parent['abs'],
+            $this->requireParam($request, 'name'),
+        );
+    }
+
+    private function cmdRename(array $request): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+        $target = $this->resolver->resolve($this->requireParam($request, 'target'));
+        $this->requirePermission($target['mount'], 'rename');
+
+        return $this->files->rename(
+            $target['mount'],
+            $target['rel'],
+            $target['abs'],
+            $this->requireParam($request, 'name'),
+        );
+    }
+
+    private function cmdDelete(array $request): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+
+        $count = 0;
+        foreach ($this->requireIdList($request, 'targets') as $id) {
+            $target = $this->resolver->resolve($id);
+            $this->requirePermission($target['mount'], 'delete');
+            $this->files->trash($target['mount'], $target['abs']);
+            $count++;
+        }
+
+        return ['deleted' => $count];
+    }
+
+    private function cmdCopy(array $request): array
+    {
+        return $this->transfer($request, 'copy');
+    }
+
+    private function cmdMove(array $request): array
+    {
+        return $this->transfer($request, 'move');
+    }
+
+    /** Gemeinsamer Kern von copy und move (Zielordner + Quellenliste). */
+    private function transfer(array $request, string $op): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+
+        $dest = $this->resolver->resolve($this->requireParam($request, 'dest'));
+        if (!is_dir($dest['abs'])) {
+            throw ApiException::denied('DEST-NOT-DIRECTORY');
+        }
+        $this->requirePermission($dest['mount'], $op);
+
+        $entries = [];
+        foreach ($this->requireIdList($request, 'sources') as $id) {
+            $src = $this->resolver->resolve($id);
+            // Über Mounts hinweg nicht erlaubt (eigene Wurzeln/Rechte).
+            if ($src['mount']->name() !== $dest['mount']->name()) {
+                throw ApiException::badRequest('CROSS-MOUNT-NOT-ALLOWED');
+            }
+            $this->requirePermission($src['mount'], $op);
+
+            $entries[] = $op === 'copy'
+                ? $this->files->copy($dest['mount'], $src['abs'], $dest['rel'], $dest['abs'])
+                : $this->files->move($dest['mount'], $src['rel'], $src['abs'], $dest['rel'], $dest['abs']);
+        }
+
+        return ['count' => count($entries), 'entries' => $entries];
     }
 
     // --- Hilfen ------------------------------------------------------------
@@ -349,6 +462,32 @@ final class Connector
         }
 
         return $value;
+    }
+
+    /**
+     * Liest eine Liste von IDs (akzeptiert auch eine einzelne ID als String).
+     *
+     * @return list<string>
+     */
+    private function requireIdList(array $request, string $name): array
+    {
+        $value = $request[$name] ?? null;
+        if (is_string($value) && $value !== '') {
+            $value = [$value];
+        }
+        $ids = [];
+        if (is_array($value)) {
+            foreach ($value as $v) {
+                if (is_string($v) && $v !== '') {
+                    $ids[] = $v;
+                }
+            }
+        }
+        if ($ids === []) {
+            throw ApiException::badRequest('PARAM-MISSING', [$name]);
+        }
+
+        return $ids;
     }
 
     /**

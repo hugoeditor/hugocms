@@ -3,11 +3,15 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { EditorView, basicSetup } from 'codemirror'
 import { EditorState, Prec } from '@codemirror/state'
 import { keymap } from '@codemirror/view'
+import { StreamLanguage } from '@codemirror/language'
 import { html } from '@codemirror/lang-html'
 import { markdown } from '@codemirror/lang-markdown'
 import { css } from '@codemirror/lang-css'
 import { javascript } from '@codemirror/lang-javascript'
 import { json } from '@codemirror/lang-json'
+import { yaml } from '@codemirror/lang-yaml'
+import { xml } from '@codemirror/lang-xml'
+import { toml } from '@codemirror/legacy-modes/mode/toml'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -23,8 +27,11 @@ function languageExtension(name) {
   switch (ext) {
     case 'html':
     case 'htm':
-    case 'svg':
       return [html()]
+    case 'xml':
+    case 'svg':
+    case 'rss':
+      return [xml()]
     case 'md':
     case 'markdown':
       return [markdown()]
@@ -34,6 +41,11 @@ function languageExtension(name) {
       return [javascript()]
     case 'json':
       return [json()]
+    case 'yaml':
+    case 'yml':
+      return [yaml()]
+    case 'toml':
+      return [StreamLanguage.define(toml)]
     default:
       return []
   }

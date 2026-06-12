@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useFilesStore } from '../stores/files'
 import { errorText } from '../i18n/apiMessage'
@@ -28,12 +28,26 @@ function onInput(value) {
 }
 
 async function save() {
-  if (!files.dirty) return
+  // saving fängt Doppelaufrufe ab: Strg+S erreicht sowohl den CodeMirror-
+  // Keymap als auch den globalen Fenster-Handler; der zweite Aufruf würde
+  // sonst mit veralteter mtime speichern und einen Scheinkonflikt auslösen.
+  if (!files.dirty || saving.value) return
   saving.value = true
   error.value = null
   try {
     await files.saveOpenFile(draft.value)
   } catch (e) {
+    // Externer Konflikt: Überschreiben nur nach ausdrücklicher Bestätigung.
+    if (e?.code === 'ECONFLICT' && confirm(t('editor.conflictConfirm'))) {
+      try {
+        await files.saveOpenFile(draft.value, { force: true })
+        error.value = null
+        return
+      } catch (e2) {
+        error.value = errorText(t, e2)
+        return
+      }
+    }
     error.value = errorText(t, e)
   } finally {
     saving.value = false
@@ -44,6 +58,32 @@ function close() {
   if (files.dirty && !confirm(t('editor.discardConfirm'))) return
   files.closeFile()
 }
+
+// Ctrl/Cmd+S speichert auch, wenn der Fokus außerhalb von CodeMirror liegt
+// (Toolbar, Dialogrand). Sonst löst der Browser seinen Speichern-Dialog aus.
+function onKeydown(e) {
+  if (files.openFile && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+    e.preventDefault()
+    save()
+  }
+}
+
+// Schützt vor Datenverlust beim Schließen/Neuladen des Browsertabs.
+function onBeforeWindowUnload(e) {
+  if (!files.dirty) return
+  e.preventDefault()
+  e.returnValue = ''
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown)
+  window.addEventListener('beforeunload', onBeforeWindowUnload)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('beforeunload', onBeforeWindowUnload)
+})
 </script>
 
 <template>

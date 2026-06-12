@@ -4,6 +4,10 @@ frontend/dist/
 frontend/.env
 frontend/.env.local
 
+# Persönliche Tool-Konfiguration auf Frontend-Ebene (analog zur Wurzelregel)
+frontend/.claude/
+frontend/.mcp.json
+
 # PHP
 vendor/
 

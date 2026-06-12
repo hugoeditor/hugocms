@@ -64,6 +64,34 @@ function crumb(item) {
       </v-tooltip>
     </div>
 
+    <!-- Anlegen -->
+    <div v-if="files.cwd" class="nemo-navgroup">
+      <v-tooltip :text="t('ctx.newFolder')" location="bottom">
+        <template #activator="{ props }">
+          <button
+            v-bind="props"
+            class="nemo-iconbtn"
+            :disabled="!files.can('mkdir')"
+            @click="files.requestNew('folder')"
+          >
+            <v-icon icon="mdi-folder-plus-outline" size="20" />
+          </button>
+        </template>
+      </v-tooltip>
+      <v-tooltip :text="t('ctx.newFile')" location="bottom">
+        <template #activator="{ props }">
+          <button
+            v-bind="props"
+            class="nemo-iconbtn"
+            :disabled="!files.can('write')"
+            @click="files.requestNew('file')"
+          >
+            <v-icon icon="mdi-file-plus-outline" size="20" />
+          </button>
+        </template>
+      </v-tooltip>
+    </div>
+
     <!-- Pfadleiste (GTK-Pathbar) -->
     <div class="nemo-pathbar">
       <button

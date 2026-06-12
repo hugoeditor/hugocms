@@ -75,9 +75,33 @@ export default {
     selected: '{0} selected',
   },
 
+  ctx: {
+    open: 'Open',
+    cut: 'Cut',
+    copy: 'Copy',
+    paste: 'Paste',
+    rename: 'Rename',
+    trash: 'Move to trash',
+    newFolder: 'New folder',
+    newFile: 'New file',
+  },
+
+  dialog: {
+    create: 'Create',
+    rename: 'Rename',
+    cancel: 'Cancel',
+    newFolderTitle: 'New folder',
+    newFolderLabel: 'Folder name',
+    newFileTitle: 'New file',
+    newFileLabel: 'File name',
+    renameTitle: 'Rename',
+    renameLabel: 'New name',
+  },
+
   editor: {
     save: 'Save',
     discardConfirm: 'Discard unsaved changes?',
+    conflictConfirm: 'The file was changed externally since it was opened. Overwrite with your version?',
   },
 
   // Field names — referenced by the backend via {t: "fields.x"} parameters.
@@ -96,6 +120,7 @@ export default {
     ENOENT: 'Not found.',
     EACCES: 'Access denied.',
     EINVAL: 'Bad request.',
+    ECONFLICT: 'Conflict with the current state on the server.',
     EINTERNAL: 'Internal error.',
     EFATAL: 'Internal error.',
     ESESSION: 'Session directory not readable/writable: {0}. Signing in is not possible — please grant read and write permissions to the web server user.',
@@ -109,6 +134,7 @@ export default {
     'UNKNOWN-COMMAND': 'Unknown command: {0}',
     'LOGIN-FAILED': 'Wrong username or password.',
     'PARAM-MISSING': 'Parameter “{0}” is missing.',
+    'PARAM-INVALID': 'Parameter “{0}” is invalid.',
     'OPERATION-NOT-ALLOWED': 'Operation “{0}” is not allowed on this mount.',
     'METHOD-REQUIRED': 'This operation requires {0}.',
 
@@ -122,6 +148,19 @@ export default {
     'CONTENT-TOO-LARGE': 'Content is too large.',
     'TEMPFILE-FAILED': 'Temporary file could not be created.',
     'FILE-SAVE-FAILED': 'File could not be saved.',
+    'CONFLICT-MTIME': 'The file was changed externally since it was opened.',
+
+    'INVALID-NAME': 'Invalid name: “{0}”.',
+    'ALREADY-EXISTS': '“{0}” already exists.',
+    'MKDIR-FAILED': 'The folder could not be created.',
+    'CREATE-FAILED': 'The file could not be created.',
+    'RENAME-FAILED': 'Rename failed.',
+    'COPY-FAILED': 'Copy failed.',
+    'MOVE-FAILED': 'Move failed.',
+    'DELETE-FAILED': 'Delete failed.',
+    'DEST-NOT-DIRECTORY': 'The target is not a folder.',
+    'CROSS-MOUNT-NOT-ALLOWED': 'This action is not possible across mounts.',
+    'CANNOT-MOVE-INTO-SELF': 'A folder cannot be moved or copied into itself.',
 
     'MOUNT-NAME-INVALID': 'Invalid mount name: {0}',
     'MOUNT-NAME-TAKEN': 'Mount name already in use: {0}',
