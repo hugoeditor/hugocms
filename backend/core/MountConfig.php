@@ -26,11 +26,24 @@ use HugoCMS\FileManager\Exception\ApiException;
  *   permissions (optional) Kommaliste; fehlt sie, gelten alle Rechte.
  *   accept      (optional) Kommaliste erlaubter Endungen (ohne Punkt).
  *   readonly    (optional) true = nur Lesen.
+ *
+ * Reservierte Sektion [hugo] (kein Mount): konfiguriert den Hugo-Aufruf
+ * (Befehl "build") für diese Webseite:
+ *   bin         (Pflicht) Pfad zum Hugo-Programm.
+ *   source      (Pflicht) Hugo-Projektverzeichnis.
+ *   destination (optional) Zielverzeichnis, Standard: <source>/public.
+ *   minify      (optional) true = Hugo mit --minify aufrufen.
  */
 final class MountConfig
 {
+    /** Sektionsname, der NICHT als Mount interpretiert wird. */
+    private const HUGO_SECTION = 'hugo';
+
     /**
-     * @return list<array{name: string, path: string, options: array}>
+     * @return array{
+     *   mounts: list<array{name: string, path: string, options: array}>,
+     *   hugo: ?array{bin: string, source: string, destination: string, minify: bool}
+     * }
      */
     public static function load(string $configPath): array
     {
@@ -45,19 +58,23 @@ final class MountConfig
 
         $baseDir = dirname($configPath);
         $mounts = [];
+        $hugo = null;
 
         foreach ($raw as $name => $section) {
             if (!is_array($section)) {
                 throw new ApiException('ECONFIG', 500, 'MOUNTS-ENTRY-OUTSIDE-SECTION', [(string) $name]);
             }
 
+            if (strtolower((string) $name) === self::HUGO_SECTION) {
+                $hugo = self::hugoSection($section, $baseDir);
+                continue;
+            }
+
             $path = isset($section['path']) ? trim((string) $section['path']) : '';
             if ($path === '') {
                 throw new ApiException('ECONFIG', 500, 'MOUNTS-PATH-REQUIRED', [(string) $name]);
             }
-            if (!self::isAbsolute($path)) {
-                $path = $baseDir . '/' . $path;
-            }
+            $path = self::resolve($path, $baseDir);
 
             $options = [];
             if (isset($section['label'])) {
@@ -80,7 +97,41 @@ final class MountConfig
             throw new ApiException('ECONFIG', 500, 'MOUNTS-NO-SECTION', [$configPath]);
         }
 
-        return $mounts;
+        return ['mounts' => $mounts, 'hugo' => $hugo];
+    }
+
+    /**
+     * Prüft die [hugo]-Sektion und löst die Pfade auf.
+     *
+     * @return array{bin: string, source: string, destination: string, minify: bool}
+     */
+    private static function hugoSection(array $section, string $baseDir): array
+    {
+        $bin = trim((string) ($section['bin'] ?? ''));
+        $source = trim((string) ($section['source'] ?? ''));
+        if ($bin === '' || $source === '') {
+            throw new ApiException('ECONFIG', 500, 'HUGO-CONFIG-INCOMPLETE');
+        }
+        $destination = trim((string) ($section['destination'] ?? ''));
+
+        $bin = self::resolve($bin, $baseDir);
+        $source = self::resolve($source, $baseDir);
+        $destination = $destination === ''
+            ? $source . '/public'
+            : self::resolve($destination, $baseDir);
+
+        return [
+            'bin' => $bin,
+            'source' => $source,
+            'destination' => $destination,
+            'minify' => (bool) ($section['minify'] ?? false),
+        ];
+    }
+
+    /** Löst einen Pfad relativ zum Verzeichnis der Konfigurationsdatei auf. */
+    private static function resolve(string $path, string $baseDir): string
+    {
+        return self::isAbsolute($path) ? $path : $baseDir . '/' . $path;
     }
 
     /** Zerlegt eine kommagetrennte Liste in getrimmte, nicht-leere Werte. */

@@ -102,6 +102,15 @@ export default {
     leave: 'Leave search',
   },
 
+  build: {
+    publish: 'Publish',
+    running: 'Hugo is running …',
+    successTitle: 'Site built',
+    failTitle: 'Hugo run failed',
+    duration: 'Duration: {0} s',
+    exitCode: 'Exit code: {0}',
+  },
+
   trash: {
     title: 'Trash',
     empty: 'The trash is empty',
@@ -237,6 +246,11 @@ export default {
     ECSRF: 'Security token invalid — please reload the page.',
     'TRASH-NOT-FOUND': 'Trash entry not found.',
     'RESTORE-FAILED': 'Restore failed.',
+
+    'HUGO-NOT-CONFIGURED': 'Hugo is not configured for this site ([hugo] section of the mount configuration).',
+    'HUGO-CONFIG-INCOMPLETE': '[hugo]: “bin” and “source” are required.',
+    'HUGO-BIN-MISSING': 'Hugo binary not found or not executable: {0}',
+    'HUGO-SOURCE-MISSING': 'Hugo project directory not found: {0}',
 
     'MOUNT-NAME-INVALID': 'Invalid mount name: {0}',
     'MOUNT-NAME-TAKEN': 'Mount name already in use: {0}',

@@ -29,6 +29,15 @@
 ;   • readonly    (optional) true = nur Lesen (überschreibt permissions).
 ;
 ; Werte mit Sonderzeichen bei Bedarf in "doppelte Anführungszeichen" setzen.
+;
+; Reservierte Sektion [hugo] (KEIN Mount): konfiguriert den Hugo-Aufruf für
+; den Veröffentlichen-Knopf des Clients (API-Befehl "build"). Ohne diese
+; Sektion wird der Knopf nicht angeboten.
+;   • bin         (Pflicht)  Pfad zum Hugo-Programm (siehe bin/get-hugo.sh).
+;   • source      (Pflicht)  Hugo-Projektverzeichnis.
+;   • destination (optional) Zielverzeichnis. Standard: <source>/public
+;   • minify      (optional) true = Hugo mit --minify aufrufen.
+; install.sh trägt die Sektion bei der Einrichtung automatisch ein.
 ; ===========================================================================
 
 [inhalte]
@@ -44,3 +53,9 @@ permissions = read, write
 [medien]
 path = daten/medien
 label = Medien
+
+;[hugo]
+;bin = ../bin/hugo/hugo
+;source = /pfad/zum/hugo-projekt
+;destination = /pfad/zum/hugo-projekt/public
+;minify = true

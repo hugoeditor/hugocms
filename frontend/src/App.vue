@@ -3,6 +3,7 @@ import { onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from './stores/auth'
 import { useFilesStore } from './stores/files'
+import { api } from './api/client'
 import { errorText, warningText } from './i18n/apiMessage'
 import LoginView from './components/LoginView.vue'
 import SetupView from './components/SetupView.vue'
@@ -72,6 +73,22 @@ async function logout() {
   await auth.logout()
   files.$reset()
 }
+
+// --- Hugo aufrufen (Veröffentlichen) ---------------------------------------
+const building = ref(false)
+const buildResult = ref(null) // { success, exitCode, output, seconds } oder null
+
+async function build() {
+  if (building.value) return
+  building.value = true
+  try {
+    buildResult.value = await api.post('build')
+  } catch (e) {
+    error.value = errorText(t, e) // Konfigurationsfehler als Snackbar
+  } finally {
+    building.value = false
+  }
+}
 </script>
 
 <template>
@@ -110,6 +127,21 @@ async function logout() {
           <v-icon icon="mdi-folder-multiple-outline" size="20" class="nemo-brand-icon" />
           <span class="nemo-title">{{ $t('app.title') }}</span>
           <div class="nemo-titlebar-spacer" />
+
+          <!-- Hugo aufrufen (nur wenn für die Webseite konfiguriert) -->
+          <v-btn
+            v-if="auth.buildable"
+            variant="flat"
+            color="primary"
+            size="small"
+            prepend-icon="mdi-rocket-launch-outline"
+            class="mr-2"
+            :loading="building"
+            @click="build"
+          >
+            {{ $t('build.publish') }}
+          </v-btn>
+
           <LanguageSwitcher />
           <span class="nemo-user">{{ auth.user?.name }}</span>
           <v-btn variant="text" size="small" prepend-icon="mdi-logout" @click="logout">
@@ -134,6 +166,31 @@ async function logout() {
         </div>
       </div>
     </template>
+
+    <!-- Ergebnis des Hugo-Laufs: Erfolg oder vollständige Fehlerausgabe -->
+    <v-dialog :model-value="!!buildResult" width="720" @update:model-value="buildResult = null">
+      <v-card v-if="buildResult">
+        <v-card-title class="d-flex align-center text-subtitle-1">
+          <v-icon
+            :icon="buildResult.success ? 'mdi-check-circle' : 'mdi-alert-circle'"
+            :color="buildResult.success ? 'success' : 'error'"
+            class="mr-2"
+          />
+          {{ buildResult.success ? $t('build.successTitle') : $t('build.failTitle') }}
+        </v-card-title>
+        <v-card-text>
+          <div class="text-caption text-medium-emphasis mb-2">
+            {{ $t('build.duration', [buildResult.seconds]) }}
+            <template v-if="!buildResult.success"> · {{ $t('build.exitCode', [buildResult.exitCode]) }}</template>
+          </div>
+          <pre class="build-output nemo-scroll">{{ buildResult.output }}</pre>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="buildResult = null">{{ $t('app.close') }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <v-snackbar :model-value="!!error" color="error" @update:model-value="error = null">
       {{ error }}
@@ -217,6 +274,19 @@ async function logout() {
 /* Dauerhafter Fehler-Block (Setup-/Pre-Login-Fehler): zentriert, begrenzt. */
 .fatal-alert {
   max-width: 600px;
+}
+
+/* Hugo-Ausgabe im Ergebnisdialog: Monospace, scrollbar, begrenzt hoch. */
+.build-output {
+  max-height: 50vh;
+  overflow: auto;
+  background: #f4f4f3;
+  border: 1px solid #d3d3d1;
+  border-radius: 4px;
+  padding: 10px 12px;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* Hinweis-Snackbar breiter und mit etwas mehr Innenabstand, damit längere

@@ -257,6 +257,26 @@ Der Webserver muss **Symlinks folgen** dürfen (Apache: `Options
 +FollowSymLinks`; Nginx tut es standardmäßig). Vorlagen für beide liegen in
 `beispiel-konfigurationen/`.
 
+### Veröffentlichen: Hugo aufrufen
+
+Der Client zeigt in der Titelleiste einen **Veröffentlichen**-Knopf, der Hugo
+für die aufgerufene Webseite startet (API-Befehl `build`). Konfiguriert wird
+das über die reservierte Sektion `[hugo]` in der Mount-Konfiguration der
+Webseite (`install.sh` trägt sie automatisch ein):
+
+```ini
+[hugo]
+bin = /pfad/zum/release/bin/hugo/hugo   ; Hugo-Programm (siehe get-hugo.sh)
+source = /var/www/kunde-a               ; Hugo-Projektverzeichnis
+destination = /var/www/kunde-a/public   ; optional, Standard: <source>/public
+minify = true                            ; optional: hugo --minify
+```
+
+Aufgerufen wird `hugo --cleanDestinationDir -s <source> -d <destination>`.
+Die Hugo-Ausgabe (Statistik bzw. Fehlermeldungen) zeigt der Client in einem
+Dialog an; ohne `[hugo]`-Sektion erscheint der Knopf nicht. Der Webserver-
+Benutzer braucht Ausführrechte auf das Binary und Schreibrechte im Ziel.
+
 ## API-Befehle
 
 | Befehl     | Methode | Parameter                            | Zweck                                  |
@@ -282,6 +302,7 @@ Der Webserver muss **Symlinks folgen** dürfen (Apache: `Options
 | `trashlist`| GET     | –                                    | Papierkörbe aller Mounts auflisten     |
 | `restore`  | POST    | `mount`, `names` (Liste)             | Aus dem Papierkorb wiederherstellen    |
 | `emptytrash`| POST   | `mount`?                             | Papierkorb endgültig leeren            |
+| `build`    | POST    | –                                    | Hugo aufrufen (Webseite erzeugen)      |
 
 Alle POST-Befehle verlangen das **CSRF-Token** aus `whoami` (Feld `csrf`) im
 Header `X-CSRF-Token`; sonst antwortet das Backend mit `ECSRF` (403).

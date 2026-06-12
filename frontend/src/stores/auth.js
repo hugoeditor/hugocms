@@ -9,6 +9,7 @@ export const useAuthStore = defineStore('auth', {
     warnings: [], // Einrichtungs-Hinweise des Servers (z. B. fehlende Verzeichnisse)
     setupRequired: false, // true, solange keine hugocms.ini existiert (Erstinbetriebnahme)
     setupDefaults: null, // Vorgaben des Servers für das Setup-Formular
+    buildable: false, // true, wenn für diese Webseite ein Hugo-Aufruf konfiguriert ist
   }),
 
   actions: {
@@ -19,6 +20,7 @@ export const useAuthStore = defineStore('auth', {
       this.warnings = data.warnings ?? []
       this.setupRequired = data.setupRequired ?? false
       this.setupDefaults = data.defaults ?? null
+      this.buildable = data.buildable ?? false
       setCsrfToken(data.csrf)
       this.ready = true
     },

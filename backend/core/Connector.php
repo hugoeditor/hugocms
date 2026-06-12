@@ -29,6 +29,13 @@ final class Connector
     /** Hinweise zur Einrichtung (z. B. fehlende Verzeichnisse), an den Client gemeldet. */
     private array $setupWarnings = [];
 
+    /**
+     * Hugo-Aufruf für den Befehl "build" (bin, source, destination, minify) —
+     * aus der [hugo]-Sektion der Mount-Konfiguration oder der Option "hugo".
+     * null = kein Build möglich (whoami meldet buildable=false).
+     */
+    private ?array $hugo = null;
+
     public function __construct(array $options)
     {
         // Hauptkonfiguration (hugocms.ini) ggf. zuerst einlesen — daraus
@@ -94,6 +101,12 @@ final class Connector
             $options['maxUploadBytes'] ?? 52_428_800,
         );
         $this->cors = $options['cors'] ?? null;
+
+        // Programmatische Hugo-Konfiguration (custom.php); die [hugo]-Sektion
+        // einer später geladenen Mount-Datei hat Vorrang.
+        if (isset($options['hugo']) && is_array($options['hugo'])) {
+            $this->hugo = $options['hugo'];
+        }
     }
 
     /**
@@ -121,8 +134,12 @@ final class Connector
      */
     public function mountsFromFile(string $configPath): self
     {
-        foreach (MountConfig::load($configPath) as $spec) {
+        $config = MountConfig::load($configPath);
+        foreach ($config['mounts'] as $spec) {
             $this->mount($spec['name'], $spec['path'], $spec['options']);
+        }
+        if ($config['hugo'] !== null) {
+            $this->hugo = $config['hugo'];
         }
 
         return $this;
@@ -184,6 +201,7 @@ final class Connector
                 'trashlist' => $this->cmdTrashList(),
                 'restore' => $this->cmdRestore($request),
                 'emptytrash' => $this->cmdEmptyTrash($request),
+                'build' => $this->cmdBuild(),
                 default => throw ApiException::badRequest('UNKNOWN-COMMAND', [$cmd]),
             };
 
@@ -259,6 +277,8 @@ final class Connector
             'warnings' => $this->setupWarnings,
             // CSRF-Token für alle Schreibbefehle (Header X-CSRF-Token).
             'csrf' => $this->csrfToken(),
+            // Ist für diese Webseite ein Hugo-Aufruf konfiguriert?
+            'buildable' => $this->hugo !== null,
         ];
     }
 
@@ -606,6 +626,64 @@ final class Connector
         }
 
         return ['removed' => $count];
+    }
+
+    // --- Hugo-Aufruf (Veröffentlichen) ---------------------------------------
+
+    /**
+     * Ruft Hugo für die konfigurierte Webseite auf ([hugo]-Sektion der
+     * Mount-Konfiguration bzw. Option "hugo"). Ein fehlgeschlagener Lauf ist
+     * KEIN API-Fehler: Die Antwort trägt success=false samt Hugo-Ausgabe,
+     * damit der Client sie vollständig anzeigen kann.
+     */
+    private function cmdBuild(): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+        if (!$this->auth->can('build')) {
+            throw ApiException::denied('OPERATION-NOT-ALLOWED', ['build']);
+        }
+
+        if ($this->hugo === null) {
+            throw new ApiException('ECONFIG', 500, 'HUGO-NOT-CONFIGURED');
+        }
+        $bin = (string) $this->hugo['bin'];
+        $source = (string) $this->hugo['source'];
+        $dest = (string) ($this->hugo['destination'] ?? $source . '/public');
+        if (!is_file($bin) || !is_executable($bin)) {
+            throw new ApiException('ECONFIG', 500, 'HUGO-BIN-MISSING', [$bin]);
+        }
+        if (!is_dir($source)) {
+            throw new ApiException('ECONFIG', 500, 'HUGO-SOURCE-MISSING', [$source]);
+        }
+
+        $cmd = escapeshellarg($bin)
+            . ' --cleanDestinationDir'
+            . ' -s ' . escapeshellarg($source)
+            . ' -d ' . escapeshellarg($dest)
+            . (!empty($this->hugo['minify']) ? ' --minify' : '')
+            . ' 2>&1';
+
+        $start = hrtime(true);
+        $lines = [];
+        $exitCode = 1;
+        exec($cmd, $lines, $exitCode);
+        $seconds = round((hrtime(true) - $start) / 1e9, 2);
+
+        // Ausgabe begrenzen (Logs können lang werden): die letzten 200 Zeilen.
+        $output = implode("\n", array_slice($lines, -200));
+        if ($exitCode === 0) {
+            $this->logger->info("Hugo-Lauf erfolgreich ({$seconds}s): {$source} -> {$dest}");
+        } else {
+            $this->logger->warning("Hugo-Lauf fehlgeschlagen (Code {$exitCode}): {$output}");
+        }
+
+        return [
+            'success' => $exitCode === 0,
+            'exitCode' => $exitCode,
+            'output' => $output,
+            'seconds' => $seconds,
+        ];
     }
 
     /** Gemeinsam für download/raw/thumb: Ziel auflösen, Leserecht, Datei. */

@@ -134,10 +134,17 @@ permissions = read, write
 [static]
 path = $HUGO_ROOT/static
 label = Medien
+
+; Hugo-Aufruf für den Veröffentlichen-Knopf (Befehl "build").
+[hugo]
+bin = $SCRIPT_DIR/hugo/hugo
+source = $HUGO_ROOT
+destination = $PUBLISH_ABS
 EOF
     echo "   → erzeugt:  content -> $HUGO_ROOT/content"
     echo "               layouts -> $HUGO_ROOT/layouts"
     echo "               static  -> $HUGO_ROOT/static"
+    echo "               [hugo]  -> $SCRIPT_DIR/hugo/hugo ($HUGO_ROOT -> $PUBLISH_ABS)"
 fi
 echo ""
 

@@ -102,6 +102,15 @@ export default {
     leave: 'Suche verlassen',
   },
 
+  build: {
+    publish: 'Veröffentlichen',
+    running: 'Hugo läuft …',
+    successTitle: 'Webseite erzeugt',
+    failTitle: 'Hugo-Lauf fehlgeschlagen',
+    duration: 'Dauer: {0} s',
+    exitCode: 'Beendigungscode: {0}',
+  },
+
   trash: {
     title: 'Papierkorb',
     empty: 'Der Papierkorb ist leer',
@@ -239,6 +248,11 @@ export default {
     ECSRF: 'Sicherheits-Token ungültig — bitte die Seite neu laden.',
     'TRASH-NOT-FOUND': 'Papierkorb-Eintrag nicht gefunden.',
     'RESTORE-FAILED': 'Wiederherstellen fehlgeschlagen.',
+
+    'HUGO-NOT-CONFIGURED': 'Hugo ist für diese Webseite nicht konfiguriert ([hugo]-Sektion der Mount-Konfiguration).',
+    'HUGO-CONFIG-INCOMPLETE': '[hugo]: „bin“ und „source“ sind erforderlich.',
+    'HUGO-BIN-MISSING': 'Hugo-Programm nicht gefunden oder nicht ausführbar: {0}',
+    'HUGO-SOURCE-MISSING': 'Hugo-Projektverzeichnis nicht gefunden: {0}',
 
     'MOUNT-NAME-INVALID': 'Ungültiger Mount-Name: {0}',
     'MOUNT-NAME-TAKEN': 'Mount bereits vergeben: {0}',
