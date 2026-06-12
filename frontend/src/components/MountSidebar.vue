@@ -16,7 +16,7 @@ function open(mount) {
         v-for="mount in files.mounts"
         :key="mount.id"
         class="nemo-place"
-        :class="{ active: files.activeMount === mount.name }"
+        :class="{ active: !files.trashMode && files.activeMount === mount.name }"
         @click="open(mount)"
       >
         <v-icon
@@ -27,16 +27,35 @@ function open(mount) {
         <span class="nemo-place-label">{{ mount.label }}</span>
       </li>
     </ul>
+
+    <div class="nemo-sidebar-spacer" />
+    <ul class="nemo-places">
+      <li
+        class="nemo-place"
+        :class="{ active: files.trashMode }"
+        @click="files.openTrash()"
+      >
+        <v-icon icon="mdi-trash-can-outline" size="18" class="nemo-place-icon" />
+        <span class="nemo-place-label">{{ $t('trash.title') }}</span>
+      </li>
+    </ul>
   </nav>
 </template>
 
 <style scoped>
 .nemo-sidebar {
+  display: flex;
+  flex-direction: column;
   height: 100%;
   background: var(--mint-panel);
   border-right: 1px solid var(--mint-border);
   padding: 8px 6px;
   overflow-y: auto;
+}
+
+/* Schiebt den Papierkorb ans untere Ende (wie in Nemo). */
+.nemo-sidebar-spacer {
+  flex: 1 1 auto;
 }
 
 .nemo-sidebar-header {

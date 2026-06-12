@@ -77,6 +77,7 @@ export default {
 
   ctx: {
     open: 'Open',
+    edit: 'Edit',
     cut: 'Cut',
     copy: 'Copy',
     paste: 'Paste',
@@ -84,6 +85,40 @@ export default {
     trash: 'Move to trash',
     newFolder: 'New folder',
     newFile: 'New file',
+    download: 'Download',
+    upload: 'Upload files …',
+  },
+
+  dnd: {
+    dropHint: 'Drop here to upload',
+  },
+
+  search: {
+    placeholder: 'Search (Enter) or filter …',
+    resultsFor: 'Search results for “{0}”',
+    colPath: 'Path',
+    none: 'No results for “{0}”',
+    truncated: 'Only the first {0} results are shown.',
+    leave: 'Leave search',
+  },
+
+  trash: {
+    title: 'Trash',
+    empty: 'The trash is empty',
+    colOrigin: 'Original location',
+    colMount: 'Place',
+    colDeleted: 'Deleted',
+    restore: 'Restore',
+    emptyAction: 'Empty trash',
+    emptyConfirm: 'Permanently delete all entries? This cannot be undone.',
+  },
+
+  viewer: {
+    counter: 'Image {0} of {1}',
+    prev: 'Previous image',
+    next: 'Next image',
+    close: 'Close',
+    download: 'Download',
   },
 
   dialog: {
@@ -99,9 +134,38 @@ export default {
   },
 
   editor: {
-    save: 'Save',
+    save: 'Save (Ctrl+S)',
     discardConfirm: 'Discard unsaved changes?',
     conflictConfirm: 'The file was changed externally since it was opened. Overwrite with your version?',
+    cursor: 'Line {0}, column {1}',
+    plainText: 'Plain text',
+    undo: 'Undo (Ctrl+Z)',
+    redo: 'Redo (Ctrl+Y)',
+    search: 'Find and replace (Ctrl+F)',
+    gotoLine: 'Go to line',
+    indentLess: 'Decrease indent (Ctrl+[)',
+    indentMore: 'Increase indent (Ctrl+])',
+    toggleComment: 'Toggle comment (Ctrl+/)',
+    foldAll: 'Fold all sections',
+    unfoldAll: 'Unfold all sections',
+    sourceView: 'Source',
+    wysiwygView: 'Visual',
+    frontMatter: 'Front matter (metadata)',
+  },
+
+  wysiwyg: {
+    bold: 'Bold',
+    italic: 'Italic',
+    strike: 'Strikethrough',
+    h1: 'Heading 1',
+    h2: 'Heading 2',
+    h3: 'Heading 3',
+    bulletList: 'Bullet list',
+    orderedList: 'Ordered list',
+    blockquote: 'Blockquote',
+    codeBlock: 'Code block',
+    inlineCode: 'Inline code',
+    hr: 'Horizontal rule',
   },
 
   // Field names — referenced by the backend via {t: "fields.x"} parameters.
@@ -161,6 +225,14 @@ export default {
     'DEST-NOT-DIRECTORY': 'The target is not a folder.',
     'CROSS-MOUNT-NOT-ALLOWED': 'This action is not possible across mounts.',
     'CANNOT-MOVE-INTO-SELF': 'A folder cannot be moved or copied into itself.',
+
+    'UPLOAD-FAILED': 'Upload of “{0}” failed.',
+    'UPLOAD-TOO-LARGE': '“{0}” is too large (at most {1}).',
+    'NOT-AN-IMAGE': 'Not an image file.',
+
+    ECSRF: 'Security token invalid — please reload the page.',
+    'TRASH-NOT-FOUND': 'Trash entry not found.',
+    'RESTORE-FAILED': 'Restore failed.',
 
     'MOUNT-NAME-INVALID': 'Invalid mount name: {0}',
     'MOUNT-NAME-TAKEN': 'Mount name already in use: {0}',

@@ -49,3 +49,10 @@
 .nemo-noselect {
   user-select: none;
 }
+
+/* Fehler-/Hinweisbanner: Vuetify gibt .v-alert "flex: 1 1" — in unseren
+   Flex-Spalten (Dateiansicht, Editor) würde der Alert sonst mit dem Inhalt
+   um die Höhe konkurrieren und die halbe Liste einnehmen. */
+.v-alert.nemo-alert {
+  flex: 0 0 auto;
+}

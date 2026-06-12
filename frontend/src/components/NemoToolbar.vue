@@ -8,6 +8,12 @@ const files = useFilesStore()
 function crumb(item) {
   files.openDir(item.id)
 }
+
+// Enter im Filterfeld: rekursive Serversuche ab dem aktuellen Ordner.
+function onSearch() {
+  const q = files.filter.trim()
+  if (q.length >= 2) files.search(q)
+}
 </script>
 
 <template>
@@ -90,6 +96,18 @@ function crumb(item) {
           </button>
         </template>
       </v-tooltip>
+      <v-tooltip :text="t('ctx.upload')" location="bottom">
+        <template #activator="{ props }">
+          <button
+            v-bind="props"
+            class="nemo-iconbtn"
+            :disabled="!files.can('upload') || files.uploading"
+            @click="files.requestNew('upload')"
+          >
+            <v-icon :icon="files.uploading ? 'mdi-progress-upload' : 'mdi-upload-outline'" size="20" />
+          </button>
+        </template>
+      </v-tooltip>
     </div>
 
     <!-- Pfadleiste (GTK-Pathbar) -->
@@ -108,14 +126,16 @@ function crumb(item) {
 
     <div class="nemo-spacer" />
 
-    <!-- Schnellfilter -->
+    <!-- Schnellfilter (tippen) und Serversuche (Enter) -->
     <div v-if="files.cwd" class="nemo-filter">
       <v-icon icon="mdi-magnify" size="18" class="nemo-filter-icon" />
       <input
         :value="files.filter"
-        :placeholder="t('toolbar.filter')"
+        :placeholder="t('search.placeholder')"
         class="nemo-filter-input"
         @input="files.setFilter($event.target.value)"
+        @keydown.enter="onSearch"
+        @keydown.escape="files.setFilter(''); files.leaveSearch()"
       />
     </div>
 

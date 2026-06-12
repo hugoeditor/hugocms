@@ -15,6 +15,9 @@ export default createVuetify({
           background: '#ffffff',
           surface: '#ffffff',
           'surface-variant': '#f4f4f3',
+          // Textfarbe auf surface-variant (u. a. Tooltips). Ohne diese Angabe
+          // bliebe Vuetifys Standard (#EEEEEE) — unlesbar auf hellem Grund.
+          'on-surface-variant': '#3c3c3a',
           primary: '#3c8527', // Mint-Grün (Akzent)
           'primary-darken-1': '#2f6b1e',
           secondary: '#5a5a58',

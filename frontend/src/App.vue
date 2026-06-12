@@ -9,6 +9,7 @@ import SetupView from './components/SetupView.vue'
 import MountSidebar from './components/MountSidebar.vue'
 import NemoToolbar from './components/NemoToolbar.vue'
 import FileBrowser from './components/FileBrowser.vue'
+import TrashView from './components/TrashView.vue'
 import EditorPanel from './components/EditorPanel.vue'
 import LanguageSwitcher from './components/LanguageSwitcher.vue'
 
@@ -77,7 +78,7 @@ async function logout() {
         <div class="d-flex justify-end fatal-alert mb-2">
           <LanguageSwitcher />
         </div>
-        <v-alert type="error" prominent border="start" class="fatal-alert">
+        <v-alert type="error" prominent border="start" class="fatal-alert nemo-alert">
           <div class="text-h6 mb-2">{{ $t('app.notReady') }}</div>
           <p class="mb-4">{{ fatalError }}</p>
           <v-btn variant="outlined" @click="init">{{ $t('app.retry') }}</v-btn>
@@ -116,10 +117,13 @@ async function logout() {
         <!-- Nemo-Werkzeugleiste (volle Breite) -->
         <NemoToolbar />
 
-        <!-- Seitenleiste + Inhalt -->
+        <!-- Seitenleiste + Inhalt (Dateien oder Papierkorb) -->
         <div class="nemo-body">
           <aside class="nemo-aside"><MountSidebar /></aside>
-          <main class="nemo-mainarea"><FileBrowser /></main>
+          <main class="nemo-mainarea">
+            <TrashView v-if="files.trashMode" />
+            <FileBrowser v-else />
+          </main>
         </div>
       </div>
 

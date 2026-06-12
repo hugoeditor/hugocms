@@ -5,11 +5,14 @@ Ein webbasierter Dateimanager zum Pflegen von Hugo-Webseiten. Backend in PHP
 verwaltet **mehrere Webseiten** (Mandantenfähigkeit); welche Verzeichnisse als
 Mounts erreichbar sind, wird je Webseite über INI-Dateien festgelegt.
 
-> **Stand: Stufe 1.** Anmeldung, Mounts, Verzeichnisse auflisten sowie
-> Textdateien lesen und speichern. Dateioperationen (anlegen, löschen,
-> umbenennen, kopieren), Upload, Bildanzeige und Papierkorb folgen in den
-> nächsten Stufen. Mandantenfähigkeit und der Auslieferungsweg
-> (`packaging.sh` / `install.sh`) stehen bereits.
+> **Stand: Stufe 4.** Anmeldung, Mounts, Verzeichnisse auflisten, Textdateien
+> lesen/speichern (mit Konfliktschutz); anlegen, umbenennen, kopieren,
+> verschieben, löschen, Mehrfachauswahl, Kontextmenü; Upload (Drag-and-Drop),
+> Download, Bildvorschauen, Bildbetrachter, Symbolansicht; visueller
+> Markdown-Editor (TipTap), Papierkorb-Verwaltung (Wiederherstellen/Leeren),
+> CSRF-Schutz, rekursive Suche. Mehrbenutzer mit Rollen folgt (Stufe 5).
+> Mandantenfähigkeit und der Auslieferungsweg (`packaging.sh` / `install.sh`)
+> stehen bereits.
 
 ## Architektur
 
@@ -254,17 +257,34 @@ Der Webserver muss **Symlinks folgen** dürfen (Apache: `Options
 +FollowSymLinks`; Nginx tut es standardmäßig). Vorlagen für beide liegen in
 `beispiel-konfigurationen/`.
 
-## API-Befehle (Stufe 1)
+## API-Befehle
 
-| Befehl   | Methode | Parameter                | Zweck                  |
-|----------|---------|--------------------------|------------------------|
-| `whoami` | GET     | –                        | Anmeldestatus abfragen |
-| `login`  | POST    | `username`, `password`   | Anmelden               |
-| `logout` | POST    | –                        | Abmelden               |
-| `mounts` | GET     | –                        | Mounts auflisten       |
-| `list`   | GET     | `target` (ID)            | Verzeichnis auflisten  |
-| `read`   | GET     | `target` (ID)            | Textdatei lesen        |
-| `write`  | POST    | `target` (ID), `content` | Textdatei speichern    |
+| Befehl     | Methode | Parameter                            | Zweck                                  |
+|------------|---------|--------------------------------------|----------------------------------------|
+| `whoami`   | GET     | –                                    | Anmeldestatus abfragen                 |
+| `login`    | POST    | `username`, `password`               | Anmelden                               |
+| `logout`   | POST    | –                                    | Abmelden                               |
+| `mounts`   | GET     | –                                    | Mounts auflisten                       |
+| `list`     | GET     | `target` (ID)                        | Verzeichnis auflisten                  |
+| `read`     | GET     | `target` (ID)                        | Textdatei lesen                        |
+| `write`    | POST    | `target` (ID), `content`, `mtime`?   | Textdatei speichern (Konfliktschutz)   |
+| `mkdir`    | POST    | `target` (Ordner-ID), `name`         | Unterordner anlegen                    |
+| `newfile`  | POST    | `target` (Ordner-ID), `name`         | Leere Datei anlegen                    |
+| `rename`   | POST    | `target` (ID), `name`                | Umbenennen                             |
+| `delete`   | POST    | `targets` (ID-Liste)                 | In den Papierkorb (`.trash`) löschen   |
+| `copy`     | POST    | `sources` (ID-Liste), `dest` (ID)    | Kopieren (gleicher Mount)              |
+| `move`     | POST    | `sources` (ID-Liste), `dest` (ID)    | Verschieben (gleicher Mount)           |
+| `upload`   | POST    | multipart: `target` (ID), `files[]`  | Dateien hochladen (Kollision: „ (2)“)  |
+| `download` | GET     | `target` (ID)                        | Datei herunterladen (attachment)       |
+| `raw`      | GET     | `target` (ID)                        | Bild inline ausliefern (Betrachter)    |
+| `thumb`    | GET     | `target` (ID), `size`?               | Bildvorschau (GD; ohne GD das Original)|
+| `search`   | GET     | `target` (Ordner-ID), `q` (≥ 2 Z.)   | Rekursive Namenssuche (max. 200)       |
+| `trashlist`| GET     | –                                    | Papierkörbe aller Mounts auflisten     |
+| `restore`  | POST    | `mount`, `names` (Liste)             | Aus dem Papierkorb wiederherstellen    |
+| `emptytrash`| POST   | `mount`?                             | Papierkorb endgültig leeren            |
+
+Alle POST-Befehle verlangen das **CSRF-Token** aus `whoami` (Feld `csrf`) im
+Header `X-CSRF-Token`; sonst antwortet das Backend mit `ECSRF` (403).
 
 Antwortformat:
 
@@ -325,15 +345,19 @@ Client:
   Pfad-Ausbruch erzeugen.
 - **Schreiboperationen nur per POST**, Session-Cookie mit `HttpOnly` und
   `SameSite=Lax`.
-
-> Hinweis: Ein CSRF-Token für Schreibbefehle ist für eine spätere Stufe
-> vorgesehen. Bis dahin schützt `SameSite=Lax` die Sitzung.
+- **CSRF-Token:** Alle Schreibbefehle verlangen das sitzungsgebundene Token
+  aus `whoami` im Header `X-CSRF-Token` (zweite Schicht neben `SameSite=Lax`).
+  Das einmalige Einrichtungs-Setup (vor Existenz der `hugocms.ini`) läuft ohne
+  Token, da dort noch keine schützenswerte Sitzung besteht.
 
 ## Nächste Stufen
 
-- **Stufe 2:** anlegen, umbenennen, kopieren, verschieben, löschen (in den
-  Papierkorb), Mehrfachauswahl, Kontextmenü.
-- **Stufe 3:** Upload (Drag-and-Drop), Download, Bildvorschauen (GD),
-  Bildbetrachter, Kachelansicht.
-- **Stufe 4:** TipTap-Markdown-Editor, Papierkorb-Verwaltung
-  (Wiederherstellen/Leeren), Mehrbenutzer mit Rollen, CSRF-Token, Suche.
+- ~~**Stufe 2:** anlegen, umbenennen, kopieren, verschieben, löschen (in den
+  Papierkorb), Mehrfachauswahl, Kontextmenü.~~ ✓ umgesetzt
+- ~~**Stufe 3:** Upload (Drag-and-Drop), Download, Bildvorschauen (GD),
+  Bildbetrachter, Kachelansicht.~~ ✓ umgesetzt (Bildvorschauen brauchen die
+  PHP-Erweiterung GD; ohne GD wird das Originalbild unverkleinert geliefert)
+- ~~**Stufe 4:** TipTap-Markdown-Editor (visuell, mit Front-Matter-Schutz),
+  Papierkorb-Verwaltung (Wiederherstellen/Leeren), CSRF-Token, Suche.~~
+  ✓ umgesetzt
+- **Stufe 5:** Mehrbenutzer mit Rollen.

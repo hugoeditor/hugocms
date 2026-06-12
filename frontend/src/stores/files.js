@@ -29,7 +29,19 @@ export const useFilesStore = defineStore('files', {
     selectionAnchor: null, // Anker für die Bereichsauswahl (Shift)
     clipboard: { mode: null, ids: [] }, // mode: 'copy' | 'cut' | null
 
-    newRequest: null, // 'folder' | 'file' — von der Toolbar gesetzt, vom Browser konsumiert
+    newRequest: null, // 'folder' | 'file' | 'upload' — von der Toolbar gesetzt, vom Browser konsumiert
+    uploading: false, // läuft gerade ein Upload? (Fortschrittsanzeige)
+    viewerId: null, // im Bildbetrachter geöffneter Eintrag (oder null)
+
+    // Serverseitige Suche (Stufe 4): aktiv, solange searchQuery gesetzt ist.
+    searchQuery: '',
+    searchResults: [],
+    searchTruncated: false,
+
+    // Papierkorb-Ansicht (Stufe 4).
+    trashMode: false,
+    trashEntries: [],
+    trashSelected: [], // [{mount, trashName}]
 
     // Navigationsverlauf (wie Nemo Zurück/Vor). Jeder Eintrag ist eine
     // Momentaufnahme { id, breadcrumb, activeMount }.
@@ -52,6 +64,14 @@ export const useFilesStore = defineStore('files', {
     isSelected: (s) => (id) => s.selectedIds.includes(id),
     selectedCount: (s) => s.selectedIds.length,
     hasClipboard: (s) => s.clipboard.ids.length > 0,
+    // Bilder des aktuellen Verzeichnisses (Reihenfolge = Anzeige) für den Betrachter.
+    imageEntries: (s) => s.entries.filter((e) => e.image),
+    viewerEntry(state) {
+      return state.viewerId ? this.imageEntries.find((e) => e.id === state.viewerId) ?? null : null
+    },
+    viewerIndex(state) {
+      return state.viewerId ? this.imageEntries.findIndex((e) => e.id === state.viewerId) : -1
+    },
     // Rechte des aktiven Mounts (für Menü-/Toolbar-Aktivierung).
     can: (s) => (perm) => {
       const m = s.mounts.find((mm) => mm.name === s.activeMount)
@@ -63,6 +83,10 @@ export const useFilesStore = defineStore('files', {
     async loadMounts() {
       const data = await api.get('mounts')
       this.mounts = data.mounts
+      // Wie Nemo direkt in einem Ort starten: den ersten Mount öffnen.
+      if (!this.cwd && this.mounts.length > 0) {
+        await this.openDir(this.mounts[0].id)
+      }
     },
 
     async _list(id) {
@@ -74,6 +98,7 @@ export const useFilesStore = defineStore('files', {
         this.selectedIds = []
         this.selectionAnchor = null
         this.filter = ''
+        this.leaveSearch()
         return data
       } finally {
         this.loading = false
@@ -81,6 +106,7 @@ export const useFilesStore = defineStore('files', {
     },
 
     async openDir(id, label = null) {
+      this.trashMode = false
       const data = await this._list(id)
 
       const mount = this.mounts.find((m) => m.id === id)
@@ -227,11 +253,120 @@ export const useFilesStore = defineStore('files', {
       await this.refresh()
     },
 
+    // --- Stufe 4: Suche und Papierkorb ------------------------------------
+
+    async search(query) {
+      const q = query.trim()
+      if (!this.cwd || q.length < 2) return
+      const data = await api.get('search', { target: this.cwd.id, q })
+      this.searchQuery = data.query
+      this.searchResults = data.entries
+      this.searchTruncated = data.truncated
+      this.selectedIds = []
+      this.selectionAnchor = null
+    },
+
+    leaveSearch() {
+      this.searchQuery = ''
+      this.searchResults = []
+      this.searchTruncated = false
+    },
+
+    async openTrash() {
+      this.trashMode = true
+      this.leaveSearch()
+      await this.loadTrash()
+    },
+
+    leaveTrash() {
+      this.trashMode = false
+      this.trashEntries = []
+      this.trashSelected = []
+    },
+
+    async loadTrash() {
+      const data = await api.get('trashlist')
+      this.trashEntries = data.entries
+      this.trashSelected = []
+    },
+
+    async restoreTrash(items) {
+      // Je Mount bündeln (das Backend stellt mount-weise wieder her).
+      const byMount = new Map()
+      for (const it of items) {
+        if (!byMount.has(it.mount)) byMount.set(it.mount, [])
+        byMount.get(it.mount).push(it.trashName)
+      }
+      for (const [mount, names] of byMount) {
+        await api.post('restore', { mount, names })
+      }
+      await this.loadTrash()
+      if (this.cwd) await this.refresh()
+    },
+
+    async emptyTrash() {
+      await api.post('emptytrash')
+      await this.loadTrash()
+    },
+
+    // --- Stufe 3: Upload, Download, Bildbetrachter -----------------------
+
+    async upload(fileList) {
+      if (!this.cwd || !fileList?.length) return
+      const form = new FormData()
+      form.append('cmd', 'upload')
+      form.append('target', this.cwd.id)
+      for (const f of fileList) form.append('files[]', f)
+      this.uploading = true
+      try {
+        await api.postForm(form)
+      } finally {
+        this.uploading = false
+      }
+      await this.refresh()
+    },
+
+    // Download über eine unsichtbare Navigation — der Browser speichert die
+    // Antwort dank Content-Disposition: attachment, die App bleibt stehen.
+    download(entry) {
+      const a = document.createElement('a')
+      a.href = api.url('download', { target: entry.id })
+      a.download = entry.name
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+    },
+
+    thumbUrl(entry, size = 256) {
+      return api.url('thumb', { target: entry.id, size })
+    },
+
+    rawUrl(entry) {
+      return api.url('raw', { target: entry.id })
+    },
+
+    openViewer(entry) {
+      this.viewerId = entry.id
+    },
+
+    closeViewer() {
+      this.viewerId = null
+    },
+
+    viewerStep(delta) {
+      const list = this.imageEntries
+      if (!list.length || this.viewerIndex < 0) return
+      const next = (this.viewerIndex + delta + list.length) % list.length
+      this.viewerId = list[next].id
+    },
+
     // --- Editor (Stufe 1) ------------------------------------------------
 
     async activate(entry) {
       if (entry.type === 'dir') {
         await this.openDir(entry.id, entry.name)
+      } else if (entry.image) {
+        this.openViewer(entry)
       } else if (entry.editable) {
         await this.openTextFile(entry)
       }

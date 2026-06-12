@@ -91,6 +91,7 @@ final class Connector
             $this->resolver,
             $options['editable'] ?? ['html', 'htm', 'md', 'markdown', 'txt', 'css', 'js', 'json', 'xml', 'yaml', 'yml', 'svg', 'toml'],
             $options['maxEditableBytes'] ?? 5_242_880,
+            $options['maxUploadBytes'] ?? 52_428_800,
         );
         $this->cors = $options['cors'] ?? null;
     }
@@ -175,6 +176,14 @@ final class Connector
                 'delete' => $this->cmdDelete($request),
                 'copy' => $this->cmdCopy($request),
                 'move' => $this->cmdMove($request),
+                'upload' => $this->cmdUpload($request),
+                'download' => $this->cmdDownload($request),
+                'raw' => $this->cmdRaw($request),
+                'thumb' => $this->cmdThumb($request),
+                'search' => $this->cmdSearch($request),
+                'trashlist' => $this->cmdTrashList(),
+                'restore' => $this->cmdRestore($request),
+                'emptytrash' => $this->cmdEmptyTrash($request),
                 default => throw ApiException::badRequest('UNKNOWN-COMMAND', [$cmd]),
             };
 
@@ -248,6 +257,8 @@ final class Connector
             'authenticated' => $this->auth->isAuthenticated(),
             'user' => $this->auth->currentUser(),
             'warnings' => $this->setupWarnings,
+            // CSRF-Token für alle Schreibbefehle (Header X-CSRF-Token).
+            'csrf' => $this->csrfToken(),
         ];
     }
 
@@ -385,7 +396,7 @@ final class Connector
         foreach ($this->requireIdList($request, 'targets') as $id) {
             $target = $this->resolver->resolve($id);
             $this->requirePermission($target['mount'], 'delete');
-            $this->files->trash($target['mount'], $target['abs']);
+            $this->files->trash($target['mount'], $target['rel'], $target['abs']);
             $count++;
         }
 
@@ -431,6 +442,245 @@ final class Connector
         return ['count' => count($entries), 'entries' => $entries];
     }
 
+    // --- Stufe 3: Upload und Auslieferung -----------------------------------
+
+    /** Nimmt multipart-Uploads entgegen (Feld files[], Ziel = Verzeichnis-ID). */
+    private function cmdUpload(array $request): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+        $target = $this->resolver->resolve($this->requireParam($request, 'target'));
+        $this->requirePermission($target['mount'], 'upload');
+        if (!is_dir($target['abs'])) {
+            throw ApiException::badRequest('NOT-A-DIRECTORY');
+        }
+
+        $entries = [];
+        foreach ($this->uploadedFiles() as $file) {
+            $entries[] = $this->files->storeUpload($target['mount'], $target['rel'], $target['abs'], $file);
+        }
+
+        return ['count' => count($entries), 'entries' => $entries];
+    }
+
+    /** Liefert eine Datei als Download (attachment) aus. */
+    private function cmdDownload(array $request): never
+    {
+        $abs = $this->resolveReadableFile($request);
+        $this->streamFile($abs, $this->files->mimeOf($abs), 'attachment');
+    }
+
+    /**
+     * Liefert eine Datei inline aus — für den Bildbetrachter. Nur Bilder
+     * werden inline gesendet; alles andere als attachment, damit kein im
+     * Mount liegendes HTML/JS im Admin-Kontext gerendert wird.
+     */
+    private function cmdRaw(array $request): never
+    {
+        $abs = $this->resolveReadableFile($request);
+        $mime = $this->files->mimeOf($abs);
+        $disposition = str_starts_with($mime, 'image/') ? 'inline' : 'attachment';
+        $this->streamFile($abs, $mime, $disposition);
+    }
+
+    /**
+     * Liefert eine verkleinerte Bildvorschau (GD). Ohne GD, bei SVG oder bei
+     * sehr großen Bildern (Dekomprimierungs-Schutz) wird das Original inline
+     * ausgeliefert — die Vorschau ist dann nur nicht verkleinert.
+     */
+    private function cmdThumb(array $request): never
+    {
+        $abs = $this->resolveReadableFile($request);
+        $mime = $this->files->mimeOf($abs);
+        if (!str_starts_with($mime, 'image/')) {
+            throw ApiException::badRequest('NOT-AN-IMAGE');
+        }
+
+        $size = max(16, min(1024, (int) ($request['size'] ?? 256)));
+        $info = @getimagesize($abs);
+        $tooBig = $info !== false && ((int) $info[0] * (int) $info[1]) > 40_000_000;
+        if ($mime === 'image/svg+xml' || !function_exists('imagecreatefromstring') || $tooBig) {
+            $this->streamFile($abs, $mime, 'inline');
+        }
+
+        $etag = '"' . sha1($abs . filemtime($abs) . filesize($abs) . 't' . $size) . '"';
+        $this->maybeNotModified($etag);
+
+        $data = @file_get_contents($abs);
+        $src = $data === false ? false : @imagecreatefromstring($data);
+        if ($src === false) {
+            $this->streamFile($abs, $mime, 'inline'); // unbekanntes Format: Original
+        }
+
+        $w = imagesx($src);
+        $h = imagesy($src);
+        $scale = min(1.0, $size / max($w, $h));
+        $tw = max(1, (int) round($w * $scale));
+        $th = max(1, (int) round($h * $scale));
+
+        $dst = imagecreatetruecolor($tw, $th);
+        imagealphablending($dst, false);
+        imagesavealpha($dst, true);
+        imagefill($dst, 0, 0, imagecolorallocatealpha($dst, 0, 0, 0, 127));
+        imagecopyresampled($dst, $src, 0, 0, 0, 0, $tw, $th, $w, $h);
+
+        header('Content-Type: image/png');
+        header('X-Content-Type-Options: nosniff');
+        header('Cache-Control: private, max-age=3600');
+        header('ETag: ' . $etag);
+        imagepng($dst);
+        exit;
+    }
+
+    // --- Stufe 4: Suche und Papierkorb ---------------------------------------
+
+    /** Rekursive Namenssuche ab einem Verzeichnis (Teilstring, max. 200 Treffer). */
+    private function cmdSearch(array $request): array
+    {
+        $this->requireAuth();
+        $target = $this->resolver->resolve($this->requireParam($request, 'target'));
+        $this->requirePermission($target['mount'], 'read');
+        if (!is_dir($target['abs'])) {
+            throw ApiException::badRequest('NOT-A-DIRECTORY');
+        }
+        $q = trim($this->requireParam($request, 'q'));
+        if (mb_strlen($q) < 2) {
+            throw ApiException::badRequest('PARAM-INVALID', ['q']);
+        }
+
+        $results = $this->files->search($target['mount'], $target['rel'], $target['abs'], $q);
+
+        return ['query' => $q, 'entries' => $results, 'truncated' => count($results) >= FileService::SEARCH_LIMIT];
+    }
+
+    /** Papierkörbe aller Mounts mit Löschrecht (zusammengeführt). */
+    private function cmdTrashList(): array
+    {
+        $this->requireAuth();
+
+        $entries = [];
+        foreach ($this->resolver->all() as $mount) {
+            if (!$mount->allows('delete') || !$this->auth->can('file.delete')) {
+                continue;
+            }
+            $entries = [...$entries, ...$this->files->listTrash($mount)];
+        }
+        usort($entries, static fn (array $a, array $b): int => $b['deletedAt'] <=> $a['deletedAt']);
+
+        return ['entries' => $entries];
+    }
+
+    /** Stellt Papierkorb-Einträge an ihrem Ursprungsort wieder her. */
+    private function cmdRestore(array $request): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+        $mount = $this->resolver->get($this->requireParam($request, 'mount'));
+        // Wiederherstellen schreibt in den Mount.
+        $this->requirePermission($mount, 'write');
+
+        $entries = [];
+        foreach ($this->requireIdList($request, 'names') as $trashName) {
+            $entries[] = $this->files->restoreFromTrash($mount, $trashName);
+        }
+
+        return ['count' => count($entries), 'entries' => $entries];
+    }
+
+    /** Leert die Papierkörbe (optional nur einen Mount) — endgültig. */
+    private function cmdEmptyTrash(array $request): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+
+        $mounts = isset($request['mount']) && is_string($request['mount']) && $request['mount'] !== ''
+            ? [$this->resolver->get($request['mount'])]
+            : array_values($this->resolver->all());
+
+        $count = 0;
+        foreach ($mounts as $mount) {
+            if (!$mount->allows('delete') || !$this->auth->can('file.delete')) {
+                continue;
+            }
+            $count += $this->files->emptyTrash($mount);
+        }
+
+        return ['removed' => $count];
+    }
+
+    /** Gemeinsam für download/raw/thumb: Ziel auflösen, Leserecht, Datei. */
+    private function resolveReadableFile(array $request): string
+    {
+        $this->requireAuth();
+        $target = $this->resolver->resolve($this->requireParam($request, 'target'));
+        $this->requirePermission($target['mount'], 'read');
+        if (!is_file($target['abs'])) {
+            throw ApiException::notFound('FILE-NOT-FOUND');
+        }
+
+        return $target['abs'];
+    }
+
+    /** Streamt eine Datei mit Cache-Validierung (ETag/304) und beendet. */
+    private function streamFile(string $abs, string $mime, string $disposition): never
+    {
+        $etag = '"' . sha1($abs . filemtime($abs) . filesize($abs)) . '"';
+        $this->maybeNotModified($etag);
+
+        $encoded = rawurlencode(basename($abs));
+        header('Content-Type: ' . $mime);
+        header('Content-Length: ' . (string) filesize($abs));
+        header("Content-Disposition: {$disposition}; filename=\"{$encoded}\"; filename*=UTF-8''{$encoded}");
+        header('X-Content-Type-Options: nosniff');
+        header('Cache-Control: private, max-age=3600');
+        header('ETag: ' . $etag);
+        readfile($abs);
+        exit;
+    }
+
+    /** Beantwortet die Anfrage mit 304, wenn der Client den Stand schon hat. */
+    private function maybeNotModified(string $etag): void
+    {
+        if (($_SERVER['HTTP_IF_NONE_MATCH'] ?? '') === $etag) {
+            http_response_code(304);
+            header('ETag: ' . $etag);
+            exit;
+        }
+    }
+
+    /**
+     * Normalisiert $_FILES['files'] (Einzeldatei oder files[]-Array) zu einer
+     * Liste von Einzeleinträgen.
+     *
+     * @return list<array{name: mixed, tmp_name: mixed, error: mixed, size: mixed}>
+     */
+    private function uploadedFiles(): array
+    {
+        $raw = $_FILES['files'] ?? null;
+        if ($raw === null) {
+            throw ApiException::badRequest('PARAM-MISSING', ['files']);
+        }
+
+        if (!is_array($raw['name'] ?? null)) {
+            return [$raw];
+        }
+
+        $list = [];
+        foreach (array_keys($raw['name']) as $i) {
+            $list[] = [
+                'name' => $raw['name'][$i] ?? '',
+                'tmp_name' => $raw['tmp_name'][$i] ?? '',
+                'error' => $raw['error'][$i] ?? UPLOAD_ERR_NO_FILE,
+                'size' => $raw['size'][$i] ?? 0,
+            ];
+        }
+        if ($list === []) {
+            throw ApiException::badRequest('PARAM-MISSING', ['files']);
+        }
+
+        return $list;
+    }
+
     // --- Hilfen ------------------------------------------------------------
 
     private function requireAuth(): void
@@ -451,6 +701,40 @@ final class Connector
     {
         if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== $method) {
             throw new ApiException('EMETHOD', 405, 'METHOD-REQUIRED', [$method]);
+        }
+        // Alle Schreibbefehle laufen hier durch — CSRF zentral prüfen.
+        if ($method === 'POST') {
+            $this->requireCsrf();
+        }
+    }
+
+    /**
+     * Liefert das sitzungsgebundene CSRF-Token (erzeugt es beim ersten Zugriff).
+     * Ohne aktive Session (auth-Implementierung ohne PHP-Session) gibt es
+     * keines — dann entfällt auch die Prüfung.
+     */
+    private function csrfToken(): ?string
+    {
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            return null;
+        }
+        if (!isset($_SESSION['hugocms_csrf']) || !is_string($_SESSION['hugocms_csrf'])) {
+            $_SESSION['hugocms_csrf'] = bin2hex(random_bytes(32));
+        }
+
+        return $_SESSION['hugocms_csrf'];
+    }
+
+    /** Verlangt bei Schreibbefehlen das Token aus whoami (Header X-CSRF-Token). */
+    private function requireCsrf(): void
+    {
+        $expected = $this->csrfToken();
+        if ($expected === null) {
+            return; // keine Session — kein sitzungsgebundenes Token möglich
+        }
+        $sent = (string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
+        if ($sent === '' || !hash_equals($expected, $sent)) {
+            throw new ApiException('ECSRF', 403);
         }
     }
 

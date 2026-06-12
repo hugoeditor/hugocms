@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { api } from '../api/client'
+import { api, setCsrfToken } from '../api/client'
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -19,6 +19,7 @@ export const useAuthStore = defineStore('auth', {
       this.warnings = data.warnings ?? []
       this.setupRequired = data.setupRequired ?? false
       this.setupDefaults = data.defaults ?? null
+      setCsrfToken(data.csrf)
       this.ready = true
     },
 

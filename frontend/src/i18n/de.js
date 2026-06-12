@@ -77,6 +77,7 @@ export default {
 
   ctx: {
     open: 'Öffnen',
+    edit: 'Bearbeiten',
     cut: 'Ausschneiden',
     copy: 'Kopieren',
     paste: 'Einfügen',
@@ -84,6 +85,40 @@ export default {
     trash: 'In den Papierkorb',
     newFolder: 'Neuer Ordner',
     newFile: 'Neue Datei',
+    download: 'Herunterladen',
+    upload: 'Dateien hochladen …',
+  },
+
+  dnd: {
+    dropHint: 'Zum Hochladen hier ablegen',
+  },
+
+  search: {
+    placeholder: 'Suchen (Enter) oder filtern …',
+    resultsFor: 'Suchergebnisse für „{0}“',
+    colPath: 'Pfad',
+    none: 'Keine Treffer für „{0}“',
+    truncated: 'Nur die ersten {0} Treffer werden angezeigt.',
+    leave: 'Suche verlassen',
+  },
+
+  trash: {
+    title: 'Papierkorb',
+    empty: 'Der Papierkorb ist leer',
+    colOrigin: 'Ursprungsort',
+    colMount: 'Ort',
+    colDeleted: 'Gelöscht am',
+    restore: 'Wiederherstellen',
+    emptyAction: 'Papierkorb leeren',
+    emptyConfirm: 'Alle Einträge endgültig löschen? Das kann nicht rückgängig gemacht werden.',
+  },
+
+  viewer: {
+    counter: 'Bild {0} von {1}',
+    prev: 'Vorheriges Bild',
+    next: 'Nächstes Bild',
+    close: 'Schließen',
+    download: 'Herunterladen',
   },
 
   dialog: {
@@ -99,9 +134,38 @@ export default {
   },
 
   editor: {
-    save: 'Speichern',
+    save: 'Speichern (Strg+S)',
     discardConfirm: 'Ungespeicherte Änderungen verwerfen?',
     conflictConfirm: 'Die Datei wurde seit dem Öffnen extern geändert. Mit Ihrer Fassung überschreiben?',
+    cursor: 'Zeile {0}, Spalte {1}',
+    plainText: 'Text',
+    undo: 'Rückgängig (Strg+Z)',
+    redo: 'Wiederholen (Strg+Y)',
+    search: 'Suchen und Ersetzen (Strg+F)',
+    gotoLine: 'Gehe zu Zeile',
+    indentLess: 'Einzug verringern (Strg+[)',
+    indentMore: 'Einzug vergrößern (Strg+])',
+    toggleComment: 'Kommentar umschalten (Strg+/)',
+    foldAll: 'Alle Abschnitte einklappen',
+    unfoldAll: 'Alle Abschnitte ausklappen',
+    sourceView: 'Quelltext',
+    wysiwygView: 'Visuell',
+    frontMatter: 'Front-Matter (Metadaten)',
+  },
+
+  wysiwyg: {
+    bold: 'Fett',
+    italic: 'Kursiv',
+    strike: 'Durchgestrichen',
+    h1: 'Überschrift 1',
+    h2: 'Überschrift 2',
+    h3: 'Überschrift 3',
+    bulletList: 'Aufzählung',
+    orderedList: 'Nummerierte Liste',
+    blockquote: 'Zitat',
+    codeBlock: 'Code-Block',
+    inlineCode: 'Code (Zeile)',
+    hr: 'Trennlinie',
   },
 
   // Feldnamen — vom Backend über Parameter {t: "fields.x"} referenziert.
@@ -163,6 +227,14 @@ export default {
     'DEST-NOT-DIRECTORY': 'Das Ziel ist kein Ordner.',
     'CROSS-MOUNT-NOT-ALLOWED': 'Über Mounts hinweg ist diese Aktion nicht möglich.',
     'CANNOT-MOVE-INTO-SELF': 'Ein Ordner kann nicht in sich selbst verschoben oder kopiert werden.',
+
+    'UPLOAD-FAILED': 'Hochladen von „{0}“ fehlgeschlagen.',
+    'UPLOAD-TOO-LARGE': '„{0}“ ist zu groß (höchstens {1}).',
+    'NOT-AN-IMAGE': 'Keine Bilddatei.',
+
+    ECSRF: 'Sicherheits-Token ungültig — bitte die Seite neu laden.',
+    'TRASH-NOT-FOUND': 'Papierkorb-Eintrag nicht gefunden.',
+    'RESTORE-FAILED': 'Wiederherstellen fehlgeschlagen.',
 
     'MOUNT-NAME-INVALID': 'Ungültiger Mount-Name: {0}',
     'MOUNT-NAME-TAKEN': 'Mount bereits vergeben: {0}',

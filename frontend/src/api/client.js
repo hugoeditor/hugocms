@@ -15,6 +15,18 @@ function normalizeBase(value) {
 
 const BASE = normalizeBase(import.meta.env.VITE_API_BASE)
 
+// CSRF-Token: kommt aus whoami (auth-Store ruft setCsrfToken) und wird bei
+// jedem Schreibbefehl als Header mitgesendet.
+let csrfToken = null
+
+export function setCsrfToken(token) {
+  csrfToken = typeof token === 'string' && token !== '' ? token : null
+}
+
+function csrfHeaders() {
+  return csrfToken ? { 'X-CSRF-Token': csrfToken } : {}
+}
+
 // Fehler trägt die Übersetzungsdaten des Backends: code (Fehlerklasse),
 // optionaler key (genauerer Meldungsschlüssel) und params. Der lesbare Text
 // entsteht erst im Frontend über die i18n-Wörterbücher (siehe i18n/apiMessage).
@@ -56,9 +68,26 @@ export const api = {
     const res = await fetch(BASE, {
       method: 'POST',
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
       body: JSON.stringify({ cmd, ...body }),
     })
     return handle(res)
+  },
+
+  // Datei-Upload als multipart/form-data (FormData trägt cmd + target + files[]).
+  async postForm(form) {
+    const res = await fetch(BASE, {
+      method: 'POST',
+      credentials: 'include',
+      headers: csrfHeaders(),
+      body: form,
+    })
+    return handle(res)
+  },
+
+  // Direkte URL eines GET-Befehls — für <img src> (thumb/raw) und Downloads.
+  url(cmd, params = {}) {
+    const query = new URLSearchParams({ cmd, ...params }).toString()
+    return `${BASE}?${query}`
   },
 }

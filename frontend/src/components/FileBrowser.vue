@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useFilesStore } from '../stores/files'
 import { formatSize, formatDate, iconFor } from '../util/format'
 import { errorText } from '../i18n/apiMessage'
+import ImageViewer from './ImageViewer.vue'
 
 const { t } = useI18n()
 const files = useFilesStore()
@@ -51,10 +52,18 @@ function buildItems(entry) {
   const items = []
   const sel = files.selectedCount
   if (entry) {
-    if (entry.type === 'dir' || entry.editable) {
+    if (entry.type === 'dir' || entry.editable || entry.image) {
       items.push({ icon: 'mdi-open-in-app', label: t('ctx.open'), action: () => onOpen(entry) })
-      items.push({ divider: true })
+      // Editierbare Bilder (z. B. SVG): Öffnen zeigt den Betrachter,
+      // Bearbeiten führt in den Texteditor.
+      if (entry.image && entry.editable) {
+        items.push({ icon: 'mdi-pencil-outline', label: t('ctx.edit'), action: () => run(() => files.openTextFile(entry)) })
+      }
     }
+    if (entry.type === 'file' && sel === 1) {
+      items.push({ icon: 'mdi-download', label: t('ctx.download'), action: () => files.download(entry) })
+    }
+    if (items.length) items.push({ divider: true })
     if (files.can('move')) items.push({ icon: 'mdi-content-cut', label: t('ctx.cut'), action: () => files.cutSelection() })
     if (files.can('copy')) items.push({ icon: 'mdi-content-copy', label: t('ctx.copy'), action: () => files.copySelection() })
   }
@@ -74,6 +83,7 @@ function buildItems(entry) {
   } else {
     if (files.can('mkdir')) items.push({ icon: 'mdi-folder-plus-outline', label: t('ctx.newFolder'), action: () => openNew('folder') })
     if (files.can('write')) items.push({ icon: 'mdi-file-plus-outline', label: t('ctx.newFile'), action: () => openNew('file') })
+    if (files.can('upload')) items.push({ icon: 'mdi-upload-outline', label: t('ctx.upload'), action: () => pickUpload() })
   }
   return items
 }
@@ -155,12 +165,49 @@ function trashSelection() {
   run(() => files.trashEntries([...files.selectedIds]))
 }
 
-// Anfragen der Toolbar (Neuer Ordner / Neue Datei) konsumieren.
+// --- Upload (Dateiauswahl + Drag-and-Drop) --------------------------------
+
+const uploadInput = ref(null)
+const dragOver = ref(false)
+
+function pickUpload() {
+  uploadInput.value?.click()
+}
+
+function onPicked(event) {
+  const list = event.target.files
+  if (list?.length) run(() => files.upload(list))
+  event.target.value = '' // gleiche Auswahl erneut möglich
+}
+
+function onDragOver(event) {
+  if (!files.can('upload') || !event.dataTransfer?.types?.includes('Files')) return
+  event.preventDefault()
+  dragOver.value = true
+}
+
+function onDragLeave(event) {
+  // Nur beim Verlassen des Inhaltsbereichs (nicht beim Wandern über Kinder).
+  if (event.currentTarget === event.target || !event.currentTarget.contains(event.relatedTarget)) {
+    dragOver.value = false
+  }
+}
+
+function onDrop(event) {
+  if (!files.can('upload')) return
+  event.preventDefault()
+  dragOver.value = false
+  const list = event.dataTransfer?.files
+  if (list?.length) run(() => files.upload(list))
+}
+
+// Anfragen der Toolbar (Neuer Ordner / Neue Datei / Hochladen) konsumieren.
 watch(
   () => files.newRequest,
   (kind) => {
     if (!kind) return
-    openNew(kind)
+    if (kind === 'upload') pickUpload()
+    else openNew(kind)
     files.newRequest = null
   },
 )
@@ -227,16 +274,75 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
     </div>
 
     <template v-else>
-      <v-alert v-if="error" type="error" density="compact" class="ma-2" tile closable @click:close="error = null">
+      <v-alert v-if="error" type="error" density="compact" class="ma-2 nemo-alert" tile closable @click:close="error = null">
         {{ error }}
       </v-alert>
 
       <div
         class="nemo-content nemo-scroll nemo-noselect"
+        :class="{ dragover: dragOver }"
         @click.self="files.clearSelection()"
         @contextmenu.self.prevent="openMenu(null, $event)"
+        @dragover="onDragOver"
+        @dragleave="onDragLeave"
+        @drop="onDrop"
       >
-        <div v-if="entries.length === 0" class="nemo-empty" @contextmenu.prevent="openMenu(null, $event)">
+        <div v-if="dragOver" class="nemo-drop-overlay">
+          <v-icon icon="mdi-tray-arrow-down" size="44" />
+          <span>{{ $t('dnd.dropHint') }}</span>
+        </div>
+
+        <!-- Suchergebnisse (Serversuche, Stufe 4) -->
+        <template v-if="files.searchQuery">
+          <div class="nemo-search-head nemo-noselect">
+            <v-icon icon="mdi-magnify" size="18" />
+            <span>{{ $t('search.resultsFor', [files.searchQuery]) }}</span>
+            <span v-if="files.searchTruncated" class="nemo-search-trunc">
+              {{ $t('search.truncated', [files.searchResults.length]) }}
+            </span>
+            <div style="flex: 1 1 auto" />
+            <button class="nemo-search-leave" @click="files.leaveSearch()">
+              <v-icon icon="mdi-close" size="16" class="mr-1" />{{ $t('search.leave') }}
+            </button>
+          </div>
+
+          <div v-if="files.searchResults.length === 0" class="nemo-empty">
+            <v-icon icon="mdi-file-search-outline" size="56" class="nemo-empty-icon" />
+            <p>{{ $t('search.none', [files.searchQuery]) }}</p>
+          </div>
+
+          <table v-else class="nemo-list">
+            <thead>
+              <tr>
+                <th class="col-name">{{ $t('files.colName') }}</th>
+                <th>{{ $t('search.colPath') }}</th>
+                <th class="col-size">{{ $t('files.colSize') }}</th>
+                <th class="col-date">{{ $t('files.colModified') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="entry in files.searchResults"
+                :key="entry.id"
+                class="nemo-row"
+                :class="{ selected: files.isSelected(entry.id) }"
+                @click="files.selectOnly(entry.id)"
+                @dblclick="onOpen(entry)"
+              >
+                <td class="col-name">
+                  <img v-if="entry.image" :src="files.thumbUrl(entry, 64)" class="nemo-row-thumb" loading="lazy" alt="" />
+                  <v-icon v-else :icon="iconFor(entry)" size="18" class="nemo-row-icon" />
+                  <span class="nemo-row-name">{{ entry.name }}</span>
+                </td>
+                <td class="col-path">{{ entry.path }}</td>
+                <td class="col-size">{{ entry.type === 'dir' ? '' : formatSize(entry.size) }}</td>
+                <td class="col-date">{{ formatDate(entry.mtime) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </template>
+
+        <div v-else-if="entries.length === 0" class="nemo-empty" @contextmenu.prevent="openMenu(null, $event)">
           <v-icon :icon="files.filter ? 'mdi-file-search-outline' : 'mdi-folder-outline'" size="56" class="nemo-empty-icon" />
           <p>{{ files.filter ? $t('files.noMatch', [files.filter]) : $t('files.emptyDir') }}</p>
         </div>
@@ -262,7 +368,14 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
               @contextmenu.prevent="openMenu(entry, $event)"
             >
               <td class="col-name">
-                <v-icon :icon="iconFor(entry)" size="18" class="nemo-row-icon" />
+                <img
+                  v-if="entry.image"
+                  :src="files.thumbUrl(entry, 64)"
+                  class="nemo-row-thumb"
+                  loading="lazy"
+                  alt=""
+                />
+                <v-icon v-else :icon="iconFor(entry)" size="18" class="nemo-row-icon" />
                 <span class="nemo-row-name">{{ entry.name }}</span>
               </td>
               <td class="col-size">{{ entry.type === 'dir' ? '' : formatSize(entry.size) }}</td>
@@ -283,7 +396,14 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
             @dblclick="onOpen(entry)"
             @contextmenu.prevent="openMenu(entry, $event)"
           >
-            <v-icon :icon="iconFor(entry)" size="48" class="nemo-tile-icon" />
+            <img
+              v-if="entry.image"
+              :src="files.thumbUrl(entry, 256)"
+              class="nemo-tile-thumb"
+              loading="lazy"
+              alt=""
+            />
+            <v-icon v-else :icon="iconFor(entry)" size="48" class="nemo-tile-icon" />
             <span class="nemo-tile-name">{{ entry.name }}</span>
           </button>
         </div>
@@ -291,9 +411,14 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 
       <!-- Statusleiste -->
       <footer class="nemo-statusbar nemo-noselect">
-        <span>{{ files.entries.length === 1 ? $t('status.itemOne') : $t('status.items', [files.entries.length]) }}</span>
+        <span v-if="files.searchQuery">
+          {{ files.searchResults.length === 1 ? $t('status.itemOne') : $t('status.items', [files.searchResults.length]) }}
+        </span>
+        <span v-else>
+          {{ files.entries.length === 1 ? $t('status.itemOne') : $t('status.items', [files.entries.length]) }}
+        </span>
         <span v-if="files.selectedCount" class="nemo-status-sel">· {{ $t('status.selected', [files.selectedCount]) }}</span>
-        <span v-if="files.filter" class="nemo-status-sel">· {{ entries.length }}/{{ files.entries.length }}</span>
+        <span v-if="files.filter && !files.searchQuery" class="nemo-status-sel">· {{ entries.length }}/{{ files.entries.length }}</span>
       </footer>
     </template>
 
@@ -336,6 +461,12 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Verstecktes Upload-Feld (Toolbar/Kontextmenü lösen es aus) -->
+    <input ref="uploadInput" type="file" multiple class="nemo-upload-input" @change="onPicked" />
+
+    <!-- Bildbetrachter -->
+    <ImageViewer />
   </section>
 </template>
 
@@ -352,6 +483,66 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 .nemo-content {
   flex: 1 1 auto;
   overflow: auto;
+  position: relative;
+}
+
+/* Ablegezone für Drag-and-Drop-Upload */
+.nemo-content.dragover {
+  outline: 2px dashed var(--mint-green);
+  outline-offset: -6px;
+  background: var(--mint-green-soft);
+}
+.nemo-drop-overlay {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+  color: var(--mint-green-dark);
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.nemo-upload-input {
+  display: none;
+}
+
+/* Suchergebnis-Kopfzeile */
+.nemo-search-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--mint-green-soft);
+  border-bottom: 1px solid var(--mint-border);
+  color: var(--mint-green-soft-text);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.nemo-search-trunc {
+  font-weight: 400;
+  color: var(--mint-text-muted);
+}
+.nemo-search-leave {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--mint-border);
+  border-radius: var(--mint-radius);
+  background: #fff;
+  padding: 3px 10px;
+  font-size: 0.82rem;
+  color: var(--mint-text);
+  cursor: pointer;
+}
+.nemo-search-leave:hover {
+  background: var(--mint-panel-hover);
+}
+.col-path {
+  color: var(--mint-text-muted);
 }
 
 .nemo-empty {
@@ -402,6 +593,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 .nemo-row.cut { opacity: 0.5; }
 .col-name { display: flex; align-items: center; gap: 8px; }
 .nemo-row-icon { color: #6f8f63; flex: 0 0 auto; }
+.nemo-row-thumb {
+  width: 22px;
+  height: 22px;
+  object-fit: cover;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
 .col-size, .col-type, .col-date { color: var(--mint-text-muted); }
 
 /* Symbolansicht */
@@ -429,6 +627,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 .nemo-tile.cut { opacity: 0.5; }
 .nemo-tile-icon { color: #6f8f63; }
 .nemo-tile.selected .nemo-tile-icon { color: var(--mint-green-dark); }
+.nemo-tile-thumb {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 3px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
 .nemo-tile-name {
   font-size: 0.8rem;
   text-align: center;
