@@ -37,6 +37,9 @@
 ;   • source      (Pflicht)  Hugo-Projektverzeichnis.
 ;   • destination (optional) Zielverzeichnis. Standard: <source>/public
 ;   • minify      (optional) true = Hugo mit --minify aufrufen.
+;   • clean       (optional) true = --cleanDestinationDir. VORSICHT: entfernt
+;                 im Ziel alles Nicht-Generierte — auch eine dort liegende
+;                 Installation (edit/, cms-api/). Standard: false.
 ; install.sh trägt die Sektion bei der Einrichtung automatisch ein.
 ; ===========================================================================
 

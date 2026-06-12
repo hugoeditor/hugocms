@@ -33,6 +33,9 @@ use HugoCMS\FileManager\Exception\ApiException;
  *   source      (Pflicht) Hugo-Projektverzeichnis.
  *   destination (optional) Zielverzeichnis, Standard: <source>/public.
  *   minify      (optional) true = Hugo mit --minify aufrufen.
+ *   clean       (optional) true = --cleanDestinationDir. VORSICHT: entfernt
+ *               im Ziel alles Nicht-Generierte — auch eine dort liegende
+ *               Installation (edit/, cms-api/). Standard: false.
  */
 final class MountConfig
 {
@@ -125,6 +128,7 @@ final class MountConfig
             'source' => $source,
             'destination' => $destination,
             'minify' => (bool) ($section['minify'] ?? false),
+            'clean' => (bool) ($section['clean'] ?? false),
         ];
     }
 

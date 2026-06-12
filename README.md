@@ -257,6 +257,14 @@ Der Webserver muss **Symlinks folgen** dürfen (Apache: `Options
 +FollowSymLinks`; Nginx tut es standardmäßig). Vorlagen für beide liegen in
 `beispiel-konfigurationen/`.
 
+**Hosting ohne Symlinks** (z. B. Hetzner Webhosting): `install.sh --copy`
+verwenden. Dann wird `edit/` als **Kopie** von `app/` angelegt und
+`cms-api/index.php` mit absolutem `require`-Pfad auf das Release-`backend/`
+erzeugt — PHP liest per Dateisystem, dafür braucht es keine Symlinks; das
+Release-Repo bleibt außerhalb des Webroots. Nach einem Update (`git pull` im
+Release-Repo) das Skript erneut ausführen, damit `edit/` neu kopiert wird —
+das Backend ist ohne diesen Schritt bereits aktuell.
+
 ### Veröffentlichen: Hugo aufrufen
 
 Der Client zeigt in der Titelleiste einen **Veröffentlichen**-Knopf, der Hugo
@@ -272,10 +280,13 @@ destination = /var/www/kunde-a/public   ; optional, Standard: <source>/public
 minify = true                            ; optional: hugo --minify
 ```
 
-Aufgerufen wird `hugo --cleanDestinationDir -s <source> -d <destination>`.
-Die Hugo-Ausgabe (Statistik bzw. Fehlermeldungen) zeigt der Client in einem
-Dialog an; ohne `[hugo]`-Sektion erscheint der Knopf nicht. Der Webserver-
-Benutzer braucht Ausführrechte auf das Binary und Schreibrechte im Ziel.
+Aufgerufen wird `hugo -s <source> -d <destination>` (optional mit `--minify`;
+`clean = true` ergänzt `--cleanDestinationDir` — Vorsicht: das entfernt im
+Ziel alles Nicht-Generierte, auch eine dort liegende Installation `edit/`,
+`cms-api/`). Die Hugo-Ausgabe (Statistik bzw. Fehlermeldungen) zeigt der
+Client in einem Dialog an; ohne `[hugo]`-Sektion erscheint der Knopf nicht.
+Der Webserver-Benutzer braucht Ausführrechte auf das Binary und
+Schreibrechte im Ziel.
 
 ## API-Befehle
 

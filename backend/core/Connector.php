@@ -657,8 +657,11 @@ final class Connector
             throw new ApiException('ECONFIG', 500, 'HUGO-SOURCE-MISSING', [$source]);
         }
 
+        // --cleanDestinationDir nur auf Wunsch (clean = true): Es entfernt im
+        // Ziel ALLES, was Hugo nicht selbst erzeugt — auch die im Publish-
+        // Ordner liegende Installation (edit/, cms-api/). Standard: aus.
         $cmd = escapeshellarg($bin)
-            . ' --cleanDestinationDir'
+            . (!empty($this->hugo['clean']) ? ' --cleanDestinationDir' : '')
             . ' -s ' . escapeshellarg($source)
             . ' -d ' . escapeshellarg($dest)
             . (!empty($this->hugo['minify']) ? ' --minify' : '')
