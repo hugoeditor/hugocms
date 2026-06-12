@@ -120,7 +120,7 @@ async function logout() {
       :model-value="warningsVisible"
       color="warning"
       location="top"
-      :timeout="-1"
+      :timeout="10000"
       multi-line
       class="warning-snackbar"
       @update:model-value="warningsVisible = false"
