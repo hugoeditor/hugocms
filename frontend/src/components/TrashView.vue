@@ -7,10 +7,11 @@ import { useI18n } from 'vue-i18n'
 import { useFilesStore } from '../stores/files'
 import { formatSize, formatDate } from '../util/format'
 import { errorText } from '../i18n/apiMessage'
+import { useTransientError } from '../util/transientError'
 
 const { t } = useI18n()
 const files = useFilesStore()
-const error = ref(null)
+const error = useTransientError() // blendet sich nach kurzer Zeit selbst aus
 const busy = ref(false)
 
 function mountLabel(name) {

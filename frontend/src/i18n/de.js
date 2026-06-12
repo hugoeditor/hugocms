@@ -151,6 +151,10 @@ export default {
     sourceView: 'Quelltext',
     wysiwygView: 'Visuell',
     frontMatter: 'Front-Matter (Metadaten)',
+    cut: 'Ausschneiden (Strg+X)',
+    copy: 'Kopieren (Strg+C)',
+    paste: 'Einfügen (Strg+V)',
+    clipboardDenied: 'Kein Zugriff auf die Zwischenablage — bitte Strg+X/C/V verwenden.',
   },
 
   wysiwyg: {

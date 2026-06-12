@@ -23,7 +23,7 @@ const props = defineProps({
   modelValue: { type: String, default: '' },
   filename: { type: String, default: '' },
 })
-const emit = defineEmits(['update:modelValue', 'save', 'cursor', 'language', 'history'])
+const emit = defineEmits(['update:modelValue', 'save', 'cursor', 'language', 'history', 'clipboard-denied'])
 
 const { locale } = useI18n()
 const host = ref(null)
@@ -53,15 +53,39 @@ const PHRASES_DE = {
   'No diagnostics': 'Keine Diagnosen',
 }
 
+// Zwischenablage-Befehle: navigator.clipboard verlangt einen sicheren
+// Kontext (HTTPS/localhost); scheitert der Zugriff, meldet exec() das als
+// clipboard-denied und das Panel zeigt einen Hinweis auf Strg+X/C/V.
+async function clipboardCopy(v) {
+  const { from, to } = v.state.selection.main
+  if (from === to) return
+  await navigator.clipboard.writeText(v.state.sliceDoc(from, to))
+}
+
+async function clipboardCut(v) {
+  const { from, to } = v.state.selection.main
+  if (from === to) return
+  await navigator.clipboard.writeText(v.state.sliceDoc(from, to))
+  v.dispatch({ changes: { from, to, insert: '' } })
+}
+
+async function clipboardPaste(v) {
+  const text = await navigator.clipboard.readText()
+  if (text !== '') v.dispatch(v.state.replaceSelection(text))
+}
+
 // Von der Werkzeugleiste im EditorPanel aufrufbare CodeMirror-Befehle.
-const commands = { undo, redo, indentMore, indentLess, toggleComment, openSearchPanel, gotoLine, foldAll, unfoldAll }
+const commands = {
+  undo, redo, indentMore, indentLess, toggleComment, openSearchPanel, gotoLine, foldAll, unfoldAll,
+  clipboardCut, clipboardCopy, clipboardPaste,
+}
 // Befehle, die ein Eingabe-Panel öffnen — der Fokus gehört danach dem Panel.
 const panelCommands = new Set(['openSearchPanel', 'gotoLine'])
 
 function exec(name) {
   const cmd = commands[name]
   if (!view || !cmd) return
-  cmd(view)
+  Promise.resolve(cmd(view)).catch(() => emit('clipboard-denied'))
   if (!panelCommands.has(name)) view.focus()
 }
 defineExpose({ exec })

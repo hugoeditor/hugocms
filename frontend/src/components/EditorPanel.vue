@@ -5,13 +5,14 @@ import { useFilesStore } from '../stores/files'
 import { errorText } from '../i18n/apiMessage'
 import CodeMirrorEditor from './CodeMirrorEditor.vue'
 import WysiwygEditor from './WysiwygEditor.vue'
+import { useTransientError } from '../util/transientError'
 
 const { t } = useI18n()
 const files = useFilesStore()
 
 const draft = ref('')
 const saving = ref(false)
-const error = ref(null)
+const error = useTransientError() // blendet sich nach kurzer Zeit selbst aus
 
 // --- Visueller Markdown-Modus (Stufe 4) -----------------------------------
 // Nur für Markdown-Dateien. Das Front-Matter (--- … ---) wird VOR TipTap
@@ -92,6 +93,10 @@ const tools = computed(() => [
   { divider: true },
   { name: 'undo', icon: 'mdi-undo', label: t('editor.undo'), disabled: !history.value.undo },
   { name: 'redo', icon: 'mdi-redo', label: t('editor.redo'), disabled: !history.value.redo },
+  { divider: true },
+  { name: 'clipboardCut', icon: 'mdi-content-cut', label: t('editor.cut') },
+  { name: 'clipboardCopy', icon: 'mdi-content-copy', label: t('editor.copy') },
+  { name: 'clipboardPaste', icon: 'mdi-content-paste', label: t('editor.paste') },
   { divider: true },
   { name: 'openSearchPanel', icon: 'mdi-magnify', label: t('editor.search') },
   { name: 'gotoLine', icon: 'mdi-format-list-numbered', label: t('editor.gotoLine') },
@@ -218,26 +223,26 @@ onBeforeUnmount(() => {
         <v-btn icon="mdi-close" variant="text" @click="close" />
       </v-toolbar>
 
-      <div class="d-flex align-center border-b px-2 py-1">
+      <!-- Werkzeugleiste des Quelltext-Editors; im visuellen Modus trägt die
+           Formatleiste des WysiwygEditor den Speichern-Knopf selbst. -->
+      <div v-if="mode === 'source'" class="d-flex align-center border-b px-2 py-1">
         <template v-for="(tool, i) in tools" :key="i">
-          <template v-if="mode === 'source' || tool.name === 'save'">
-            <v-divider v-if="tool.divider" vertical class="mx-1 align-self-stretch" />
-            <v-tooltip v-else :text="tool.label" location="bottom">
-              <template #activator="{ props: tip }">
-                <v-btn
-                  v-bind="tip"
-                  :icon="tool.icon"
-                  size="small"
-                  variant="text"
-                  density="comfortable"
-                  :color="tool.color"
-                  :disabled="tool.disabled"
-                  :loading="tool.loading"
-                  @click="tool.action ? tool.action() : editorRef?.exec(tool.name)"
-                />
-              </template>
-            </v-tooltip>
-          </template>
+          <v-divider v-if="tool.divider" vertical class="mx-1 align-self-stretch" />
+          <v-tooltip v-else :text="tool.label" location="bottom">
+            <template #activator="{ props: tip }">
+              <v-btn
+                v-bind="tip"
+                :icon="tool.icon"
+                size="small"
+                variant="text"
+                density="comfortable"
+                :color="tool.color"
+                :disabled="tool.disabled"
+                :loading="tool.loading"
+                @click="tool.action ? tool.action() : editorRef?.exec(tool.name)"
+              />
+            </template>
+          </v-tooltip>
         </template>
       </div>
 
@@ -261,9 +266,13 @@ onBeforeUnmount(() => {
           <WysiwygEditor
             :key="files.openFile.id + ':wysiwyg'"
             :model-value="bodyDraft"
+            :save-disabled="!files.dirty"
+            :saving="saving"
             class="flex-grow-1"
             style="min-height: 0"
             @update:model-value="onWysiwygInput"
+            @save="save"
+            @clipboard-denied="error = t('editor.clipboardDenied')"
           />
         </template>
 
@@ -279,6 +288,7 @@ onBeforeUnmount(() => {
           @cursor="cursor = $event"
           @language="language = $event"
           @history="history = $event"
+          @clipboard-denied="error = t('editor.clipboardDenied')"
         />
       </div>
 

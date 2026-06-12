@@ -10,9 +10,47 @@ import { Markdown } from 'tiptap-markdown'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
+  // Zustand des Speichern-Knopfs in der Formatleiste (vom EditorPanel).
+  saveDisabled: { type: Boolean, default: false },
+  saving: { type: Boolean, default: false },
 })
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue', 'clipboard-denied', 'save'])
 const { t } = useI18n()
+
+// Zwischenablage: writeText/readText verlangen einen sicheren Kontext;
+// beim Scheitern meldet clipboard-denied einen Hinweis auf Strg+X/C/V.
+function selectionText(ed) {
+  const { from, to } = ed.state.selection
+  return ed.state.doc.textBetween(from, to, '\n')
+}
+
+function clipCut(ed) {
+  const text = selectionText(ed)
+  if (!text) return
+  navigator.clipboard
+    .writeText(text)
+    .then(() => ed.chain().focus().deleteSelection().run())
+    .catch(() => emit('clipboard-denied'))
+}
+
+function clipCopy(ed) {
+  const text = selectionText(ed)
+  if (!text) return
+  navigator.clipboard.writeText(text).catch(() => emit('clipboard-denied'))
+}
+
+function clipPaste(ed) {
+  navigator.clipboard
+    .readText()
+    .then((text) => {
+      if (text === '') return
+      // Über die reguläre Einfüge-Pipeline — so greift auch die
+      // Markdown-Umwandlung von tiptap-markdown.
+      ed.view.focus()
+      ed.view.pasteText(text)
+    })
+    .catch(() => emit('clipboard-denied'))
+}
 
 const editor = useEditor({
   content: props.modelValue,
@@ -42,6 +80,21 @@ const tools = computed(() => {
   const ed = editor.value
   if (!ed) return []
   return [
+    {
+      icon: 'mdi-content-save',
+      label: t('editor.save'),
+      active: false,
+      disabled: props.saveDisabled || props.saving,
+      run: () => emit('save'),
+    },
+    { divider: true },
+    { icon: 'mdi-undo', label: t('editor.undo'), active: false, disabled: !ed.can().undo(), run: () => ed.chain().focus().undo().run() },
+    { icon: 'mdi-redo', label: t('editor.redo'), active: false, disabled: !ed.can().redo(), run: () => ed.chain().focus().redo().run() },
+    { divider: true },
+    { icon: 'mdi-content-cut', label: t('editor.cut'), active: false, run: () => clipCut(ed) },
+    { icon: 'mdi-content-copy', label: t('editor.copy'), active: false, run: () => clipCopy(ed) },
+    { icon: 'mdi-content-paste', label: t('editor.paste'), active: false, run: () => clipPaste(ed) },
+    { divider: true },
     { icon: 'mdi-format-bold', label: t('wysiwyg.bold'), active: ed.isActive('bold'), run: () => ed.chain().focus().toggleBold().run() },
     { icon: 'mdi-format-italic', label: t('wysiwyg.italic'), active: ed.isActive('italic'), run: () => ed.chain().focus().toggleItalic().run() },
     { icon: 'mdi-format-strikethrough', label: t('wysiwyg.strike'), active: ed.isActive('strike'), run: () => ed.chain().focus().toggleStrike().run() },
@@ -72,6 +125,7 @@ const tools = computed(() => {
               v-bind="tip"
               class="wysiwyg-btn"
               :class="{ active: tool.active }"
+              :disabled="tool.disabled"
               @mousedown.prevent
               @click="tool.run()"
             >
@@ -115,9 +169,13 @@ const tools = computed(() => {
   color: var(--mint-text);
   cursor: pointer;
 }
-.wysiwyg-btn:hover {
+.wysiwyg-btn:hover:not(:disabled) {
   background: var(--mint-panel-hover);
   border-color: var(--mint-border);
+}
+.wysiwyg-btn:disabled {
+  color: #b6b6b3;
+  cursor: default;
 }
 .wysiwyg-btn.active {
   background: var(--mint-green-soft);

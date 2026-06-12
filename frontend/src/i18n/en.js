@@ -151,6 +151,10 @@ export default {
     sourceView: 'Source',
     wysiwygView: 'Visual',
     frontMatter: 'Front matter (metadata)',
+    cut: 'Cut (Ctrl+X)',
+    copy: 'Copy (Ctrl+C)',
+    paste: 'Paste (Ctrl+V)',
+    clipboardDenied: 'Clipboard access not available — please use Ctrl+X/C/V.',
   },
 
   wysiwyg: {
