@@ -28,8 +28,8 @@ final class Config
     /**
      * @return array{
      *   auth: array<string, mixed>,
-     *   session: array{path: ?string},
-     *   log: array{file: ?string, level: ?string}
+     *   session: array{path: string},
+     *   log: array{file: string, level: string}
      * }
      */
     public static function load(string $configPath): array
@@ -47,25 +47,58 @@ final class Config
 
         $auth = (isset($raw['auth']) && is_array($raw['auth'])) ? $raw['auth'] : [];
 
+        // Vollständigkeit prüfen: Alle Pflichtfelder müssen gesetzt und nicht
+        // leer sein. Die treiberabhängigen Auth-Felder (etwa username,
+        // password_hash bei singleuser) prüft die AuthFactory. Fehlende Felder
+        // werden gesammelt und gemeinsam gemeldet, damit nicht bei jedem Start
+        // nur das nächste fehlende Feld auftaucht.
+        $missing = [];
+        if (self::isBlank($auth['driver'] ?? null)) {
+            $missing[] = '[auth] driver';
+        }
+        if (self::isBlank($raw['session']['path'] ?? null)) {
+            $missing[] = '[session] path';
+        }
+        if (self::isBlank($raw['log']['file'] ?? null)) {
+            $missing[] = '[log] file';
+        }
+        if (self::isBlank($raw['log']['level'] ?? null)) {
+            $missing[] = '[log] level';
+        }
+        if ($missing !== []) {
+            throw new ApiException(
+                sprintf(
+                    'Unvollständige Konfiguration in %s: Folgende Pflichtfelder fehlen oder sind leer: %s.',
+                    $configPath,
+                    implode(', ', $missing),
+                ),
+                'ECONFIG',
+                500,
+            );
+        }
+
         return [
             'auth' => $auth,
             'session' => [
-                'path' => self::optionalPath($raw['session']['path'] ?? null, $baseDir),
+                'path' => self::resolvePath($raw['session']['path'], $baseDir),
             ],
             'log' => [
-                'file' => self::optionalPath($raw['log']['file'] ?? null, $baseDir),
-                'level' => isset($raw['log']['level']) ? (string) $raw['log']['level'] : null,
+                'file' => self::resolvePath($raw['log']['file'], $baseDir),
+                'level' => trim((string) $raw['log']['level']),
             ],
         ];
     }
 
-    /** Trimmt einen optionalen Pfad und löst ihn relativ zum baseDir auf. */
-    private static function optionalPath(mixed $value, string $baseDir): ?string
+    /** Prüft, ob ein Wert fehlt oder nach dem Trimmen leer ist. */
+    private static function isBlank(mixed $value): bool
     {
-        $path = trim((string) ($value ?? ''));
-        if ($path === '') {
-            return null;
-        }
+        return trim((string) ($value ?? '')) === '';
+    }
+
+    /** Trimmt einen (geprüft nicht leeren) Pfad und löst ihn relativ zum baseDir auf. */
+    private static function resolvePath(mixed $value, string $baseDir): string
+    {
+        $path = trim((string) $value);
         if (str_starts_with($path, '/') || preg_match('#^[A-Za-z]:[\\\\/]#', $path) === 1) {
             return $path;
         }

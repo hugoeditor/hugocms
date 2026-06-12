@@ -3,6 +3,7 @@ import { onMounted, ref, watch } from 'vue'
 import { useAuthStore } from './stores/auth'
 import { useFilesStore } from './stores/files'
 import LoginView from './components/LoginView.vue'
+import SetupView from './components/SetupView.vue'
 import MountSidebar from './components/MountSidebar.vue'
 import FileBrowser from './components/FileBrowser.vue'
 import EditorPanel from './components/EditorPanel.vue'
@@ -81,6 +82,10 @@ async function logout() {
       <v-main class="d-flex align-center justify-center">
         <v-progress-circular indeterminate color="primary" />
       </v-main>
+    </template>
+
+    <template v-else-if="auth.setupRequired">
+      <SetupView />
     </template>
 
     <template v-else-if="!auth.authenticated">

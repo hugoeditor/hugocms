@@ -7,6 +7,8 @@ export const useAuthStore = defineStore('auth', {
     authenticated: false,
     ready: false, // true, sobald der erste whoami-Aufruf beantwortet wurde
     warnings: [], // Einrichtungs-Hinweise des Servers (z. B. fehlende Verzeichnisse)
+    setupRequired: false, // true, solange keine hugocms.ini existiert (Erstinbetriebnahme)
+    setupDefaults: null, // Vorgaben des Servers für das Setup-Formular
   }),
 
   actions: {
@@ -15,7 +17,17 @@ export const useAuthStore = defineStore('auth', {
       this.authenticated = data.authenticated
       this.user = data.user
       this.warnings = data.warnings ?? []
+      this.setupRequired = data.setupRequired ?? false
+      this.setupDefaults = data.defaults ?? null
       this.ready = true
+    },
+
+    async setup(payload) {
+      const data = await api.post('setup', payload)
+      this.authenticated = data.authenticated
+      this.user = data.user
+      this.warnings = data.warnings ?? []
+      this.setupRequired = false
     },
 
     async login(username, password) {

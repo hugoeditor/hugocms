@@ -19,8 +19,9 @@
  *          mit Rückfall auf mounts.ini (mit Hinweis). Den Hash bildet SiteKey
  *          aus Host + Endpunkt-Pfad — so verwaltet eine Installation mehrere
  *          Webseiten. Fehlt beides, wird die Seite als unbekannt gemeldet (404).
- *   3. Fehlt die hugocms.ini, wird ein Einrichtungsfehler an den Client
- *      gemeldet. (Ein Einrichtungs-Setup, das die Dateien erzeugt, folgt.)
+ *   3. Fehlt die hugocms.ini, übernimmt das Einrichtungs-Setup (Setup): Es
+ *      zeigt dem Anwender ein Setup-Formular und erzeugt daraus die
+ *      hugocms.ini.
  */
 
 declare(strict_types=1);
@@ -30,6 +31,7 @@ require __DIR__ . '/autoload.php';
 use HugoCMS\FileManager\Connector;
 use HugoCMS\FileManager\Exception\ApiException;
 use HugoCMS\FileManager\Response;
+use HugoCMS\FileManager\Setup;
 use HugoCMS\FileManager\SiteKey;
 
 // Konfiguration liegt im übergeordneten backend/-Verzeichnis.
@@ -91,10 +93,8 @@ if (is_file($configFile)) {
     return;
 }
 
-// 3. Keine Konfiguration vorhanden — die Einrichtung steht noch aus.
-Response::error(
-    'ESETUP',
-    'HugoCMS ist noch nicht eingerichtet: weder custom.php noch hugocms.ini gefunden. '
-    . 'Das Einrichtungs-Setup folgt.',
-    503,
-);
+// 3. Keine Konfiguration vorhanden — das Einrichtungs-Setup übernimmt. Es
+//    beantwortet whoami (setupRequired) und den Befehl setup, der die
+//    hugocms.ini erzeugt und den Benutzer direkt anmeldet. Danach greift beim
+//    nächsten Aufruf der normale Pfad (Schritt 2).
+Setup::handle($backendDir);

@@ -1,0 +1,250 @@
+<?php
+
+declare(strict_types=1);
+
+namespace HugoCMS\FileManager;
+
+use HugoCMS\FileManager\Exception\ApiException;
+use Throwable;
+
+/**
+ * Erstinbetriebnahme: Wird vom Einstiegspunkt (hugocms.php) aufgerufen, wenn
+ * weder custom.php noch hugocms.ini vorhanden sind. Solange das so ist, ist
+ * HugoCMS nicht konfiguriert und der Connector lässt sich nicht aufbauen —
+ * darum übernimmt dieser schlanke Handler die Anfragen direkt.
+ *
+ * Zwei Befehle:
+ *   - whoami: meldet setupRequired=true samt Vorgaben für das Setup-Formular.
+ *   - setup:  prüft die Eingaben, erzeugt die hugocms.ini, legt die benötigten
+ *             Verzeichnisse an und meldet den neuen Benutzer direkt an.
+ *
+ * Sobald die hugocms.ini geschrieben ist, greift im Einstiegspunkt der normale
+ * Pfad (Connector) und dieser Handler wird nicht mehr erreicht. Es entsteht
+ * also kein dauerhaft offener, unauthentifizierter Schreibendpunkt.
+ */
+final class Setup
+{
+    private const DEFAULT_SESSION_PATH = 'var/sessions';
+    private const DEFAULT_LOG_FILE     = 'log/hugocms.log';
+    private const DEFAULT_LOG_LEVEL    = 'warning';
+    private const LOG_LEVELS           = ['debug', 'info', 'warning', 'error'];
+    private const MIN_PASSWORD_LENGTH  = 8;
+
+    /** Beantwortet die Anfrage im Einrichtungszustand und beendet das Skript. */
+    public static function handle(string $backendDir): never
+    {
+        try {
+            $request = self::readRequest();
+            $cmd = (string) ($request['cmd'] ?? 'whoami');
+
+            match ($cmd) {
+                'whoami' => self::status(),
+                'setup'  => self::create($backendDir, $request),
+                default  => throw new ApiException(
+                    'HugoCMS ist noch nicht eingerichtet.',
+                    'ESETUP',
+                    503,
+                ),
+            };
+        } catch (ApiException $e) {
+            Response::error($e->errorCode(), $e->getMessage(), $e->httpStatus());
+        } catch (Throwable $e) {
+            Response::error('EINTERNAL', 'Interner Fehler bei der Einrichtung.', 500);
+        }
+    }
+
+    /** Signalisiert dem Frontend, dass die Einrichtung aussteht (samt Vorgaben). */
+    private static function status(): never
+    {
+        Response::ok([
+            'authenticated' => false,
+            'user'          => null,
+            'warnings'      => [],
+            'setupRequired' => true,
+            'defaults'      => [
+                'username'    => 'admin',
+                'sessionPath' => self::DEFAULT_SESSION_PATH,
+                'logFile'     => self::DEFAULT_LOG_FILE,
+                'logLevel'    => self::DEFAULT_LOG_LEVEL,
+                'logLevels'   => self::LOG_LEVELS,
+            ],
+        ]);
+    }
+
+    /** Erzeugt die hugocms.ini, legt Verzeichnisse an und meldet den Benutzer an. */
+    private static function create(string $backendDir, array $request): never
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
+            throw new ApiException('Die Einrichtung erfordert POST.', 'EMETHOD', 405);
+        }
+
+        $configFile = $backendDir . '/hugocms.ini';
+        if (is_file($configFile)) {
+            // Im Setup-Zweig dürfte das nicht vorkommen; schützt vor einem
+            // doppelten Absenden bzw. einem parallelen zweiten Setup-Aufruf.
+            throw new ApiException('Die Konfiguration besteht bereits.', 'ESETUP', 409);
+        }
+        if (!is_writable($backendDir)) {
+            throw new ApiException(
+                "Verzeichnis nicht beschreibbar: {$backendDir} — bitte Schreibrechte "
+                . 'für den Webserver-Benutzer setzen.',
+                'ESETUP',
+                500,
+            );
+        }
+
+        $username    = self::requireField($request, 'username', 'Benutzername');
+        $password    = self::requirePassword($request);
+        $sessionPath = self::requireField($request, 'sessionPath', 'Sitzungsverzeichnis');
+        $logFile     = self::requireField($request, 'logFile', 'Logdatei');
+        $logLevel    = self::requireLevel($request);
+
+        $hash = password_hash($password, PASSWORD_DEFAULT);
+
+        // Atomar und nur neu anlegen: Der Modus "x" scheitert, falls die Datei
+        // zwischen der obigen Prüfung und hier doch entstanden ist (Wettlauf).
+        $content = self::buildIni($username, $hash, $sessionPath, $logFile, $logLevel);
+        $handle = @fopen($configFile, 'x');
+        if ($handle === false) {
+            throw new ApiException('Die hugocms.ini konnte nicht angelegt werden.', 'ESETUP', 500);
+        }
+        fwrite($handle, $content);
+        fclose($handle);
+        @chmod($configFile, 0640);
+
+        // Konfiguration laden (prüft erneut alle Pflichtfelder) und die nun
+        // erwarteten Verzeichnisse anlegen, damit Session und Log sofort greifen.
+        $cfg = Config::load($configFile);
+        self::ensureDir($cfg['session']['path']);
+        self::ensureDir(dirname($cfg['log']['file']));
+
+        // Automatische Anmeldung über den regulären Auth-Pfad: Session-Ort
+        // setzen, Auth bauen (startet die Session) und mit dem soeben gesetzten
+        // Klartextpasswort anmelden — der Hash stammt aus demselben Passwort.
+        if (is_dir($cfg['session']['path'])) {
+            session_save_path($cfg['session']['path']);
+        }
+        $auth = (new AuthFactory())->create($cfg['auth']);
+        if (!$auth->attemptLogin($username, $password)) {
+            throw new ApiException(
+                'Die automatische Anmeldung nach der Einrichtung ist fehlgeschlagen.',
+                'ESETUP',
+                500,
+            );
+        }
+
+        Response::ok([
+            'authenticated' => true,
+            'user'          => $auth->currentUser(),
+            'warnings'      => [],
+        ]);
+    }
+
+    /** Liest GET-, Formular- und JSON-Eingaben zu einem Array zusammen. */
+    private static function readRequest(): array
+    {
+        $request = array_merge($_GET, $_POST);
+
+        $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+        if (str_contains($contentType, 'application/json')) {
+            $body = file_get_contents('php://input');
+            if ($body !== false && $body !== '') {
+                $decoded = json_decode($body, true);
+                if (is_array($decoded)) {
+                    $request = array_merge($request, $decoded);
+                }
+            }
+        }
+
+        return $request;
+    }
+
+    /** Pflichtfeld: nicht leer und ohne Zeichen, die die INI sprengen würden. */
+    private static function requireField(array $request, string $key, string $label): string
+    {
+        $value = trim((string) ($request[$key] ?? ''));
+        if ($value === '') {
+            throw new ApiException("Feld „{$label}“ ist erforderlich.", 'EINVAL', 400);
+        }
+        if (preg_match('/["\r\n]/', $value) === 1) {
+            throw new ApiException(
+                "Feld „{$label}“ enthält unzulässige Zeichen (Anführungszeichen oder Zeilenumbruch).",
+                'EINVAL',
+                400,
+            );
+        }
+
+        return $value;
+    }
+
+    /** Das Passwort wird nicht in die INI geschrieben (nur sein Hash) — nur Länge prüfen. */
+    private static function requirePassword(array $request): string
+    {
+        $password = (string) ($request['password'] ?? '');
+        if (strlen($password) < self::MIN_PASSWORD_LENGTH) {
+            throw new ApiException(
+                sprintf('Das Passwort muss mindestens %d Zeichen lang sein.', self::MIN_PASSWORD_LENGTH),
+                'EINVAL',
+                400,
+            );
+        }
+
+        return $password;
+    }
+
+    /** Log-Stufe gegen die erlaubten Werte prüfen. */
+    private static function requireLevel(array $request): string
+    {
+        $level = strtolower(trim((string) ($request['logLevel'] ?? '')));
+        if (!in_array($level, self::LOG_LEVELS, true)) {
+            throw new ApiException(
+                'Ungültige Log-Stufe. Erlaubt: ' . implode(', ', self::LOG_LEVELS) . '.',
+                'EINVAL',
+                400,
+            );
+        }
+
+        return $level;
+    }
+
+    /** Erzeugt fehlende Verzeichnisse (rekursiv). */
+    private static function ensureDir(string $path): void
+    {
+        if ($path !== '' && !is_dir($path)) {
+            @mkdir($path, 0775, true);
+        }
+    }
+
+    /**
+     * Baut den Inhalt der hugocms.ini. Werte in doppelten Anführungszeichen; die
+     * verbotenen Zeichen (") sind zuvor ausgeschlossen, der bcrypt-Hash enthält
+     * ohnehin nur [./A-Za-z0-9$].
+     */
+    private static function buildIni(
+        string $username,
+        string $hash,
+        string $sessionPath,
+        string $logFile,
+        string $logLevel,
+    ): string {
+        $lines = [
+            '; HugoCMS – Hauptkonfiguration (vom Einrichtungs-Setup erzeugt)',
+            '; Dokumentation der Felder: hugocms.ini.beispiel',
+            '',
+            '[auth]',
+            'driver = singleuser',
+            sprintf('username = "%s"', $username),
+            sprintf('password_hash = "%s"', $hash),
+            '',
+            '[session]',
+            sprintf('path = "%s"', $sessionPath),
+            '',
+            '[log]',
+            sprintf('file = "%s"', $logFile),
+            sprintf('level = %s', $logLevel),
+            '',
+        ];
+
+        return implode("\n", $lines);
+    }
+}

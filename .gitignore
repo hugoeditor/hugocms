@@ -25,6 +25,7 @@ hugocms-release/
 # Installationsspezifische Konfigurationsdateien (Vorlagen *.ini.beispiel
 # bleiben versioniert, da sie nicht auf .ini enden).
 *.ini
+*.bak
 
 # Anwenderspezifischer Bootstrap (Vorlage: custom.php.beispiel).
 custom.php
