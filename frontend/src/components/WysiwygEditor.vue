@@ -138,8 +138,6 @@ const tools = computed(() => {
 }
 .wysiwyg-content :deep(.ProseMirror) {
   min-height: 100%;
-  max-width: 860px;
-  margin: 0 auto;
   padding: 24px 32px 48px;
   outline: none;
   font-size: 0.95rem;

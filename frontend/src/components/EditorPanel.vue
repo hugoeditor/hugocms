@@ -183,6 +183,12 @@ onBeforeUnmount(() => {
   <v-dialog :model-value="!!files.openFile" fullscreen :scrim="false" transition="dialog-bottom-transition">
     <v-card v-if="files.openFile" class="d-flex flex-column" style="height: 100vh">
       <v-toolbar color="surface" density="comfortable" flat>
+        <!-- Zurück zum Dateimanager — gleiche Wirkung wie das Schließen-Kreuz. -->
+        <v-tooltip :text="$t('app.close')" location="bottom">
+          <template #activator="{ props: tip }">
+            <v-btn v-bind="tip" icon="mdi-arrow-left" variant="text" class="ml-1" @click="close" />
+          </template>
+        </v-tooltip>
         <v-icon class="mx-3" icon="mdi-file-document-edit" />
         <v-toolbar-title>
           {{ files.openFile.name }}
