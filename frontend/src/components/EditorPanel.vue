@@ -185,8 +185,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <v-dialog :model-value="!!files.openFile" fullscreen :scrim="false" transition="dialog-bottom-transition">
-    <v-card v-if="files.openFile" class="d-flex flex-column" style="height: 100vh">
+  <!-- Überlagerung des Arbeitsbereichs (nicht der Titelleiste): füllt den
+       position:relative-Rahmen .nemo-workspace in App.vue. -->
+  <div v-if="files.openFile" class="editor-overlay">
+    <v-card class="d-flex flex-column flex-grow-1" flat tile style="height: 100%">
       <v-toolbar color="surface" density="comfortable" flat>
         <!-- Zurück zum Dateimanager — gleiche Wirkung wie das Schließen-Kreuz. -->
         <v-tooltip :text="$t('app.close')" location="bottom">
@@ -298,10 +300,21 @@ onBeforeUnmount(() => {
         <span>{{ language ?? $t('editor.plainText') }}</span>
       </div>
     </v-card>
-  </v-dialog>
+  </div>
 </template>
 
 <style scoped>
+/* Editor als Überlagerung über Werkzeugleiste + Dateibereich; die
+   Nemo-Titelleiste darüber bleibt sichtbar und bedienbar (z. B. Abmelden). */
+.editor-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  background: var(--mint-content);
+}
+
 /* Front-Matter-Bereich im visuellen Modus: einklappbarer Rohtext. */
 .fm-box {
   flex: 0 0 auto;

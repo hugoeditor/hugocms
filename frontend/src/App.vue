@@ -66,6 +66,9 @@ watch(() => auth.authenticated, (isAuthenticated) => {
 })
 
 async function logout() {
+  // Der Abmelden-Knopf ist auch im Editor erreichbar — ungespeicherte
+  // Änderungen nicht stillschweigend verwerfen.
+  if (files.dirty && !confirm(t('editor.discardConfirm'))) return
   await auth.logout()
   files.$reset()
 }
@@ -114,20 +117,22 @@ async function logout() {
           </v-btn>
         </header>
 
-        <!-- Nemo-Werkzeugleiste (volle Breite) -->
-        <NemoToolbar />
-
-        <!-- Seitenleiste + Inhalt (Dateien oder Papierkorb) -->
-        <div class="nemo-body">
-          <aside class="nemo-aside"><MountSidebar /></aside>
-          <main class="nemo-mainarea">
-            <TrashView v-if="files.trashMode" />
-            <FileBrowser v-else />
-          </main>
+        <!-- Arbeitsbereich unterhalb der Titelleiste: Werkzeugleiste,
+             Seitenleiste + Inhalt. Der Editor legt sich als Überlagerung
+             NUR über diesen Bereich — die Titelleiste (Sprache, Benutzer,
+             Abmelden) bleibt auch im Editor sichtbar. -->
+        <div class="nemo-workspace">
+          <NemoToolbar />
+          <div class="nemo-body">
+            <aside class="nemo-aside"><MountSidebar /></aside>
+            <main class="nemo-mainarea">
+              <TrashView v-if="files.trashMode" />
+              <FileBrowser v-else />
+            </main>
+          </div>
+          <EditorPanel />
         </div>
       </div>
-
-      <EditorPanel />
     </template>
 
     <v-snackbar :model-value="!!error" color="error" @update:model-value="error = null">
@@ -183,6 +188,15 @@ async function logout() {
   font-size: 0.85rem;
   color: var(--mint-text-muted);
   margin: 0 4px 0 8px;
+}
+
+/* Bezugsrahmen für die Editor-Überlagerung (unterhalb der Titelleiste). */
+.nemo-workspace {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .nemo-body {
