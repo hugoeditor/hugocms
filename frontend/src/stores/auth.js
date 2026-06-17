@@ -10,6 +10,7 @@ export const useAuthStore = defineStore('auth', {
     setupRequired: false, // true, solange keine hugocms.ini existiert (Erstinbetriebnahme)
     setupDefaults: null, // Vorgaben des Servers für das Setup-Formular
     buildable: false, // true, wenn für diese Webseite ein Hugo-Aufruf konfiguriert ist
+    reconfigurable: false, // true, wenn die hugocms.ini im Betrieb änderbar ist
   }),
 
   actions: {
@@ -21,8 +22,28 @@ export const useAuthStore = defineStore('auth', {
       this.setupRequired = data.setupRequired ?? false
       this.setupDefaults = data.defaults ?? null
       this.buildable = data.buildable ?? false
+      this.reconfigurable = data.reconfigurable ?? false
       setCsrfToken(data.csrf)
       this.ready = true
+    },
+
+    // Aktuelle (rohe) Konfigurationswerte zum Vorbefüllen des Umkonfigurations-
+    // Dialogs. Anmeldedaten sind bewusst nicht enthalten.
+    async loadConfig() {
+      return api.get('config')
+    },
+
+    // Schreibt die hugocms.ini neu (Verzeichnisse, Log, Hugo-Programm).
+    async reconfigure(payload) {
+      await api.post('reconfigure', payload)
+    },
+
+    // Ändert die Anmeldedaten (Name/Passwort). Der Server beendet danach die
+    // Sitzung; per anschließendem whoami den Zustand (abgemeldet) und ein
+    // frisches CSRF-Token holen, damit die Login-Maske sauber funktioniert.
+    async changeAccount(payload) {
+      await api.post('account', payload)
+      await this.check()
     },
 
     async setup(payload) {

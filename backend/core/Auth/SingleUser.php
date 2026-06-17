@@ -42,6 +42,11 @@ final class SingleUser implements AuthInterface
         return true;
     }
 
+    public function verifyPassword(string $password): bool
+    {
+        return password_verify($password, $this->passwordHash);
+    }
+
     public function logout(): void
     {
         unset($_SESSION[self::SESSION_KEY]);

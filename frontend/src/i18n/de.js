@@ -114,6 +114,31 @@ export default {
     exitCode: 'Beendigungscode: {0}',
   },
 
+  reconfigure: {
+    open: 'Konfiguration ändern',
+    title: 'Konfiguration ändern',
+    intro: 'Verzeichnisse, Logging und Hugo-Programm anpassen. Die Anmeldedaten bleiben unverändert.',
+    submit: 'Speichern',
+    cancel: 'Abbrechen',
+    success: 'Konfiguration gespeichert.',
+    note: 'Änderungen am Sitzungsverzeichnis und an der Logdatei greifen erst beim nächsten Laden.',
+  },
+
+  account: {
+    open: 'Anmeldedaten ändern',
+    title: 'Anmeldedaten ändern',
+    intro: 'Anmeldename und Passwort ändern. Zur Bestätigung das aktuelle Passwort eingeben.',
+    username: 'Anmeldename',
+    currentPassword: 'Aktuelles Passwort',
+    newPassword: 'Neues Passwort',
+    newPasswordHint: 'Leer lassen, um das Passwort beizubehalten. Mindestens {0} Zeichen.',
+    newPasswordConfirm: 'Neues Passwort bestätigen',
+    submit: 'Speichern',
+    cancel: 'Abbrechen',
+    note: 'Nach dem Speichern ist eine erneute Anmeldung mit den neuen Daten nötig.',
+    passwordMismatch: 'Die neuen Passwörter stimmen nicht überein.',
+  },
+
   trash: {
     title: 'Papierkorb',
     empty: 'Der Papierkorb ist leer',
@@ -162,11 +187,37 @@ export default {
     unfoldAll: 'Alle Abschnitte ausklappen',
     sourceView: 'Quelltext',
     wysiwygView: 'Visuell',
-    frontMatter: 'Front-Matter (Metadaten)',
     cut: 'Ausschneiden (Strg+X)',
     copy: 'Kopieren (Strg+C)',
     paste: 'Einfügen (Strg+V)',
     clipboardDenied: 'Kein Zugriff auf die Zwischenablage — bitte Strg+X/C/V verwenden.',
+  },
+
+  // Strukturierter Front-Matter-Editor (Metadaten oberhalb des Textes).
+  frontMatter: {
+    title: 'Front-Matter (Metadaten)',
+    add: 'Variable',
+    commonFields: 'Gängige Felder',
+    customField: 'Eigene Variable …',
+    remove: 'Variable entfernen',
+    empty: 'Noch keine Metadaten. Über „Variable“ ein erstes Feld hinzufügen.',
+    keyPlaceholder: 'Name',
+    listPlaceholder: 'Wert eingeben und Enter drücken',
+    fieldType: 'Feldtyp',
+    now: 'Jetzt einsetzen',
+    rawMode: 'Als YAML-Text bearbeiten',
+    structuredMode: 'Strukturiert bearbeiten',
+    rawLabel: 'Front-Matter (YAML)',
+    rawInvalid: 'Ungültiges YAML — strukturierte Ansicht erst nach Korrektur möglich.',
+    types: {
+      text: 'Text',
+      multiline: 'Mehrzeiliger Text',
+      number: 'Zahl',
+      boolean: 'Wahrheitswert',
+      date: 'Datum',
+      list: 'Liste',
+      raw: 'YAML (Rohtext)',
+    },
   },
 
   wysiwyg: {
@@ -209,6 +260,10 @@ export default {
     ESESSION: 'Sitzungsverzeichnis nicht les-/beschreibbar: {0}. Eine Anmeldung ist nicht möglich — bitte Lese- und Schreibrechte für den Webserver-Benutzer setzen.',
     ESITE: 'Unbekannte Webseite „{0}“: weder mounts/{1}.ini noch der Rückfall mounts.ini vorhanden. Die Einrichtung folgt.',
 
+    'CONFIG-WRITE-FAILED': 'Die Konfiguration konnte nicht geschrieben werden.',
+    'RECONFIGURE-UNAVAILABLE': 'Die Konfiguration lässt sich für diese Installation nicht im laufenden Betrieb ändern.',
+    'CURRENT-PASSWORD-WRONG': 'Das aktuelle Passwort ist falsch.',
+    'ACCOUNT-NOT-SUPPORTED': 'Das Ändern der Anmeldedaten wird für dieses Authentifizierungsverfahren nicht unterstützt.',
     'CONFIG-NOT-READABLE': 'Konfiguration nicht lesbar: {0}',
     'CONFIG-INVALID-INI': 'Konfiguration ist kein gültiges INI: {0}',
     'CONFIG-INCOMPLETE': 'Unvollständige Konfiguration in {0}: Folgende Pflichtfelder fehlen oder sind leer: {1}.',

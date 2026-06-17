@@ -26,6 +26,13 @@ final class Connector
     /** Konfiguriertes Sitzungsverzeichnis (für die Rechteprüfung in whoami). */
     private readonly ?string $sessionDir;
 
+    /**
+     * Pfad zur hugocms.ini, sofern der Connector daraus aufgebaut wurde.
+     * null bei programmatischer Konfiguration (custom.php). Nur wenn gesetzt,
+     * lässt sich die Konfiguration im laufenden Betrieb ändern (reconfigure).
+     */
+    private readonly ?string $configPath;
+
     /** Hinweise zur Einrichtung (z. B. fehlende Verzeichnisse), an den Client gemeldet. */
     private array $setupWarnings = [];
 
@@ -53,6 +60,7 @@ final class Connector
         // Fehler-Handler noch nicht stehen.
         $authConfig = null;
         $sessionPath = null;
+        $this->configPath = isset($options['config']) ? (string) $options['config'] : null;
         if (isset($options['config'])) {
             $cfg = Config::load((string) $options['config']);
 
@@ -226,6 +234,9 @@ final class Connector
                 'restore' => $this->cmdRestore($request),
                 'emptytrash' => $this->cmdEmptyTrash($request),
                 'build' => $this->cmdBuild(),
+                'config' => $this->cmdConfig(),
+                'reconfigure' => $this->cmdReconfigure($request),
+                'account' => $this->cmdAccount($request),
                 default => throw ApiException::badRequest('UNKNOWN-COMMAND', [$cmd]),
             };
 
@@ -304,6 +315,9 @@ final class Connector
             // Ist ein Hugo-Aufruf möglich? Nötig sind das zentrale Programm
             // (hugocms.ini) UND der Webseiten-Teil (source) der Mount-Konfig.
             'buildable' => $this->hugo !== null && $this->hugoBin !== null,
+            // Lässt sich die Konfiguration im laufenden Betrieb ändern? Nur,
+            // wenn der Connector aus einer hugocms.ini aufgebaut wurde.
+            'reconfigurable' => $this->configPath !== null,
         ];
     }
 
@@ -715,6 +729,245 @@ final class Connector
             'output' => $output,
             'seconds' => $seconds,
         ];
+    }
+
+    /** Erlaubte Log-Stufen — gemeinsam für Lesen (config) und Schreiben. */
+    private const LOG_LEVELS = ['debug', 'info', 'warning', 'error'];
+
+    /** Mindestlänge für ein neu gesetztes Passwort (wie im Erst-Setup). */
+    private const MIN_PASSWORD_LENGTH = 8;
+
+    /**
+     * Liefert die aktuellen, ROHEN (nicht aufgelösten) Konfigurationswerte aus
+     * der hugocms.ini zum Vorbefüllen des Umkonfigurations-Formulars. Die
+     * Anmeldedaten ([auth]) werden bewusst NICHT zurückgegeben.
+     */
+    private function cmdConfig(): array
+    {
+        $this->requireAuth();
+        if ($this->configPath === null) {
+            throw new ApiException('ECONFIG', 409, 'RECONFIGURE-UNAVAILABLE');
+        }
+        $raw = @parse_ini_file($this->configPath, true, INI_SCANNER_TYPED);
+        if (!is_array($raw)) {
+            throw new ApiException('ECONFIG', 500, 'CONFIG-INVALID-INI', [$this->configPath]);
+        }
+
+        return [
+            'sessionPath' => (string) ($raw['session']['path'] ?? ''),
+            'logFile'     => (string) ($raw['log']['file'] ?? ''),
+            'logLevel'    => (string) ($raw['log']['level'] ?? 'warning'),
+            'hugoBin'     => (string) ($raw['hugo']['bin'] ?? ''),
+            'logLevels'   => self::LOG_LEVELS,
+        ];
+    }
+
+    /**
+     * Schreibt die hugocms.ini im laufenden Betrieb neu — Sitzungsverzeichnis,
+     * Logdatei, Log-Stufe und Hugo-Programm. Die [auth]-Sektion (Anmeldename,
+     * Passwort-Hash) wird WÖRTLICH aus der bestehenden Datei übernommen, damit
+     * Anmeldedaten unberührt bleiben und der Hash nicht durch Re-Serialisierung
+     * verfälscht wird. Pfadänderungen (Session/Log) greifen erst beim nächsten
+     * Request.
+     */
+    private function cmdReconfigure(array $request): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+        if ($this->configPath === null) {
+            throw new ApiException('ECONFIG', 409, 'RECONFIGURE-UNAVAILABLE');
+        }
+
+        $sessionPath = self::cleanConfigValue($request['sessionPath'] ?? '', 'sessionPath', true);
+        $logFile     = self::cleanConfigValue($request['logFile'] ?? '', 'logFile', true);
+        $logLevel    = strtolower(trim((string) ($request['logLevel'] ?? '')));
+        if (!in_array($logLevel, self::LOG_LEVELS, true)) {
+            throw ApiException::badRequest('SETUP-LOG-LEVEL-INVALID', [implode(', ', self::LOG_LEVELS)]);
+        }
+        $hugoBin = self::cleanConfigValue($request['hugoBin'] ?? '', 'hugoBin', false);
+
+        $current = @file_get_contents($this->configPath);
+        if ($current === false) {
+            throw new ApiException('ECONFIG', 500, 'CONFIG-NOT-READABLE', [$this->configPath]);
+        }
+        $authBlock = self::extractSection($current, 'auth');
+        if ($authBlock === null) {
+            throw new ApiException('ECONFIG', 500, 'CONFIG-INVALID-INI', [$this->configPath]);
+        }
+
+        $lines = [
+            '; HugoCMS – Hauptkonfiguration (im laufenden Betrieb aktualisiert)',
+            '; Dokumentation der Felder: hugocms.ini.beispiel',
+            '',
+            $authBlock,
+            '',
+            '[session]',
+            sprintf('path = "%s"', $sessionPath),
+            '',
+            '[log]',
+            sprintf('file = "%s"', $logFile),
+            sprintf('level = %s', $logLevel),
+            '',
+        ];
+        if ($hugoBin !== '') {
+            $lines[] = '[hugo]';
+            $lines[] = sprintf('bin = "%s"', $hugoBin);
+            $lines[] = '';
+        }
+        $content = implode("\n", $lines);
+
+        // Atomar überschreiben (temporäre Datei + rename im selben Verzeichnis).
+        $tmp = @tempnam(dirname($this->configPath), '.hugocfg');
+        if ($tmp === false || @file_put_contents($tmp, $content) === false || !@rename($tmp, $this->configPath)) {
+            if (is_string($tmp)) {
+                @unlink($tmp);
+            }
+            throw new ApiException('EIO', 500, 'CONFIG-WRITE-FAILED');
+        }
+        @chmod($this->configPath, 0640);
+        $this->logger->info('Konfiguration aktualisiert (reconfigure).');
+
+        return ['ok' => true];
+    }
+
+    /**
+     * Ändert die Anmeldedaten (Name, optional Passwort) in der hugocms.ini.
+     * Das aktuelle Passwort muss zur Bestätigung mitgegeben werden. Nur der
+     * Treiber "singleuser" wird unterstützt. Die übrigen Sektionen bleiben
+     * wörtlich erhalten; nur [auth] wird neu geschrieben. Nach Erfolg wird die
+     * Sitzung beendet — die Anmeldung erfolgt mit den neuen Daten erneut.
+     */
+    private function cmdAccount(array $request): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+        if ($this->configPath === null) {
+            throw new ApiException('ECONFIG', 409, 'RECONFIGURE-UNAVAILABLE');
+        }
+
+        // Identität bestätigen: das BISHERIGE Passwort muss stimmen.
+        $currentPassword = (string) ($request['currentPassword'] ?? '');
+        if ($currentPassword === '' || !$this->auth->verifyPassword($currentPassword)) {
+            throw new ApiException('EAUTH', 403, 'CURRENT-PASSWORD-WRONG');
+        }
+
+        $username = self::cleanConfigValue($request['username'] ?? '', 'username', true);
+        $newPassword = (string) ($request['password'] ?? '');
+        if ($newPassword !== '' && strlen($newPassword) < self::MIN_PASSWORD_LENGTH) {
+            throw ApiException::badRequest('SETUP-PASSWORD-TOO-SHORT', [self::MIN_PASSWORD_LENGTH]);
+        }
+
+        // Bestehende [auth]-Werte lesen — nur singleuser kann seine Anmeldedaten
+        // über die INI ändern.
+        $raw = @parse_ini_file($this->configPath, true, INI_SCANNER_TYPED);
+        if (!is_array($raw) || !isset($raw['auth']) || !is_array($raw['auth'])) {
+            throw new ApiException('ECONFIG', 500, 'CONFIG-INVALID-INI', [$this->configPath]);
+        }
+        if (strtolower(trim((string) ($raw['auth']['driver'] ?? ''))) !== 'singleuser') {
+            throw new ApiException('ECONFIG', 409, 'ACCOUNT-NOT-SUPPORTED');
+        }
+        $hash = $newPassword !== ''
+            ? password_hash($newPassword, PASSWORD_DEFAULT)
+            : (string) ($raw['auth']['password_hash'] ?? '');
+        if ($hash === '') {
+            throw new ApiException('ECONFIG', 500, 'CONFIG-INVALID-INI', [$this->configPath]);
+        }
+
+        // [auth] neu schreiben, übrige Sektionen wörtlich übernehmen.
+        $current = @file_get_contents($this->configPath);
+        if ($current === false) {
+            throw new ApiException('ECONFIG', 500, 'CONFIG-NOT-READABLE', [$this->configPath]);
+        }
+        $lines = [
+            '; HugoCMS – Hauptkonfiguration (Anmeldedaten im laufenden Betrieb geändert)',
+            '; Dokumentation der Felder: hugocms.ini.beispiel',
+            '',
+            '[auth]',
+            'driver = singleuser',
+            sprintf('username = "%s"', $username),
+            sprintf('password_hash = "%s"', $hash),
+        ];
+        foreach (['session', 'log', 'hugo'] as $section) {
+            $block = self::extractSection($current, $section);
+            if ($block !== null) {
+                $lines[] = '';
+                $lines[] = $block;
+            }
+        }
+        $lines[] = '';
+        $content = implode("\n", $lines);
+
+        $tmp = @tempnam(dirname($this->configPath), '.hugocfg');
+        if ($tmp === false || @file_put_contents($tmp, $content) === false || !@rename($tmp, $this->configPath)) {
+            if (is_string($tmp)) {
+                @unlink($tmp);
+            }
+            throw new ApiException('EIO', 500, 'CONFIG-WRITE-FAILED');
+        }
+        @chmod($this->configPath, 0640);
+        $this->logger->info('Anmeldedaten geändert (account).');
+
+        // Anmeldedaten geändert → Sitzung beenden; Neuanmeldung mit neuen Daten.
+        $this->auth->logout();
+
+        return ['ok' => true, 'reauth' => true];
+    }
+
+    /**
+     * Prüft einen Konfigurationswert: trimmt ihn, lehnt INI-sprengende Zeichen
+     * (Anführungszeichen, Zeilenumbruch) ab. Pflichtfelder dürfen nicht leer
+     * sein; optionale Felder geben '' zurück.
+     */
+    private static function cleanConfigValue(mixed $value, string $fieldKey, bool $required): string
+    {
+        $v = trim((string) $value);
+        if ($v === '') {
+            if ($required) {
+                throw ApiException::badRequest('SETUP-FIELD-REQUIRED', [['t' => 'fields.' . $fieldKey]]);
+            }
+            return '';
+        }
+        if (preg_match('/["\r\n]/', $v) === 1) {
+            throw ApiException::badRequest('SETUP-FIELD-INVALID-CHARS', [['t' => 'fields.' . $fieldKey]]);
+        }
+
+        return $v;
+    }
+
+    /**
+     * Extrahiert eine Sektion [name] samt Inhalt WÖRTLICH aus einem INI-Text
+     * (von der Sektionszeile bis zur nächsten Sektion bzw. Dateiende, ohne
+     * abschließende Leerzeilen). Gibt null zurück, wenn die Sektion fehlt.
+     */
+    private static function extractSection(string $ini, string $name): ?string
+    {
+        $lines = preg_split('/\r\n|\r|\n/', $ini) ?: [];
+        $out = [];
+        $inSection = false;
+        foreach ($lines as $line) {
+            if (preg_match('/^\s*\[(.+?)\]\s*$/', $line, $m) === 1) {
+                $isTarget = strtolower(trim($m[1])) === $name;
+                if ($inSection && !$isTarget) {
+                    break; // nächste Sektion erreicht
+                }
+                $inSection = $isTarget;
+                if ($inSection) {
+                    $out[] = '[' . $name . ']';
+                }
+                continue;
+            }
+            if ($inSection) {
+                $out[] = $line;
+            }
+        }
+        if ($out === []) {
+            return null;
+        }
+        while ($out !== [] && trim((string) end($out)) === '') {
+            array_pop($out);
+        }
+
+        return implode("\n", $out);
     }
 
     /** Gemeinsam für download/raw/thumb: Ziel auflösen, Leserecht, Datei. */

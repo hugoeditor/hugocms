@@ -12,6 +12,8 @@ import NemoToolbar from './components/NemoToolbar.vue'
 import FileBrowser from './components/FileBrowser.vue'
 import TrashView from './components/TrashView.vue'
 import EditorPanel from './components/EditorPanel.vue'
+import ReconfigureDialog from './components/ReconfigureDialog.vue'
+import AccountDialog from './components/AccountDialog.vue'
 import LanguageSwitcher from './components/LanguageSwitcher.vue'
 
 const { t } = useI18n()
@@ -77,9 +79,39 @@ async function logout() {
 // --- Hugo aufrufen (Veröffentlichen) ---------------------------------------
 const building = ref(false)
 const buildResult = ref(null) // { success, exitCode, output, seconds } oder null
+const editorPanelRef = ref(null)
+
+// --- Konfiguration im laufenden Betrieb ändern -----------------------------
+const reconfigureOpen = ref(false)
+const accountOpen = ref(false)
+const notice = ref(null) // kurze Erfolgsmeldung (Snackbar)
+
+function onAccountChanged() {
+  // Der Server hat die Sitzung beendet; der Store-Zustand ist bereits auf
+  // abgemeldet aktualisiert, daher zeigt App nun die Login-Maske. Hinweis dazu.
+  notice.value = t('account.note')
+}
+
+async function onReconfigured() {
+  notice.value = t('reconfigure.success')
+  // buildable/Warnungen können sich geändert haben (z. B. Hugo-Programm) —
+  // Status neu laden.
+  try {
+    await auth.check()
+  } catch {
+    // unkritisch — beim nächsten Laden konsistent
+  }
+}
 
 async function build() {
   if (building.value) return
+  // Ungespeicherte Editor-Änderungen zuerst sichern, damit Hugo den aktuellen
+  // Stand verarbeitet. Schlägt das Speichern fehl (z. B. Konflikt abgelehnt),
+  // wird NICHT gebaut — der Editor zeigt den Fehler.
+  if (files.openFile && files.dirty) {
+    const saved = await editorPanelRef.value?.save()
+    if (!saved) return
+  }
   building.value = true
   try {
     buildResult.value = await api.post('build')
@@ -142,8 +174,31 @@ async function build() {
             {{ $t('build.publish') }}
           </v-btn>
 
+          <!-- Konfiguration ändern (nur bei INI-basierter Installation) -->
+          <v-tooltip v-if="auth.reconfigurable" :text="$t('reconfigure.open')" location="bottom">
+            <template #activator="{ props }">
+              <v-btn
+                v-bind="props"
+                icon="mdi-cog-outline"
+                variant="text"
+                size="small"
+                class="mr-1"
+                @click="reconfigureOpen = true"
+              />
+            </template>
+          </v-tooltip>
+
           <LanguageSwitcher />
-          <span class="nemo-user">{{ auth.user?.name }}</span>
+          <v-tooltip :text="$t('account.open')" location="bottom">
+            <template #activator="{ props }">
+              <button
+                v-bind="props"
+                type="button"
+                class="nemo-user nemo-user-btn"
+                @click="accountOpen = true"
+              >{{ auth.user?.name }}</button>
+            </template>
+          </v-tooltip>
           <v-btn variant="text" size="small" prepend-icon="mdi-logout" @click="logout">
             {{ $t('app.logout') }}
           </v-btn>
@@ -162,7 +217,7 @@ async function build() {
               <FileBrowser v-else />
             </main>
           </div>
-          <EditorPanel />
+          <EditorPanel ref="editorPanelRef" />
         </div>
       </div>
     </template>
@@ -192,8 +247,16 @@ async function build() {
       </v-card>
     </v-dialog>
 
+    <!-- Konfiguration im laufenden Betrieb ändern -->
+    <ReconfigureDialog v-model="reconfigureOpen" @saved="onReconfigured" />
+    <AccountDialog v-model="accountOpen" @changed="onAccountChanged" />
+
     <v-snackbar :model-value="!!error" color="error" @update:model-value="error = null">
       {{ error }}
+    </v-snackbar>
+
+    <v-snackbar :model-value="!!notice" color="success" :timeout="3000" @update:model-value="notice = null">
+      {{ notice }}
     </v-snackbar>
 
     <v-snackbar
@@ -245,6 +308,21 @@ async function build() {
   font-size: 0.85rem;
   color: var(--mint-text-muted);
   margin: 0 4px 0 8px;
+}
+
+/* Klickbarer Benutzername (öffnet den Anmeldedaten-Dialog) — als Text gestaltet,
+   nicht als Standard-Button. */
+.nemo-user-btn {
+  background: none;
+  border: none;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+}
+.nemo-user-btn:hover {
+  color: var(--mint-text);
+  background: var(--mint-hover, rgba(0, 0, 0, 0.06));
 }
 
 /* Bezugsrahmen für die Editor-Überlagerung (unterhalb der Titelleiste). */

@@ -114,6 +114,31 @@ export default {
     exitCode: 'Exit code: {0}',
   },
 
+  reconfigure: {
+    open: 'Change configuration',
+    title: 'Change configuration',
+    intro: 'Adjust directories, logging and the Hugo binary. Login credentials stay unchanged.',
+    submit: 'Save',
+    cancel: 'Cancel',
+    success: 'Configuration saved.',
+    note: 'Changes to the session directory and log file take effect on the next load.',
+  },
+
+  account: {
+    open: 'Change credentials',
+    title: 'Change credentials',
+    intro: 'Change the login name and password. Enter the current password to confirm.',
+    username: 'Login name',
+    currentPassword: 'Current password',
+    newPassword: 'New password',
+    newPasswordHint: 'Leave empty to keep the current password. At least {0} characters.',
+    newPasswordConfirm: 'Confirm new password',
+    submit: 'Save',
+    cancel: 'Cancel',
+    note: 'After saving you need to sign in again with the new credentials.',
+    passwordMismatch: 'The new passwords do not match.',
+  },
+
   trash: {
     title: 'Trash',
     empty: 'The trash is empty',
@@ -162,11 +187,37 @@ export default {
     unfoldAll: 'Unfold all sections',
     sourceView: 'Source',
     wysiwygView: 'Visual',
-    frontMatter: 'Front matter (metadata)',
     cut: 'Cut (Ctrl+X)',
     copy: 'Copy (Ctrl+C)',
     paste: 'Paste (Ctrl+V)',
     clipboardDenied: 'Clipboard access not available — please use Ctrl+X/C/V.',
+  },
+
+  // Structured front matter editor (metadata above the text body).
+  frontMatter: {
+    title: 'Front matter (metadata)',
+    add: 'Variable',
+    commonFields: 'Common fields',
+    customField: 'Custom variable …',
+    remove: 'Remove variable',
+    empty: 'No metadata yet. Add a first field via “Variable”.',
+    keyPlaceholder: 'Name',
+    listPlaceholder: 'Type a value and press Enter',
+    fieldType: 'Field type',
+    now: 'Insert current time',
+    rawMode: 'Edit as YAML text',
+    structuredMode: 'Edit as form',
+    rawLabel: 'Front matter (YAML)',
+    rawInvalid: 'Invalid YAML — fix it to return to the structured view.',
+    types: {
+      text: 'Text',
+      multiline: 'Multi-line text',
+      number: 'Number',
+      boolean: 'Boolean',
+      date: 'Date',
+      list: 'List',
+      raw: 'YAML (raw)',
+    },
   },
 
   wysiwyg: {
@@ -207,6 +258,10 @@ export default {
     ESESSION: 'Session directory not readable/writable: {0}. Signing in is not possible — please grant read and write permissions to the web server user.',
     ESITE: 'Unknown website “{0}”: neither mounts/{1}.ini nor the fallback mounts.ini is present. Setup pending.',
 
+    'CONFIG-WRITE-FAILED': 'The configuration could not be written.',
+    'RECONFIGURE-UNAVAILABLE': 'The configuration cannot be changed at runtime for this installation.',
+    'CURRENT-PASSWORD-WRONG': 'The current password is incorrect.',
+    'ACCOUNT-NOT-SUPPORTED': 'Changing credentials is not supported for this authentication method.',
     'CONFIG-NOT-READABLE': 'Configuration not readable: {0}',
     'CONFIG-INVALID-INI': 'Configuration is not valid INI: {0}',
     'CONFIG-INCOMPLETE': 'Incomplete configuration in {0}: the following required fields are missing or empty: {1}.',

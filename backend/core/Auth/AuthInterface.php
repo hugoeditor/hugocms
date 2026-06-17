@@ -16,6 +16,13 @@ interface AuthInterface
      */
     public function attemptLogin(string $username, string $password): bool;
 
+    /**
+     * Prüft das Passwort des aktuell angemeldeten Benutzers OHNE Seiteneffekte
+     * (keine Sitzungsänderung). Für sicherheitsrelevante Bestätigungen, etwa
+     * vor dem Ändern der Anmeldedaten.
+     */
+    public function verifyPassword(string $password): bool;
+
     public function logout(): void;
 
     public function isAuthenticated(): bool;

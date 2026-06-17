@@ -5,6 +5,7 @@ import { useFilesStore } from '../stores/files'
 import { errorText } from '../i18n/apiMessage'
 import CodeMirrorEditor from './CodeMirrorEditor.vue'
 import WysiwygEditor from './WysiwygEditor.vue'
+import FrontMatterPanel from './FrontMatterPanel.vue'
 import { useTransientError } from '../util/transientError'
 
 const { t } = useI18n()
@@ -66,8 +67,10 @@ function onWysiwygInput(bodyMd) {
   onInput(fmDraft.value + bodyMd)
 }
 
-function onFmInput(event) {
-  fmDraft.value = event.target.value
+// Das Front-Matter-Panel meldet den fertigen Block (inkl. --- Zeilen) zurück;
+// Body bleibt unangetastet.
+function onFmInput(block) {
+  fmDraft.value = block
   onInput(fmDraft.value + bodyDraft.value)
 }
 
@@ -125,32 +128,42 @@ function onInput(value) {
   files.dirty = value !== files.openFile?.content
 }
 
+// Speichert den offenen Entwurf. Rückgabe: true, wenn nichts zu speichern war
+// oder das Speichern gelang; false bei Fehler/abgelehntem Konflikt. Der
+// boolesche Rückgabewert erlaubt Aufrufern (z. B. dem Veröffentlichen vor dem
+// Build), nur bei Erfolg fortzufahren.
 async function save() {
   // saving fängt Doppelaufrufe ab: Strg+S erreicht sowohl den CodeMirror-
   // Keymap als auch den globalen Fenster-Handler; der zweite Aufruf würde
   // sonst mit veralteter mtime speichern und einen Scheinkonflikt auslösen.
-  if (!files.dirty || saving.value) return
+  if (saving.value) return false
+  if (!files.dirty) return true
   saving.value = true
   error.value = null
   try {
     await files.saveOpenFile(draft.value)
+    return true
   } catch (e) {
     // Externer Konflikt: Überschreiben nur nach ausdrücklicher Bestätigung.
     if (e?.code === 'ECONFLICT' && confirm(t('editor.conflictConfirm'))) {
       try {
         await files.saveOpenFile(draft.value, { force: true })
         error.value = null
-        return
+        return true
       } catch (e2) {
         error.value = errorText(t, e2)
-        return
+        return false
       }
     }
     error.value = errorText(t, e)
+    return false
   } finally {
     saving.value = false
   }
 }
+
+// Für Aufrufer außerhalb (App.vue: vor dem Build speichern).
+defineExpose({ save })
 
 function close() {
   if (files.dirty && !confirm(t('editor.discardConfirm'))) return
@@ -253,18 +266,11 @@ onBeforeUnmount(() => {
       <div class="flex-grow-1 d-flex flex-column" style="overflow: hidden">
         <!-- Visueller Markdown-Modus: Front-Matter separat, Body in TipTap -->
         <template v-if="mode === 'wysiwyg'">
-          <details v-if="fmDraft" class="fm-box">
-            <summary class="fm-summary nemo-noselect">
-              <v-icon icon="mdi-code-json" size="15" class="mr-1" />{{ $t('editor.frontMatter') }}
-            </summary>
-            <textarea
-              class="fm-textarea nemo-scroll"
-              :value="fmDraft"
-              rows="6"
-              spellcheck="false"
-              @input="onFmInput"
-            />
-          </details>
+          <FrontMatterPanel
+            :key="files.openFile.id + ':fm'"
+            :model-value="fmDraft"
+            @update:model-value="onFmInput"
+          />
           <WysiwygEditor
             :key="files.openFile.id + ':wysiwyg'"
             :model-value="bodyDraft"
@@ -313,34 +319,5 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   background: var(--mint-content);
-}
-
-/* Front-Matter-Bereich im visuellen Modus: einklappbarer Rohtext. */
-.fm-box {
-  flex: 0 0 auto;
-  border-bottom: 1px solid var(--mint-border);
-  background: var(--mint-panel);
-}
-.fm-summary {
-  display: flex;
-  align-items: center;
-  padding: 5px 12px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--mint-text-muted);
-  cursor: pointer;
-}
-.fm-textarea {
-  display: block;
-  width: 100%;
-  border: none;
-  border-top: 1px dashed var(--mint-border);
-  background: #fbfbfa;
-  padding: 8px 12px;
-  font-family: monospace;
-  font-size: 0.82rem;
-  color: var(--mint-text);
-  resize: vertical;
-  outline: none;
 }
 </style>
