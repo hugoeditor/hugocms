@@ -59,12 +59,12 @@ function open(mount) {
 }
 
 .nemo-sidebar-header {
-  font-size: 0.72rem;
+  font-size: 0.84rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--mint-text-muted);
-  padding: 6px 8px 4px;
+  padding: 0px 8px 6px;
 }
 
 .nemo-places {

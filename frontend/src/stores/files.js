@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { api } from '../api/client'
 
 const VIEW_KEY = 'hugocms_view'
+const SIDEBAR_KEY = 'hugocms_sidebar_collapsed'
 
 function readView() {
   try {
@@ -11,6 +12,14 @@ function readView() {
     // ignorieren
   }
   return 'list'
+}
+
+function readSidebarCollapsed() {
+  try {
+    return localStorage.getItem(SIDEBAR_KEY) === 'true'
+  } catch {
+    return false
+  }
 }
 
 export const useFilesStore = defineStore('files', {
@@ -23,6 +32,7 @@ export const useFilesStore = defineStore('files', {
     loading: false,
 
     view: readView(), // 'list' | 'icons'
+    sidebarCollapsed: readSidebarCollapsed(), // Orte-Seitenleiste eingeklappt?
     filter: '', // Schnellfilter (Namensteil) auf das aktuelle Verzeichnis
 
     selectedIds: [], // markierte Einträge (Mehrfachauswahl)
@@ -167,6 +177,15 @@ export const useFilesStore = defineStore('files', {
       this.view = view
       try {
         localStorage.setItem(VIEW_KEY, view)
+      } catch {
+        // ignorieren
+      }
+    },
+
+    toggleSidebar() {
+      this.sidebarCollapsed = !this.sidebarCollapsed
+      try {
+        localStorage.setItem(SIDEBAR_KEY, String(this.sidebarCollapsed))
       } catch {
         // ignorieren
       }

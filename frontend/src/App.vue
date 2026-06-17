@@ -76,6 +76,16 @@ async function logout() {
   files.$reset()
 }
 
+// Orte-Menü: zu einem Mount-Point wechseln. Ist gerade eine Datei im Editor
+// offen, wird dieser geschlossen und der Dateimanager mit dem gewählten Ort
+// angezeigt — bei ungespeicherten Änderungen vorher nachfragen (wie beim
+// Schließen-Knopf des Editors).
+function openPlace(mount) {
+  if (files.dirty && !confirm(t('editor.discardConfirm'))) return
+  if (files.openFile) files.closeFile()
+  files.openDir(mount.id)
+}
+
 // --- Hugo aufrufen (Veröffentlichen) ---------------------------------------
 const building = ref(false)
 const buildResult = ref(null) // { success, exitCode, output, seconds } oder null
@@ -158,6 +168,34 @@ async function build() {
         <header class="nemo-titlebar nemo-noselect">
           <v-icon icon="mdi-folder-multiple-outline" size="20" class="nemo-brand-icon" />
           <span class="nemo-title">{{ $t('app.title') }}</span>
+
+          <!-- Orte-Menü: schneller Sprung zu einem Mount-Point, auch wenn die
+               Seitenleiste eingeklappt ist. -->
+          <v-menu v-if="files.mounts.length">
+            <template #activator="{ props }">
+              <v-btn
+                v-bind="props"
+                variant="text"
+                size="small"
+                prepend-icon="mdi-folder-network-outline"
+                append-icon="mdi-menu-down"
+                class="ml-2 nemo-places-btn"
+              >
+                {{ $t('files.places') }}
+              </v-btn>
+            </template>
+            <v-list density="compact" min-width="200">
+              <v-list-item
+                v-for="mount in files.mounts"
+                :key="mount.id"
+                :prepend-icon="!files.trashMode && files.activeMount === mount.name ? 'mdi-folder-open' : 'mdi-folder-network-outline'"
+                :title="mount.label"
+                :active="!files.trashMode && files.activeMount === mount.name"
+                @click="openPlace(mount)"
+              />
+            </v-list>
+          </v-menu>
+
           <div class="nemo-titlebar-spacer" />
 
           <!-- Hugo aufrufen (nur wenn für die Webseite konfiguriert) -->
@@ -211,7 +249,7 @@ async function build() {
         <div class="nemo-workspace">
           <NemoToolbar />
           <div class="nemo-body">
-            <aside class="nemo-aside"><MountSidebar /></aside>
+            <aside class="nemo-aside" :class="{ collapsed: files.sidebarCollapsed }"><MountSidebar /></aside>
             <main class="nemo-mainarea">
               <TrashView v-if="files.trashMode" />
               <FileBrowser v-else />
@@ -342,6 +380,13 @@ async function build() {
 .nemo-aside {
   flex: 0 0 210px;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  transition: flex-basis 0.18s ease;
+}
+/* Eingeklappt: Breite auf 0 zusammenfahren (Inhalt wird abgeschnitten). */
+.nemo-aside.collapsed {
+  flex-basis: 0;
 }
 .nemo-mainarea {
   flex: 1 1 auto;

@@ -61,6 +61,8 @@ export default {
     forward: 'Forward',
     up: 'Parent folder',
     refresh: 'Refresh',
+    showSidebar: 'Show places sidebar',
+    hideSidebar: 'Hide places sidebar',
   },
 
   view: {
