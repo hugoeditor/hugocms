@@ -612,6 +612,18 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 }
 .col-size, .col-type, .col-date { color: var(--mint-text-muted); }
 
+/* Schmale Schirme: platzraubende Spalten ausblenden und Zeilen für die
+   Bedienung per Finger etwas höher machen. */
+@media (max-width: 959.98px) {
+  .nemo-row td { padding-top: 9px; padding-bottom: 9px; }
+}
+@media (max-width: 720px) {
+  .col-type, .col-path { display: none; }
+}
+@media (max-width: 560px) {
+  .col-date { display: none; }
+}
+
 /* Symbolansicht */
 .nemo-grid {
   display: grid;

@@ -240,7 +240,7 @@ onBeforeUnmount(() => {
 
       <!-- Werkzeugleiste des Quelltext-Editors; im visuellen Modus trägt die
            Formatleiste des WysiwygEditor den Speichern-Knopf selbst. -->
-      <div v-if="mode === 'source'" class="d-flex align-center border-b px-2 py-1">
+      <div v-if="mode === 'source'" class="d-flex flex-wrap align-center border-b px-2 py-1">
         <template v-for="(tool, i) in tools" :key="i">
           <v-divider v-if="tool.divider" vertical class="mx-1 align-self-stretch" />
           <v-tooltip v-else :text="tool.label" location="bottom">

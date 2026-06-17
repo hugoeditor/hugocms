@@ -76,14 +76,20 @@ async function logout() {
   files.$reset()
 }
 
-// Orte-Menü: zu einem Mount-Point wechseln. Ist gerade eine Datei im Editor
-// offen, wird dieser geschlossen und der Dateimanager mit dem gewählten Ort
-// angezeigt — bei ungespeicherten Änderungen vorher nachfragen (wie beim
-// Schließen-Knopf des Editors).
-function openPlace(mount) {
+// Orte-Menü: zu einem Mount-Point oder zum Papierkorb wechseln. Ist gerade eine
+// Datei im Editor offen, wird dieser geschlossen und der Dateimanager mit dem
+// gewählten Ziel angezeigt — bei ungespeicherten Änderungen vorher nachfragen
+// (wie beim Schließen-Knopf des Editors).
+function leaveEditorThen(action) {
   if (files.dirty && !confirm(t('editor.discardConfirm'))) return
   if (files.openFile) files.closeFile()
-  files.openDir(mount.id)
+  action()
+}
+function openPlace(mount) {
+  leaveEditorThen(() => files.openDir(mount.id))
+}
+function openTrashView() {
+  leaveEditorThen(() => files.openTrash())
 }
 
 // --- Hugo aufrufen (Veröffentlichen) ---------------------------------------
@@ -167,10 +173,11 @@ async function build() {
         <!-- Fenster-Titelleiste (Marke, Sprache, Benutzer, Abmelden) -->
         <header class="nemo-titlebar nemo-noselect">
           <v-icon icon="mdi-folder-multiple-outline" size="20" class="nemo-brand-icon" />
-          <span class="nemo-title">{{ $t('app.title') }}</span>
+          <span class="nemo-title d-none d-md-inline">{{ $t('app.title') }}</span>
 
-          <!-- Orte-Menü: schneller Sprung zu einem Mount-Point, auch wenn die
-               Seitenleiste eingeklappt ist. -->
+          <!-- Orte-Menü: schneller Sprung zu einem Mount-Point oder dem
+               Papierkorb. Auf schmalen Schirmen ersetzt es die ausgeblendete
+               Seitenleiste als Hauptnavigation. -->
           <v-menu v-if="files.mounts.length">
             <template #activator="{ props }">
               <v-btn
@@ -181,7 +188,7 @@ async function build() {
                 append-icon="mdi-menu-down"
                 class="ml-2 nemo-places-btn"
               >
-                {{ $t('files.places') }}
+                <span class="d-none d-sm-inline">{{ $t('files.places') }}</span>
               </v-btn>
             </template>
             <v-list density="compact" min-width="200">
@@ -192,6 +199,13 @@ async function build() {
                 :title="mount.label"
                 :active="!files.trashMode && files.activeMount === mount.name"
                 @click="openPlace(mount)"
+              />
+              <v-divider class="my-1" />
+              <v-list-item
+                prepend-icon="mdi-trash-can-outline"
+                :title="$t('trash.title')"
+                :active="files.trashMode"
+                @click="openTrashView()"
               />
             </v-list>
           </v-menu>
@@ -209,7 +223,7 @@ async function build() {
             :loading="building"
             @click="build"
           >
-            {{ $t('build.publish') }}
+            <span class="d-none d-md-inline">{{ $t('build.publish') }}</span>
           </v-btn>
 
           <!-- Konfiguration ändern (nur bei INI-basierter Installation) -->
@@ -232,13 +246,13 @@ async function build() {
               <button
                 v-bind="props"
                 type="button"
-                class="nemo-user nemo-user-btn"
+                class="nemo-user nemo-user-btn d-none d-sm-inline-block"
                 @click="accountOpen = true"
               >{{ auth.user?.name }}</button>
             </template>
           </v-tooltip>
           <v-btn variant="text" size="small" prepend-icon="mdi-logout" @click="logout">
-            {{ $t('app.logout') }}
+            <span class="d-none d-md-inline">{{ $t('app.logout') }}</span>
           </v-btn>
         </header>
 
@@ -249,7 +263,7 @@ async function build() {
         <div class="nemo-workspace">
           <NemoToolbar />
           <div class="nemo-body">
-            <aside class="nemo-aside" :class="{ collapsed: files.sidebarCollapsed }"><MountSidebar /></aside>
+            <aside class="nemo-aside d-none d-md-block" :class="{ collapsed: files.sidebarCollapsed }"><MountSidebar /></aside>
             <main class="nemo-mainarea">
               <TrashView v-if="files.trashMode" />
               <FileBrowser v-else />

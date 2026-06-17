@@ -207,6 +207,14 @@ function emptyAll() {
 .col-date { width: 160px; }
 .nemo-list td.col-size { text-align: right; }
 
+/* Schmale Schirme: platzraubende Spalten ausblenden (wie im Dateimanager). */
+@media (max-width: 720px) {
+  .col-origin { display: none; }
+}
+@media (max-width: 560px) {
+  .col-date { display: none; }
+}
+
 .nemo-row { cursor: default; color: var(--mint-text); }
 .nemo-row td {
   padding: 4px 10px;

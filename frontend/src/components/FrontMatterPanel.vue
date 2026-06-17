@@ -654,6 +654,12 @@ function onRawInput(text) {
   gap: 4px;
   padding: 3px 0;
 }
+/* Handy: Schlüssel und Wert untereinander statt nebeneinander. */
+@media (max-width: 599.98px) {
+  .fm-row { flex-wrap: wrap; }
+  .fm-key { flex: 1 1 auto; }
+  .fm-value { flex: 1 1 100%; order: 3; }
+}
 .fm-type {
   flex: 0 0 auto;
   margin-top: 2px;

@@ -23,7 +23,7 @@ function onSearch() {
       <template #activator="{ props }">
         <button
           v-bind="props"
-          class="nemo-iconbtn"
+          class="nemo-iconbtn d-none d-md-inline-flex"
           :class="{ active: !files.sidebarCollapsed }"
           @click="files.toggleSidebar()"
         >
@@ -192,6 +192,29 @@ function onSearch() {
   background: var(--mint-panel);
   border-bottom: 1px solid var(--mint-border);
   min-height: 44px;
+}
+
+/* Schmale Schirme (Handy/Tablet): Werkzeugleiste umbrechen statt überlaufen.
+   Die Pfadleiste rückt in eine eigene Zeile (voll breit, horizontal scrollbar),
+   das Filterfeld füllt die verbleibende Breite. */
+@media (max-width: 959.98px) {
+  .nemo-toolbar {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  .nemo-spacer {
+    display: none;
+  }
+  .nemo-pathbar {
+    order: 10;
+    flex: 1 1 100%;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .nemo-filter {
+    flex: 1 1 160px;
+    min-width: 0;
+  }
 }
 
 .nemo-navgroup,
