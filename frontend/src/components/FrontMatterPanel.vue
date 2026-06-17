@@ -344,11 +344,15 @@ function onRawInput(text) {
 
 <template>
   <section class="fm-panel">
-    <header class="fm-head nemo-noselect" @click="open = !open">
-      <v-icon :icon="open ? 'mdi-menu-down' : 'mdi-menu-right'" size="20" class="fm-caret" />
-      <v-icon icon="mdi-tune-variant" size="16" class="mr-1" />
-      <span class="fm-title">{{ t('frontMatter.title') }}</span>
-      <span v-if="!open && summary" class="fm-summary">{{ summary }}</span>
+    <header class="fm-head nemo-noselect">
+      <!-- Nur der Titelbereich klappt ein/aus — so lösen Fehlklicks neben den
+           Knöpfen rechts nicht versehentlich das Einklappen aus. -->
+      <button type="button" class="fm-head-toggle" @click="open = !open">
+        <v-icon :icon="open ? 'mdi-menu-down' : 'mdi-menu-right'" size="20" class="fm-caret" />
+        <v-icon icon="mdi-tune-variant" size="16" class="mr-1" />
+        <span class="fm-title">{{ t('frontMatter.title') }}</span>
+        <span v-if="!open && summary" class="fm-summary">{{ summary }}</span>
+      </button>
 
       <v-spacer />
 
@@ -357,7 +361,7 @@ function onRawInput(text) {
           <v-btn
             v-bind="tip"
             :icon="rawMode ? 'mdi-table' : 'mdi-code-braces'"
-            size="x-small"
+            size="small"
             variant="text"
             density="comfortable"
             :disabled="!open"
@@ -370,7 +374,7 @@ function onRawInput(text) {
         <template #activator="{ props: menu }">
           <v-btn
             v-bind="menu"
-            size="x-small"
+            size="small"
             variant="tonal"
             color="primary"
             density="comfortable"
@@ -590,8 +594,26 @@ function onRawInput(text) {
   align-items: center;
   gap: 2px;
   padding: 4px 8px 4px 6px;
-  cursor: pointer;
   color: var(--mint-text-muted);
+}
+/* Klickbarer Ein-/Ausklapp-Bereich: nur Titel und Zusammenfassung, damit der
+   leere Raum neben den Knöpfen rechts nicht togglet. */
+.fm-head-toggle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.fm-head-toggle:hover .fm-title {
+  color: var(--mint-green);
 }
 .fm-caret {
   color: var(--mint-text-muted);
