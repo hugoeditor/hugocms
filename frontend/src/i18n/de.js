@@ -131,7 +131,7 @@ export default {
     username: 'Anmeldename',
     currentPassword: 'Aktuelles Passwort',
     newPassword: 'Neues Passwort',
-    newPasswordHint: 'Leer lassen, um das Passwort beizubehalten. Mindestens {0} Zeichen.',
+    newPasswordHint: 'Leer lassen, um das Passwort beizubehalten und nur den Anmeldenamen zu ändern. Mindestens {0} Zeichen.',
     newPasswordConfirm: 'Neues Passwort bestätigen',
     submit: 'Speichern',
     cancel: 'Abbrechen',

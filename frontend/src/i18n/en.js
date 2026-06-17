@@ -131,7 +131,7 @@ export default {
     username: 'Login name',
     currentPassword: 'Current password',
     newPassword: 'New password',
-    newPasswordHint: 'Leave empty to keep the current password. At least {0} characters.',
+    newPasswordHint: 'Leave empty to keep the current password and only change the login name. At least {0} characters.',
     newPasswordConfirm: 'Confirm new password',
     submit: 'Save',
     cancel: 'Cancel',

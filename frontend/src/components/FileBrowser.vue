@@ -331,9 +331,11 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
                 @dblclick="onOpen(entry)"
               >
                 <td class="col-name">
-                  <img v-if="entry.image" :src="files.thumbUrl(entry, 64)" class="nemo-row-thumb" loading="lazy" alt="" />
-                  <v-icon v-else :icon="iconFor(entry)" size="18" class="nemo-row-icon" />
-                  <span class="nemo-row-name">{{ entry.name }}</span>
+                  <div class="nemo-name-cell">
+                    <img v-if="entry.image" :src="files.thumbUrl(entry, 64)" class="nemo-row-thumb" loading="lazy" alt="" />
+                    <v-icon v-else :icon="iconFor(entry)" size="18" class="nemo-row-icon" />
+                    <span class="nemo-row-name">{{ entry.name }}</span>
+                  </div>
                 </td>
                 <td class="col-path">{{ entry.path }}</td>
                 <td class="col-size">{{ entry.type === 'dir' ? '' : formatSize(entry.size) }}</td>
@@ -369,15 +371,17 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
               @contextmenu.prevent="openMenu(entry, $event)"
             >
               <td class="col-name">
-                <img
-                  v-if="entry.image"
-                  :src="files.thumbUrl(entry, 64)"
-                  class="nemo-row-thumb"
-                  loading="lazy"
-                  alt=""
-                />
-                <v-icon v-else :icon="iconFor(entry)" size="18" class="nemo-row-icon" />
-                <span class="nemo-row-name">{{ entry.name }}</span>
+                <div class="nemo-name-cell">
+                  <img
+                    v-if="entry.image"
+                    :src="files.thumbUrl(entry, 64)"
+                    class="nemo-row-thumb"
+                    loading="lazy"
+                    alt=""
+                  />
+                  <v-icon v-else :icon="iconFor(entry)" size="18" class="nemo-row-icon" />
+                  <span class="nemo-row-name">{{ entry.name }}</span>
+                </div>
               </td>
               <td class="col-size">{{ entry.type === 'dir' ? '' : formatSize(entry.size) }}</td>
               <td class="col-type">{{ typeLabel(entry) }}</td>
@@ -592,7 +596,12 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 .nemo-row.selected .col-type,
 .nemo-row.selected .col-date { color: #fff; }
 .nemo-row.cut { opacity: 0.5; }
-.col-name { display: flex; align-items: center; gap: 8px; }
+/* Flex-Layout für Symbol + Name liegt auf einem inneren Wrapper, NICHT auf der
+   Tabellenzelle selbst: ein <td>/<th> mit display:flex fällt aus dem
+   Tabellen-Layout und wird anders hoch berechnet als die übrigen Zellen —
+   das versetzte die Namensspalte gegenüber der Kopfzeile. */
+.nemo-name-cell { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.nemo-row-name { overflow: hidden; text-overflow: ellipsis; }
 .nemo-row-icon { color: #6f8f63; flex: 0 0 auto; }
 .nemo-row-thumb {
   width: 22px;
