@@ -113,12 +113,57 @@ MOUNT_FILE="$MOUNTS_DIR/${HASH}.ini"
 # der Mount-Datei gälten sonst relativ zu backend/mounts/, nicht zum Projekt.
 HUGO_ROOT="$(dirname "$PUBLISH_ABS")"
 
+# Standard-Sektionen als gemeinsame Quelle für Neuanlage UND Nachrüstung, damit
+# beide Pfade nicht auseinanderdriften. source/destination der [hugo]-Sektion
+# werden wie die Mount-Pfade aus dem Hugo-Projektverzeichnis bzw. dem
+# übergebenen Publish-Ordner abgeleitet.
+CONTENT_BLOCK="[content]
+path = $HUGO_ROOT/content
+label = Inhalt
+accept = md, markdown, html, htm, png, jpg, jpeg, gif, webp, svg"
+
+LAYOUTS_BLOCK="[layouts]
+path = $HUGO_ROOT/layouts
+label = Vorlagen
+permissions = read, write"
+
+STATIC_BLOCK="[static]
+path = $HUGO_ROOT/static
+label = Medien"
+
+HUGO_BLOCK="; Hugo-Aufruf für den Veröffentlichen-Knopf (Befehl \"build\"). Das Hugo-
+; Programm (bin) steht zentral in der hugocms.ini, nicht hier.
+[hugo]
+source = $HUGO_ROOT
+destination = $PUBLISH_ABS"
+
+# Hängt einen Sektionsblock an die bestehende Mount-Datei an, falls die Sektion
+# fehlt, und legt ein optional angegebenes Verzeichnis an.
+# $1 = Sektionsname, $2 = Sektionsblock, $3 = optionales Verzeichnis.
+append_section_if_missing() {
+    local name="$1" block="$2" dir="${3:-}"
+    if grep -q "^\[${name}\]" "$MOUNT_FILE"; then
+        return
+    fi
+    [ -n "$dir" ] && mkdir -p "$dir"
+    printf '\n%s\n' "$block" >> "$MOUNT_FILE"
+    echo "     [${name}] ergänzt${dir:+  -> $dir}"
+}
+
 mkdir -p "$MOUNTS_DIR"
 echo "1. Mount-Konfiguration (Hugo-Projekt: $HUGO_ROOT)"
 echo "   Site-Kennung: $SITE_KEY"
 echo "   Datei:        $MOUNT_FILE"
 if [ -e "$MOUNT_FILE" ]; then
-    echo "   → existiert bereits, bleibt unverändert."
+    # Bestehende Datei nicht überschreiben (mögliche manuelle Anpassungen),
+    # aber fehlende Standard-Sektionen nachrüsten — z. B. bei Dateien, die eine
+    # ältere install.sh-Version ohne [hugo] erzeugt hat. Vorhandene Sektionen
+    # (auch umbenannte Mounts) bleiben unangetastet.
+    echo "   → existiert bereits; fehlende Standard-Sektionen werden ergänzt."
+    append_section_if_missing content "$CONTENT_BLOCK" "$HUGO_ROOT/content"
+    append_section_if_missing layouts "$LAYOUTS_BLOCK" "$HUGO_ROOT/layouts"
+    append_section_if_missing static  "$STATIC_BLOCK"  "$HUGO_ROOT/static"
+    append_section_if_missing hugo    "$HUGO_BLOCK"
 else
     # Mount-Zielverzeichnisse sicherstellen — das Backend verweigert Mounts
     # auf nicht existierende Verzeichnisse.
@@ -128,25 +173,13 @@ else
 ; Hugo-Projektstruktur im Elternverzeichnis des Publish-Ordners.
 ; Absolute Pfade; bei Bedarf anpassen.
 
-[content]
-path = $HUGO_ROOT/content
-label = Inhalt
-accept = md, markdown, html, htm, png, jpg, jpeg, gif, webp, svg
+$CONTENT_BLOCK
 
-[layouts]
-path = $HUGO_ROOT/layouts
-label = Vorlagen
-permissions = read, write
+$LAYOUTS_BLOCK
 
-[static]
-path = $HUGO_ROOT/static
-label = Medien
+$STATIC_BLOCK
 
-; Hugo-Aufruf für den Veröffentlichen-Knopf (Befehl "build"). Das Hugo-
-; Programm (bin) steht zentral in der hugocms.ini, nicht hier.
-[hugo]
-source = $HUGO_ROOT
-destination = $PUBLISH_ABS
+$HUGO_BLOCK
 EOF
     echo "   → erzeugt:  content -> $HUGO_ROOT/content"
     echo "               layouts -> $HUGO_ROOT/layouts"
