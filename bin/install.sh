@@ -17,14 +17,17 @@
 #      mit Hugo-Struktur: content/, layouts/ und static/ im Hugo-Projekt-
 #      verzeichnis (Elternverzeichnis des Publish-Ordners). Pfade bei Bedarf
 #      anpassen.
-#   2. Richtet den Publish-Ordner ohne Symlinks ein — funktioniert damit auch
-#      auf Hostings, deren Webserver Symlinks nicht folgt (z. B. Shared Hosting):
+#   2. Richtet die App ohne Symlinks ein — funktioniert damit auch auf Hostings,
+#      deren Webserver Symlinks nicht folgt (z. B. Shared Hosting):
 #        edit/             KOPIE von <hugocms-release>/app  (Frontend, URL /edit/)
 #        cms-api/          (Endpunkt, URL /cms-api/)
 #          └── index.php   (erzeugt; bindet das Release-backend/ per require ein)
-#      Der PHP-Code bleibt im Release-Repo; nur das Frontend wird kopiert. Nach
-#      einem Update (git pull im Release-Repo) das Skript erneut ausführen,
-#      damit edit/ neu kopiert wird.
+#      Der PHP-Code bleibt im Release-Repo; nur das Frontend wird kopiert.
+#      Die App wird an ZWEI Stellen abgelegt: direkt im Publish-Ordner (sofort
+#      erreichbar) und im Hugo-static-Verzeichnis. Da Hugo static/ bei jedem
+#      Build in den Publish-Ordner spiegelt, übersteht die App so auch ein
+#      'hugo --cleanDestinationDir'. Nach einem Update (git pull im Release-Repo)
+#      das Skript erneut ausführen, damit beide Kopien aktualisiert werden.
 #
 # Das Skript liegt im bin/ des Release-Repos und ermittelt dessen Wurzel
 # relativ zu sich selbst — das Repo darf an beliebiger Stelle liegen.
@@ -209,27 +212,31 @@ else
 fi
 echo ""
 
-# --- 2. Publish-Ordner einrichten ------------------------------------------
+# --- 2. App einrichten -----------------------------------------------------
 # Ohne Symlinks: Das Frontend wird kopiert, der API-Endpunkt erhält eine
 # erzeugte index.php mit absolutem require auf das Release-backend/. So
 # funktioniert es auch auf Hostings, deren Webserver Symlinks nicht folgt;
-# PHP liest per require ohnehin direkt im Release-Repo. Nach einem Update
-# (git pull) dieses Skript erneut ausführen, damit edit/ neu kopiert wird.
-echo "2. Publish-Ordner einrichten"
-API_ENDPOINT="$PUBLISH_ABS/$API_DIR"
-mkdir -p "$API_ENDPOINT"
+# PHP liest per require ohnehin direkt im Release-Repo.
+#
+# Die App wird an ZWEI Stellen abgelegt:
+#   • direkt im Publish-Ordner  — sofort erreichbar (vor dem ersten Hugo-Lauf),
+#   • im Hugo-static-Verzeichnis — Hugo spiegelt static/ bei jedem Build in den
+#     Publish-Ordner; dadurch übersteht die App ein 'hugo --cleanDestinationDir'.
+# Nach einem Update (git pull) dieses Skript erneut ausführen, damit beide
+# Kopien aktualisiert werden.
 
-# Frontend: alten Stand (Kopie oder früherer Symlink) ersetzen.
-if [ -L "$PUBLISH_ABS/$EDIT_DIR" ] || [ -d "$PUBLISH_ABS/$EDIT_DIR" ]; then
-    rm -rf "$PUBLISH_ABS/$EDIT_DIR"
-fi
-mkdir -p "$PUBLISH_ABS/$EDIT_DIR"
-cp -a "$APP_DIR/." "$PUBLISH_ABS/$EDIT_DIR/"
-echo "   $EDIT_DIR/ (Kopie von $APP_DIR)"
+# Legt Frontend (edit/) und API-Endpunkt (cms-api/index.php) im Basisverzeichnis
+# $1 an. Vorhandener Stand (Kopie oder früherer Symlink) wird ersetzt.
+deploy_app() {
+    local base="$1"
+    if [ -L "$base/$EDIT_DIR" ] || [ -d "$base/$EDIT_DIR" ]; then
+        rm -rf "$base/$EDIT_DIR"
+    fi
+    mkdir -p "$base/$EDIT_DIR"
+    cp -a "$APP_DIR/." "$base/$EDIT_DIR/"
 
-# API-Endpunkt: erzeugte index.php, die das Backend direkt im Release-Repo
-# einbindet — kein Symlink nötig.
-cat > "$API_ENDPOINT/index.php" <<PHP
+    mkdir -p "$base/$API_DIR"
+    cat > "$base/$API_DIR/index.php" <<PHP
 <?php
 
 /**
@@ -242,13 +249,23 @@ declare(strict_types=1);
 
 require '$BACKEND_DIR/core/hugocms.php';
 PHP
-echo "   $API_DIR/index.php (erzeugt; require -> $BACKEND_DIR)"
 
-# Symlink-Reste einer früheren Symlink-Installation entfernen.
-if [ -L "$API_ENDPOINT/$BACKEND_LINK" ]; then
-    rm "$API_ENDPOINT/$BACKEND_LINK"
-    echo "   $API_DIR/$BACKEND_LINK (alter Symlink entfernt)"
-fi
+    # Symlink-Reste einer früheren Symlink-Installation entfernen.
+    if [ -L "$base/$API_DIR/$BACKEND_LINK" ]; then
+        rm "$base/$API_DIR/$BACKEND_LINK"
+    fi
+}
+
+echo "2. App einrichten (Frontend + API-Endpunkt)"
+STATIC_DIR="$HUGO_ROOT/static"
+
+deploy_app "$PUBLISH_ABS"
+echo "   Publish-Ordner: $EDIT_DIR/ + $API_DIR/index.php  ($PUBLISH_ABS)"
+
+deploy_app "$STATIC_DIR"
+echo "   Hugo-static:    $EDIT_DIR/ + $API_DIR/index.php  ($STATIC_DIR)"
+echo "   → Hugo spiegelt static/ bei jedem Build — die App übersteht damit"
+echo "     'hugo --cleanDestinationDir'."
 echo ""
 
 echo "========================================="

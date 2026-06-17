@@ -7,7 +7,7 @@ export default {
   },
 
   app: {
-    title: 'HugoCMS – File Manager',
+    title: 'HugoCMS',
     logout: 'Sign out',
     notReady: 'HugoCMS is not ready',
     retry: 'Check again',
