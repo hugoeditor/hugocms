@@ -7,7 +7,7 @@
 #   ├── app/                 (gebautes Frontend = Client; URL-Pfad via Installationsroutine)
 #   ├── bin/
 #   │     ├── get-hugo.sh          (lädt das Hugo-Binary nach bin/hugo/)
-#   │     └── install.sh           (richtet eine Webseite ein: Symlinks + mounts/<hash>.ini)
+#   │     └── install.sh           (richtet eine Webseite ein: Kopie + mounts/<hash>.ini)
 #   │     (hugo/ wird NICHT mitgeliefert — install.sh holt es per get-hugo.sh)
 #   ├── backend/
 #   │     ├── core/                (Kern-Bibliothek inkl. autoload.php + hugocms.php)
@@ -19,8 +19,9 @@
 #   │     ├── hugocms.ini.beispiel       (Vorlage: Anmeldung, Session, Logging)
 #   │     └── mounts.ini.beispiel        (Vorlage: Mount-Konfiguration, Rückfall)
 #   └── index.php            (Einstiegspunkt; bindet backend/core/hugocms.php ein.
-#                             install.sh kopiert ihn als API-Endpunkt nach
-#                             <publish>/cms-api/index.php neben einen backend-Symlink.)
+#                             install.sh erzeugt im Endpunkt <publish>/cms-api/
+#                             index.php eine eigene Fassung mit absolutem require
+#                             auf das Release-backend/ — ohne Symlink.)
 #
 # Aufruf:
 #   packaging.sh            nur bauen; danach 'git status' des Release-Repos.
@@ -164,11 +165,21 @@ echo "-----------------------------------------"
 
 if [ "$DO_COMMIT" = 1 ]; then
     # Commit-Message aus dem Quell-Commit ableiten (Rückverfolgbarkeit). Ist der
-    # Arbeitsbaum des Quell-Repos nicht sauber, wird der Stand als -dirty markiert.
+    # Arbeitsbaum des Quell-Repos nicht sauber, wird der Stand als -dev markiert.
     SRC_REV="$(git -C "$PROJECT_DIR" rev-parse --short HEAD 2>/dev/null || echo '?')"
     SRC_SUBJ="$(git -C "$PROJECT_DIR" log -1 --pretty=%s 2>/dev/null || echo 'Release')"
     if ! git -C "$PROJECT_DIR" diff --quiet HEAD 2>/dev/null; then
-        SRC_REV="${SRC_REV}-dirty"
+        SRC_REV="${SRC_REV}-dev"
+        # Der Quell-Arbeitsbaum ist nicht sauber — der Commit würde als -dev
+        # markiert. Vor dem Erzeugen bestätigen lassen (Default: Ja). Ohne
+        # interaktives Terminal (z. B. CI) gilt der Default ohne Nachfrage.
+        if [ -t 0 ]; then
+            printf 'Quell-Arbeitsbaum nicht sauber — Commit als "%s" erzeugen? [J/n] ' "$SRC_REV"
+            read -r reply || reply=""
+            case "$reply" in
+                [nN]*) echo "Abgebrochen — kein Commit erzeugt."; exit 0 ;;
+            esac
+        fi
     fi
     MSG="Release aus ${SRC_REV}: ${SRC_SUBJ}"
 

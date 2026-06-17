@@ -27,9 +27,9 @@ use HugoCMS\FileManager\Exception\ApiException;
  *   accept      (optional) Kommaliste erlaubter Endungen (ohne Punkt).
  *   readonly    (optional) true = nur Lesen.
  *
- * Reservierte Sektion [hugo] (kein Mount): konfiguriert den Hugo-Aufruf
- * (Befehl "build") für diese Webseite:
- *   bin         (Pflicht) Pfad zum Hugo-Programm.
+ * Reservierte Sektion [hugo] (kein Mount): konfiguriert den webseiten-
+ * spezifischen Teil des Hugo-Aufrufs (Befehl "build"). Das Hugo-PROGRAMM
+ * selbst (bin) steht zentral in der hugocms.ini — es gibt nur eines.
  *   source      (Pflicht) Hugo-Projektverzeichnis.
  *   destination (optional) Zielverzeichnis, Standard: <source>/public.
  *   minify      (optional) true = Hugo mit --minify aufrufen.
@@ -45,7 +45,8 @@ final class MountConfig
     /**
      * @return array{
      *   mounts: list<array{name: string, path: string, options: array}>,
-     *   hugo: ?array{bin: string, source: string, destination: string, minify: bool}
+     *   hugo: ?array{source: string, destination: string, minify: bool, clean: bool},
+     *   warnings: list<array{key: string, params: list<mixed>}>
      * }
      */
     public static function load(string $configPath): array
@@ -62,6 +63,7 @@ final class MountConfig
         $baseDir = dirname($configPath);
         $mounts = [];
         $hugo = null;
+        $warnings = [];
 
         foreach ($raw as $name => $section) {
             if (!is_array($section)) {
@@ -70,6 +72,12 @@ final class MountConfig
 
             if (strtolower((string) $name) === self::HUGO_SECTION) {
                 $hugo = self::hugoSection($section, $baseDir);
+                // Vorhandene, aber unvollständige [hugo]-Sektion bricht die Site
+                // NICHT ab — sie ist dann lediglich nicht veröffentlichbar
+                // (buildable=false). Ein Hinweis macht den Tippfehler sichtbar.
+                if ($hugo === null) {
+                    $warnings[] = ['key' => 'HUGO-CONFIG-INCOMPLETE', 'params' => [$configPath]];
+                }
                 continue;
             }
 
@@ -100,31 +108,31 @@ final class MountConfig
             throw new ApiException('ECONFIG', 500, 'MOUNTS-NO-SECTION', [$configPath]);
         }
 
-        return ['mounts' => $mounts, 'hugo' => $hugo];
+        return ['mounts' => $mounts, 'hugo' => $hugo, 'warnings' => $warnings];
     }
 
     /**
-     * Prüft die [hugo]-Sektion und löst die Pfade auf.
+     * Prüft die [hugo]-Sektion und löst die Pfade auf. Fehlt das Pflichtfeld
+     * „source“, gilt die Sektion als unvollständig: Rückgabe null — die Site
+     * bleibt nutzbar, nur „build“ steht nicht zur Verfügung. Das Hugo-Programm
+     * (bin) wird hier NICHT gelesen; es steht zentral in der hugocms.ini.
      *
-     * @return array{bin: string, source: string, destination: string, minify: bool}
+     * @return ?array{source: string, destination: string, minify: bool, clean: bool}
      */
-    private static function hugoSection(array $section, string $baseDir): array
+    private static function hugoSection(array $section, string $baseDir): ?array
     {
-        $bin = trim((string) ($section['bin'] ?? ''));
         $source = trim((string) ($section['source'] ?? ''));
-        if ($bin === '' || $source === '') {
-            throw new ApiException('ECONFIG', 500, 'HUGO-CONFIG-INCOMPLETE');
+        if ($source === '') {
+            return null;
         }
         $destination = trim((string) ($section['destination'] ?? ''));
 
-        $bin = self::resolve($bin, $baseDir);
         $source = self::resolve($source, $baseDir);
         $destination = $destination === ''
             ? $source . '/public'
             : self::resolve($destination, $baseDir);
 
         return [
-            'bin' => $bin,
             'source' => $source,
             'destination' => $destination,
             'minify' => (bool) ($section['minify'] ?? false),

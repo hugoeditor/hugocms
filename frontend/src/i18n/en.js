@@ -36,6 +36,9 @@ export default {
     logFile: 'Log file',
     logFileHint: 'Relative to the backend directory; the directory is created.',
     logLevel: 'Log level',
+    logLevelHint: 'How verbose logging is: debug (everything) through info and warning to error (errors only). Recommended: warning.',
+    hugoBin: 'Hugo binary',
+    hugoBinHint: 'Path to the Hugo binary for the publish button; relative to the backend directory. Leave empty if not needed.',
     submit: 'Set up and sign in',
     passwordTooShort: 'The password must be at least {0} characters long.',
     passwordMismatch: 'The passwords do not match.',
@@ -188,6 +191,7 @@ export default {
     sessionPath: 'Session directory',
     logFile: 'Log file',
     logLevel: 'Log level',
+    hugoBin: 'Hugo binary',
   },
 
   errors: {
@@ -248,7 +252,7 @@ export default {
     'RESTORE-FAILED': 'Restore failed.',
 
     'HUGO-NOT-CONFIGURED': 'Hugo is not configured for this site ([hugo] section of the mount configuration).',
-    'HUGO-CONFIG-INCOMPLETE': '[hugo]: “bin” and “source” are required.',
+    'HUGO-BIN-NOT-CONFIGURED': 'The Hugo binary is not configured ([hugo] bin in hugocms.ini).',
     'HUGO-BIN-MISSING': 'Hugo binary not found or not executable: {0}',
     'HUGO-SOURCE-MISSING': 'Hugo project directory not found: {0}',
 
@@ -289,5 +293,7 @@ export default {
     'SESSION-DIR-MISSING': 'Session directory missing: {0} — sign-ins may not persist.',
     'LOG-DIR-MISSING': 'Log directory missing: {0} — messages go to the server log.',
     'MOUNT-CONFIG-MISSING': 'No dedicated mount configuration for “{0}”.',
+    'HUGO-CONFIG-INCOMPLETE': 'Incomplete [hugo] section in {0}: “source” is required. Publishing is disabled for this site.',
+    'HUGO-BIN-NOT-CONFIGURED': 'The Hugo binary is not configured ([hugo] bin in hugocms.ini). Publishing is disabled.',
   },
 }

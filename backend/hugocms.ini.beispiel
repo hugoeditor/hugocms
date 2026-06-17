@@ -34,3 +34,13 @@ path = var/sessions
 ; Beide Felder sind Pflicht und dürfen nicht leer sein.
 file = log/hugocms.log
 level = warning
+
+[hugo]
+; Zentraler Pfad zum Hugo-PROGRAMM für den Veröffentlichen-Knopf (Befehl
+; "build"). Installationsweit gibt es nur eine Hugo-Binärdatei, daher steht
+; sie hier — nicht in den einzelnen Mount-Konfigurationen. Beziehen mit
+; bin/get-hugo.sh. Relative Pfade gelten relativ zu DIESER Datei.
+; Optional: Fehlt der Eintrag, wird der Veröffentlichen-Knopf nicht angeboten.
+; Die je Webseite unterschiedlichen Pfade (source/destination) stehen in der
+; [hugo]-Sektion der jeweiligen Mount-Konfiguration (siehe mounts.ini.beispiel).
+bin = ../bin/hugo/hugo

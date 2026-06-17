@@ -27,6 +27,7 @@ final class Setup
     private const DEFAULT_SESSION_PATH = 'var/sessions';
     private const DEFAULT_LOG_FILE     = 'log/hugocms.log';
     private const DEFAULT_LOG_LEVEL    = 'warning';
+    private const DEFAULT_HUGO_BIN     = '../bin/hugo/hugo';
     private const LOG_LEVELS           = ['debug', 'info', 'warning', 'error'];
     private const MIN_PASSWORD_LENGTH  = 8;
 
@@ -63,6 +64,7 @@ final class Setup
                 'logFile'     => self::DEFAULT_LOG_FILE,
                 'logLevel'    => self::DEFAULT_LOG_LEVEL,
                 'logLevels'   => self::LOG_LEVELS,
+                'hugoBin'     => self::DEFAULT_HUGO_BIN,
             ],
         ]);
     }
@@ -89,12 +91,13 @@ final class Setup
         $sessionPath = self::requireField($request, 'sessionPath');
         $logFile     = self::requireField($request, 'logFile');
         $logLevel    = self::requireLevel($request);
+        $hugoBin     = self::optionalField($request, 'hugoBin');
 
         $hash = password_hash($password, PASSWORD_DEFAULT);
 
         // Atomar und nur neu anlegen: Der Modus "x" scheitert, falls die Datei
         // zwischen der obigen Prüfung und hier doch entstanden ist (Wettlauf).
-        $content = self::buildIni($username, $hash, $sessionPath, $logFile, $logLevel);
+        $content = self::buildIni($username, $hash, $sessionPath, $logFile, $logLevel, $hugoBin);
         $handle = @fopen($configFile, 'x');
         if ($handle === false) {
             throw new ApiException('ESETUP', 500, 'SETUP-INI-WRITE-FAILED');
@@ -164,6 +167,20 @@ final class Setup
         return $value;
     }
 
+    /**
+     * Optionales Feld: leer erlaubt, sonst dieselbe Zeichenprüfung wie bei
+     * requireField (keine Anführungszeichen/Zeilenumbrüche).
+     */
+    private static function optionalField(array $request, string $key): string
+    {
+        $value = trim((string) ($request[$key] ?? ''));
+        if ($value !== '' && preg_match('/["\r\n]/', $value) === 1) {
+            throw new ApiException('EINVAL', 400, 'SETUP-FIELD-INVALID-CHARS', [['t' => 'fields.' . $key]]);
+        }
+
+        return $value;
+    }
+
     /** Das Passwort wird nicht in die INI geschrieben (nur sein Hash) — nur Länge prüfen. */
     private static function requirePassword(array $request): string
     {
@@ -205,6 +222,7 @@ final class Setup
         string $sessionPath,
         string $logFile,
         string $logLevel,
+        string $hugoBin = '',
     ): string {
         $lines = [
             '; HugoCMS – Hauptkonfiguration (vom Einrichtungs-Setup erzeugt)',
@@ -223,6 +241,14 @@ final class Setup
             sprintf('level = %s', $logLevel),
             '',
         ];
+
+        // Zentraler Hugo-Programmpfad — nur schreiben, wenn angegeben. Ohne ihn
+        // bleibt der Veröffentlichen-Knopf aus (buildable=false).
+        if ($hugoBin !== '') {
+            $lines[] = '[hugo]';
+            $lines[] = sprintf('bin = "%s"', $hugoBin);
+            $lines[] = '';
+        }
 
         return implode("\n", $lines);
     }

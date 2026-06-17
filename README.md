@@ -243,24 +243,18 @@ Das Skript:
    `content` → `content/`, `layouts` → `layouts/`, `static` → `static/`, jeweils
    im Hugo-Projektverzeichnis (Elternverzeichnis des Publish-Ordners). Eine
    bestehende Datei bleibt unverändert.
-3. **Publish-Ordner verlinken**:
-   - `edit/` → Symlink auf `app/` (Editor-Oberfläche, URL `/edit/`)
-   - `cms-api/` → echtes Verzeichnis mit einer Kopie der Release-`index.php`
-     und einem Symlink `backend` auf das Release-`backend/` (API-Endpunkt,
+3. **Publish-Ordner einrichten** (ohne Symlinks):
+   - `edit/` → **Kopie** von `app/` (Editor-Oberfläche, URL `/edit/`)
+   - `cms-api/` → echtes Verzeichnis mit einer erzeugten `index.php`, die das
+     Release-`backend/` per absolutem `require` einbindet (API-Endpunkt,
      URL `/cms-api/`).
 
-So bleibt der Code im Release; nur die kleine `index.php` wird kopiert. Mehrere
+So bleibt der PHP-Code im Release; nur das Frontend wird kopiert. Mehrere
 Webseiten teilen sich dasselbe `backend/` (gemeinsame Anmeldung); nur die
 `mounts/<hash>.ini` unterscheiden sich je Host.
 
-Der Webserver muss **Symlinks folgen** dürfen (Apache: `Options
-+FollowSymLinks`; Nginx tut es standardmäßig). Vorlagen für beide liegen in
-`beispiel-konfigurationen/`.
-
-**Hosting ohne Symlinks** (z. B. Hetzner Webhosting): `install.sh --copy`
-verwenden. Dann wird `edit/` als **Kopie** von `app/` angelegt und
-`cms-api/index.php` mit absolutem `require`-Pfad auf das Release-`backend/`
-erzeugt — PHP liest per Dateisystem, dafür braucht es keine Symlinks; das
+Das Verfahren kommt **ohne Symlinks** aus und funktioniert daher auch auf
+Hostings, deren Webserver Symlinks nicht folgt (z. B. Hetzner Webhosting); das
 Release-Repo bleibt außerhalb des Webroots. Nach einem Update (`git pull` im
 Release-Repo) das Skript erneut ausführen, damit `edit/` neu kopiert wird —
 das Backend ist ohne diesen Schritt bereits aktuell.

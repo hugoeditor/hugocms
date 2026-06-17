@@ -18,6 +18,12 @@ const sessionPath = ref(defaults.sessionPath ?? 'var/sessions')
 const logFile = ref(defaults.logFile ?? 'log/hugocms.log')
 const logLevel = ref(defaults.logLevel ?? 'warning')
 const logLevels = defaults.logLevels ?? ['debug', 'info', 'warning', 'error']
+const hugoBin = ref(defaults.hugoBin ?? '../bin/hugo/hugo')
+
+// Der Verzeichnis-/Logging-Abschnitt ist standardmäßig eingeklappt; die
+// Vorgabewerte reichen für den Normalfall. Die Felder bleiben im DOM (v-show),
+// damit ihre Werte auch ohne Aufklappen gesendet werden.
+const dirsExpanded = ref(false)
 
 const loading = ref(false)
 const error = ref(null)
@@ -43,6 +49,7 @@ async function submit() {
       sessionPath: sessionPath.value,
       logFile: logFile.value,
       logLevel: logLevel.value,
+      hugoBin: hugoBin.value,
     })
   } catch (e) {
     error.value = errorText(t, e)
@@ -71,13 +78,12 @@ async function submit() {
             variant="outlined"
             density="comfortable"
           />
+          <div class="text-caption text-medium-emphasis mb-1">{{ $t('setup.passwordHint', [MIN_PASSWORD_LENGTH]) }}</div>
           <v-text-field
             v-model="password"
             :label="$t('setup.password')"
             type="password"
             prepend-inner-icon="mdi-lock"
-            :hint="$t('setup.passwordHint', [MIN_PASSWORD_LENGTH])"
-            persistent-hint
             variant="outlined"
             density="comfortable"
             class="mb-2"
@@ -92,37 +98,64 @@ async function submit() {
           />
 
           <v-divider class="my-3" />
-          <div class="text-subtitle-2 mb-2">{{ $t('setup.sectionDirs') }}</div>
-          <v-text-field
-            v-model="sessionPath"
-            :label="$t('setup.sessionPath')"
-            prepend-inner-icon="mdi-folder-account"
-            :hint="$t('setup.sessionPathHint')"
-            persistent-hint
-            variant="outlined"
-            density="comfortable"
-            class="mb-2"
-          />
-          <v-text-field
-            v-model="logFile"
-            :label="$t('setup.logFile')"
-            prepend-inner-icon="mdi-file-document-outline"
-            :hint="$t('setup.logFileHint')"
-            persistent-hint
-            variant="outlined"
-            density="comfortable"
-            class="mb-2"
-          />
-          <v-select
-            v-model="logLevel"
-            :items="logLevels"
-            :label="$t('setup.logLevel')"
-            prepend-inner-icon="mdi-tune"
-            variant="outlined"
-            density="comfortable"
-          />
+          <div
+            class="text-subtitle-2 mb-2 d-flex align-center"
+            style="cursor: pointer; user-select: none"
+            role="button"
+            :aria-expanded="dirsExpanded"
+            @click="dirsExpanded = !dirsExpanded"
+          >
+            <v-icon
+              :icon="dirsExpanded ? 'mdi-chevron-down' : 'mdi-chevron-right'"
+              size="small"
+              class="mr-1"
+            />
+            {{ $t('setup.sectionDirs') }}
+          </div>
+          <v-expand-transition>
+            <div v-show="dirsExpanded">
+              <div class="text-caption text-medium-emphasis mt-5 mb-3">{{ $t('setup.sessionPathHint') }}</div>
+              <v-text-field
+                v-model="sessionPath"
+                :label="$t('setup.sessionPath')"
+                prepend-inner-icon="mdi-folder-account"
+                variant="outlined"
+                density="comfortable"
+                class="mb-2"
+              />
+              <div class="text-caption text-medium-emphasis mb-3">{{ $t('setup.logFileHint') }}</div>
+              <v-text-field
+                v-model="logFile"
+                :label="$t('setup.logFile')"
+                prepend-inner-icon="mdi-file-document-outline"
+                variant="outlined"
+                density="comfortable"
+                class="mb-2"
+              />
+              <div class="text-caption text-medium-emphasis mb-3">{{ $t('setup.logLevelHint') }}</div>
+              <v-select
+                v-model="logLevel"
+                :items="logLevels"
+                :label="$t('setup.logLevel')"
+                prepend-inner-icon="mdi-tune"
+                variant="outlined"
+                density="comfortable"
+                class="mb-2"
+              />
+              <div class="text-caption text-medium-emphasis mb-3">{{ $t('setup.hugoBinHint') }}</div>
+              <v-text-field
+                v-model="hugoBin"
+                :label="$t('setup.hugoBin')"
+                prepend-inner-icon="mdi-language-go"
+                variant="outlined"
+                density="comfortable"
+              />
+            </div>
+          </v-expand-transition>
+          <v-divider class="mt-3 mb-5" />
 
-          <v-alert v-if="error" type="error" density="compact" class="mb-3">{{ error }}</v-alert>
+
+          <v-alert v-if="error" type="error" density="compact" class="mb-3 mt-3">{{ error }}</v-alert>
           <v-btn type="submit" color="primary" block :loading="loading">
             {{ $t('setup.submit') }}
           </v-btn>

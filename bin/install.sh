@@ -2,21 +2,14 @@
 # install.sh — Richtet eine HugoCMS-Webseite im Produktivsystem ein.
 #
 # Aufruf:
-#     bin/install.sh [--copy] <host> <hugo-publish-ordner>
+#     bin/install.sh <host> <hugo-publish-ordner>
 #
-#   --copy                 Für Hostings, deren Webserver Symlinks nicht folgt
-#                          (z. B. Shared Hosting): edit/ wird als KOPIE von
-#                          app/ angelegt und cms-api/index.php mit absolutem
-#                          require-Pfad auf das Release-backend/ ERZEUGT.
-#                          Nach einem Update (git pull im Release-Repo) das
-#                          Skript erneut ausführen, damit edit/ neu kopiert
-#                          wird. Ohne --copy: Symlinks (Standard).
 #   <host>                 Hostname der Webseite OHNE Schema/Port/Pfad,
 #                          z. B. kunde-a.example.com (so wie der Browser ihn
 #                          sendet). Den Endpunkt-Pfad (/cms-api) ergänzt das
 #                          Skript selbst — passend zum Verzeichnisnamen unten.
 #   <hugo-publish-ordner>  Veröffentlichungsverzeichnis von Hugo; hier werden
-#                          edit/ (Symlink) und cms-api/ (Endpunkt) angelegt.
+#                          edit/ (Frontend) und cms-api/ (Endpunkt) angelegt.
 #
 # Wirkung:
 #   1. Erzeugt — falls noch nicht vorhanden — die host-spezifische Mount-Datei
@@ -24,12 +17,14 @@
 #      mit Hugo-Struktur: content/, layouts/ und static/ im Hugo-Projekt-
 #      verzeichnis (Elternverzeichnis des Publish-Ordners). Pfade bei Bedarf
 #      anpassen.
-#   2. Richtet den Publish-Ordner ein:
-#        edit/             -> <hugocms-release>/app       (Symlink; Frontend, URL /edit/)
-#        cms-api/          (echtes Verzeichnis;     API-Endpunkt, URL /cms-api/)
-#          ├── index.php   (Kopie der Release-index.php)
-#          └── backend     -> <hugocms-release>/backend   (Symlink)
-#      So bleibt der Code im Release; nur die kleine index.php wird kopiert.
+#   2. Richtet den Publish-Ordner ohne Symlinks ein — funktioniert damit auch
+#      auf Hostings, deren Webserver Symlinks nicht folgt (z. B. Shared Hosting):
+#        edit/             KOPIE von <hugocms-release>/app  (Frontend, URL /edit/)
+#        cms-api/          (Endpunkt, URL /cms-api/)
+#          └── index.php   (erzeugt; bindet das Release-backend/ per require ein)
+#      Der PHP-Code bleibt im Release-Repo; nur das Frontend wird kopiert. Nach
+#      einem Update (git pull im Release-Repo) das Skript erneut ausführen,
+#      damit edit/ neu kopiert wird.
 #
 # Das Skript liegt im bin/ des Release-Repos und ermittelt dessen Wurzel
 # relativ zu sich selbst — das Repo darf an beliebiger Stelle liegen.
@@ -37,28 +32,24 @@
 set -euo pipefail
 
 # --- Namen im Publish-Ordner -----------------------------------------------
-EDIT_LINK="edit"        # Symlink auf app/ (Frontend, URL /edit/)
+EDIT_DIR="edit"         # Kopie von app/ (Frontend, URL /edit/)
 API_DIR="cms-api"       # Endpunkt-Verzeichnis = Endpunkt-Pfad für den Hash
-BACKEND_LINK="backend"  # Symlink in cms-api/ auf das Release-backend/. Der Name
-                        # muss zu require '…/backend/core/hugocms.php' in der
-                        # kopierten index.php passen.
+BACKEND_LINK="backend"  # Alter Symlink-Name in cms-api/ (frühere Symlink-
+                        # Installation); wird, falls vorhanden, aufgeräumt.
 
 # --- Release-Wurzel relativ zum Skript -----------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 APP_DIR="$PKG_ROOT/app"
 BACKEND_DIR="$PKG_ROOT/backend"
-ENTRY="$PKG_ROOT/index.php"   # Release-Einstiegspunkt (wird nach cms-api/ kopiert)
 MOUNTS_DIR="$BACKEND_DIR/mounts"
 
 # --- Parameter prüfen ------------------------------------------------------
-MODE="symlink"
 ARGS=()
 for arg in "$@"; do
     case "$arg" in
-        --copy) MODE="copy" ;;
         -h|--help)
-            echo "Aufruf: $0 [--copy] <host> <hugo-publish-ordner>"
+            echo "Aufruf: $0 <host> <hugo-publish-ordner>"
             exit 0
             ;;
         *) ARGS+=("$arg") ;;
@@ -66,7 +57,7 @@ for arg in "$@"; do
 done
 
 if [ "${#ARGS[@]}" -ne 2 ]; then
-    echo "Aufruf: $0 [--copy] <host> <hugo-publish-ordner>" >&2
+    echo "Aufruf: $0 <host> <hugo-publish-ordner>" >&2
     echo "  z. B. $0 kunde-a.example.com /var/www/kunde-a/public" >&2
     exit 1
 fi
@@ -88,10 +79,6 @@ for d in "$APP_DIR" "$BACKEND_DIR"; do
         exit 1
     fi
 done
-if [ ! -f "$ENTRY" ]; then
-    echo "❌ Release-Einstiegspunkt fehlt: $ENTRY" >&2
-    exit 1
-fi
 if [ ! -d "$PUBLISH" ]; then
     echo "❌ Publish-Ordner existiert nicht: $PUBLISH" >&2
     exit 1
@@ -155,45 +142,65 @@ permissions = read, write
 path = $HUGO_ROOT/static
 label = Medien
 
-; Hugo-Aufruf für den Veröffentlichen-Knopf (Befehl "build").
+; Hugo-Aufruf für den Veröffentlichen-Knopf (Befehl "build"). Das Hugo-
+; Programm (bin) steht zentral in der hugocms.ini, nicht hier.
 [hugo]
-bin = $SCRIPT_DIR/hugo/hugo
 source = $HUGO_ROOT
 destination = $PUBLISH_ABS
 EOF
     echo "   → erzeugt:  content -> $HUGO_ROOT/content"
     echo "               layouts -> $HUGO_ROOT/layouts"
     echo "               static  -> $HUGO_ROOT/static"
-    echo "               [hugo]  -> $SCRIPT_DIR/hugo/hugo ($HUGO_ROOT -> $PUBLISH_ABS)"
+    echo "               [hugo]  -> source $HUGO_ROOT -> destination $PUBLISH_ABS"
+fi
+echo ""
+
+# --- 1b. Zentralen Hugo-Programmpfad in die hugocms.ini eintragen ----------
+# Das Hugo-Binary wird installationsweit einmal konfiguriert: [hugo] bin in
+# der hugocms.ini. Existiert die Datei bereits (Einrichtung gelaufen) und hat
+# noch keine [hugo]-Sektion, ergänzen wir sie; sonst nur ein Hinweis, da die
+# hugocms.ini erst das Einrichtungs-Setup beim ersten Aufruf erzeugt.
+CONFIG_FILE="$BACKEND_DIR/hugocms.ini"
+HUGO_BIN="$SCRIPT_DIR/hugo/hugo"
+echo "1b. Zentraler Hugo-Programmpfad (hugocms.ini, [hugo] bin)"
+if [ -f "$CONFIG_FILE" ]; then
+    if grep -q '^\[hugo\]' "$CONFIG_FILE"; then
+        echo "    → [hugo]-Sektion vorhanden, bleibt unverändert (bin ggf. prüfen: $HUGO_BIN)."
+    else
+        printf '\n[hugo]\nbin = %s\n' "$HUGO_BIN" >> "$CONFIG_FILE"
+        echo "    → ergänzt: bin = $HUGO_BIN"
+    fi
+else
+    echo "    → hugocms.ini fehlt noch (Einrichtung folgt im Browser)."
+    echo "      Danach in die [hugo]-Sektion eintragen:  bin = $HUGO_BIN"
 fi
 echo ""
 
 # --- 2. Publish-Ordner einrichten ------------------------------------------
-echo "2. Publish-Ordner (Modus: $MODE)"
+# Ohne Symlinks: Das Frontend wird kopiert, der API-Endpunkt erhält eine
+# erzeugte index.php mit absolutem require auf das Release-backend/. So
+# funktioniert es auch auf Hostings, deren Webserver Symlinks nicht folgt;
+# PHP liest per require ohnehin direkt im Release-Repo. Nach einem Update
+# (git pull) dieses Skript erneut ausführen, damit edit/ neu kopiert wird.
+echo "2. Publish-Ordner einrichten"
 API_ENDPOINT="$PUBLISH_ABS/$API_DIR"
 mkdir -p "$API_ENDPOINT"
 
-if [ "$MODE" = "copy" ]; then
-    # KOPIERMODUS (Hosting ohne Symlink-Unterstützung im Webserver):
-    # Apache muss keine Symlinks auflösen — PHP liest dagegen per require
-    # problemlos direkt im Release-Repo. Daher: Frontend kopieren, Endpunkt-
-    # index.php mit absolutem Pfad aufs Release-Backend ERZEUGEN.
-    # Nach einem Update (git pull) dieses Skript erneut ausführen.
+# Frontend: alten Stand (Kopie oder früherer Symlink) ersetzen.
+if [ -L "$PUBLISH_ABS/$EDIT_DIR" ] || [ -d "$PUBLISH_ABS/$EDIT_DIR" ]; then
+    rm -rf "$PUBLISH_ABS/$EDIT_DIR"
+fi
+mkdir -p "$PUBLISH_ABS/$EDIT_DIR"
+cp -a "$APP_DIR/." "$PUBLISH_ABS/$EDIT_DIR/"
+echo "   $EDIT_DIR/ (Kopie von $APP_DIR)"
 
-    # Frontend: alten Stand (Kopie oder Symlink) ersetzen.
-    if [ -L "$PUBLISH_ABS/$EDIT_LINK" ] || [ -d "$PUBLISH_ABS/$EDIT_LINK" ]; then
-        rm -rf "$PUBLISH_ABS/$EDIT_LINK"
-    fi
-    mkdir -p "$PUBLISH_ABS/$EDIT_LINK"
-    cp -a "$APP_DIR/." "$PUBLISH_ABS/$EDIT_LINK/"
-    echo "   $EDIT_LINK/ (Kopie von $APP_DIR)"
-
-    # API-Endpunkt: erzeugte index.php, kein backend-Symlink nötig.
-    cat > "$API_ENDPOINT/index.php" <<PHP
+# API-Endpunkt: erzeugte index.php, die das Backend direkt im Release-Repo
+# einbindet — kein Symlink nötig.
+cat > "$API_ENDPOINT/index.php" <<PHP
 <?php
 
 /**
- * HugoCMS – API-Endpunkt (von install.sh --copy erzeugt).
+ * HugoCMS – API-Endpunkt (von install.sh erzeugt).
  * Bindet das Backend direkt im Release-Repo ein; nach einem Update dort
  * (git pull) ist dieser Endpunkt ohne weiteres Zutun aktuell.
  */
@@ -202,29 +209,12 @@ declare(strict_types=1);
 
 require '$BACKEND_DIR/core/hugocms.php';
 PHP
-    echo "   $API_DIR/index.php (erzeugt; require -> $BACKEND_DIR)"
+echo "   $API_DIR/index.php (erzeugt; require -> $BACKEND_DIR)"
 
-    # Symlink-Reste einer früheren Standard-Installation entfernen.
-    if [ -L "$API_ENDPOINT/$BACKEND_LINK" ]; then
-        rm "$API_ENDPOINT/$BACKEND_LINK"
-        echo "   $API_DIR/$BACKEND_LINK (Symlink entfernt)"
-    fi
-else
-    # STANDARD (Symlinks): Webserver braucht Options +FollowSymLinks.
-    # ln -sfn: vorhandenen Symlink ersetzen (-f), bestehenden Verzeichnis-
-    # Symlink nicht dereferenzieren (-n; sonst landete der Link IM Ziel).
-
-    # Frontend: direkter Symlink genügt (rein statische Dateien).
-    ln -sfn "$APP_DIR" "$PUBLISH_ABS/$EDIT_LINK"
-    echo "   $EDIT_LINK/ -> $APP_DIR"
-
-    # API-Endpunkt: echtes Verzeichnis cms-api/ mit kopierter index.php und
-    # einem Symlink auf das Release-backend/. Die index.php bindet backend/
-    # core/hugocms.php ein — der Code bleibt im Release.
-    cp "$ENTRY" "$API_ENDPOINT/index.php"
-    ln -sfn "$BACKEND_DIR" "$API_ENDPOINT/$BACKEND_LINK"
-    echo "   $API_DIR/index.php   (kopiert aus dem Release)"
-    echo "   $API_DIR/$BACKEND_LINK -> $BACKEND_DIR"
+# Symlink-Reste einer früheren Symlink-Installation entfernen.
+if [ -L "$API_ENDPOINT/$BACKEND_LINK" ]; then
+    rm "$API_ENDPOINT/$BACKEND_LINK"
+    echo "   $API_DIR/$BACKEND_LINK (alter Symlink entfernt)"
 fi
 echo ""
 

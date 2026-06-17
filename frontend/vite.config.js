@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vuetify from 'vite-plugin-vuetify'
+import vueDevTools from 'vite-plugin-vue-devtools'
 
 // Im Entwicklungsbetrieb läuft Vite auf 5173 und der PHP-Server auf 8765.
 // Der Proxy leitet alle /cms-api-Aufrufe an den PHP-Connector weiter und reicht
@@ -11,6 +12,10 @@ export default defineConfig({
   // Gilt für Build und Dev-Server (Dev: http://localhost:5173/edit/).
   base: '/edit/',
   plugins: [
+    // Vue DevTools nur im Entwicklungsbetrieb; beim Build ist das Plugin
+    // ohnehin inaktiv. Blendet eine schwebende Schaltfläche ein (keine
+    // Browser-Erweiterung nötig).
+    vueDevTools(),
     vue(),
     vuetify({ autoImport: true }),
   ],

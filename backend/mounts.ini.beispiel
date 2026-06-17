@@ -30,10 +30,10 @@
 ;
 ; Werte mit Sonderzeichen bei Bedarf in "doppelte Anführungszeichen" setzen.
 ;
-; Reservierte Sektion [hugo] (KEIN Mount): konfiguriert den Hugo-Aufruf für
-; den Veröffentlichen-Knopf des Clients (API-Befehl "build"). Ohne diese
-; Sektion wird der Knopf nicht angeboten.
-;   • bin         (Pflicht)  Pfad zum Hugo-Programm (siehe bin/get-hugo.sh).
+; Reservierte Sektion [hugo] (KEIN Mount): konfiguriert den webseiten-
+; spezifischen Teil des Hugo-Aufrufs für den Veröffentlichen-Knopf des Clients
+; (API-Befehl "build"). Ohne diese Sektion wird der Knopf nicht angeboten.
+; Das Hugo-PROGRAMM (bin) steht zentral in der hugocms.ini — nicht hier.
 ;   • source      (Pflicht)  Hugo-Projektverzeichnis.
 ;   • destination (optional) Zielverzeichnis. Standard: <source>/public
 ;   • minify      (optional) true = Hugo mit --minify aufrufen.
@@ -58,7 +58,6 @@ path = daten/medien
 label = Medien
 
 ;[hugo]
-;bin = ../bin/hugo/hugo
 ;source = /pfad/zum/hugo-projekt
 ;destination = /pfad/zum/hugo-projekt/public
 ;minify = true

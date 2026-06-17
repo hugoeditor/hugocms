@@ -36,6 +36,9 @@ export default {
     logFile: 'Logdatei',
     logFileHint: 'Relativ zum backend-Verzeichnis; das Verzeichnis wird angelegt.',
     logLevel: 'Log-Stufe',
+    logLevelHint: 'Wie ausführlich protokolliert wird: debug (alles) über info und warning bis error (nur Fehler). Empfohlen: warning.',
+    hugoBin: 'Hugo-Programm',
+    hugoBinHint: 'Pfad zur Hugo-Binary für den Veröffentlichen-Knopf; relativ zum backend-Verzeichnis. Leer lassen, wenn nicht benötigt.',
     submit: 'Einrichten und anmelden',
     passwordTooShort: 'Das Passwort muss mindestens {0} Zeichen lang sein.',
     passwordMismatch: 'Die Passwörter stimmen nicht überein.',
@@ -188,6 +191,7 @@ export default {
     sessionPath: 'Sitzungsverzeichnis',
     logFile: 'Logdatei',
     logLevel: 'Log-Stufe',
+    hugoBin: 'Hugo-Programm',
   },
 
   // Fehlermeldungen. Schlüssel sind entweder die eindeutige Fehlerklasse
@@ -250,7 +254,7 @@ export default {
     'RESTORE-FAILED': 'Wiederherstellen fehlgeschlagen.',
 
     'HUGO-NOT-CONFIGURED': 'Hugo ist für diese Webseite nicht konfiguriert ([hugo]-Sektion der Mount-Konfiguration).',
-    'HUGO-CONFIG-INCOMPLETE': '[hugo]: „bin“ und „source“ sind erforderlich.',
+    'HUGO-BIN-NOT-CONFIGURED': 'Hugo-Programm ist nicht konfiguriert ([hugo] bin in der hugocms.ini).',
     'HUGO-BIN-MISSING': 'Hugo-Programm nicht gefunden oder nicht ausführbar: {0}',
     'HUGO-SOURCE-MISSING': 'Hugo-Projektverzeichnis nicht gefunden: {0}',
 
@@ -291,5 +295,7 @@ export default {
     'SESSION-DIR-MISSING': 'Sitzungsverzeichnis fehlt: {0} — Anmeldungen sind möglicherweise nicht von Dauer.',
     'LOG-DIR-MISSING': 'Log-Verzeichnis fehlt: {0} — Meldungen gehen ins Server-Log.',
     'MOUNT-CONFIG-MISSING': 'Keine eigene Mount-Konfiguration für „{0}“.',
+    'HUGO-CONFIG-INCOMPLETE': 'Unvollständige [hugo]-Sektion in {0}: „source“ ist erforderlich. Veröffentlichen ist für diese Webseite deaktiviert.',
+    'HUGO-BIN-NOT-CONFIGURED': 'Hugo-Programm ist nicht konfiguriert ([hugo] bin in der hugocms.ini). Veröffentlichen ist deaktiviert.',
   },
 }

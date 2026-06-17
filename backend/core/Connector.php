@@ -30,11 +30,19 @@ final class Connector
     private array $setupWarnings = [];
 
     /**
-     * Hugo-Aufruf für den Befehl "build" (bin, source, destination, minify) —
-     * aus der [hugo]-Sektion der Mount-Konfiguration oder der Option "hugo".
-     * null = kein Build möglich (whoami meldet buildable=false).
+     * Webseiten-spezifischer Teil des Hugo-Aufrufs (source, destination,
+     * minify, clean) — aus der [hugo]-Sektion der Mount-Konfiguration oder der
+     * Option "hugo". null = diese Webseite hat keine Hugo-Konfiguration.
      */
     private ?array $hugo = null;
+
+    /**
+     * Zentraler Pfad zum Hugo-Programm — aus der [hugo]-Sektion der
+     * hugocms.ini oder der Option "hugoBin". Installationsweit nur einer.
+     * null = kein Hugo konfiguriert. Build ist nur möglich, wenn sowohl
+     * $hugoBin als auch der Webseiten-Teil $hugo gesetzt sind.
+     */
+    private ?string $hugoBin = null;
 
     public function __construct(array $options)
     {
@@ -63,6 +71,7 @@ final class Connector
             // Log nur aus der Datei übernehmen, wenn nicht explizit gesetzt.
             $options['log'] ??= $cfg['log']['file'];
             $options['logLevel'] ??= $cfg['log']['level'] ?? 'error';
+            $options['hugoBin'] ??= $cfg['hugoBin'];
             $authConfig = $cfg['auth'];
         }
         $this->sessionDir = $sessionPath;
@@ -106,7 +115,13 @@ final class Connector
         // einer später geladenen Mount-Datei hat Vorrang.
         if (isset($options['hugo']) && is_array($options['hugo'])) {
             $this->hugo = $options['hugo'];
+            // Abwärtskompatibel: trug die programmatische Konfiguration den
+            // Programmpfad noch im Webseiten-Teil, als zentralen bin übernehmen.
+            if (!isset($options['hugoBin']) && isset($options['hugo']['bin'])) {
+                $options['hugoBin'] = (string) $options['hugo']['bin'];
+            }
         }
+        $this->hugoBin = isset($options['hugoBin']) ? (string) $options['hugoBin'] : null;
     }
 
     /**
@@ -140,6 +155,15 @@ final class Connector
         }
         if ($config['hugo'] !== null) {
             $this->hugo = $config['hugo'];
+            // Die Webseite ist auf Veröffentlichen ausgelegt (source gesetzt),
+            // aber das zentrale Hugo-Programm fehlt in der hugocms.ini —
+            // sichtbar machen, sonst verschwindet der Knopf kommentarlos.
+            if ($this->hugoBin === null) {
+                $this->addSetupWarning('HUGO-BIN-NOT-CONFIGURED');
+            }
+        }
+        foreach ($config['warnings'] as $warning) {
+            $this->addSetupWarning($warning['key'], $warning['params']);
         }
 
         return $this;
@@ -277,8 +301,9 @@ final class Connector
             'warnings' => $this->setupWarnings,
             // CSRF-Token für alle Schreibbefehle (Header X-CSRF-Token).
             'csrf' => $this->csrfToken(),
-            // Ist für diese Webseite ein Hugo-Aufruf konfiguriert?
-            'buildable' => $this->hugo !== null,
+            // Ist ein Hugo-Aufruf möglich? Nötig sind das zentrale Programm
+            // (hugocms.ini) UND der Webseiten-Teil (source) der Mount-Konfig.
+            'buildable' => $this->hugo !== null && $this->hugoBin !== null,
         ];
     }
 
@@ -647,7 +672,10 @@ final class Connector
         if ($this->hugo === null) {
             throw new ApiException('ECONFIG', 500, 'HUGO-NOT-CONFIGURED');
         }
-        $bin = (string) $this->hugo['bin'];
+        if ($this->hugoBin === null) {
+            throw new ApiException('ECONFIG', 500, 'HUGO-BIN-NOT-CONFIGURED');
+        }
+        $bin = $this->hugoBin;
         $source = (string) $this->hugo['source'];
         $dest = (string) ($this->hugo['destination'] ?? $source . '/public');
         if (!is_file($bin) || !is_executable($bin)) {

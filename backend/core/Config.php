@@ -22,6 +22,13 @@ use HugoCMS\FileManager\Exception\ApiException;
  *   [log]
  *   file = log/hugocms.log
  *   level = error      ; debug | info | warning | error
+ *
+ *   [hugo]
+ *   bin = ../bin/hugo/hugo   ; zentraler Pfad zum Hugo-Programm (optional)
+ *
+ * Die Sektion [hugo] enthält hier NUR das Programm (bin) — es gibt installa-
+ * tionsweit nur eine Hugo-Binärdatei. Die je Webseite unterschiedlichen Pfade
+ * (source/destination) stehen in der jeweiligen Mount-Konfiguration.
  */
 final class Config
 {
@@ -29,7 +36,8 @@ final class Config
      * @return array{
      *   auth: array<string, mixed>,
      *   session: array{path: string},
-     *   log: array{file: string, level: string}
+     *   log: array{file: string, level: string},
+     *   hugoBin: ?string
      * }
      */
     public static function load(string $configPath): array
@@ -69,6 +77,10 @@ final class Config
             throw new ApiException('ECONFIG', 500, 'CONFIG-INCOMPLETE', [$configPath, implode(', ', $missing)]);
         }
 
+        // Zentraler Hugo-Programmpfad (optional). Fehlt er, ist kein Build
+        // möglich — der Connector meldet das je Webseite (buildable=false).
+        $hugoBin = trim((string) ($raw['hugo']['bin'] ?? ''));
+
         return [
             'auth' => $auth,
             'session' => [
@@ -78,6 +90,7 @@ final class Config
                 'file' => self::resolvePath($raw['log']['file'], $baseDir),
                 'level' => trim((string) $raw['log']['level']),
             ],
+            'hugoBin' => $hugoBin === '' ? null : self::resolvePath($hugoBin, $baseDir),
         ];
     }
 
