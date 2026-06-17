@@ -23,6 +23,11 @@
   --mint-titlebar: #f6f6f5;       /* Fenster-Titelleiste */
 
   --mint-radius: 4px;             /* GTK-typisch wenig Rundung */
+
+  /* Maximale Breite des gesamten Fensters auf großen Monitoren; darunter volle
+     Breite. Das Fenster wird zentriert dargestellt. */
+  --mint-content-max: 1200px;
+  --mint-shell-bg: #d6d6d3;       /* abgesetzter Bereich neben dem Fenster */
 }
 
 /* Inhaltsbereich-Scrollbalken dezenter (wie GTK). */

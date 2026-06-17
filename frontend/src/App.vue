@@ -169,7 +169,10 @@ async function build() {
     </template>
 
     <template v-else>
-      <div class="nemo-window">
+      <!-- Äußerer Rahmen: zentriert das gesamte Fenster und begrenzt seine
+           Breite auf großen Monitoren (volle Höhe bleibt erhalten). -->
+      <div class="nemo-shell">
+        <div class="nemo-window">
         <!-- Fenster-Titelleiste (Marke, Sprache, Benutzer, Abmelden) -->
         <header class="nemo-titlebar nemo-noselect">
           <v-icon icon="mdi-folder-multiple-outline" size="20" class="nemo-brand-icon" />
@@ -271,6 +274,7 @@ async function build() {
           </div>
           <EditorPanel ref="editorPanelRef" />
         </div>
+        </div>
       </div>
     </template>
 
@@ -333,11 +337,22 @@ async function build() {
 
 <style scoped>
 /* Nemo-Fenster: Titelleiste, Werkzeugleiste, dann Seitenleiste + Inhalt. */
+/* Äußerer Rahmen: zentriert das Fenster und hebt es auf großen Monitoren mit
+   einem abgesetzten Hintergrund ab. */
+.nemo-shell {
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  background: var(--mint-shell-bg);
+}
 .nemo-window {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: var(--mint-content-max);
   height: 100vh;
   background: var(--mint-content);
+  box-shadow: 0 0 1px rgba(0, 0, 0, 0.25), 0 0 22px rgba(0, 0, 0, 0.1);
 }
 
 .nemo-titlebar {
