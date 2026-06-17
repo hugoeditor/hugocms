@@ -24,22 +24,25 @@
 #                             auf das Release-backend/ — ohne Symlink.)
 #
 # Aufruf:
-#   packaging.sh            nur bauen; danach 'git status' des Release-Repos.
-#   packaging.sh --commit   zusätzlich im Release-Repo committen (Commit-
-#                           Message wird aus dem Quell-Commit abgeleitet).
-#   packaging.sh --push     committen UND pushen.
-# Ohne Flag wird NICHT committet — Commit/Push bleiben dir überlassen.
+#   packaging.sh              bauen, im Release-Repo committen UND pushen
+#                             (Standard; Commit-Message aus dem Quell-Commit).
+#   packaging.sh --no-push    bauen und committen, aber NICHT pushen.
+#   packaging.sh --no-commit  nur bauen; weder committen noch pushen (danach
+#                             'git status' des Release-Repos).
+# Ohne Flag wird also committet UND gepusht.
 
 set -euo pipefail
 
 # --- Argumente -------------------------------------------------------------
-DO_COMMIT=0
-DO_PUSH=0
+# Standard: committen und pushen. --no-push unterdrückt nur den Push,
+# --no-commit unterdrückt beides.
+DO_COMMIT=1
+DO_PUSH=1
 for arg in "$@"; do
     case "$arg" in
-        --commit) DO_COMMIT=1 ;;
-        --push)   DO_COMMIT=1; DO_PUSH=1 ;;
-        -h|--help) echo "Aufruf: $0 [--commit] [--push]"; exit 0 ;;
+        --no-commit) DO_COMMIT=0; DO_PUSH=0 ;;
+        --no-push)   DO_PUSH=0 ;;
+        -h|--help) echo "Aufruf: $0 [--no-commit | --no-push]"; exit 0 ;;
         *) echo "Unbekannte Option: $arg" >&2; exit 1 ;;
     esac
 done
@@ -195,7 +198,7 @@ if [ "$DO_COMMIT" = 1 ]; then
         git -C "$PKG_REPO" push
     fi
 else
-    echo "Zum Übernehmen: git -C '$PKG_REPO' add -A && git -C '$PKG_REPO' commit"
-    echo "  oder bequemer: scripts/packaging.sh --commit   (bzw. --push)"
+    echo "Kein Commit (--no-commit). Zum manuellen Übernehmen:"
+    echo "  git -C '$PKG_REPO' add -A && git -C '$PKG_REPO' commit"
 fi
 echo "========================================="

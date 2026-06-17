@@ -215,14 +215,15 @@ Danach aktualisiert jeder `scripts/packaging.sh`-Lauf den Inhalt von
 du fasst es nie von Hand an:
 
 ```bash
-scripts/packaging.sh            # nur bauen; danach 'git status' des Release-Repos
-scripts/packaging.sh --commit   # zusätzlich committen (Message aus dem Quell-Commit)
-scripts/packaging.sh --push     # committen und pushen
+scripts/packaging.sh              # bauen, committen UND pushen (Standard)
+scripts/packaging.sh --no-push    # bauen und committen, aber nicht pushen
+scripts/packaging.sh --no-commit  # nur bauen; danach 'git status' des Release-Repos
 ```
 
 Die Commit-Message wird aus dem Quell-Commit abgeleitet (z. B. `Release aus
 a1b2c3d: <Betreff>`); ist der Quell-Arbeitsbaum nicht sauber, wird der Stand
-als `-dirty` markiert. Ohne Flag committet das Skript nichts.
+als `-dev` markiert und vor dem Commit nachgefragt. Standardmäßig committet und
+pusht das Skript — `--no-push` unterdrückt den Push, `--no-commit` beides.
 
 ### Webseite einrichten: `bin/install.sh`
 
