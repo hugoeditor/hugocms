@@ -10,7 +10,9 @@ Mounts erreichbar sind, wird je Webseite über INI-Dateien festgelegt.
 > verschieben, löschen, Mehrfachauswahl, Kontextmenü; Upload (Drag-and-Drop),
 > Download, Bildvorschauen, Bildbetrachter, Symbolansicht; visueller
 > Markdown-Editor (TipTap), Papierkorb-Verwaltung (Wiederherstellen/Leeren),
-> CSRF-Schutz, rekursive Suche. Mehrbenutzer mit Rollen folgt (Stufe 5).
+> CSRF-Schutz, rekursive Suche. Konfiguration und Anmeldedaten lassen sich im
+> laufenden Betrieb über die Oberfläche ändern. Mehrbenutzer mit Rollen folgt
+> (Stufe 5).
 > Mandantenfähigkeit und der Auslieferungsweg (`packaging.sh` / `install.sh`)
 > stehen bereits.
 
@@ -25,11 +27,11 @@ hugocms-2026/                     # Quell-Repo (Entwicklung)
 │   │   ├── hugocms.php           # fester Einstiegspunkt (Bootstrap, nicht ändern)
 │   │   ├── Connector.php         # Befehlsverarbeitung, Fehler-Handler
 │   │   ├── SiteKey.php           # Host → Site-Kennung/Hash (Mandantenfähigkeit)
-│   │   ├── Config.php            # hugocms.ini einlesen
+│   │   ├── Config.php            # hugocms.ini lesen & schreiben (zentrale Kapsel)
 │   │   ├── MountConfig.php       # mounts.ini einlesen
 │   │   ├── MountResolver.php     # Mounts, ID-Kodierung, Einsperrung
 │   │   ├── Mount.php             # Einhängepunkt (Pfad, Rechte, Endungen)
-│   │   ├── FileService.php       # list, read, write
+│   │   ├── FileService.php       # Dateioperationen (list, read, write, anlegen, …)
 │   │   ├── AuthFactory.php       # Auth-Treiber (singleuser)
 │   │   ├── Logger.php            # Datei-Logging mit Stufen
 │   │   ├── Response.php          # einheitliche JSON-Antworten
@@ -104,6 +106,12 @@ path = var/sessions
 [log]
 file = log/hugocms.log
 level = warning      ; debug | info | warning | error
+
+[hugo]
+; Zentraler Pfad zum Hugo-PROGRAMM (optional). Installationsweit gibt es nur
+; eine Hugo-Binärdatei, daher steht sie hier — nicht in den Mounts. Fehlt sie,
+; wird der Veröffentlichen-Knopf nicht angeboten.
+bin = ../bin/hugo/hugo
 ```
 
 ### Mounts
@@ -243,12 +251,19 @@ Das Skript:
 2. **Mount-Datei erzeugen** – `backend/mounts/<hash>.ini` mit Hugo-Struktur:
    `content` → `content/`, `layouts` → `layouts/`, `static` → `static/`, jeweils
    im Hugo-Projektverzeichnis (Elternverzeichnis des Publish-Ordners). Eine
-   bestehende Datei bleibt unverändert.
-3. **Publish-Ordner einrichten** (ohne Symlinks):
+   bestehende Datei bleibt erhalten; fehlende Standard-Sektionen (auch `[hugo]`)
+   werden ergänzt.
+3. **Hugo-Programm zentral eintragen** – existiert die `hugocms.ini` bereits und
+   hat noch keine `[hugo]`-Sektion, wird `bin` ergänzt; sonst ein Hinweis (die
+   Datei entsteht erst beim Einrichtungs-Setup).
+4. **App einrichten** (ohne Symlinks):
    - `edit/` → **Kopie** von `app/` (Editor-Oberfläche, URL `/edit/`)
-   - `cms-api/` → echtes Verzeichnis mit einer erzeugten `index.php`, die das
-     Release-`backend/` per absolutem `require` einbindet (API-Endpunkt,
-     URL `/cms-api/`).
+   - `cms-api/index.php` → erzeugt, bindet das Release-`backend/` per absolutem
+     `require` ein (API-Endpunkt, URL `/cms-api/`).
+
+   Beides wird **zweimal** abgelegt: direkt im Publish-Ordner (sofort
+   erreichbar) **und** im `static/`-Verzeichnis. Da Hugo `static/` bei jedem
+   Build spiegelt, übersteht die App so ein `hugo --cleanDestinationDir`.
 
 So bleibt der PHP-Code im Release; nur das Frontend wird kopiert. Mehrere
 Webseiten teilen sich dasselbe `backend/` (gemeinsame Anmeldung); nur die
@@ -257,31 +272,57 @@ Webseiten teilen sich dasselbe `backend/` (gemeinsame Anmeldung); nur die
 Das Verfahren kommt **ohne Symlinks** aus und funktioniert daher auch auf
 Hostings, deren Webserver Symlinks nicht folgt (z. B. Hetzner Webhosting); das
 Release-Repo bleibt außerhalb des Webroots. Nach einem Update (`git pull` im
-Release-Repo) das Skript erneut ausführen, damit `edit/` neu kopiert wird —
+Release-Repo) das Skript erneut ausführen, damit die App neu kopiert wird —
 das Backend ist ohne diesen Schritt bereits aktuell.
 
 ### Veröffentlichen: Hugo aufrufen
 
 Der Client zeigt in der Titelleiste einen **Veröffentlichen**-Knopf, der Hugo
-für die aufgerufene Webseite startet (API-Befehl `build`). Konfiguriert wird
-das über die reservierte Sektion `[hugo]` in der Mount-Konfiguration der
-Webseite (`install.sh` trägt sie automatisch ein):
+für die aufgerufene Webseite startet (API-Befehl `build`). Die Konfiguration ist
+auf zwei Dateien verteilt:
+
+- Das **Hugo-Programm** steht zentral in `hugocms.ini` (`[hugo] bin`) — es gibt
+  installationsweit nur eine Binärdatei.
+- Die **je Webseite** unterschiedlichen Pfade stehen in der reservierten Sektion
+  `[hugo]` der Mount-Konfiguration (`install.sh` trägt sie automatisch ein):
 
 ```ini
 [hugo]
-bin = /pfad/zum/release/bin/hugo/hugo   ; Hugo-Programm (siehe get-hugo.sh)
 source = /var/www/kunde-a               ; Hugo-Projektverzeichnis
 destination = /var/www/kunde-a/public   ; optional, Standard: <source>/public
 minify = true                            ; optional: hugo --minify
 ```
 
 Aufgerufen wird `hugo -s <source> -d <destination>` (optional mit `--minify`;
-`clean = true` ergänzt `--cleanDestinationDir` — Vorsicht: das entfernt im
-Ziel alles Nicht-Generierte, auch eine dort liegende Installation `edit/`,
-`cms-api/`). Die Hugo-Ausgabe (Statistik bzw. Fehlermeldungen) zeigt der
-Client in einem Dialog an; ohne `[hugo]`-Sektion erscheint der Knopf nicht.
-Der Webserver-Benutzer braucht Ausführrechte auf das Binary und
-Schreibrechte im Ziel.
+`clean = true` ergänzt `--cleanDestinationDir`). Veröffentlichbar ist eine
+Webseite nur, wenn **beides** vorliegt — das zentrale Programm **und** die
+Mount-`[hugo]`-Sektion; sonst erscheint der Knopf nicht. Ist eine offene Datei
+ungespeichert, wird sie vor dem Build automatisch gesichert. Die Hugo-Ausgabe
+(Statistik bzw. Fehlermeldungen) zeigt der Client in einem Dialog an. Der
+Webserver-Benutzer braucht Ausführrechte auf das Binary und Schreibrechte im
+Ziel.
+
+> **Zu `--cleanDestinationDir`:** Der Schalter entfernt im Ziel alles, was Hugo
+> nicht selbst erzeugt. Damit die Installation (`edit/`, `cms-api/`) das
+> übersteht, legt `install.sh` sie zusätzlich im `static/`-Verzeichnis ab —
+> Hugo spiegelt `static/` bei jedem Build in den Publish-Ordner.
+
+### Konfiguration im laufenden Betrieb ändern
+
+Die `hugocms.ini` lässt sich auch nach der Einrichtung über die Oberfläche
+anpassen (nur bei INI-basierter Installation, nicht bei `custom.php`):
+
+- **Zahnrad in der Titelleiste** (`reconfigure`): Sitzungsverzeichnis, Logdatei,
+  Log-Stufe und Hugo-Programm. Die Anmeldedaten bleiben unberührt; Pfadänderungen
+  greifen beim nächsten Laden.
+- **Klick auf den Benutzernamen** (`account`): Anmeldename und Passwort ändern.
+  Zur Bestätigung ist das aktuelle Passwort nötig; danach wird zur erneuten
+  Anmeldung mit den neuen Daten ausgeloggt.
+
+Das Lesen und Schreiben der `hugocms.ini` ist in `Config` gekapselt; die
+Persistenz der Anmeldedaten übernimmt der Auth-Treiber selbst
+(`AuthInterface::changeCredentials`), sodass ein künftiger Mehrbenutzer-Treiber
+sie anders ablegen kann, ohne dass der Connector sich ändert.
 
 ## API-Befehle
 
@@ -309,6 +350,9 @@ Schreibrechte im Ziel.
 | `restore`  | POST    | `mount`, `names` (Liste)             | Aus dem Papierkorb wiederherstellen    |
 | `emptytrash`| POST   | `mount`?                             | Papierkorb endgültig leeren            |
 | `build`    | POST    | –                                    | Hugo aufrufen (Webseite erzeugen)      |
+| `config`   | GET     | –                                    | Aktuelle Konfigurationswerte (ohne Anmeldedaten) |
+| `reconfigure`| POST  | `sessionPath`, `logFile`, `logLevel`, `hugoBin`? | hugocms.ini ändern (Verzeichnisse/Log/Hugo) |
+| `account`  | POST    | `currentPassword`, `username`, `password`? | Anmeldedaten ändern (danach Neuanmeldung) |
 
 Alle POST-Befehle verlangen das **CSRF-Token** aus `whoami` (Feld `csrf`) im
 Header `X-CSRF-Token`; sonst antwortet das Backend mit `ECSRF` (403).
