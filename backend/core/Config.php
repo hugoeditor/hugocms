@@ -94,6 +94,183 @@ final class Config
         ];
     }
 
+    /**
+     * Liefert die rohen (NICHT pfad-aufgelösten) Werte der hugocms.ini, je
+     * Sektion als Schlüssel/Wert-Array von Strings. Für das Vorbefüllen von
+     * Formularen und das Erhalten unveränderter Werte. Fehlt die Datei, wird
+     * ein leeres Array geliefert.
+     *
+     * @return array<string, array<string, string>>
+     */
+    public static function raw(string $configPath): array
+    {
+        if (!is_file($configPath)) {
+            return [];
+        }
+        // RAW: keine Typumwandlung (username "on"/"123" bleibt String) und keine
+        // $-Interpolation — wichtig für den bcrypt-Hash.
+        $raw = @parse_ini_file($configPath, true, INI_SCANNER_RAW);
+        if (!is_array($raw)) {
+            throw new ApiException('ECONFIG', 500, 'CONFIG-INVALID-INI', [$configPath]);
+        }
+        $out = [];
+        foreach ($raw as $section => $values) {
+            if (!is_array($values)) {
+                continue;
+            }
+            $clean = [];
+            foreach ($values as $key => $value) {
+                // RAW behält umschließende Anführungszeichen — entfernen.
+                $clean[(string) $key] = self::unquote((string) $value);
+            }
+            $out[(string) $section] = $clean;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Schreibt die hugocms.ini atomar. Die in $changes genannten Sektionen
+     * werden neu serialisiert (Werte gequotet); Wert null entfernt die Sektion.
+     * Nicht genannte Sektionen bleiben WÖRTLICH erhalten (inkl. Kommentaren,
+     * Quoting des bcrypt-Hashes). Existiert die Datei nicht, wird sie mit dem
+     * optionalen Kopf-Kommentar und in der Schlüssel-Reihenfolge von $changes
+     * angelegt.
+     *
+     * @param array<string, array<string, string>|null> $changes
+     */
+    public static function updateSections(string $configPath, array $changes, ?string $header = null): void
+    {
+        $existing = is_file($configPath) ? (string) @file_get_contents($configPath) : '';
+
+        // Sektionsreihenfolge: vorhandene zuerst (Position bleibt), neue ans Ende.
+        $order = [];
+        foreach (preg_split('/\r\n|\r|\n/', $existing) ?: [] as $line) {
+            if (preg_match('/^\s*\[(.+?)\]\s*$/', $line, $m) === 1) {
+                $order[] = strtolower(trim($m[1]));
+            }
+        }
+        foreach (array_keys($changes) as $name) {
+            if (!in_array($name, $order, true)) {
+                $order[] = $name;
+            }
+        }
+
+        $blocks = [];
+        foreach ($order as $name) {
+            if (array_key_exists($name, $changes)) {
+                if ($changes[$name] === null) {
+                    continue; // Sektion entfernen
+                }
+                $blocks[] = self::serializeSection($name, $changes[$name]);
+            } else {
+                $block = self::extractSection($existing, $name);
+                if ($block !== null) {
+                    $blocks[] = $block;
+                }
+            }
+        }
+
+        $head = self::extractHeader($existing) ?? $header;
+        $content = ($head !== null && trim($head) !== '' ? rtrim($head) . "\n\n" : '')
+            . implode("\n\n", $blocks) . "\n";
+
+        self::atomicWrite($configPath, $content);
+    }
+
+    /** Serialisiert eine Sektion; alle Werte werden in "..." gesetzt. */
+    private static function serializeSection(string $name, array $values): string
+    {
+        $lines = ['[' . $name . ']'];
+        foreach ($values as $key => $value) {
+            $value = (string) $value;
+            // Doppelte Anführungszeichen würden die INI sprengen — der bcrypt-
+            // Hash und validierte Eingaben enthalten keine; defensiv absichern.
+            if (str_contains($value, '"') || preg_match('/[\r\n]/', $value) === 1) {
+                throw new ApiException('ECONFIG', 500, 'CONFIG-WRITE-FAILED');
+            }
+            $lines[] = $key . ' = "' . $value . '"';
+        }
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * Extrahiert eine Sektion [name] samt Inhalt WÖRTLICH (von der
+     * Sektionszeile bis zur nächsten Sektion bzw. Dateiende, ohne
+     * abschließende Leerzeilen). null, wenn die Sektion fehlt.
+     */
+    private static function extractSection(string $ini, string $name): ?string
+    {
+        $lines = preg_split('/\r\n|\r|\n/', $ini) ?: [];
+        $out = [];
+        $inSection = false;
+        foreach ($lines as $line) {
+            if (preg_match('/^\s*\[(.+?)\]\s*$/', $line, $m) === 1) {
+                $isTarget = strtolower(trim($m[1])) === $name;
+                if ($inSection && !$isTarget) {
+                    break;
+                }
+                $inSection = $isTarget;
+                if ($inSection) {
+                    $out[] = '[' . $name . ']';
+                }
+                continue;
+            }
+            if ($inSection) {
+                $out[] = $line;
+            }
+        }
+        if ($out === []) {
+            return null;
+        }
+        while ($out !== [] && trim((string) end($out)) === '') {
+            array_pop($out);
+        }
+
+        return implode("\n", $out);
+    }
+
+    /** Liefert den Kopf-Kommentar (Zeilen vor der ersten [Sektion]) oder null. */
+    private static function extractHeader(string $ini): ?string
+    {
+        $head = [];
+        foreach (preg_split('/\r\n|\r|\n/', $ini) ?: [] as $line) {
+            if (preg_match('/^\s*\[(.+?)\]\s*$/', $line) === 1) {
+                break;
+            }
+            $head[] = $line;
+        }
+        while ($head !== [] && trim((string) end($head)) === '') {
+            array_pop($head);
+        }
+
+        return $head === [] ? null : implode("\n", $head);
+    }
+
+    /** Entfernt ein einzelnes Paar umschließender Anführungszeichen. */
+    private static function unquote(string $value): string
+    {
+        if (strlen($value) >= 2 && $value[0] === '"' && substr($value, -1) === '"') {
+            return substr($value, 1, -1);
+        }
+
+        return $value;
+    }
+
+    /** Schreibt Inhalt atomar (temporäre Datei + rename), Rechte 0640. */
+    private static function atomicWrite(string $configPath, string $content): void
+    {
+        $tmp = @tempnam(dirname($configPath), '.hugocfg');
+        if ($tmp === false || @file_put_contents($tmp, $content) === false || !@rename($tmp, $configPath)) {
+            if (is_string($tmp)) {
+                @unlink($tmp);
+            }
+            throw new ApiException('EIO', 500, 'CONFIG-WRITE-FAILED');
+        }
+        @chmod($configPath, 0640);
+    }
+
     /** Prüft, ob ein Wert fehlt oder nach dem Trimmen leer ist. */
     private static function isBlank(mixed $value): bool
     {

@@ -95,16 +95,24 @@ final class Setup
 
         $hash = password_hash($password, PASSWORD_DEFAULT);
 
-        // Atomar und nur neu anlegen: Der Modus "x" scheitert, falls die Datei
-        // zwischen der obigen Prüfung und hier doch entstanden ist (Wettlauf).
-        $content = self::buildIni($username, $hash, $sessionPath, $logFile, $logLevel, $hugoBin);
-        $handle = @fopen($configFile, 'x');
-        if ($handle === false) {
-            throw new ApiException('ESETUP', 500, 'SETUP-INI-WRITE-FAILED');
+        // hugocms.ini über die zentrale Schreib-API anlegen (gleiche Logik wie
+        // beim späteren Umkonfigurieren). Die [hugo]-Sektion nur bei gesetztem
+        // Programmpfad. Das Nicht-Überschreiben einer bestehenden Datei sichert
+        // der is_file()-Check oben ab.
+        $sections = [
+            'auth'    => ['driver' => 'singleuser', 'username' => $username, 'password_hash' => $hash],
+            'session' => ['path' => $sessionPath],
+            'log'     => ['file' => $logFile, 'level' => $logLevel],
+        ];
+        if ($hugoBin !== '') {
+            $sections['hugo'] = ['bin' => $hugoBin];
         }
-        fwrite($handle, $content);
-        fclose($handle);
-        @chmod($configFile, 0640);
+        Config::updateSections(
+            $configFile,
+            $sections,
+            "; HugoCMS – Hauptkonfiguration (vom Einrichtungs-Setup erzeugt)\n"
+                . '; Dokumentation der Felder: hugocms.ini.beispiel',
+        );
 
         // Konfiguration laden (prüft erneut alle Pflichtfelder) und die nun
         // erwarteten Verzeichnisse anlegen, damit Session und Log sofort greifen.
@@ -209,47 +217,5 @@ final class Setup
         if ($path !== '' && !is_dir($path)) {
             @mkdir($path, 0775, true);
         }
-    }
-
-    /**
-     * Baut den Inhalt der hugocms.ini. Werte in doppelten Anführungszeichen; die
-     * verbotenen Zeichen (") sind zuvor ausgeschlossen, der bcrypt-Hash enthält
-     * ohnehin nur [./A-Za-z0-9$].
-     */
-    private static function buildIni(
-        string $username,
-        string $hash,
-        string $sessionPath,
-        string $logFile,
-        string $logLevel,
-        string $hugoBin = '',
-    ): string {
-        $lines = [
-            '; HugoCMS – Hauptkonfiguration (vom Einrichtungs-Setup erzeugt)',
-            '; Dokumentation der Felder: hugocms.ini.beispiel',
-            '',
-            '[auth]',
-            'driver = singleuser',
-            sprintf('username = "%s"', $username),
-            sprintf('password_hash = "%s"', $hash),
-            '',
-            '[session]',
-            sprintf('path = "%s"', $sessionPath),
-            '',
-            '[log]',
-            sprintf('file = "%s"', $logFile),
-            sprintf('level = %s', $logLevel),
-            '',
-        ];
-
-        // Zentraler Hugo-Programmpfad — nur schreiben, wenn angegeben. Ohne ihn
-        // bleibt der Veröffentlichen-Knopf aus (buildable=false).
-        if ($hugoBin !== '') {
-            $lines[] = '[hugo]';
-            $lines[] = sprintf('bin = "%s"', $hugoBin);
-            $lines[] = '';
-        }
-
-        return implode("\n", $lines);
     }
 }

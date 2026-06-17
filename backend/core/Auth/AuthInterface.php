@@ -23,6 +23,21 @@ interface AuthInterface
      */
     public function verifyPassword(string $password): bool;
 
+    /**
+     * Kann der Treiber die eigenen Anmeldedaten (Name/Passwort) ändern und
+     * persistieren? Nicht jeder kann das (z. B. LDAP, oder eine programmatisch
+     * ohne Persistenzort erzeugte Instanz).
+     */
+    public function supportsCredentialChange(): bool;
+
+    /**
+     * Ändert die Anmeldedaten des aktuell angemeldeten Benutzers und speichert
+     * sie dauerhaft (treiberspezifisch). null lässt den jeweiligen Wert
+     * unverändert. Der Aufrufer hat die Identität zuvor zu bestätigen
+     * (verifyPassword). Wird nur aufgerufen, wenn supportsCredentialChange().
+     */
+    public function changeCredentials(?string $newUsername, ?string $newPassword): void;
+
     public function logout(): void;
 
     public function isAuthenticated(): bool;

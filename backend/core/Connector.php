@@ -102,7 +102,7 @@ final class Connector
             foreach ((array) ($options['authDrivers'] ?? []) as $name => $driverFactory) {
                 $factory->register((string) $name, $driverFactory);
             }
-            $options['auth'] = $factory->create($authConfig);
+            $options['auth'] = $factory->create($authConfig, $this->configPath);
         }
 
         if (!isset($options['auth']) || !$options['auth'] instanceof AuthInterface) {
@@ -748,27 +748,22 @@ final class Connector
         if ($this->configPath === null) {
             throw new ApiException('ECONFIG', 409, 'RECONFIGURE-UNAVAILABLE');
         }
-        $raw = @parse_ini_file($this->configPath, true, INI_SCANNER_TYPED);
-        if (!is_array($raw)) {
-            throw new ApiException('ECONFIG', 500, 'CONFIG-INVALID-INI', [$this->configPath]);
-        }
+        $raw = Config::raw($this->configPath);
 
         return [
-            'sessionPath' => (string) ($raw['session']['path'] ?? ''),
-            'logFile'     => (string) ($raw['log']['file'] ?? ''),
-            'logLevel'    => (string) ($raw['log']['level'] ?? 'warning'),
-            'hugoBin'     => (string) ($raw['hugo']['bin'] ?? ''),
+            'sessionPath' => $raw['session']['path'] ?? '',
+            'logFile'     => $raw['log']['file'] ?? '',
+            'logLevel'    => $raw['log']['level'] ?? 'warning',
+            'hugoBin'     => $raw['hugo']['bin'] ?? '',
             'logLevels'   => self::LOG_LEVELS,
         ];
     }
 
     /**
      * Schreibt die hugocms.ini im laufenden Betrieb neu — Sitzungsverzeichnis,
-     * Logdatei, Log-Stufe und Hugo-Programm. Die [auth]-Sektion (Anmeldename,
-     * Passwort-Hash) wird WÖRTLICH aus der bestehenden Datei übernommen, damit
-     * Anmeldedaten unberührt bleiben und der Hash nicht durch Re-Serialisierung
-     * verfälscht wird. Pfadänderungen (Session/Log) greifen erst beim nächsten
-     * Request.
+     * Logdatei, Log-Stufe und Hugo-Programm. Die [auth]-Sektion bleibt über
+     * Config::updateSections wörtlich erhalten. Pfadänderungen (Session/Log)
+     * greifen erst beim nächsten Request.
      */
     private function cmdReconfigure(array $request): array
     {
@@ -786,63 +781,30 @@ final class Connector
         }
         $hugoBin = self::cleanConfigValue($request['hugoBin'] ?? '', 'hugoBin', false);
 
-        $current = @file_get_contents($this->configPath);
-        if ($current === false) {
-            throw new ApiException('ECONFIG', 500, 'CONFIG-NOT-READABLE', [$this->configPath]);
-        }
-        $authBlock = self::extractSection($current, 'auth');
-        if ($authBlock === null) {
-            throw new ApiException('ECONFIG', 500, 'CONFIG-INVALID-INI', [$this->configPath]);
-        }
-
-        $lines = [
-            '; HugoCMS – Hauptkonfiguration (im laufenden Betrieb aktualisiert)',
-            '; Dokumentation der Felder: hugocms.ini.beispiel',
-            '',
-            $authBlock,
-            '',
-            '[session]',
-            sprintf('path = "%s"', $sessionPath),
-            '',
-            '[log]',
-            sprintf('file = "%s"', $logFile),
-            sprintf('level = %s', $logLevel),
-            '',
-        ];
-        if ($hugoBin !== '') {
-            $lines[] = '[hugo]';
-            $lines[] = sprintf('bin = "%s"', $hugoBin);
-            $lines[] = '';
-        }
-        $content = implode("\n", $lines);
-
-        // Atomar überschreiben (temporäre Datei + rename im selben Verzeichnis).
-        $tmp = @tempnam(dirname($this->configPath), '.hugocfg');
-        if ($tmp === false || @file_put_contents($tmp, $content) === false || !@rename($tmp, $this->configPath)) {
-            if (is_string($tmp)) {
-                @unlink($tmp);
-            }
-            throw new ApiException('EIO', 500, 'CONFIG-WRITE-FAILED');
-        }
-        @chmod($this->configPath, 0640);
+        Config::updateSections($this->configPath, [
+            'session' => ['path' => $sessionPath],
+            'log'     => ['file' => $logFile, 'level' => $logLevel],
+            // Leeres Hugo-Programm entfernt die Sektion (kein Build).
+            'hugo'    => $hugoBin === '' ? null : ['bin' => $hugoBin],
+        ]);
         $this->logger->info('Konfiguration aktualisiert (reconfigure).');
 
         return ['ok' => true];
     }
 
     /**
-     * Ändert die Anmeldedaten (Name, optional Passwort) in der hugocms.ini.
-     * Das aktuelle Passwort muss zur Bestätigung mitgegeben werden. Nur der
-     * Treiber "singleuser" wird unterstützt. Die übrigen Sektionen bleiben
-     * wörtlich erhalten; nur [auth] wird neu geschrieben. Nach Erfolg wird die
-     * Sitzung beendet — die Anmeldung erfolgt mit den neuen Daten erneut.
+     * Ändert die Anmeldedaten (Name, optional Passwort). Das aktuelle Passwort
+     * muss zur Bestätigung mitgegeben werden. Die eigentliche Persistenz
+     * übernimmt der Auth-Treiber (changeCredentials) — der Connector kennt
+     * weder das Speicherformat noch den Treibertyp. Nach Erfolg wird die
+     * Sitzung beendet; die Anmeldung erfolgt mit den neuen Daten erneut.
      */
     private function cmdAccount(array $request): array
     {
         $this->requireAuth();
         $this->requireMethod('POST');
-        if ($this->configPath === null) {
-            throw new ApiException('ECONFIG', 409, 'RECONFIGURE-UNAVAILABLE');
+        if (!$this->auth->supportsCredentialChange()) {
+            throw new ApiException('ECONFIG', 409, 'ACCOUNT-NOT-SUPPORTED');
         }
 
         // Identität bestätigen: das BISHERIGE Passwort muss stimmen.
@@ -857,54 +819,8 @@ final class Connector
             throw ApiException::badRequest('SETUP-PASSWORD-TOO-SHORT', [self::MIN_PASSWORD_LENGTH]);
         }
 
-        // Bestehende [auth]-Werte lesen — nur singleuser kann seine Anmeldedaten
-        // über die INI ändern.
-        $raw = @parse_ini_file($this->configPath, true, INI_SCANNER_TYPED);
-        if (!is_array($raw) || !isset($raw['auth']) || !is_array($raw['auth'])) {
-            throw new ApiException('ECONFIG', 500, 'CONFIG-INVALID-INI', [$this->configPath]);
-        }
-        if (strtolower(trim((string) ($raw['auth']['driver'] ?? ''))) !== 'singleuser') {
-            throw new ApiException('ECONFIG', 409, 'ACCOUNT-NOT-SUPPORTED');
-        }
-        $hash = $newPassword !== ''
-            ? password_hash($newPassword, PASSWORD_DEFAULT)
-            : (string) ($raw['auth']['password_hash'] ?? '');
-        if ($hash === '') {
-            throw new ApiException('ECONFIG', 500, 'CONFIG-INVALID-INI', [$this->configPath]);
-        }
-
-        // [auth] neu schreiben, übrige Sektionen wörtlich übernehmen.
-        $current = @file_get_contents($this->configPath);
-        if ($current === false) {
-            throw new ApiException('ECONFIG', 500, 'CONFIG-NOT-READABLE', [$this->configPath]);
-        }
-        $lines = [
-            '; HugoCMS – Hauptkonfiguration (Anmeldedaten im laufenden Betrieb geändert)',
-            '; Dokumentation der Felder: hugocms.ini.beispiel',
-            '',
-            '[auth]',
-            'driver = singleuser',
-            sprintf('username = "%s"', $username),
-            sprintf('password_hash = "%s"', $hash),
-        ];
-        foreach (['session', 'log', 'hugo'] as $section) {
-            $block = self::extractSection($current, $section);
-            if ($block !== null) {
-                $lines[] = '';
-                $lines[] = $block;
-            }
-        }
-        $lines[] = '';
-        $content = implode("\n", $lines);
-
-        $tmp = @tempnam(dirname($this->configPath), '.hugocfg');
-        if ($tmp === false || @file_put_contents($tmp, $content) === false || !@rename($tmp, $this->configPath)) {
-            if (is_string($tmp)) {
-                @unlink($tmp);
-            }
-            throw new ApiException('EIO', 500, 'CONFIG-WRITE-FAILED');
-        }
-        @chmod($this->configPath, 0640);
+        // Persistenz dem Treiber überlassen (leeres Passwort = unverändert).
+        $this->auth->changeCredentials($username, $newPassword !== '' ? $newPassword : null);
         $this->logger->info('Anmeldedaten geändert (account).');
 
         // Anmeldedaten geändert → Sitzung beenden; Neuanmeldung mit neuen Daten.
@@ -932,42 +848,6 @@ final class Connector
         }
 
         return $v;
-    }
-
-    /**
-     * Extrahiert eine Sektion [name] samt Inhalt WÖRTLICH aus einem INI-Text
-     * (von der Sektionszeile bis zur nächsten Sektion bzw. Dateiende, ohne
-     * abschließende Leerzeilen). Gibt null zurück, wenn die Sektion fehlt.
-     */
-    private static function extractSection(string $ini, string $name): ?string
-    {
-        $lines = preg_split('/\r\n|\r|\n/', $ini) ?: [];
-        $out = [];
-        $inSection = false;
-        foreach ($lines as $line) {
-            if (preg_match('/^\s*\[(.+?)\]\s*$/', $line, $m) === 1) {
-                $isTarget = strtolower(trim($m[1])) === $name;
-                if ($inSection && !$isTarget) {
-                    break; // nächste Sektion erreicht
-                }
-                $inSection = $isTarget;
-                if ($inSection) {
-                    $out[] = '[' . $name . ']';
-                }
-                continue;
-            }
-            if ($inSection) {
-                $out[] = $line;
-            }
-        }
-        if ($out === []) {
-            return null;
-        }
-        while ($out !== [] && trim((string) end($out)) === '') {
-            array_pop($out);
-        }
-
-        return implode("\n", $out);
     }
 
     /** Gemeinsam für download/raw/thumb: Ziel auflösen, Leserecht, Datei. */

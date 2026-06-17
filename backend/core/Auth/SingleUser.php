@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace HugoCMS\FileManager\Auth;
 
+use HugoCMS\FileManager\Config;
+use HugoCMS\FileManager\Exception\ApiException;
+
 /**
  * Anmeldung mit genau einem Benutzer. Das Passwort wird als Hash
  * (password_hash) erwartet, niemals im Klartext.
@@ -12,6 +15,10 @@ namespace HugoCMS\FileManager\Auth;
  *
  * Der Einzelbenutzer besitzt alle globalen Rechte; die tatsächliche
  * Begrenzung ergibt sich aus den Berechtigungen je Mount.
+ *
+ * Ist der Pfad zur hugocms.ini bekannt ($configPath), kann der Benutzer seine
+ * Anmeldedaten ändern; die Persistenz erfolgt über die [auth]-Sektion dieser
+ * Datei. Ohne Pfad (z. B. programmatisch via custom.php) ist das nicht möglich.
  */
 final class SingleUser implements AuthInterface
 {
@@ -23,6 +30,7 @@ final class SingleUser implements AuthInterface
     public function __construct(
         private readonly string $username,
         private readonly string $passwordHash,
+        private readonly ?string $configPath = null,
     ) {
         $this->ensureSession();
     }
@@ -45,6 +53,32 @@ final class SingleUser implements AuthInterface
     public function verifyPassword(string $password): bool
     {
         return password_verify($password, $this->passwordHash);
+    }
+
+    public function supportsCredentialChange(): bool
+    {
+        return $this->configPath !== null;
+    }
+
+    public function changeCredentials(?string $newUsername, ?string $newPassword): void
+    {
+        if ($this->configPath === null) {
+            throw new ApiException('ECONFIG', 409, 'ACCOUNT-NOT-SUPPORTED');
+        }
+        $username = $newUsername ?? $this->username;
+        $hash = $newPassword !== null
+            ? password_hash($newPassword, PASSWORD_DEFAULT)
+            : $this->passwordHash;
+
+        // Nur die [auth]-Sektion neu schreiben; session/log/hugo bleiben über
+        // Config::updateSections wörtlich erhalten.
+        Config::updateSections($this->configPath, [
+            'auth' => [
+                'driver' => 'singleuser',
+                'username' => $username,
+                'password_hash' => $hash,
+            ],
+        ]);
     }
 
     public function logout(): void

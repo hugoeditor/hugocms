@@ -28,14 +28,16 @@ final class AuthFactory
 
     public function __construct()
     {
-        $this->register('singleuser', static function (array $cfg): AuthInterface {
+        $this->register('singleuser', static function (array $cfg, ?string $configPath = null): AuthInterface {
             $username = isset($cfg['username']) ? (string) $cfg['username'] : '';
             $hash = isset($cfg['password_hash']) ? (string) $cfg['password_hash'] : '';
             if ($username === '' || $hash === '') {
                 throw new ApiException('ECONFIG', 500, 'AUTH-SINGLEUSER-REQUIRED');
             }
 
-            return new SingleUser($username, $hash);
+            // configPath ermöglicht das Ändern der Anmeldedaten (Persistenz in
+            // der hugocms.ini). Fehlt er, ist die Änderung deaktiviert.
+            return new SingleUser($username, $hash, $configPath);
         });
     }
 
@@ -51,10 +53,12 @@ final class AuthFactory
 
     /**
      * Erzeugt die AuthInterface-Instanz für die gegebene [auth]-Sektion.
+     * $configPath (Pfad zur hugocms.ini) wird an den Treiber durchgereicht,
+     * damit dieser bei Bedarf seine Anmeldedaten dort persistieren kann.
      *
      * @param array<string, mixed> $authConfig
      */
-    public function create(array $authConfig): AuthInterface
+    public function create(array $authConfig, ?string $configPath = null): AuthInterface
     {
         $driver = strtolower(trim((string) ($authConfig['driver'] ?? 'singleuser')));
         if ($driver === '') {
@@ -64,7 +68,7 @@ final class AuthFactory
             throw new ApiException('ECONFIG', 500, 'AUTH-DRIVER-UNKNOWN', [$driver]);
         }
 
-        $auth = ($this->drivers[$driver])($authConfig);
+        $auth = ($this->drivers[$driver])($authConfig, $configPath);
         if (!$auth instanceof AuthInterface) {
             throw new ApiException('ECONFIG', 500, 'AUTH-DRIVER-INVALID', [$driver]);
         }
