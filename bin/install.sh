@@ -163,6 +163,25 @@ append_section_if_missing() {
     echo "     [${name}] ergänzt${dir:+  -> $dir}"
 }
 
+# Wie append_section_if_missing, fügt den Block aber VOR der ersten Sektion ein
+# (nach einem etwaigen Kopf-Kommentar) — für Mounts, die als erster Eintrag
+# erscheinen sollen.
+prepend_section_if_missing() {
+    local name="$1" block="$2" dir="${3:-}"
+    if grep -q "^\[${name}\]" "$MOUNT_FILE"; then
+        return
+    fi
+    [ -n "$dir" ] && mkdir -p "$dir"
+    local tmp
+    tmp="$(mktemp "$(dirname "$MOUNT_FILE")/.mnt.XXXXXX")"
+    awk -v block="$block" '
+        seen == 0 && /^\[/ { print block "\n"; seen = 1 }
+        { print }
+        END { if (seen == 0) printf "\n%s\n", block }
+    ' "$MOUNT_FILE" > "$tmp" && mv "$tmp" "$MOUNT_FILE"
+    echo "     [${name}] als erster Mount ergänzt${dir:+  -> $dir}"
+}
+
 mkdir -p "$MOUNTS_DIR"
 echo "1. Mount-Konfiguration (Hugo-Projekt: $HUGO_ROOT)"
 echo "   Site-Kennung: $SITE_KEY"
@@ -173,7 +192,7 @@ if [ -e "$MOUNT_FILE" ]; then
     # ältere install.sh-Version ohne [hugo] erzeugt hat. Vorhandene Sektionen
     # (auch umbenannte Mounts) bleiben unangetastet.
     echo "   → existiert bereits; fehlende Standard-Sektionen werden ergänzt."
-    append_section_if_missing projekt "$PROJEKT_BLOCK" "$HUGO_ROOT"
+    prepend_section_if_missing projekt "$PROJEKT_BLOCK" "$HUGO_ROOT"
     append_section_if_missing content "$CONTENT_BLOCK" "$HUGO_ROOT/content"
     append_section_if_missing layouts "$LAYOUTS_BLOCK" "$HUGO_ROOT/layouts"
     append_section_if_missing static  "$STATIC_BLOCK"  "$HUGO_ROOT/static"
