@@ -14,9 +14,10 @@
 # Wirkung:
 #   1. Erzeugt — falls noch nicht vorhanden — die host-spezifische Mount-Datei
 #        backend/mounts/<hash>.ini   (Hash wie scripts/site-hash.sh)
-#      mit Hugo-Struktur: content/, layouts/ und static/ im Hugo-Projekt-
-#      verzeichnis (Elternverzeichnis des Publish-Ordners). Pfade bei Bedarf
-#      anpassen.
+#      mit dem gesamten Hugo-Projektverzeichnis als erstem Mount (projekt,
+#      Zugriff auf ALLE Dateien inkl. config.* und Theme) sowie content/,
+#      layouts/ und static/ darin (Elternverzeichnis des Publish-Ordners).
+#      Pfade bei Bedarf anpassen.
 #   2. Richtet die App ohne Symlinks ein — funktioniert damit auch auf Hostings,
 #      deren Webserver Symlinks nicht folgt (z. B. Shared Hosting):
 #        edit/             KOPIE von <hugocms-release>/app  (Frontend, URL /edit/)
@@ -120,6 +121,15 @@ HUGO_ROOT="$(dirname "$PUBLISH_ABS")"
 # beide Pfade nicht auseinanderdriften. source/destination der [hugo]-Sektion
 # werden wie die Mount-Pfade aus dem Hugo-Projektverzeichnis bzw. dem
 # übergebenen Publish-Ordner abgeleitet.
+
+# Projekt-Mount: das gesamte Hugo-Projektverzeichnis. Ohne accept-Beschränkung,
+# damit der Benutzer auf ALLE Dateien zugreifen kann (config.toml/hugo.yaml,
+# Theme-Ordner u. a.) — nicht nur auf content/layouts/static. Steht bewusst als
+# ERSTER Mount.
+PROJEKT_BLOCK="[projekt]
+path = $HUGO_ROOT
+label = Projekt"
+
 CONTENT_BLOCK="[content]
 path = $HUGO_ROOT/content
 label = Inhalt
@@ -163,6 +173,7 @@ if [ -e "$MOUNT_FILE" ]; then
     # ältere install.sh-Version ohne [hugo] erzeugt hat. Vorhandene Sektionen
     # (auch umbenannte Mounts) bleiben unangetastet.
     echo "   → existiert bereits; fehlende Standard-Sektionen werden ergänzt."
+    append_section_if_missing projekt "$PROJEKT_BLOCK" "$HUGO_ROOT"
     append_section_if_missing content "$CONTENT_BLOCK" "$HUGO_ROOT/content"
     append_section_if_missing layouts "$LAYOUTS_BLOCK" "$HUGO_ROOT/layouts"
     append_section_if_missing static  "$STATIC_BLOCK"  "$HUGO_ROOT/static"
@@ -176,6 +187,8 @@ else
 ; Hugo-Projektstruktur im Elternverzeichnis des Publish-Ordners.
 ; Absolute Pfade; bei Bedarf anpassen.
 
+$PROJEKT_BLOCK
+
 $CONTENT_BLOCK
 
 $LAYOUTS_BLOCK
@@ -184,7 +197,8 @@ $STATIC_BLOCK
 
 $HUGO_BLOCK
 EOF
-    echo "   → erzeugt:  content -> $HUGO_ROOT/content"
+    echo "   → erzeugt:  projekt -> $HUGO_ROOT (alle Dateien)"
+    echo "               content -> $HUGO_ROOT/content"
     echo "               layouts -> $HUGO_ROOT/layouts"
     echo "               static  -> $HUGO_ROOT/static"
     echo "               [hugo]  -> source $HUGO_ROOT -> destination $PUBLISH_ABS"

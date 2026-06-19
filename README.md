@@ -248,11 +248,13 @@ Das Skript:
 1. **Hugo bereitstellen** – fehlt `bin/hugo/`, lädt `get-hugo.sh` den
    Static-Site-Generator (Variante *extended*, gepinnte Version) und prüft die
    Prüfsumme. Das Binary ist nicht Teil des Repos.
-2. **Mount-Datei erzeugen** – `backend/mounts/<hash>.ini` mit Hugo-Struktur:
-   `content` → `content/`, `layouts` → `layouts/`, `static` → `static/`, jeweils
-   im Hugo-Projektverzeichnis (Elternverzeichnis des Publish-Ordners). Eine
-   bestehende Datei bleibt erhalten; fehlende Standard-Sektionen (auch `[hugo]`)
-   werden ergänzt.
+2. **Mount-Datei erzeugen** – `backend/mounts/<hash>.ini`. Erster Mount ist
+   `projekt` → das gesamte Hugo-Projektverzeichnis (ohne Endungsfilter, also
+   Zugriff auf alle Dateien inkl. `config.*` und Theme-Ordner); dazu die
+   bequemen Direktzugänge `content` → `content/`, `layouts` → `layouts/`,
+   `static` → `static/` (Elternverzeichnis des Publish-Ordners). Eine bestehende
+   Datei bleibt erhalten; fehlende Standard-Sektionen (auch `[hugo]`) werden
+   ergänzt.
 3. **Hugo-Programm zentral eintragen** – existiert die `hugocms.ini` bereits und
    hat noch keine `[hugo]`-Sektion, wird `bin` ergänzt; sonst ein Hinweis (die
    Datei entsteht erst beim Einrichtungs-Setup).
