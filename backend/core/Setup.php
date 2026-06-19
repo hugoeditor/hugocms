@@ -29,6 +29,7 @@ final class Setup
     private const DEFAULT_LOG_LEVEL    = 'warning';
     private const DEFAULT_HUGO_BIN     = '../bin/hugo/hugo';
     private const LOG_LEVELS           = ['debug', 'info', 'warning', 'error'];
+    private const AI_WRITE_MODES       = ['readonly', 'confirm', 'auto'];
     private const MIN_PASSWORD_LENGTH  = 8;
 
     /** Beantwortet die Anfrage im Einrichtungszustand und beendet das Skript. */
@@ -65,6 +66,9 @@ final class Setup
                 'logLevel'    => self::DEFAULT_LOG_LEVEL,
                 'logLevels'   => self::LOG_LEVELS,
                 'hugoBin'     => self::DEFAULT_HUGO_BIN,
+                'aiModel'     => 'claude-opus-4-8',
+                'aiWriteMode' => 'confirm',
+                'aiWriteModes' => self::AI_WRITE_MODES,
             ],
         ]);
     }
@@ -92,13 +96,19 @@ final class Setup
         $logFile     = self::requireField($request, 'logFile');
         $logLevel    = self::requireLevel($request);
         $hugoBin     = self::optionalField($request, 'hugoBin');
+        $aiApiKey    = self::optionalField($request, 'aiApiKey');
+        $aiModel     = self::optionalField($request, 'aiModel');
+        $aiWriteMode = strtolower(trim((string) ($request['aiWriteMode'] ?? 'confirm')));
+        if (!in_array($aiWriteMode, self::AI_WRITE_MODES, true)) {
+            $aiWriteMode = 'confirm';
+        }
 
         $hash = password_hash($password, PASSWORD_DEFAULT);
 
         // hugocms.ini über die zentrale Schreib-API anlegen (gleiche Logik wie
-        // beim späteren Umkonfigurieren). Die [hugo]-Sektion nur bei gesetztem
-        // Programmpfad. Das Nicht-Überschreiben einer bestehenden Datei sichert
-        // der is_file()-Check oben ab.
+        // beim späteren Umkonfigurieren). [hugo]/[ai] nur bei gesetztem Wert.
+        // Das Nicht-Überschreiben einer bestehenden Datei sichert der
+        // is_file()-Check oben ab.
         $sections = [
             'auth'    => ['driver' => 'singleuser', 'username' => $username, 'password_hash' => $hash],
             'session' => ['path' => $sessionPath],
@@ -106,6 +116,13 @@ final class Setup
         ];
         if ($hugoBin !== '') {
             $sections['hugo'] = ['bin' => $hugoBin];
+        }
+        if ($aiApiKey !== '') {
+            $sections['ai'] = [
+                'api_key' => $aiApiKey,
+                'model' => $aiModel !== '' ? $aiModel : 'claude-opus-4-8',
+                'write_mode' => $aiWriteMode,
+            ];
         }
         Config::updateSections(
             $configFile,

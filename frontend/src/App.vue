@@ -14,11 +14,14 @@ import TrashView from './components/TrashView.vue'
 import EditorPanel from './components/EditorPanel.vue'
 import ReconfigureDialog from './components/ReconfigureDialog.vue'
 import AccountDialog from './components/AccountDialog.vue'
+import AssistantPanel from './components/AssistantPanel.vue'
+import { useAssistantStore } from './stores/assistant'
 import LanguageSwitcher from './components/LanguageSwitcher.vue'
 
 const { t } = useI18n()
 const auth = useAuthStore()
 const files = useFilesStore()
+const assistant = useAssistantStore()
 const error = ref(null)
 const fatalError = ref(null)
 const warningsVisible = ref(false)
@@ -229,6 +232,20 @@ async function build() {
             <span class="d-none d-md-inline">{{ $t('build.publish') }}</span>
           </v-btn>
 
+          <!-- KI-Assistent (nur wenn ein API-Schlüssel konfiguriert ist) -->
+          <v-tooltip v-if="auth.ai.enabled" :text="$t('assistant.open')" location="bottom">
+            <template #activator="{ props }">
+              <v-btn
+                v-bind="props"
+                icon="mdi-robot-happy-outline"
+                variant="text"
+                size="small"
+                class="mr-1"
+                @click="assistant.open = !assistant.open"
+              />
+            </template>
+          </v-tooltip>
+
           <!-- Konfiguration ändern (nur bei INI-basierter Installation) -->
           <v-tooltip v-if="auth.reconfigurable" :text="$t('reconfigure.open')" location="bottom">
             <template #activator="{ props }">
@@ -306,6 +323,9 @@ async function build() {
     <!-- Konfiguration im laufenden Betrieb ändern -->
     <ReconfigureDialog v-model="reconfigureOpen" @saved="onReconfigured" />
     <AccountDialog v-model="accountOpen" @changed="onAccountChanged" />
+
+    <!-- KI-Assistent (rechtes Seitenpanel) -->
+    <AssistantPanel v-if="auth.ai.enabled" />
 
     <v-snackbar :model-value="!!error" color="error" @update:model-value="error = null">
       {{ error }}

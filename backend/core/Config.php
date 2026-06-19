@@ -91,6 +91,31 @@ final class Config
                 'level' => trim((string) $raw['log']['level']),
             ],
             'hugoBin' => $hugoBin === '' ? null : self::resolvePath($hugoBin, $baseDir),
+            'ai' => self::aiSection($raw['ai'] ?? null),
+        ];
+    }
+
+    /**
+     * KI-Assistent (optional). Ohne API-Schlüssel ist der Assistent aus.
+     * writeMode: 'readonly' (nur lesen) | 'confirm' (vor dem Schreiben
+     * bestätigen) | 'auto' (Schreibaktionen direkt ausführen).
+     *
+     * @return array{apiKey: ?string, model: string, writeMode: string}
+     */
+    private static function aiSection(mixed $section): array
+    {
+        $section = is_array($section) ? $section : [];
+        $apiKey = trim((string) ($section['api_key'] ?? ''));
+        $model = trim((string) ($section['model'] ?? '')) ?: 'claude-opus-4-8';
+        $writeMode = strtolower(trim((string) ($section['write_mode'] ?? 'confirm')));
+        if (!in_array($writeMode, ['readonly', 'confirm', 'auto'], true)) {
+            $writeMode = 'confirm';
+        }
+
+        return [
+            'apiKey' => $apiKey === '' ? null : $apiKey,
+            'model' => $model,
+            'writeMode' => $writeMode,
         ];
     }
 

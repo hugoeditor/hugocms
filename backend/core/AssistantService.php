@@ -1,0 +1,399 @@
+<?php
+
+declare(strict_types=1);
+
+namespace HugoCMS\FileManager;
+
+use HugoCMS\FileManager\Exception\ApiException;
+use Throwable;
+
+/**
+ * KI-Assistent: führt das Gespräch mit Claude und übersetzt dessen Werkzeug-
+ * aufrufe in Dateioperationen. Die Werkzeuge sind dünne Hüllen um FileService
+ * und MountResolver — der Assistent erbt damit exakt die Sicherheits- und
+ * Rechteschicht der übrigen Befehle (Mount-Einsperrung, permissions, erlaubte
+ * Endungen). Pfade haben die lesbare Form "<mount>/<relativer/pfad>".
+ *
+ * Der Ablauf ist ZUSTANDSLOS: Der Client hält den Gesprächsverlauf
+ * (Anthropic-Nachrichtenformat) und schickt ihn bei jedem Zug mit. Im Modus
+ * "confirm" pausiert der Loop vor einer Schreibaktion und gibt sie als
+ * "pending" an den Client zurück; nach Bestätigung wird derselbe Verlauf mit
+ * einer Entscheidung erneut gesendet.
+ */
+final class AssistantService
+{
+    /** Obergrenze für Werkzeug-Runden je Zug (Schutz vor Endlosschleifen). */
+    private const MAX_STEPS = 12;
+    private const MAX_TOKENS = 16000;
+
+    /** Werkzeuge, die schreiben (im Modus confirm bestätigungspflichtig). */
+    private const WRITE_TOOLS = ['write_file', 'create_dir', 'rename'];
+
+    public function __construct(
+        private readonly AnthropicClient $client,
+        private readonly string $model,
+        private readonly string $writeMode, // readonly | confirm | auto
+        private readonly MountResolver $resolver,
+        private readonly FileService $files,
+    ) {
+    }
+
+    /**
+     * Führt einen Assistenten-Zug aus.
+     *
+     * @param array<int, mixed> $messages Verlauf im Anthropic-Format
+     * @param ?string $confirm 'allow' | 'reject' beantwortet eine pending
+     *                         Schreibaktion; null für einen normalen Zug
+     * @param string $locale Sprachkürzel für die Antwort
+     * @return array{messages: array, reply: string, actions: array, pending: ?array}
+     */
+    public function run(array $messages, ?string $confirm, string $locale): array
+    {
+        $system = $this->systemPrompt($locale);
+        $tools = $this->toolDefs();
+        $actions = [];
+
+        // Bestätigung einer pausierten Schreibaktion: das zuletzt angeforderte
+        // Werkzeug ausführen bzw. ablehnen, dann normal weiterlaufen.
+        if ($confirm !== null) {
+            $messages = $this->resolvePending($messages, $confirm, $actions);
+        }
+
+        for ($step = 0; $step < self::MAX_STEPS; $step++) {
+            $response = $this->client->createMessage([
+                'model' => $this->model,
+                'max_tokens' => self::MAX_TOKENS,
+                'system' => $system,
+                'messages' => $messages,
+                'tools' => $tools,
+                'thinking' => ['type' => 'adaptive'],
+                // Höchstens ein Werkzeug pro Antwort — vereinfacht den
+                // Bestätigungsablauf (immer genau eine pending Aktion).
+                'tool_choice' => ['type' => 'auto', 'disable_parallel_tool_use' => true],
+            ]);
+
+            $content = is_array($response['content'] ?? null) ? $response['content'] : [];
+            // Den Assistenten-Block UNVERÄNDERT übernehmen (inkl. thinking-
+            // Blöcke mit Signatur) — sonst lehnt die API den nächsten Zug ab.
+            $messages[] = ['role' => 'assistant', 'content' => $content];
+
+            if (($response['stop_reason'] ?? null) !== 'tool_use') {
+                return $this->result($messages, $this->textFromContent($content), $actions, null);
+            }
+
+            $toolUse = $this->firstToolUse($content);
+            if ($toolUse === null) {
+                return $this->result($messages, $this->textFromContent($content), $actions, null);
+            }
+            $name = (string) ($toolUse['name'] ?? '');
+            $input = is_array($toolUse['input'] ?? null) ? $toolUse['input'] : [];
+
+            // Schreibaktion im confirm-Modus: anhalten und an den Client geben.
+            if ($this->writeMode === 'confirm' && in_array($name, self::WRITE_TOOLS, true)) {
+                return $this->result(
+                    $messages,
+                    $this->textFromContent($content),
+                    $actions,
+                    $this->buildPending($toolUse),
+                );
+            }
+
+            [$resultText, $isError] = $this->executeTool($name, $input);
+            if (!$isError && in_array($name, self::WRITE_TOOLS, true)) {
+                $actions[] = ['tool' => $name, 'path' => (string) ($input['path'] ?? '')];
+            }
+            $messages[] = ['role' => 'user', 'content' => [
+                $this->toolResult((string) $toolUse['id'], $resultText, $isError),
+            ]];
+        }
+
+        return $this->result($messages, '', $actions, null, true);
+    }
+
+    /** Führt die zuletzt angeforderte (pausierte) Schreibaktion aus oder lehnt sie ab. */
+    private function resolvePending(array $messages, string $confirm, array &$actions): array
+    {
+        $last = is_array(end($messages)) ? end($messages) : [];
+        $toolUse = ($last['role'] ?? '') === 'assistant'
+            ? $this->firstToolUse(is_array($last['content'] ?? null) ? $last['content'] : [])
+            : null;
+        if ($toolUse === null) {
+            throw ApiException::badRequest('AI-NO-PENDING');
+        }
+
+        if ($confirm === 'allow') {
+            $name = (string) ($toolUse['name'] ?? '');
+            $input = is_array($toolUse['input'] ?? null) ? $toolUse['input'] : [];
+            [$resultText, $isError] = $this->executeTool($name, $input);
+            if (!$isError) {
+                $actions[] = ['tool' => $name, 'path' => (string) ($input['path'] ?? '')];
+            }
+        } else {
+            $resultText = 'Der Benutzer hat diese Aktion abgelehnt. Frage nach, wie du fortfahren sollst.';
+            $isError = true;
+        }
+
+        $messages[] = ['role' => 'user', 'content' => [
+            $this->toolResult((string) $toolUse['id'], $resultText, $isError),
+        ]];
+
+        return $messages;
+    }
+
+    /**
+     * Führt ein Werkzeug aus. Fehler werden NICHT geworfen, sondern als
+     * Werkzeugergebnis (is_error) an Claude zurückgegeben, damit es sich
+     * korrigieren kann.
+     *
+     * @return array{0: string, 1: bool} Ergebnistext und Fehler-Flag
+     */
+    private function executeTool(string $name, array $input): array
+    {
+        try {
+            $text = match ($name) {
+                'list_dir' => $this->toolListDir($input),
+                'read_file' => $this->toolReadFile($input),
+                'write_file' => $this->toolWriteFile($input),
+                'create_dir' => $this->toolCreateDir($input),
+                'rename' => $this->toolRename($input),
+                default => throw ApiException::badRequest('AI-UNKNOWN-TOOL', [$name]),
+            };
+
+            return [$text, false];
+        } catch (ApiException $e) {
+            // Kurzform (Schlüssel + Parameter) genügt Claude zur Korrektur.
+            return ['Fehler: ' . $e->getMessage(), true];
+        } catch (Throwable) {
+            return ['Fehler: interne Werkzeugausführung fehlgeschlagen.', true];
+        }
+    }
+
+    private function toolListDir(array $input): string
+    {
+        $r = $this->resolvePath((string) ($input['path'] ?? ''), true, 'read');
+        $entries = $this->files->listDir($r['mount'], $r['rel'], $r['abs']);
+        if ($entries === []) {
+            return '(leeres Verzeichnis)';
+        }
+        $lines = [];
+        foreach ($entries as $entry) {
+            $lines[] = (($entry['type'] ?? '') === 'dir' ? '[dir] ' : '      ') . ($entry['name'] ?? '');
+        }
+
+        return implode("\n", $lines);
+    }
+
+    private function toolReadFile(array $input): string
+    {
+        $r = $this->resolvePath((string) ($input['path'] ?? ''), true, 'read');
+
+        return (string) $this->files->readText($r['mount'], $r['abs'])['content'];
+    }
+
+    private function toolWriteFile(array $input): string
+    {
+        $path = (string) ($input['path'] ?? '');
+        $r = $this->resolvePath($path, false, 'write');
+        $this->files->writeText($r['mount'], $r['rel'], $r['abs'], (string) ($input['content'] ?? ''));
+
+        return 'Gespeichert: ' . $path;
+    }
+
+    private function toolCreateDir(array $input): string
+    {
+        $path = (string) ($input['path'] ?? '');
+        $r = $this->resolvePath($path, false, 'mkdir');
+        $this->files->makeDir($r['mount'], self::parentRel($r['rel']), dirname($r['abs']), basename($r['rel']));
+
+        return 'Ordner angelegt: ' . $path;
+    }
+
+    private function toolRename(array $input): string
+    {
+        $path = (string) ($input['path'] ?? '');
+        $newName = (string) ($input['new_name'] ?? '');
+        $r = $this->resolvePath($path, true, 'rename');
+        $this->files->rename($r['mount'], $r['rel'], $r['abs'], $newName);
+
+        return 'Umbenannt: ' . $path . ' → ' . $newName;
+    }
+
+    /**
+     * Übersetzt einen lesbaren Pfad in einen aufgelösten Mount-Pfad und prüft
+     * das nötige Recht.
+     *
+     * @return array{mount: Mount, abs: string, rel: string}
+     */
+    private function resolvePath(string $path, bool $mustExist, string $permission): array
+    {
+        $id = $this->pathToId($path);
+        $r = $this->resolver->resolve($id, $mustExist);
+        if (!$r['mount']->allows($permission)) {
+            throw ApiException::denied('OPERATION-NOT-ALLOWED', [$permission]);
+        }
+
+        return $r;
+    }
+
+    /** "<mount>/<rel>" → undurchsichtige Mount-ID. */
+    private function pathToId(string $path): string
+    {
+        $path = ltrim(str_replace('\\', '/', $path), '/');
+        $slash = strpos($path, '/');
+        if ($slash === false) {
+            $mount = $path;
+            $rel = '';
+        } else {
+            $mount = substr($path, 0, $slash);
+            $rel = substr($path, $slash + 1);
+        }
+        if ($mount === '') {
+            throw ApiException::badRequest('AI-PATH-INVALID', [$path]);
+        }
+
+        return $this->resolver->encodeId($mount, $rel);
+    }
+
+    private static function parentRel(string $rel): string
+    {
+        $pos = strrpos($rel, '/');
+
+        return $pos === false ? '' : substr($rel, 0, $pos);
+    }
+
+    /** Baut die Vorschau einer pausierten Schreibaktion (für die Bestätigung). */
+    private function buildPending(array $toolUse): array
+    {
+        $input = is_array($toolUse['input'] ?? null) ? $toolUse['input'] : [];
+        $pending = ['tool' => (string) ($toolUse['name'] ?? ''), 'input' => $input];
+
+        // Für write_file den bisherigen Inhalt mitgeben, damit der Client einen
+        // Diff zeigen kann (null = neue Datei).
+        if (($toolUse['name'] ?? '') === 'write_file') {
+            $pending['oldContent'] = null;
+            try {
+                $r = $this->resolvePath((string) ($input['path'] ?? ''), true, 'read');
+                $pending['oldContent'] = (string) $this->files->readText($r['mount'], $r['abs'])['content'];
+            } catch (Throwable) {
+                // existiert noch nicht — bleibt null
+            }
+        }
+
+        return $pending;
+    }
+
+    private function firstToolUse(array $content): ?array
+    {
+        foreach ($content as $block) {
+            if (is_array($block) && ($block['type'] ?? '') === 'tool_use') {
+                return $block;
+            }
+        }
+
+        return null;
+    }
+
+    private function textFromContent(array $content): string
+    {
+        $parts = [];
+        foreach ($content as $block) {
+            if (is_array($block) && ($block['type'] ?? '') === 'text') {
+                $parts[] = (string) ($block['text'] ?? '');
+            }
+        }
+
+        return trim(implode("\n", $parts));
+    }
+
+    private function toolResult(string $toolUseId, string $content, bool $isError): array
+    {
+        return [
+            'type' => 'tool_result',
+            'tool_use_id' => $toolUseId,
+            'content' => $content,
+            'is_error' => $isError,
+        ];
+    }
+
+    private function result(array $messages, string $reply, array $actions, ?array $pending, bool $aborted = false): array
+    {
+        return [
+            'messages' => $messages,
+            'reply' => $aborted ? 'Abgebrochen: zu viele Werkzeugschritte.' : $reply,
+            'actions' => $actions,
+            'pending' => $pending,
+        ];
+    }
+
+    /** Werkzeugdefinitionen; Schreib-Werkzeuge nur außerhalb von "readonly". */
+    private function toolDefs(): array
+    {
+        $tools = [
+            [
+                'name' => 'list_dir',
+                'description' => 'List the entries of a directory. "path" is "<mount>/<relative path>"; use just "<mount>" for the mount root.',
+                'input_schema' => ['type' => 'object', 'properties' => ['path' => ['type' => 'string']], 'required' => ['path']],
+            ],
+            [
+                'name' => 'read_file',
+                'description' => 'Read a text file. "path" is "<mount>/<relative path>".',
+                'input_schema' => ['type' => 'object', 'properties' => ['path' => ['type' => 'string']], 'required' => ['path']],
+            ],
+        ];
+        if ($this->writeMode === 'readonly') {
+            return $tools;
+        }
+
+        $tools[] = [
+            'name' => 'write_file',
+            'description' => 'Create a file or overwrite an existing one with "content". "path" is "<mount>/<relative path>". Read the file first before overwriting it.',
+            'input_schema' => ['type' => 'object', 'properties' => ['path' => ['type' => 'string'], 'content' => ['type' => 'string']], 'required' => ['path', 'content']],
+        ];
+        $tools[] = [
+            'name' => 'create_dir',
+            'description' => 'Create a new directory. "path" is "<mount>/<relative path>".',
+            'input_schema' => ['type' => 'object', 'properties' => ['path' => ['type' => 'string']], 'required' => ['path']],
+        ];
+        $tools[] = [
+            'name' => 'rename',
+            'description' => 'Rename a file or directory within its folder. "path" is the existing item; "new_name" is the new base name.',
+            'input_schema' => ['type' => 'object', 'properties' => ['path' => ['type' => 'string'], 'new_name' => ['type' => 'string']], 'required' => ['path', 'new_name']],
+        ];
+
+        return $tools;
+    }
+
+    private function systemPrompt(string $locale): string
+    {
+        $mountLines = [];
+        foreach ($this->resolver->all() as $mount) {
+            $info = $mount->describe();
+            $mountLines[] = sprintf(
+                '- %s (%s) — rights: %s',
+                $info['name'],
+                $info['label'],
+                implode(', ', $info['permissions']),
+            );
+        }
+        $mounts = $mountLines === [] ? '(none)' : implode("\n", $mountLines);
+
+        $writeNote = match ($this->writeMode) {
+            'readonly' => 'You can only read files; no write tools are available.',
+            'confirm' => 'Write actions require the user to confirm before they run.',
+            default => 'Write actions are applied directly.',
+        };
+
+        return <<<SYS
+        You are an assistant built into HugoCMS, a file manager for Hugo static-site projects. You help the user manage their Hugo site: editing content with front matter, fixing configuration (hugo.toml / hugo.yaml / config.toml), creating and editing layouts and partials, and explaining Hugo concepts.
+
+        You access the project through tools. A path has the form `<mount>/<relative/path>`, where `<mount>` is one of the configured mounts below; use just `<mount>` for its root. Discover structure with list_dir, and always read a file before overwriting it.
+
+        Configured mounts:
+        {$mounts}
+
+        {$writeNote}
+
+        Answer in the user's language (locale: {$locale}). Be concise and practical — prefer concrete edits and exact Hugo syntax over long explanations.
+        SYS;
+    }
+}

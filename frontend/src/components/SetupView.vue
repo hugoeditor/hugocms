@@ -20,6 +20,13 @@ const logLevel = ref(defaults.logLevel ?? 'warning')
 const logLevels = defaults.logLevels ?? ['debug', 'info', 'warning', 'error']
 const hugoBin = ref(defaults.hugoBin ?? '../bin/hugo/hugo')
 
+// KI-Assistent (optional). Ohne API-Schlüssel bleibt er deaktiviert.
+const aiApiKey = ref('')
+const aiModel = ref(defaults.aiModel ?? 'claude-opus-4-8')
+const aiWriteMode = ref(defaults.aiWriteMode ?? 'confirm')
+const aiModels = ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5']
+const writeModeItems = ['readonly', 'confirm', 'auto'].map((v) => ({ value: v, title: t(`assistant.mode.${v}`) }))
+
 // Der Verzeichnis-/Logging-Abschnitt ist standardmäßig eingeklappt; die
 // Vorgabewerte reichen für den Normalfall. Die Felder bleiben im DOM (v-show),
 // damit ihre Werte auch ohne Aufklappen gesendet werden.
@@ -50,6 +57,9 @@ async function submit() {
       logFile: logFile.value,
       logLevel: logLevel.value,
       hugoBin: hugoBin.value,
+      aiApiKey: aiApiKey.value,
+      aiModel: aiModel.value,
+      aiWriteMode: aiWriteMode.value,
     })
   } catch (e) {
     error.value = errorText(t, e)
@@ -147,6 +157,37 @@ async function submit() {
                 v-model="hugoBin"
                 :label="$t('setup.hugoBin')"
                 prepend-inner-icon="mdi-language-go"
+                variant="outlined"
+                density="comfortable"
+                class="mb-2"
+              />
+
+              <div class="text-subtitle-2 mt-2 mb-1">{{ $t('aiConfig.section') }}</div>
+              <div class="text-caption text-medium-emphasis mb-3">{{ $t('aiConfig.setupHint') }}</div>
+              <v-text-field
+                v-model="aiApiKey"
+                :label="$t('aiConfig.apiKey')"
+                type="password"
+                prepend-inner-icon="mdi-key-variant"
+                autocomplete="off"
+                variant="outlined"
+                density="comfortable"
+                class="mb-2"
+              />
+              <v-select
+                v-model="aiModel"
+                :items="aiModels"
+                :label="$t('aiConfig.model')"
+                prepend-inner-icon="mdi-brain"
+                variant="outlined"
+                density="comfortable"
+                class="mb-2"
+              />
+              <v-select
+                v-model="aiWriteMode"
+                :items="writeModeItems"
+                :label="$t('aiConfig.writeMode')"
+                prepend-inner-icon="mdi-shield-edit-outline"
                 variant="outlined"
                 density="comfortable"
               />

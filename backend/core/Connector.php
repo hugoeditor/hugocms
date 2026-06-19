@@ -51,6 +51,14 @@ final class Connector
      */
     private ?string $hugoBin = null;
 
+    /**
+     * KI-Assistent-Konfiguration aus der [ai]-Sektion der hugocms.ini.
+     * apiKey=null → Assistent deaktiviert. writeMode: readonly|confirm|auto.
+     *
+     * @var array{apiKey: ?string, model: string, writeMode: string}
+     */
+    private array $ai = ['apiKey' => null, 'model' => 'claude-opus-4-8', 'writeMode' => 'confirm'];
+
     public function __construct(array $options)
     {
         // Hauptkonfiguration (hugocms.ini) ggf. zuerst einlesen — daraus
@@ -80,6 +88,7 @@ final class Connector
             $options['log'] ??= $cfg['log']['file'];
             $options['logLevel'] ??= $cfg['log']['level'] ?? 'error';
             $options['hugoBin'] ??= $cfg['hugoBin'];
+            $this->ai = $cfg['ai'];
             $authConfig = $cfg['auth'];
         }
         $this->sessionDir = $sessionPath;
@@ -234,6 +243,7 @@ final class Connector
                 'restore' => $this->cmdRestore($request),
                 'emptytrash' => $this->cmdEmptyTrash($request),
                 'build' => $this->cmdBuild(),
+                'assistant' => $this->cmdAssistant($request),
                 'config' => $this->cmdConfig(),
                 'reconfigure' => $this->cmdReconfigure($request),
                 'account' => $this->cmdAccount($request),
@@ -318,6 +328,11 @@ final class Connector
             // Lässt sich die Konfiguration im laufenden Betrieb ändern? Nur,
             // wenn der Connector aus einer hugocms.ini aufgebaut wurde.
             'reconfigurable' => $this->configPath !== null,
+            // KI-Assistent: aktiv, wenn ein API-Schlüssel konfiguriert ist.
+            'ai' => [
+                'enabled' => $this->ai['apiKey'] !== null,
+                'writeMode' => $this->ai['writeMode'],
+            ],
         ];
     }
 
@@ -731,8 +746,48 @@ final class Connector
         ];
     }
 
+    /**
+     * KI-Assistent: führt einen Gesprächszug mit Claude aus (Werkzeugaufrufe
+     * laufen über FileService/MountResolver, also mit denselben Rechten und
+     * derselben Einsperrung wie alle Datei-Befehle).
+     */
+    private function cmdAssistant(array $request): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+        if ($this->ai['apiKey'] === null) {
+            throw new ApiException('ECONFIG', 409, 'AI-NOT-CONFIGURED');
+        }
+
+        $messages = $request['messages'] ?? null;
+        if (!is_array($messages) || $messages === []) {
+            throw ApiException::badRequest('PARAM-MISSING', ['messages']);
+        }
+        $locale = (string) ($request['locale'] ?? 'de');
+        $confirm = $request['confirm'] ?? null;
+        if ($confirm !== null && !in_array($confirm, ['allow', 'reject'], true)) {
+            throw ApiException::badRequest('PARAM-INVALID', ['confirm']);
+        }
+
+        // Der Werkzeug-Loop kann mehrere API-Aufrufe nacheinander machen.
+        @set_time_limit(180);
+
+        $service = new AssistantService(
+            new AnthropicClient($this->ai['apiKey']),
+            $this->ai['model'],
+            $this->ai['writeMode'],
+            $this->resolver,
+            $this->files,
+        );
+
+        return $service->run($messages, $confirm === null ? null : (string) $confirm, $locale);
+    }
+
     /** Erlaubte Log-Stufen — gemeinsam für Lesen (config) und Schreiben. */
     private const LOG_LEVELS = ['debug', 'info', 'warning', 'error'];
+
+    /** Erlaubte Schreibmodi des KI-Assistenten. */
+    private const AI_WRITE_MODES = ['readonly', 'confirm', 'auto'];
 
     /** Mindestlänge für ein neu gesetztes Passwort (wie im Erst-Setup). */
     private const MIN_PASSWORD_LENGTH = 8;
@@ -756,6 +811,11 @@ final class Connector
             'logLevel'    => $raw['log']['level'] ?? 'warning',
             'hugoBin'     => $raw['hugo']['bin'] ?? '',
             'logLevels'   => self::LOG_LEVELS,
+            // KI-Assistent: Status + Modus/Modell, aber NIE der API-Schlüssel.
+            'aiConfigured' => trim((string) ($raw['ai']['api_key'] ?? '')) !== '',
+            'aiModel'      => $raw['ai']['model'] ?? '',
+            'aiWriteMode'  => $raw['ai']['write_mode'] ?? 'confirm',
+            'aiWriteModes' => self::AI_WRITE_MODES,
         ];
     }
 
@@ -781,11 +841,27 @@ final class Connector
         }
         $hugoBin = self::cleanConfigValue($request['hugoBin'] ?? '', 'hugoBin', false);
 
+        // KI-Assistent. Der API-Schlüssel ist ein Geheimnis: ein leeres Feld
+        // lässt den bestehenden unverändert; nur eine Eingabe ersetzt ihn.
+        $aiWriteMode = strtolower(trim((string) ($request['aiWriteMode'] ?? 'confirm')));
+        if (!in_array($aiWriteMode, self::AI_WRITE_MODES, true)) {
+            $aiWriteMode = 'confirm';
+        }
+        $aiModel = self::cleanConfigValue($request['aiModel'] ?? '', 'aiModel', false);
+        $aiKeyNew = self::cleanConfigValue($request['aiApiKey'] ?? '', 'aiApiKey', false);
+        $existingAi = Config::raw($this->configPath)['ai'] ?? [];
+        $apiKey = $aiKeyNew !== '' ? $aiKeyNew : trim((string) ($existingAi['api_key'] ?? ''));
+        $model = $aiModel !== '' ? $aiModel : (trim((string) ($existingAi['model'] ?? '')) ?: 'claude-opus-4-8');
+
         Config::updateSections($this->configPath, [
             'session' => ['path' => $sessionPath],
             'log'     => ['file' => $logFile, 'level' => $logLevel],
             // Leeres Hugo-Programm entfernt die Sektion (kein Build).
             'hugo'    => $hugoBin === '' ? null : ['bin' => $hugoBin],
+            // Ohne API-Schlüssel keine [ai]-Sektion (Assistent aus).
+            'ai'      => $apiKey === ''
+                ? null
+                : ['api_key' => $apiKey, 'model' => $model, 'write_mode' => $aiWriteMode],
         ]);
         $this->logger->info('Konfiguration aktualisiert (reconfigure).');
 

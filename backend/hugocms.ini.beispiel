@@ -44,3 +44,14 @@ level = warning
 ; Die je Webseite unterschiedlichen Pfade (source/destination) stehen in der
 ; [hugo]-Sektion der jeweiligen Mount-Konfiguration (siehe mounts.ini.beispiel).
 bin = ../bin/hugo/hugo
+
+;[ai]
+; KI-Assistent (Claude). Optional — ohne API-Schlüssel ist der Assistent aus.
+; Lässt sich auch über das Einrichtungs-/Konfigurationsformular setzen.
+;   api_key    Anthropic API-Schlüssel (Geheimnis; Datei mit 0640 schützen).
+;   model      Claude-Modell. Standard: claude-opus-4-8.
+;   write_mode readonly = nur lesen | confirm = vor dem Schreiben bestätigen
+;              | auto = Schreibaktionen direkt ausführen. Standard: confirm.
+;api_key = "sk-ant-..."
+;model = claude-opus-4-8
+;write_mode = confirm

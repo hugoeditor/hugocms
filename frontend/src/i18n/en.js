@@ -126,6 +126,47 @@ export default {
     note: 'Changes to the session directory and log file take effect on the next load.',
   },
 
+  assistant: {
+    open: 'AI assistant',
+    title: 'AI assistant',
+    clear: 'Clear conversation',
+    empty: 'How can I help? I can read, create and edit files — configuration (hugo.toml/config), layouts and partials.',
+    thinking: 'Assistant is working …',
+    placeholder: 'Ask a question or describe a task … (Enter sends, Shift+Enter = new line)',
+    approve: 'Apply',
+    reject: 'Reject',
+    pendingTitle: 'Confirm change',
+    pendingNewFile: 'Create new file: {0}',
+    pendingOverwrite: 'Overwrite file: {0}',
+    pendingDir: 'Create directory: {0}',
+    pendingRename: 'Rename: {0} → {1}',
+    oldContent: 'Current content',
+    mode: {
+      readonly: 'Read-only',
+      confirm: 'With confirmation',
+      auto: 'Automatic',
+    },
+    tool: {
+      read_file: 'reads {0}',
+      list_dir: 'browses {0}',
+      write_file: 'writes {0}',
+      create_dir: 'creates directory {0}',
+      rename: 'renames {0}',
+    },
+  },
+
+  // AI assistant configuration (used in the setup and reconfigure forms).
+  aiConfig: {
+    section: 'AI assistant',
+    apiKey: 'Anthropic API key',
+    setupHint: 'Optional: API key for the AI assistant. Leave empty if not needed.',
+    apiKeyHintSet: 'A key is stored. Leave empty to keep it; entering one replaces it.',
+    apiKeyHintUnset: 'No key stored yet. Leaving it empty keeps the assistant disabled.',
+    model: 'Model',
+    writeMode: 'Write mode',
+    writeModeHint: 'How the assistant handles file changes.',
+  },
+
   account: {
     open: 'Change credentials',
     title: 'Change credentials',
@@ -312,6 +353,11 @@ export default {
     'HUGO-BIN-NOT-CONFIGURED': 'The Hugo binary is not configured ([hugo] bin in hugocms.ini).',
     'HUGO-BIN-MISSING': 'Hugo binary not found or not executable: {0}',
     'HUGO-SOURCE-MISSING': 'Hugo project directory not found: {0}',
+
+    'AI-NOT-CONFIGURED': 'The AI assistant is not configured ([ai] api_key in hugocms.ini).',
+    'AI-REQUEST-FAILED': 'AI request failed: {0}',
+    'AI-AUTH-FAILED': 'AI authentication failed — check the API key: {0}',
+    'AI-NO-PENDING': 'No pending action to confirm.',
 
     'MOUNT-NAME-INVALID': 'Invalid mount name: {0}',
     'MOUNT-NAME-TAKEN': 'Mount name already in use: {0}',

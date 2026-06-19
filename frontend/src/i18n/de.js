@@ -126,6 +126,47 @@ export default {
     note: 'Änderungen am Sitzungsverzeichnis und an der Logdatei greifen erst beim nächsten Laden.',
   },
 
+  assistant: {
+    open: 'KI-Assistent',
+    title: 'KI-Assistent',
+    clear: 'Verlauf löschen',
+    empty: 'Wie kann ich helfen? Ich kann Dateien lesen, anlegen und bearbeiten — bei Konfiguration (hugo.toml/config), Layouts und Partials.',
+    thinking: 'Assistent arbeitet …',
+    placeholder: 'Frage stellen oder Aufgabe beschreiben … (Enter sendet, Umschalt+Enter = neue Zeile)',
+    approve: 'Übernehmen',
+    reject: 'Ablehnen',
+    pendingTitle: 'Änderung bestätigen',
+    pendingNewFile: 'Neue Datei anlegen: {0}',
+    pendingOverwrite: 'Datei überschreiben: {0}',
+    pendingDir: 'Ordner anlegen: {0}',
+    pendingRename: 'Umbenennen: {0} → {1}',
+    oldContent: 'Bisheriger Inhalt',
+    mode: {
+      readonly: 'Nur lesen',
+      confirm: 'Mit Bestätigung',
+      auto: 'Automatisch',
+    },
+    tool: {
+      read_file: 'liest {0}',
+      list_dir: 'sieht {0} durch',
+      write_file: 'schreibt {0}',
+      create_dir: 'legt Ordner {0} an',
+      rename: 'benennt {0} um',
+    },
+  },
+
+  // Konfiguration des KI-Assistenten (in Setup- und Umkonfigurations-Formular).
+  aiConfig: {
+    section: 'KI-Assistent',
+    apiKey: 'Anthropic API-Schlüssel',
+    setupHint: 'Optional: API-Schlüssel für den KI-Assistenten. Leer lassen, wenn nicht gewünscht.',
+    apiKeyHintSet: 'Ein Schlüssel ist hinterlegt. Leer lassen, um ihn beizubehalten; Eingabe ersetzt ihn.',
+    apiKeyHintUnset: 'Noch kein Schlüssel hinterlegt. Leer lassen lässt den Assistenten deaktiviert.',
+    model: 'Modell',
+    writeMode: 'Schreibmodus',
+    writeModeHint: 'Wie der Assistent mit Datei-Änderungen umgeht.',
+  },
+
   account: {
     open: 'Anmeldedaten ändern',
     title: 'Anmeldedaten ändern',
@@ -314,6 +355,11 @@ export default {
     'HUGO-BIN-NOT-CONFIGURED': 'Hugo-Programm ist nicht konfiguriert ([hugo] bin in der hugocms.ini).',
     'HUGO-BIN-MISSING': 'Hugo-Programm nicht gefunden oder nicht ausführbar: {0}',
     'HUGO-SOURCE-MISSING': 'Hugo-Projektverzeichnis nicht gefunden: {0}',
+
+    'AI-NOT-CONFIGURED': 'Der KI-Assistent ist nicht konfiguriert ([ai] api_key in der hugocms.ini).',
+    'AI-REQUEST-FAILED': 'Anfrage an die KI fehlgeschlagen: {0}',
+    'AI-AUTH-FAILED': 'Authentifizierung bei der KI fehlgeschlagen — API-Schlüssel prüfen: {0}',
+    'AI-NO-PENDING': 'Keine ausstehende Aktion zum Bestätigen.',
 
     'MOUNT-NAME-INVALID': 'Ungültiger Mount-Name: {0}',
     'MOUNT-NAME-TAKEN': 'Mount bereits vergeben: {0}',

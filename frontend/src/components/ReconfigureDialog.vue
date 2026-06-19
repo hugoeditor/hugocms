@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 import { errorText } from '../i18n/apiMessage'
@@ -17,6 +17,17 @@ const logLevel = ref('warning')
 const logLevels = ref(['debug', 'info', 'warning', 'error'])
 const hugoBin = ref('')
 
+// KI-Assistent. Der Schlüssel wird nie geladen (Geheimnis); leeres Feld lässt
+// ihn unverändert. aiConfigured zeigt nur an, ob bereits einer gesetzt ist.
+const aiApiKey = ref('')
+const aiModel = ref('claude-opus-4-8')
+const aiWriteMode = ref('confirm')
+const aiConfigured = ref(false)
+const aiModels = ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5']
+const writeModeItems = computed(() =>
+  ['readonly', 'confirm', 'auto'].map((v) => ({ value: v, title: t(`assistant.mode.${v}`) })),
+)
+
 const loading = ref(false) // Laden der aktuellen Werte beim Öffnen
 const saving = ref(false)
 const error = ref(null)
@@ -33,6 +44,10 @@ watch(model, async (open) => {
     logLevel.value = cfg.logLevel ?? 'warning'
     logLevels.value = cfg.logLevels ?? ['debug', 'info', 'warning', 'error']
     hugoBin.value = cfg.hugoBin ?? ''
+    aiApiKey.value = ''
+    aiModel.value = cfg.aiModel || 'claude-opus-4-8'
+    aiWriteMode.value = cfg.aiWriteMode || 'confirm'
+    aiConfigured.value = !!cfg.aiConfigured
   } catch (e) {
     error.value = errorText(t, e)
   } finally {
@@ -49,6 +64,9 @@ async function submit() {
       logFile: logFile.value,
       logLevel: logLevel.value,
       hugoBin: hugoBin.value,
+      aiApiKey: aiApiKey.value, // leer = unverändert
+      aiModel: aiModel.value,
+      aiWriteMode: aiWriteMode.value,
     })
     emit('saved')
     model.value = false
@@ -101,6 +119,41 @@ async function submit() {
             v-model="hugoBin"
             :label="$t('setup.hugoBin')"
             prepend-inner-icon="mdi-language-go"
+            variant="outlined"
+            density="comfortable"
+            class="mb-2"
+          />
+
+          <v-divider class="my-3" />
+          <div class="text-subtitle-2 mb-2">{{ $t('aiConfig.section') }}</div>
+          <div class="text-caption text-medium-emphasis mb-1">
+            {{ aiConfigured ? $t('aiConfig.apiKeyHintSet') : $t('aiConfig.apiKeyHintUnset') }}
+          </div>
+          <v-text-field
+            v-model="aiApiKey"
+            :label="$t('aiConfig.apiKey')"
+            type="password"
+            prepend-inner-icon="mdi-key-variant"
+            autocomplete="off"
+            variant="outlined"
+            density="comfortable"
+            class="mb-2"
+          />
+          <v-select
+            v-model="aiModel"
+            :items="aiModels"
+            :label="$t('aiConfig.model')"
+            prepend-inner-icon="mdi-brain"
+            variant="outlined"
+            density="comfortable"
+            class="mb-2"
+          />
+          <div class="text-caption text-medium-emphasis mb-1">{{ $t('aiConfig.writeModeHint') }}</div>
+          <v-select
+            v-model="aiWriteMode"
+            :items="writeModeItems"
+            :label="$t('aiConfig.writeMode')"
+            prepend-inner-icon="mdi-shield-edit-outline"
             variant="outlined"
             density="comfortable"
           />
