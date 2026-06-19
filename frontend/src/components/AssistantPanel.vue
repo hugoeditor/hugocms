@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/auth'
 import { useAssistantStore } from '../stores/assistant'
 import { useFilesStore } from '../stores/files'
 import { errorText } from '../i18n/apiMessage'
+import { lineDiff } from '../util/lineDiff'
 
 const { t, locale } = useI18n()
 const auth = useAuthStore()
@@ -17,6 +18,15 @@ const scroller = ref(null)
 const writeModeLabel = computed(() => {
   const m = auth.ai?.writeMode ?? 'confirm'
   return t(`assistant.mode.${m}`)
+})
+
+// Inline-Diff für eine ausstehende write_file-Aktion auf einer BESTEHENDEN
+// Datei. null bei neuer Datei oder zu großem Inhalt → Panel zeigt dann die
+// einfache Inhalts-Vorschau.
+const diff = computed(() => {
+  const p = assistant.pending
+  if (!p || p.tool !== 'write_file' || p.oldContent == null) return null
+  return lineDiff(p.oldContent, p.input?.content ?? '')
 })
 
 // Tool-Notiz lesbar machen (Werkzeugname → übersetzter Text mit Pfad).
@@ -101,20 +111,31 @@ watch(
           <v-card-text class="py-2">
             <template v-if="assistant.pending.tool === 'write_file'">
               <div class="text-body-2 mb-1">
-                {{ assistant.pending.oldContent === null ? $t('assistant.pendingNewFile', [assistant.pending.input.path]) : $t('assistant.pendingOverwrite', [assistant.pending.input.path]) }}
+                {{ assistant.pending.oldContent === null ? $t('assistant.diffNewFile', [assistant.pending.input.path]) : $t('assistant.diffOverwrite', [assistant.pending.input.path]) }}
               </div>
-              <pre class="assistant-preview">{{ assistant.pending.input.content }}</pre>
-              <v-expansion-panels v-if="assistant.pending.oldContent !== null" variant="accordion" class="mt-1">
-                <v-expansion-panel :title="$t('assistant.oldContent')">
-                  <template #text><pre class="assistant-preview">{{ assistant.pending.oldContent }}</pre></template>
-                </v-expansion-panel>
-              </v-expansion-panels>
+              <!-- Überschreiben: zeilenweiser Diff (alt rot, neu grün, Kontext grau). -->
+              <div v-if="diff" class="assistant-diff">
+                <div
+                  v-for="(l, k) in diff"
+                  :key="k"
+                  class="assistant-diff__line"
+                  :class="`assistant-diff__line--${l.t}`"
+                ><span class="assistant-diff__sign">{{ l.t === 'add' ? '+' : l.t === 'del' ? '-' : ' ' }}</span>{{ l.text }}</div>
+              </div>
+              <!-- Neue Datei oder zu großer Diff: einfache Inhalts-Vorschau. -->
+              <pre v-else class="assistant-preview">{{ assistant.pending.input.content }}</pre>
             </template>
             <div v-else-if="assistant.pending.tool === 'create_dir'" class="text-body-2">
               {{ $t('assistant.pendingDir', [assistant.pending.input.path]) }}
             </div>
             <div v-else-if="assistant.pending.tool === 'rename'" class="text-body-2">
               {{ $t('assistant.pendingRename', [assistant.pending.input.path, assistant.pending.input.new_name]) }}
+            </div>
+            <div v-else-if="assistant.pending.tool === 'delete'" class="text-body-2">
+              {{ $t('assistant.pendingDelete', [assistant.pending.input.path]) }}
+            </div>
+            <div v-else-if="assistant.pending.tool === 'move'" class="text-body-2">
+              {{ $t('assistant.pendingMove', [assistant.pending.input.path, assistant.pending.input.dest_dir]) }}
             </div>
           </v-card-text>
           <v-card-actions>
@@ -179,5 +200,38 @@ watch(
   font-size: 0.8rem;
   white-space: pre-wrap;
   word-break: break-word;
+}
+.assistant-diff {
+  max-height: 280px;
+  overflow: auto;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.03);
+  padding: 4px 0;
+  font-family: monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+.assistant-diff__line {
+  padding: 0 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.assistant-diff__sign {
+  display: inline-block;
+  width: 1ch;
+  margin-right: 4px;
+  opacity: 0.55;
+  user-select: none;
+}
+.assistant-diff__line--add {
+  background: rgba(60, 133, 39, 0.16);
+}
+.assistant-diff__line--del {
+  background: rgba(192, 57, 43, 0.14);
+  text-decoration: line-through;
+  text-decoration-color: rgba(192, 57, 43, 0.5);
+}
+.assistant-diff__line--ctx {
+  color: var(--mint-text-muted, #666);
 }
 </style>

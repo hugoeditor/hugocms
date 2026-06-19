@@ -140,7 +140,11 @@ export default {
     pendingOverwrite: 'Overwrite file: {0}',
     pendingDir: 'Create directory: {0}',
     pendingRename: 'Rename: {0} → {1}',
+    pendingDelete: 'Move to trash: {0}',
+    pendingMove: 'Move: {0} → {1}',
     oldContent: 'Current content',
+    diffNewFile: 'New file: {0}',
+    diffOverwrite: 'Overwrites: {0}',
     mode: {
       readonly: 'Read-only',
       confirm: 'With confirmation',
@@ -152,6 +156,8 @@ export default {
       write_file: 'writes {0}',
       create_dir: 'creates directory {0}',
       rename: 'renames {0}',
+      delete: 'deletes {0}',
+      move: 'moves {0}',
     },
   },
 

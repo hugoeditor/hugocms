@@ -27,7 +27,7 @@ final class AssistantService
     private const MAX_TOKENS = 16000;
 
     /** Werkzeuge, die schreiben (im Modus confirm bestätigungspflichtig). */
-    private const WRITE_TOOLS = ['write_file', 'create_dir', 'rename'];
+    private const WRITE_TOOLS = ['write_file', 'create_dir', 'rename', 'delete', 'move'];
 
     public function __construct(
         private readonly AnthropicClient $client,
@@ -156,6 +156,8 @@ final class AssistantService
                 'write_file' => $this->toolWriteFile($input),
                 'create_dir' => $this->toolCreateDir($input),
                 'rename' => $this->toolRename($input),
+                'delete' => $this->toolDelete($input),
+                'move' => $this->toolMove($input),
                 default => throw ApiException::badRequest('AI-UNKNOWN-TOOL', [$name]),
             };
 
@@ -216,6 +218,30 @@ final class AssistantService
         $this->files->rename($r['mount'], $r['rel'], $r['abs'], $newName);
 
         return 'Umbenannt: ' . $path . ' → ' . $newName;
+    }
+
+    private function toolDelete(array $input): string
+    {
+        $path = (string) ($input['path'] ?? '');
+        $r = $this->resolvePath($path, true, 'delete');
+        $this->files->trash($r['mount'], $r['rel'], $r['abs']);
+
+        return 'In den Papierkorb verschoben: ' . $path;
+    }
+
+    private function toolMove(array $input): string
+    {
+        $path = (string) ($input['path'] ?? '');
+        $destDir = (string) ($input['dest_dir'] ?? '');
+        $src = $this->resolvePath($path, true, 'move');
+        $dest = $this->resolvePath($destDir, true, 'move'); // Zielordner muss existieren
+        // FileService::move arbeitet innerhalb EINES Mounts.
+        if ($src['mount'] !== $dest['mount']) {
+            throw ApiException::denied('CROSS-MOUNT-NOT-ALLOWED');
+        }
+        $this->files->move($src['mount'], $src['rel'], $src['abs'], $dest['rel'], $dest['abs']);
+
+        return 'Verschoben: ' . $path . ' → ' . $destDir;
     }
 
     /**
@@ -358,6 +384,16 @@ final class AssistantService
             'name' => 'rename',
             'description' => 'Rename a file or directory within its folder. "path" is the existing item; "new_name" is the new base name.',
             'input_schema' => ['type' => 'object', 'properties' => ['path' => ['type' => 'string'], 'new_name' => ['type' => 'string']], 'required' => ['path', 'new_name']],
+        ];
+        $tools[] = [
+            'name' => 'delete',
+            'description' => 'Move a file or directory to the trash (recoverable). "path" is "<mount>/<relative path>".',
+            'input_schema' => ['type' => 'object', 'properties' => ['path' => ['type' => 'string']], 'required' => ['path']],
+        ];
+        $tools[] = [
+            'name' => 'move',
+            'description' => 'Move a file or directory into another directory within the same mount. "path" is the item to move; "dest_dir" is the target directory (must already exist).',
+            'input_schema' => ['type' => 'object', 'properties' => ['path' => ['type' => 'string'], 'dest_dir' => ['type' => 'string']], 'required' => ['path', 'dest_dir']],
         ];
 
         return $tools;

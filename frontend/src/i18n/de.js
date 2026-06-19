@@ -140,7 +140,11 @@ export default {
     pendingOverwrite: 'Datei überschreiben: {0}',
     pendingDir: 'Ordner anlegen: {0}',
     pendingRename: 'Umbenennen: {0} → {1}',
+    pendingDelete: 'In den Papierkorb verschieben: {0}',
+    pendingMove: 'Verschieben: {0} → {1}',
     oldContent: 'Bisheriger Inhalt',
+    diffNewFile: 'Neue Datei: {0}',
+    diffOverwrite: 'Überschreibt: {0}',
     mode: {
       readonly: 'Nur lesen',
       confirm: 'Mit Bestätigung',
@@ -152,6 +156,8 @@ export default {
       write_file: 'schreibt {0}',
       create_dir: 'legt Ordner {0} an',
       rename: 'benennt {0} um',
+      delete: 'löscht {0}',
+      move: 'verschiebt {0}',
     },
   },
 
