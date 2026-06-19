@@ -10,9 +10,10 @@ Mounts erreichbar sind, wird je Webseite über INI-Dateien festgelegt.
 > verschieben, löschen, Mehrfachauswahl, Kontextmenü; Upload (Drag-and-Drop),
 > Download, Bildvorschauen, Bildbetrachter, Symbolansicht; visueller
 > Markdown-Editor (TipTap), Papierkorb-Verwaltung (Wiederherstellen/Leeren),
-> CSRF-Schutz, rekursive Suche. Konfiguration und Anmeldedaten lassen sich im
-> laufenden Betrieb über die Oberfläche ändern. Mehrbenutzer mit Rollen folgt
-> (Stufe 5).
+> CSRF-Schutz, rekursive Suche. Optionaler **KI-Assistent** (Claude) mit Zugriff
+> auf die Mounts, Editor-Anbindung und drei Schreibmodi. Konfiguration und
+> Anmeldedaten lassen sich im laufenden Betrieb über die Oberfläche ändern.
+> Mehrbenutzer mit Rollen folgt (Stufe 5).
 > Mandantenfähigkeit und der Auslieferungsweg (`packaging.sh` / `install.sh`)
 > stehen bereits.
 
@@ -32,6 +33,8 @@ hugocms-2026/                     # Quell-Repo (Entwicklung)
 │   │   ├── MountResolver.php     # Mounts, ID-Kodierung, Einsperrung
 │   │   ├── Mount.php             # Einhängepunkt (Pfad, Rechte, Endungen)
 │   │   ├── FileService.php       # Dateioperationen (list, read, write, anlegen, …)
+│   │   ├── AssistantService.php  # KI-Assistent: Tool-Schleife über FileService
+│   │   ├── AnthropicClient.php   # Claude-API über cURL (ohne SDK)
 │   │   ├── AuthFactory.php       # Auth-Treiber (singleuser)
 │   │   ├── Logger.php            # Datei-Logging mit Stufen
 │   │   ├── Response.php          # einheitliche JSON-Antworten
@@ -112,6 +115,12 @@ level = warning      ; debug | info | warning | error
 ; eine Hugo-Binärdatei, daher steht sie hier — nicht in den Mounts. Fehlt sie,
 ; wird der Veröffentlichen-Knopf nicht angeboten.
 bin = ../bin/hugo/hugo
+
+[ai]
+; KI-Assistent (Claude), optional. Ohne api_key ist der Assistent aus.
+api_key    = "sk-ant-..."     ; Anthropic-Schlüssel (Geheimnis; Datei mit 0640 schützen)
+model      = claude-opus-4-8  ; Claude-Modell (Standard: claude-opus-4-8)
+write_mode = confirm          ; readonly | confirm | auto (Standard: confirm)
 ```
 
 ### Mounts
@@ -315,7 +324,9 @@ Die `hugocms.ini` lässt sich auch nach der Einrichtung über die Oberfläche
 anpassen (nur bei INI-basierter Installation, nicht bei `custom.php`):
 
 - **Zahnrad in der Titelleiste** (`reconfigure`): Sitzungsverzeichnis, Logdatei,
-  Log-Stufe und Hugo-Programm. Die Anmeldedaten bleiben unberührt; Pfadänderungen
+  Log-Stufe, Hugo-Programm sowie der KI-Assistent (API-Schlüssel, Modell,
+  Schreibmodus). Die Anmeldedaten bleiben unberührt; ein leeres
+  API-Schlüssel-Feld lässt den vorhandenen Schlüssel unverändert. Pfadänderungen
   greifen beim nächsten Laden.
 - **Klick auf den Benutzernamen** (`account`): Anmeldename und Passwort ändern.
   Zur Bestätigung ist das aktuelle Passwort nötig; danach wird zur erneuten
@@ -325,6 +336,55 @@ Das Lesen und Schreiben der `hugocms.ini` ist in `Config` gekapselt; die
 Persistenz der Anmeldedaten übernimmt der Auth-Treiber selbst
 (`AuthInterface::changeCredentials`), sodass ein künftiger Mehrbenutzer-Treiber
 sie anders ablegen kann, ohne dass der Connector sich ändert.
+
+## KI-Assistent
+
+Optionaler Chat-Assistent auf Basis von Claude. Er kennt Hugo (Front Matter,
+`config.*`, Themes, Layouts/Partials) und arbeitet direkt auf den Mounts der
+aufgerufenen Webseite. Aktiv ist er nur, wenn in der `hugocms.ini` ein
+`[ai] api_key` hinterlegt ist; dann erscheint ein Roboter-Knopf in der
+Titelleiste, der das Chat-Panel öffnet.
+
+**Architektur.** Der Assistent fügt sich in das schlanke, zustandslose Backend
+ein: Der Client hält den Gesprächsverlauf (Anthropic-Nachrichtenformat) und
+schickt ihn bei jedem Zug mit; das Backend (`AssistantService`) führt die
+Werkzeug-Schleife aus und gibt den fortgeschriebenen Verlauf zurück. Die
+Claude-API wird über **cURL** angesprochen (`AnthropicClient`) — kein SDK, kein
+Composer. Modell-Standard: `claude-opus-4-8`.
+
+**Werkzeuge und Sicherheit.** Der Assistent greift ausschließlich über
+`FileService`/`MountResolver` zu (`list_dir`, `read_file`, `write_file`,
+`create_dir`, `rename`, `delete` → Papierkorb, `move`). Damit gelten für ihn
+**dieselben Grenzen** wie für die Oberfläche: Einsperrung pro Mount,
+`permissions`/`readonly` und erlaubte Endungen. Der API-Schlüssel verlässt das
+Backend nie (wie der Passwort-Hash); im Formular heißt „Feld leer = unverändert".
+
+**Schreibmodi** (`[ai] write_mode`):
+
+| Modus     | Verhalten                                                        |
+|-----------|------------------------------------------------------------------|
+| `readonly`| Nur lesen — Schreibwerkzeuge sind gar nicht erst verfügbar.      |
+| `confirm` | Jede Schreibaktion wird zur Bestätigung angezeigt (Standard).    |
+| `auto`    | Schreibaktionen werden direkt ausgeführt.                        |
+
+Im `confirm`-Modus zeigt das Panel vor dem Schreiben eine Vorschau: bei einer
+bestehenden Datei einen zeilenweisen Diff, bei einer neuen Datei den Inhalt.
+
+**Editor- und Dateimanager-Anbindung.** Der Assistent erhält bei jedem Zug den
+Kontext der Oberfläche: die im **Editor** geöffnete Datei (für „diese Datei")
+und das im **Dateimanager** angezeigte Verzeichnis (Zielort für „eine neue
+Datei" ohne Pfadangabe). Ungespeicherte Editor-Änderungen werden vor dem Zug
+automatisch gesichert; ändert der Assistent die offene Datei, lädt der Editor
+das Ergebnis sofort neu.
+
+**Projektkonventionen.** Der Assistent ist angewiesen, vorhandene Konventionen
+zu übernehmen (Front-Matter-Format YAML/TOML/JSON, Datumsformat, Config-Sprache,
+Templating-Stil), statt zu raten — er prüft dafür Nachbardateien, `archetypes/`
+und die Hugo-Config. Zusätzlich kann jede Webseite eine versteckte Datei
+**`.hugocms-assistant.md`** im Wurzelverzeichnis eines Mounts hinterlegen; deren
+Inhalt wird als vorrangige, projektweite Anweisung in den Systemkontext geladen
+(z. B. „Front Matter immer YAML", „Theme ananke", „Inhalte auf Deutsch"). Fehlt
+die Datei, greift die allgemeine Konventionserkennung.
 
 ## API-Befehle
 
@@ -352,8 +412,9 @@ sie anders ablegen kann, ohne dass der Connector sich ändert.
 | `restore`  | POST    | `mount`, `names` (Liste)             | Aus dem Papierkorb wiederherstellen    |
 | `emptytrash`| POST   | `mount`?                             | Papierkorb endgültig leeren            |
 | `build`    | POST    | –                                    | Hugo aufrufen (Webseite erzeugen)      |
-| `config`   | GET     | –                                    | Aktuelle Konfigurationswerte (ohne Anmeldedaten) |
-| `reconfigure`| POST  | `sessionPath`, `logFile`, `logLevel`, `hugoBin`? | hugocms.ini ändern (Verzeichnisse/Log/Hugo) |
+| `assistant`| POST    | `messages`, `locale`?, `confirm`?, `openFilePath`?, `openDirPath`? | KI-Assistent: einen Zug ausführen (Werkzeug-Schleife) |
+| `config`   | GET     | –                                    | Aktuelle Konfigurationswerte inkl. AI-Status (ohne Geheimnisse) |
+| `reconfigure`| POST  | `sessionPath`, `logFile`, `logLevel`, `hugoBin`?, `aiApiKey`?, `aiModel`?, `aiWriteMode`? | hugocms.ini ändern (Verzeichnisse/Log/Hugo/AI) |
 | `account`  | POST    | `currentPassword`, `username`, `password`? | Anmeldedaten ändern (danach Neuanmeldung) |
 
 Alle POST-Befehle verlangen das **CSRF-Token** aus `whoami` (Feld `csrf`) im

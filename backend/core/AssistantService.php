@@ -29,6 +29,10 @@ final class AssistantService
     /** Werkzeuge, die schreiben (im Modus confirm bestätigungspflichtig). */
     private const WRITE_TOOLS = ['write_file', 'create_dir', 'rename', 'delete', 'move'];
 
+    /** Projektweite Anweisungsdatei (im Wurzelverzeichnis eines Mounts). */
+    private const INSTRUCTION_FILE = '.hugocms-assistant.md';
+    private const MAX_INSTRUCTION_BYTES = 8192;
+
     public function __construct(
         private readonly AnthropicClient $client,
         private readonly string $model,
@@ -399,6 +403,27 @@ final class AssistantService
         return $tools;
     }
 
+    /**
+     * Liest die projektweite Anweisungsdatei (.hugocms-assistant.md) aus dem
+     * Wurzelverzeichnis des ersten Mounts, der sie enthält. Vom Maintainer
+     * gepflegt — daher als vertrauenswürdige, vorrangige Anweisung behandelt.
+     */
+    private function projectInstructions(): ?string
+    {
+        foreach ($this->resolver->all() as $mount) {
+            $path = $mount->root() . '/' . self::INSTRUCTION_FILE;
+            if (!is_file($path)) {
+                continue;
+            }
+            $text = @file_get_contents($path, false, null, 0, self::MAX_INSTRUCTION_BYTES);
+            if ($text !== false && trim($text) !== '') {
+                return trim($text);
+            }
+        }
+
+        return null;
+    }
+
     private function systemPrompt(string $locale, ?string $openFilePath = null, ?string $openDirPath = null): string
     {
         $mountLines = [];
@@ -434,6 +459,15 @@ final class AssistantService
             $openNote .= "\n\nThe file manager is currently showing the directory `{$openDirPath}`. "
                 . "When the user asks to create a file or folder without saying where, place it in this directory "
                 . "unless the request clearly points elsewhere — in which case briefly say where you put it.";
+        }
+
+        // Projektweite Maintainer-Anweisungen (.hugocms-assistant.md) — haben
+        // Vorrang vor der generischen Anleitung oben.
+        $instructions = $this->projectInstructions();
+        if ($instructions !== null) {
+            $openNote .= "\n\nProject-specific instructions from the site maintainer "
+                . "(authoritative — follow these; they override the general guidance above where they conflict):\n"
+                . $instructions;
         }
 
         return <<<SYS
