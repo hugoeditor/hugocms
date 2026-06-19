@@ -58,8 +58,9 @@ export const useFilesStore = defineStore('files', {
     history: [],
     historyIndex: -1,
 
-    openFile: null, // { id, name, content, mtime } oder null
+    openFile: null, // { id, name, content, mtime, path } oder null
     dirty: false, // ungespeicherte Änderungen im Editor
+    reloadTick: 0, // erhöht sich, wenn der offene Inhalt extern neu geladen wurde
   }),
 
   getters: {
@@ -393,8 +394,21 @@ export const useFilesStore = defineStore('files', {
 
     async openTextFile(entry) {
       const data = await api.get('read', { target: entry.id })
-      this.openFile = { id: entry.id, name: data.name, content: data.content, mtime: data.mtime }
+      this.openFile = { id: entry.id, name: data.name, content: data.content, mtime: data.mtime, path: data.path }
       this.dirty = false
+    },
+
+    // Lädt die offene Datei neu (z. B. nachdem der KI-Assistent sie geändert
+    // hat) und stößt über reloadTick die Anzeige im Editor an. Nur wirksam,
+    // wenn sich der Inhalt tatsächlich geändert hat.
+    async reloadOpenFile() {
+      if (!this.openFile) return
+      const data = await api.get('read', { target: this.openFile.id })
+      if (data.content === this.openFile.content) return
+      this.openFile.content = data.content
+      this.openFile.mtime = data.mtime
+      this.dirty = false
+      this.reloadTick++
     },
 
     async saveOpenFile(content, { force = false } = {}) {

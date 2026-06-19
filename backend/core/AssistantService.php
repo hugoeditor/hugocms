@@ -47,9 +47,9 @@ final class AssistantService
      * @param string $locale Sprachkürzel für die Antwort
      * @return array{messages: array, reply: string, actions: array, pending: ?array}
      */
-    public function run(array $messages, ?string $confirm, string $locale): array
+    public function run(array $messages, ?string $confirm, string $locale, ?string $openFilePath = null): array
     {
-        $system = $this->systemPrompt($locale);
+        $system = $this->systemPrompt($locale, $openFilePath);
         $tools = $this->toolDefs();
         $actions = [];
 
@@ -399,7 +399,7 @@ final class AssistantService
         return $tools;
     }
 
-    private function systemPrompt(string $locale): string
+    private function systemPrompt(string $locale, ?string $openFilePath = null): string
     {
         $mountLines = [];
         foreach ($this->resolver->all() as $mount) {
@@ -419,15 +419,26 @@ final class AssistantService
             default => 'Write actions are applied directly.',
         };
 
+        // Hinweis auf die aktuell im Editor geöffnete Datei, damit "diese Datei"
+        // / "die offene Datei" eindeutig ist.
+        $openNote = '';
+        if ($openFilePath !== null && $openFilePath !== '') {
+            $openNote = "\n\nThe file `{$openFilePath}` is currently open in the editor. "
+                . "When the user says \"this file\", \"the open file\" or similar without naming a path, they mean this one. "
+                . "Its unsaved changes have already been saved before this turn, so read_file reflects the current state.";
+        }
+
         return <<<SYS
         You are an assistant built into HugoCMS, a file manager for Hugo static-site projects. You help the user manage their Hugo site: editing content with front matter, fixing configuration (hugo.toml / hugo.yaml / config.toml), creating and editing layouts and partials, and explaining Hugo concepts.
 
         You access the project through tools. A path has the form `<mount>/<relative/path>`, where `<mount>` is one of the configured mounts below; use just `<mount>` for its root. Discover structure with list_dir, and always read a file before overwriting it.
 
+        Match the project's existing conventions — never introduce a format or style the project does not already use. Hugo has no global front-matter format; it is per file, recognizable only by the delimiters (`---` = YAML, `+++` = TOML, `{ }` = JSON). So BEFORE creating content or front matter, inspect what the project already does: read an existing file in the same section, or check the `archetypes/` templates and the Hugo config (hugo.toml / hugo.yaml / config.*). Adopt the same front-matter format, date format, and field names. The same applies to config edits (match the existing config language) and to layouts/partials (match the templating style and naming already in use). If existing files disagree or none exist, ask the user which convention to follow rather than guessing.
+
         Configured mounts:
         {$mounts}
 
-        {$writeNote}
+        {$writeNote}{$openNote}
 
         Answer in the user's language (locale: {$locale}). Be concise and practical — prefer concrete edits and exact Hugo syntax over long explanations.
         SYS;

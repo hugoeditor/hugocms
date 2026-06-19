@@ -6,6 +6,7 @@ import { useAssistantStore } from '../stores/assistant'
 import { useFilesStore } from '../stores/files'
 import { errorText } from '../i18n/apiMessage'
 import { lineDiff } from '../util/lineDiff'
+import { flushEditor } from '../util/editorBridge'
 
 const { t, locale } = useI18n()
 const auth = useAuthStore()
@@ -36,18 +37,42 @@ function toolText(b) {
   return label === key ? `${b.tool} ${b.path}` : label
 }
 
+// Wenn der Assistent die im Editor geöffnete Datei geändert hat, deren Inhalt
+// neu laden, damit das Ergebnis sofort im Editor erscheint.
+function norm(p) {
+  return String(p ?? '').replace(/^\/+|\/+$/g, '')
+}
+async function reloadIfOpenChanged() {
+  const open = files.openFile
+  if (open?.path && assistant.actions.some((a) => norm(a.path) === norm(open.path))) {
+    await files.reloadOpenFile()
+  }
+}
+
 async function submit() {
   const text = input.value.trim()
   if (!text || assistant.busy) return
+  // Ungespeicherte Editor-Änderungen sichern, damit der Assistent den aktuellen
+  // Stand sieht (analog zum Veröffentlichen-Knopf). Bei Speicherfehler abbrechen.
+  if (files.dirty && files.openFile) {
+    const saved = await flushEditor()
+    if (!saved) return
+  }
   input.value = ''
-  const ok = await assistant.send(text, locale.value)
-  if (!ok) input.value = text // bei Fehler zurück ins Feld
+  const ok = await assistant.send(text, locale.value, files.openFile?.path ?? null)
+  if (!ok) {
+    input.value = text // bei Fehler zurück ins Feld
+    return
+  }
+  await reloadIfOpenChanged()
 }
 
 async function resolve(decision) {
-  await assistant.resolve(decision, locale.value)
-  // Nach einer Änderung könnte der aktuelle Ordner veraltet sein — auffrischen.
-  if (decision === 'allow') files.refresh?.()
+  await assistant.resolve(decision, locale.value, files.openFile?.path ?? null)
+  if (decision === 'allow') {
+    files.refresh?.() // Ordneransicht könnte veraltet sein
+    await reloadIfOpenChanged()
+  }
 }
 
 // Beim Eintreffen neuer Nachrichten ans Ende scrollen.

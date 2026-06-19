@@ -391,7 +391,13 @@ final class Connector
         $target = $this->resolver->resolve($this->requireParam($request, 'target'));
         $this->requirePermission($target['mount'], 'read');
 
-        return $this->files->readText($target['mount'], $target['abs']);
+        $data = $this->files->readText($target['mount'], $target['abs']);
+        // Lesbarer Pfad (mount/rel) — der KI-Assistent referenziert Dateien so.
+        $data['path'] = $target['rel'] === ''
+            ? $target['mount']->name()
+            : $target['mount']->name() . '/' . $target['rel'];
+
+        return $data;
     }
 
     private function cmdWrite(array $request): array
@@ -768,6 +774,8 @@ final class Connector
         if ($confirm !== null && !in_array($confirm, ['allow', 'reject'], true)) {
             throw ApiException::badRequest('PARAM-INVALID', ['confirm']);
         }
+        // Optionaler Kontext: im Editor geöffnete Datei (lesbarer Pfad).
+        $openFilePath = trim((string) ($request['openFilePath'] ?? '')) ?: null;
 
         // Der Werkzeug-Loop kann mehrere API-Aufrufe nacheinander machen.
         @set_time_limit(180);
@@ -780,7 +788,7 @@ final class Connector
             $this->files,
         );
 
-        return $service->run($messages, $confirm === null ? null : (string) $confirm, $locale);
+        return $service->run($messages, $confirm === null ? null : (string) $confirm, $locale, $openFilePath);
     }
 
     /** Erlaubte Log-Stufen — gemeinsam für Lesen (config) und Schreiben. */

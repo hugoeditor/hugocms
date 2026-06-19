@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useFilesStore } from '../stores/files'
 import { errorText } from '../i18n/apiMessage'
 import CodeMirrorEditor from './CodeMirrorEditor.vue'
+import { setEditorSaver } from '../util/editorBridge'
 import WysiwygEditor from './WysiwygEditor.vue'
 import FrontMatterPanel from './FrontMatterPanel.vue'
 import { useTransientError } from '../util/transientError'
@@ -123,6 +124,19 @@ watch(
   },
 )
 
+// Externer Neu-Lade-Anstoß (z. B. nachdem der KI-Assistent die offene Datei
+// geändert hat): Entwurf aus dem aktualisierten Inhalt übernehmen. Der
+// CodeMirror-/WYSIWYG-Schlüssel enthält reloadTick und remountet dadurch.
+watch(
+  () => files.reloadTick,
+  () => {
+    draft.value = files.openFile?.content ?? ''
+    files.dirty = false
+    error.value = null
+    if (isMarkdown.value && mode.value === 'wysiwyg') syncFromDraft()
+  },
+)
+
 function onInput(value) {
   draft.value = value
   files.dirty = value !== files.openFile?.content
@@ -189,11 +203,14 @@ function onBeforeWindowUnload(e) {
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('beforeunload', onBeforeWindowUnload)
+  // Dem Assistenten erlauben, ungespeicherte Änderungen vor einem Zug zu sichern.
+  setEditorSaver(save)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('beforeunload', onBeforeWindowUnload)
+  setEditorSaver(null)
 })
 </script>
 
@@ -267,12 +284,12 @@ onBeforeUnmount(() => {
         <!-- Visueller Markdown-Modus: Front-Matter separat, Body in TipTap -->
         <template v-if="mode === 'wysiwyg'">
           <FrontMatterPanel
-            :key="files.openFile.id + ':fm'"
+            :key="files.openFile.id + ':fm:' + files.reloadTick"
             :model-value="fmDraft"
             @update:model-value="onFmInput"
           />
           <WysiwygEditor
-            :key="files.openFile.id + ':wysiwyg'"
+            :key="files.openFile.id + ':wysiwyg:' + files.reloadTick"
             :model-value="bodyDraft"
             :save-disabled="!files.dirty"
             :saving="saving"
@@ -287,7 +304,7 @@ onBeforeUnmount(() => {
         <CodeMirrorEditor
           v-else
           ref="editorRef"
-          :key="files.openFile.id"
+          :key="files.openFile.id + ':' + files.reloadTick"
           :model-value="draft"
           :filename="files.openFile.name"
           class="flex-grow-1"

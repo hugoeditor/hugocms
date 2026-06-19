@@ -41,12 +41,12 @@ export const useAssistantStore = defineStore('assistant', {
     // Sendet eine neue Nutzernachricht. Rückgabe: true bei Erfolg. Bei Fehler
     // wird die gerade angehängte Nachricht zurückgerollt (alternierende
     // Rollen bleiben gültig) und der Aufrufer kann den Text erneut anbieten.
-    async send(text, locale) {
+    async send(text, locale, openFilePath = null) {
       this.error = null
       this.history.push({ role: 'user', content: text })
       this.busy = true
       try {
-        const data = await api.post('assistant', { messages: this.history, locale })
+        const data = await api.post('assistant', { messages: this.history, locale, openFilePath })
         this.apply(data)
         return true
       } catch (e) {
@@ -59,11 +59,11 @@ export const useAssistantStore = defineStore('assistant', {
     },
 
     // Beantwortet eine ausstehende Schreibaktion (confirm-Modus).
-    async resolve(decision, locale) {
+    async resolve(decision, locale, openFilePath = null) {
       this.error = null
       this.busy = true
       try {
-        const data = await api.post('assistant', { messages: this.history, locale, confirm: decision })
+        const data = await api.post('assistant', { messages: this.history, locale, confirm: decision, openFilePath })
         this.apply(data)
         return true
       } catch (e) {
