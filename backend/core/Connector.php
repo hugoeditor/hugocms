@@ -379,8 +379,14 @@ final class Connector
         $target = $this->resolver->resolve($this->requireParam($request, 'target'));
         $this->requirePermission($target['mount'], 'read');
 
+        $cwd = $this->files->entryInfo($target['mount'], $target['rel'], $target['abs']);
+        // Lesbarer Pfad (mount/rel) — als Kontext für den KI-Assistenten.
+        $cwd['path'] = $target['rel'] === ''
+            ? $target['mount']->name()
+            : $target['mount']->name() . '/' . $target['rel'];
+
         return [
-            'cwd' => $this->files->entryInfo($target['mount'], $target['rel'], $target['abs']),
+            'cwd' => $cwd,
             'entries' => $this->files->listDir($target['mount'], $target['rel'], $target['abs']),
         ];
     }
@@ -774,8 +780,10 @@ final class Connector
         if ($confirm !== null && !in_array($confirm, ['allow', 'reject'], true)) {
             throw ApiException::badRequest('PARAM-INVALID', ['confirm']);
         }
-        // Optionaler Kontext: im Editor geöffnete Datei (lesbarer Pfad).
+        // Optionaler Kontext: im Editor geöffnete Datei und im Dateimanager
+        // angezeigtes Verzeichnis (jeweils lesbarer Pfad).
         $openFilePath = trim((string) ($request['openFilePath'] ?? '')) ?: null;
+        $openDirPath = trim((string) ($request['openDirPath'] ?? '')) ?: null;
 
         // Der Werkzeug-Loop kann mehrere API-Aufrufe nacheinander machen.
         @set_time_limit(180);
@@ -788,7 +796,7 @@ final class Connector
             $this->files,
         );
 
-        return $service->run($messages, $confirm === null ? null : (string) $confirm, $locale, $openFilePath);
+        return $service->run($messages, $confirm === null ? null : (string) $confirm, $locale, $openFilePath, $openDirPath);
     }
 
     /** Erlaubte Log-Stufen — gemeinsam für Lesen (config) und Schreiben. */

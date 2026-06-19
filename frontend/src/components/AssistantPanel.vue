@@ -49,6 +49,14 @@ async function reloadIfOpenChanged() {
   }
 }
 
+// Kontext aus Editor (offene Datei) und Dateimanager (angezeigtes Verzeichnis).
+function context() {
+  return {
+    openFilePath: files.openFile?.path ?? null,
+    openDirPath: files.cwd?.path ?? null,
+  }
+}
+
 async function submit() {
   const text = input.value.trim()
   if (!text || assistant.busy) return
@@ -59,7 +67,7 @@ async function submit() {
     if (!saved) return
   }
   input.value = ''
-  const ok = await assistant.send(text, locale.value, files.openFile?.path ?? null)
+  const ok = await assistant.send(text, locale.value, context())
   if (!ok) {
     input.value = text // bei Fehler zurück ins Feld
     return
@@ -68,7 +76,7 @@ async function submit() {
 }
 
 async function resolve(decision) {
-  await assistant.resolve(decision, locale.value, files.openFile?.path ?? null)
+  await assistant.resolve(decision, locale.value, context())
   if (decision === 'allow') {
     files.refresh?.() // Ordneransicht könnte veraltet sein
     await reloadIfOpenChanged()

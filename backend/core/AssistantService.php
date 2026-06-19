@@ -47,9 +47,9 @@ final class AssistantService
      * @param string $locale Sprachkürzel für die Antwort
      * @return array{messages: array, reply: string, actions: array, pending: ?array}
      */
-    public function run(array $messages, ?string $confirm, string $locale, ?string $openFilePath = null): array
+    public function run(array $messages, ?string $confirm, string $locale, ?string $openFilePath = null, ?string $openDirPath = null): array
     {
-        $system = $this->systemPrompt($locale, $openFilePath);
+        $system = $this->systemPrompt($locale, $openFilePath, $openDirPath);
         $tools = $this->toolDefs();
         $actions = [];
 
@@ -399,7 +399,7 @@ final class AssistantService
         return $tools;
     }
 
-    private function systemPrompt(string $locale, ?string $openFilePath = null): string
+    private function systemPrompt(string $locale, ?string $openFilePath = null, ?string $openDirPath = null): string
     {
         $mountLines = [];
         foreach ($this->resolver->all() as $mount) {
@@ -428,6 +428,14 @@ final class AssistantService
                 . "Its unsaved changes have already been saved before this turn, so read_file reflects the current state.";
         }
 
+        // Hinweis auf das im Dateimanager angezeigte Verzeichnis — Zielort für
+        // "eine neue Datei" ohne Pfadangabe.
+        if ($openDirPath !== null && $openDirPath !== '') {
+            $openNote .= "\n\nThe file manager is currently showing the directory `{$openDirPath}`. "
+                . "When the user asks to create a file or folder without saying where, place it in this directory "
+                . "unless the request clearly points elsewhere — in which case briefly say where you put it.";
+        }
+
         return <<<SYS
         You are an assistant built into HugoCMS, a file manager for Hugo static-site projects. You help the user manage their Hugo site: editing content with front matter, fixing configuration (hugo.toml / hugo.yaml / config.toml), creating and editing layouts and partials, and explaining Hugo concepts.
 
@@ -438,7 +446,7 @@ final class AssistantService
         Configured mounts:
         {$mounts}
 
-        {$writeNote}{$openNote}
+        {$writeNote} Write each file exactly once: decide on its complete, final content first and write it in a SINGLE write_file call. Never create a file and then immediately overwrite it again in the same task — in confirmation mode that would force the user to confirm the same file twice.{$openNote}
 
         Answer in the user's language (locale: {$locale}). Be concise and practical — prefer concrete edits and exact Hugo syntax over long explanations.
         SYS;
