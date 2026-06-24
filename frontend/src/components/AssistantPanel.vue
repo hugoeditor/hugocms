@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
@@ -22,6 +22,37 @@ const scroller = ref(null)
 // Animation stimmt.
 const display = useDisplay()
 const drawerWidth = computed(() => (display.xs.value ? display.width.value : 440))
+
+// Höhe des Drawers an die TATSÄCHLICH sichtbare Fläche binden. Auf echten
+// Smartphones überschätzen 100vh/100dvh den sichtbaren Bereich: Die dynamische
+// Adressleiste und vor allem die eingeblendete Bildschirmtastatur verkleinern
+// nur den "visual viewport", nicht aber vh/dvh. Dadurch rutscht das unten
+// angedockte Eingabefeld aus dem Bild und man muss scrollen. Die VisualViewport-
+// API liefert die echte Höhe und reagiert auf beide Effekte.
+const viewportHeight = ref(window.visualViewport?.height ?? window.innerHeight)
+
+function updateViewportHeight() {
+  viewportHeight.value = window.visualViewport?.height ?? window.innerHeight
+}
+
+onMounted(() => {
+  updateViewportHeight()
+  const vv = window.visualViewport
+  if (vv) {
+    vv.addEventListener('resize', updateViewportHeight)
+    vv.addEventListener('scroll', updateViewportHeight)
+  }
+  window.addEventListener('resize', updateViewportHeight)
+})
+
+onBeforeUnmount(() => {
+  const vv = window.visualViewport
+  if (vv) {
+    vv.removeEventListener('resize', updateViewportHeight)
+    vv.removeEventListener('scroll', updateViewportHeight)
+  }
+  window.removeEventListener('resize', updateViewportHeight)
+})
 
 const writeModeLabel = computed(() => {
   const m = auth.ai?.writeMode ?? 'confirm'
@@ -108,6 +139,7 @@ watch(
     temporary
     :width="drawerWidth"
     class="assistant-drawer"
+    :style="{ '--assistant-vh': viewportHeight + 'px' }"
     @update:model-value="assistant.open = $event"
   >
     <div class="d-flex flex-column assistant-body">
@@ -216,13 +248,14 @@ watch(
 </template>
 
 <style scoped>
-/* Drawer an die TATSÄCHLICH sichtbare Viewport-Höhe binden (100dvh) statt an
-   100vh. Auf Handys zählt 100vh die ein-/ausblendende Adressleiste mit, sodass
-   das unten angedockte Eingabefeld unter die Falz rutschte und man dorthin
-   scrollen musste. Auf dem Desktop ist 100dvh = 100vh — also unverändert. */
+/* Drawer-Höhe an die per VisualViewport gemessene, tatsächlich sichtbare Höhe
+   binden (--assistant-vh, vom Script gesetzt). Das berücksichtigt auf echten
+   Geräten die dynamische Adressleiste UND die Bildschirmtastatur — anders als
+   100vh/100dvh. Fallback 100dvh, falls die Variable (noch) fehlt. Auf dem
+   Desktop entspricht der Wert der Fensterhöhe, also unverändert. */
 .assistant-drawer {
-  height: 100vh !important;
-  height: 100dvh !important;
+  height: var(--assistant-vh, 100dvh) !important;
+  max-height: var(--assistant-vh, 100dvh) !important;
 }
 .assistant-body {
   height: 100%;
