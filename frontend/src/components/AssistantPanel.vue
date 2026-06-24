@@ -266,6 +266,11 @@ watch(
   .assistant-drawer {
     width: 100% !important;
     max-width: 100% !important;
+    box-sizing: border-box !important;
+    /* Innenkanten-Rand entfernen: Bei voller Breite ist er überflüssig und
+       würde als 1 px über die Viewport-Breite hinausragen (horizontaler
+       Überlauf — "ein paar Pixel nach links schiebbar"). */
+    border: none !important;
   }
 }
 .assistant-body {
