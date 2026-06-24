@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
+import { useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 import { useAssistantStore } from '../stores/assistant'
@@ -15,6 +16,12 @@ const files = useFilesStore()
 
 const input = ref('')
 const scroller = ref(null)
+
+// Auf Handys (xs) den Assistenten über die volle Bildschirmbreite zeigen; sonst
+// die feste Breite. Die echte Zahl an Vuetify geben, damit die Ein-/Ausblend-
+// Animation stimmt.
+const display = useDisplay()
+const drawerWidth = computed(() => (display.xs.value ? display.width.value : 440))
 
 const writeModeLabel = computed(() => {
   const m = auth.ai?.writeMode ?? 'confirm'
@@ -99,10 +106,11 @@ watch(
     :model-value="assistant.open"
     location="right"
     temporary
-    width="440"
+    :width="drawerWidth"
+    class="assistant-drawer"
     @update:model-value="assistant.open = $event"
   >
-    <div class="d-flex flex-column" style="height: 100%">
+    <div class="d-flex flex-column assistant-body">
       <!-- Kopf -->
       <div class="d-flex align-center px-3 py-2 border-b">
         <v-icon icon="mdi-robot-happy-outline" class="mr-2" />
@@ -118,7 +126,7 @@ watch(
       </div>
 
       <!-- Verlauf -->
-      <div ref="scroller" class="flex-grow-1 pa-3" style="overflow-y: auto">
+      <div ref="scroller" class="flex-grow-1 pa-3 assistant-scroll">
         <div v-if="!assistant.bubbles.length" class="text-medium-emphasis text-body-2">
           {{ $t('assistant.empty') }}
         </div>
@@ -208,6 +216,26 @@ watch(
 </template>
 
 <style scoped>
+/* Drawer an die TATSÄCHLICH sichtbare Viewport-Höhe binden (100dvh) statt an
+   100vh. Auf Handys zählt 100vh die ein-/ausblendende Adressleiste mit, sodass
+   das unten angedockte Eingabefeld unter die Falz rutschte und man dorthin
+   scrollen musste. Auf dem Desktop ist 100dvh = 100vh — also unverändert. */
+.assistant-drawer {
+  height: 100vh !important;
+  height: 100dvh !important;
+}
+.assistant-body {
+  height: 100%;
+}
+/* Entscheidend: Ein scrollendes Flex-Element braucht min-height: 0, sonst kann
+   es nicht unter seine Inhaltshöhe schrumpfen und drückt — bei vielen
+   Nachrichten — das darunter liegende Eingabefeld aus dem sichtbaren Bereich.
+   Genau das ließ sich auf kürzeren Displays nur durch Scrollen erreichen. */
+.assistant-scroll {
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .assistant-bubble {
   max-width: 85%;
   padding: 6px 10px;
