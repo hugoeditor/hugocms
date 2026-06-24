@@ -57,7 +57,10 @@ async function init() {
     await auth.check()
     if (auth.warnings.length > 0) warningsVisible.value = true
   } catch (e) {
-    fatalError.value = errorText(t, e)
+    // Das Fehler-OBJEKT merken (nicht den fertig übersetzten Text), damit die
+    // dauerhaft sichtbare Meldung beim Sprachwechsel über den Umschalter auf
+    // diesem Bildschirm mitübersetzt wird. Die Auflösung passiert im Template.
+    fatalError.value = e
   }
 }
 
@@ -151,7 +154,7 @@ async function build() {
         </div>
         <v-alert type="error" prominent border="start" class="fatal-alert nemo-alert">
           <div class="text-h6 mb-2">{{ $t('app.notReady') }}</div>
-          <p class="mb-4">{{ fatalError }}</p>
+          <p class="mb-4">{{ errorText(t, fatalError) }}</p>
           <v-btn variant="outlined" @click="init">{{ $t('app.retry') }}</v-btn>
         </v-alert>
       </v-main>
