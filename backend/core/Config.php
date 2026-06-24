@@ -16,6 +16,9 @@ use HugoCMS\FileManager\Exception\ApiException;
  *   username = admin
  *   password_hash = "$2y$10$..."
  *
+ *   [user]
+ *   session_lifetime = 8   ; Sitzungsdauer in Stunden (optional; Standard 8)
+ *
  *   [session]
  *   path = var/sessions
  *
@@ -32,9 +35,13 @@ use HugoCMS\FileManager\Exception\ApiException;
  */
 final class Config
 {
+    /** Standard-Sitzungsdauer in Sekunden, falls [user] session_lifetime fehlt (8 Stunden). */
+    private const DEFAULT_SESSION_LIFETIME = 28800;
+
     /**
      * @return array{
      *   auth: array<string, mixed>,
+     *   user: array{sessionLifetime: int},
      *   session: array{path: string},
      *   log: array{file: string, level: string},
      *   hugoBin: ?string
@@ -83,6 +90,7 @@ final class Config
 
         return [
             'auth' => $auth,
+            'user' => self::userSection($raw['user'] ?? null),
             'session' => [
                 'path' => self::resolvePath($raw['session']['path'], $baseDir),
             ],
@@ -93,6 +101,26 @@ final class Config
             'hugoBin' => $hugoBin === '' ? null : self::resolvePath($hugoBin, $baseDir),
             'ai' => self::aiSection($raw['ai'] ?? null),
         ];
+    }
+
+    /**
+     * Globale, für alle Benutzer geltende Einstellungen ([user]-Sektion).
+     * Solange driver=singleuser verwendet wird, ist die hugocms.ini der einzige
+     * Speicherort für solche Einstellungen.
+     *
+     * session_lifetime: Sitzungsdauer in STUNDEN — so lange bleibt eine
+     * Anmeldung bei Inaktivität gültig. Fehlt der Wert oder ist er ungültig
+     * (≤ 0), gilt der Standard von 8 Stunden.
+     *
+     * @return array{sessionLifetime: int}  sessionLifetime in Sekunden
+     */
+    private static function userSection(mixed $section): array
+    {
+        $section = is_array($section) ? $section : [];
+        $hours = isset($section['session_lifetime']) ? (float) $section['session_lifetime'] : 0.0;
+        $seconds = $hours > 0 ? (int) round($hours * 3600) : self::DEFAULT_SESSION_LIFETIME;
+
+        return ['sessionLifetime' => $seconds];
     }
 
     /**

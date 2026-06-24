@@ -39,6 +39,21 @@ export class ApiError extends Error {
   }
 }
 
+// Zentrale Reaktion auf eine abgelaufene/fehlende Sitzung (EAUTH): Die App
+// registriert hier einen Handler, der auf die Login-Ansicht zurückschaltet.
+// Während des Anmeldevorgangs (Cookie-Timing-Retry, siehe App.vue) lässt sich
+// der Wächter kurz aussetzen, damit er dort nicht fälschlich auslöst.
+let unauthorizedHandler = null
+let guardSuspended = false
+
+export function setUnauthorizedHandler(fn) {
+  unauthorizedHandler = typeof fn === 'function' ? fn : null
+}
+
+export function suspendAuthGuard(value) {
+  guardSuspended = !!value
+}
+
 async function handle(response) {
   let payload
   try {
@@ -47,7 +62,13 @@ async function handle(response) {
     throw new ApiError({ code: 'ENETWORK', params: [String(response.status)] })
   }
   if (!payload.ok) {
-    throw new ApiError(payload.error ?? { code: 'EUNKNOWN' })
+    const err = payload.error ?? { code: 'EUNKNOWN' }
+    // Abgelaufene Sitzung zentral behandeln (sofern nicht gerade ausgesetzt),
+    // bevor der Fehler an die Aufrufstelle weitergereicht wird.
+    if (err.code === 'EAUTH' && !guardSuspended && unauthorizedHandler) {
+      unauthorizedHandler()
+    }
+    throw new ApiError(err)
   }
   return payload.data
 }

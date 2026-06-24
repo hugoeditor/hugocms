@@ -24,6 +24,15 @@ username = admin
 ; Wegen der $-Zeichen in doppelte Anführungszeichen setzen.
 password_hash = "HIER-PASSWORT-HASH-EINTRAGEN"
 
+[user]
+; Globale Einstellungen, die für alle Benutzer gelten. Solange
+; driver=singleuser verwendet wird, ist diese Datei der einzige Speicherort
+; für solche Einstellungen.
+; session_lifetime: Sitzungsdauer in STUNDEN — so lange bleibt eine Anmeldung
+; bei Inaktivität gültig; jede Aktion frischt das Fenster auf. Optional;
+; fehlt der Wert, gilt der Standard von 8 Stunden.
+;session_lifetime = 8
+
 [session]
 ; Verzeichnis für die PHP-Sitzungsdateien (muss für den Webserver-Benutzer
 ; beschreibbar sein). Pflichtfeld — darf nicht leer sein.

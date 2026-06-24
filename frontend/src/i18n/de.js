@@ -13,6 +13,7 @@ export default {
     retry: 'Erneut prüfen',
     setupWarningTitle: 'Server-Hinweis zur Einrichtung',
     close: 'Schließen',
+    sessionExpired: 'Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.',
   },
 
   login: {

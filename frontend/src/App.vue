@@ -3,7 +3,7 @@ import { onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from './stores/auth'
 import { useFilesStore } from './stores/files'
-import { api } from './api/client'
+import { api, setUnauthorizedHandler, suspendAuthGuard } from './api/client'
 import { errorText, warningText } from './i18n/apiMessage'
 import LoginView from './components/LoginView.vue'
 import SetupView from './components/SetupView.vue'
@@ -26,8 +26,27 @@ const error = ref(null)
 const fatalError = ref(null)
 const warningsVisible = ref(false)
 
+// Läuft eine geschützte Anfrage in EAUTH (Sitzung serverseitig abgelaufen),
+// zentral zur Login-Ansicht zurückkehren: abmelden, alle geladenen Daten
+// verwerfen und einen Hinweis zeigen. App.vue blendet dann automatisch die
+// LoginView ein, sodass keine Daten mehr sichtbar sind und der Benutzer sich
+// gleich wieder anmelden kann.
+setUnauthorizedHandler(() => {
+  if (!auth.authenticated) return // bereits abgemeldet
+  auth.authenticated = false
+  auth.user = null
+  files.$reset()
+  error.value = t('app.sessionExpired')
+  // Ein veraltetes CSRF-Token ist hier unkritisch: Der Login ist serverseitig
+  // von der CSRF-Prüfung ausgenommen und liefert ein frisches Token zurück.
+})
+
 async function loadMounts() {
   error.value = null
+  // Während des Mount-Ladens nach dem Login den globalen Sitzungswächter
+  // aussetzen: Der erste Versuch kann durch das Cookie-Timing (siehe unten) ein
+  // EAUTH liefern, ohne dass die Sitzung tatsächlich abgelaufen ist.
+  suspendAuthGuard(true)
   try {
     await files.loadMounts()
   } catch (e) {
@@ -45,6 +64,8 @@ async function loadMounts() {
       }
     }
     error.value = errorText(t, e)
+  } finally {
+    suspendAuthGuard(false)
   }
 }
 

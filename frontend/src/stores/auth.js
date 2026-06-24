@@ -73,6 +73,10 @@ export const useAuthStore = defineStore('auth', {
       const data = await api.post('login', { username, password })
       this.authenticated = data.authenticated
       this.user = data.user
+      // Frisches CSRF-Token der angemeldeten Sitzung übernehmen, damit der erste
+      // Schreibbefehl nach dem Login gelingt — auch nach einem Sitzungsablauf,
+      // bei dem das vorige Token verworfen wurde.
+      if (data.csrf) setCsrfToken(data.csrf)
     },
 
     async logout() {

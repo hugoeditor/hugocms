@@ -67,6 +67,7 @@ final class Connector
         // ungültig) werden direkt als JSON beantwortet, da der Logger und die
         // Fehler-Handler noch nicht stehen.
         $authConfig = null;
+        $authOptions = [];
         $sessionPath = null;
         $this->configPath = isset($options['config']) ? (string) $options['config'] : null;
         if (isset($options['config'])) {
@@ -90,6 +91,9 @@ final class Connector
             $options['hugoBin'] ??= $cfg['hugoBin'];
             $this->ai = $cfg['ai'];
             $authConfig = $cfg['auth'];
+            // Globale [user]-Einstellungen an den Auth-Treiber durchreichen
+            // (z. B. Sitzungsdauer für SingleUser).
+            $authOptions = ['sessionLifetime' => $cfg['user']['sessionLifetime']];
         }
         $this->sessionDir = $sessionPath;
 
@@ -111,7 +115,7 @@ final class Connector
             foreach ((array) ($options['authDrivers'] ?? []) as $name => $driverFactory) {
                 $factory->register((string) $name, $driverFactory);
             }
-            $options['auth'] = $factory->create($authConfig, $this->configPath);
+            $options['auth'] = $factory->create($authConfig, $this->configPath, $authOptions);
         }
 
         if (!isset($options['auth']) || !$options['auth'] instanceof AuthInterface) {
@@ -338,7 +342,12 @@ final class Connector
 
     private function cmdLogin(array $request): array
     {
-        $this->requireMethod('POST');
+        // Login ohne CSRF-Prüfung (siehe requireMethod): Vor der Anmeldung hat
+        // der Client kein sitzungsgebundenes Token. Geschützt ist der Login
+        // durch Benutzername + Passwort. Das frische Token der angemeldeten
+        // Sitzung wird zurückgegeben, damit nachfolgende Schreibbefehle sofort
+        // ein gültiges Token besitzen — auch nach einem Sitzungsablauf.
+        $this->requireMethod('POST', false);
         $ok = $this->auth->attemptLogin(
             (string) ($request['username'] ?? ''),
             (string) ($request['password'] ?? ''),
@@ -347,7 +356,11 @@ final class Connector
             throw ApiException::unauthorized('LOGIN-FAILED');
         }
 
-        return ['authenticated' => true, 'user' => $this->auth->currentUser()];
+        return [
+            'authenticated' => true,
+            'user' => $this->auth->currentUser(),
+            'csrf' => $this->csrfToken(),
+        ];
     }
 
     private function cmdLogout(): array
@@ -1031,13 +1044,15 @@ final class Connector
         }
     }
 
-    private function requireMethod(string $method): void
+    private function requireMethod(string $method, bool $checkCsrf = true): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== $method) {
             throw new ApiException('EMETHOD', 405, 'METHOD-REQUIRED', [$method]);
         }
-        // Alle Schreibbefehle laufen hier durch — CSRF zentral prüfen.
-        if ($method === 'POST') {
+        // Alle Schreibbefehle laufen hier durch — CSRF zentral prüfen. Der Login
+        // ist die einzige Ausnahme ($checkCsrf=false): Vor der Anmeldung kann der
+        // Client kein gültiges Token der (ggf. neuen) Sitzung besitzen.
+        if ($method === 'POST' && $checkCsrf) {
             $this->requireCsrf();
         }
     }

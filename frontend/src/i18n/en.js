@@ -13,6 +13,7 @@ export default {
     retry: 'Check again',
     setupWarningTitle: 'Server setup notice',
     close: 'Close',
+    sessionExpired: 'Your session has expired. Please sign in again.',
   },
 
   login: {
