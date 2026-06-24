@@ -17,11 +17,12 @@ const files = useFilesStore()
 const input = ref('')
 const scroller = ref(null)
 
-// Auf Handys (xs) den Assistenten über die volle Bildschirmbreite zeigen; sonst
-// die feste Breite. Die echte Zahl an Vuetify geben, damit die Ein-/Ausblend-
-// Animation stimmt.
+// Auf schmalen Schirmen (< 960 px, smAndDown — dieselbe Schwelle wie das übrige
+// responsive Layout) den Assistenten über die volle Bildschirmbreite zeigen;
+// darüber die feste Breite. Die echte Zahl an Vuetify geben, damit die
+// Ein-/Ausblend-Animation stimmt.
 const display = useDisplay()
-const drawerWidth = computed(() => (display.xs.value ? display.width.value : 440))
+const drawerWidth = computed(() => (display.smAndDown.value ? display.width.value : 440))
 
 // Höhe des Drawers an die TATSÄCHLICH sichtbare Fläche binden. Auf echten
 // Smartphones überschätzen 100vh/100dvh den sichtbaren Bereich: Die dynamische
