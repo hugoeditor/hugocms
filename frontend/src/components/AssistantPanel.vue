@@ -258,6 +258,16 @@ watch(
   height: var(--assistant-vh, 100dvh) !important;
   max-height: var(--assistant-vh, 100dvh) !important;
 }
+/* Auf schmalen Schirmen volle Breite PER CSS erzwingen. Vuetify setzt die per
+   JS gemessene Pixelbreite als Inline-Style; durch Sub-Pixel-/Rundungs-
+   differenzen blieb auf manchen Geräten (z. B. 360 px) ein schmaler Streifen
+   am Rand. width:100% bindet exakt an die Viewport-Breite — geräteunabhängig. */
+@media (max-width: 959.98px) {
+  .assistant-drawer {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
 .assistant-body {
   height: 100%;
 }
