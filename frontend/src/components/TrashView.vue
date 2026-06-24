@@ -8,9 +8,11 @@ import { useFilesStore } from '../stores/files'
 import { formatSize, formatDate } from '../util/format'
 import { errorText } from '../i18n/apiMessage'
 import { useTransientError } from '../util/transientError'
+import { useConfirm } from '../util/confirm'
 
 const { t } = useI18n()
 const files = useFilesStore()
+const confirm = useConfirm()
 const error = useTransientError() // blendet sich nach kurzer Zeit selbst aus
 const busy = ref(false)
 
@@ -46,8 +48,14 @@ function restoreSelected() {
   if (files.trashSelected.length) run(() => files.restoreTrash([...files.trashSelected]))
 }
 
-function emptyAll() {
-  if (confirm(t('trash.emptyConfirm'))) run(() => files.emptyTrash())
+async function emptyAll() {
+  const ok = await confirm({
+    title: t('trash.emptyTitle'),
+    message: t('trash.emptyConfirm'),
+    confirmText: t('trash.emptyConfirmAction'),
+    color: 'error',
+  })
+  if (ok) run(() => files.emptyTrash())
 }
 </script>
 

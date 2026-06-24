@@ -17,8 +17,21 @@ import AccountDialog from './components/AccountDialog.vue'
 import AssistantPanel from './components/AssistantPanel.vue'
 import { useAssistantStore } from './stores/assistant'
 import LanguageSwitcher from './components/LanguageSwitcher.vue'
+import ConfirmDialog from './components/ConfirmDialog.vue'
+import { useConfirm } from './util/confirm'
 
 const { t } = useI18n()
+const confirm = useConfirm()
+
+// Wiederkehrende Rückfrage: ungespeicherte Editor-Änderungen verwerfen?
+function confirmDiscard() {
+  return confirm({
+    title: t('editor.discardTitle'),
+    message: t('editor.discardConfirm'),
+    confirmText: t('editor.discardAction'),
+    color: 'warning',
+  })
+}
 const auth = useAuthStore()
 const files = useFilesStore()
 const assistant = useAssistantStore()
@@ -98,7 +111,7 @@ watch(() => auth.authenticated, (isAuthenticated) => {
 async function logout() {
   // Der Abmelden-Knopf ist auch im Editor erreichbar — ungespeicherte
   // Änderungen nicht stillschweigend verwerfen.
-  if (files.dirty && !confirm(t('editor.discardConfirm'))) return
+  if (files.dirty && !(await confirmDiscard())) return
   await auth.logout()
   files.$reset()
 }
@@ -107,8 +120,8 @@ async function logout() {
 // Datei im Editor offen, wird dieser geschlossen und der Dateimanager mit dem
 // gewählten Ziel angezeigt — bei ungespeicherten Änderungen vorher nachfragen
 // (wie beim Schließen-Knopf des Editors).
-function leaveEditorThen(action) {
-  if (files.dirty && !confirm(t('editor.discardConfirm'))) return
+async function leaveEditorThen(action) {
+  if (files.dirty && !(await confirmDiscard())) return
   if (files.openFile) files.closeFile()
   action()
 }
@@ -376,6 +389,9 @@ async function build() {
         <v-btn variant="text" @click="warningsVisible = false">{{ $t('app.close') }}</v-btn>
       </div>
     </v-snackbar>
+
+    <!-- Globaler Bestätigungsdialog (Ersatz für window.confirm) -->
+    <ConfirmDialog />
   </v-app>
 </template>
 

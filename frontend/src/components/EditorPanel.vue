@@ -8,9 +8,11 @@ import { setEditorSaver } from '../util/editorBridge'
 import WysiwygEditor from './WysiwygEditor.vue'
 import FrontMatterPanel from './FrontMatterPanel.vue'
 import { useTransientError } from '../util/transientError'
+import { useConfirm } from '../util/confirm'
 
 const { t } = useI18n()
 const files = useFilesStore()
+const confirm = useConfirm()
 
 const draft = ref('')
 const saving = ref(false)
@@ -159,7 +161,12 @@ async function save() {
     return true
   } catch (e) {
     // Externer Konflikt: Überschreiben nur nach ausdrücklicher Bestätigung.
-    if (e?.code === 'ECONFLICT' && confirm(t('editor.conflictConfirm'))) {
+    if (e?.code === 'ECONFLICT' && (await confirm({
+      title: t('editor.conflictTitle'),
+      message: t('editor.conflictConfirm'),
+      confirmText: t('editor.conflictAction'),
+      color: 'warning',
+    }))) {
       try {
         await files.saveOpenFile(draft.value, { force: true })
         error.value = null
@@ -179,8 +186,13 @@ async function save() {
 // Für Aufrufer außerhalb (App.vue: vor dem Build speichern).
 defineExpose({ save })
 
-function close() {
-  if (files.dirty && !confirm(t('editor.discardConfirm'))) return
+async function close() {
+  if (files.dirty && !(await confirm({
+    title: t('editor.discardTitle'),
+    message: t('editor.discardConfirm'),
+    confirmText: t('editor.discardAction'),
+    color: 'warning',
+  }))) return
   files.closeFile()
 }
 

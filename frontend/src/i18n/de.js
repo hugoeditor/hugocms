@@ -197,6 +197,8 @@ export default {
     colDeleted: 'Gelöscht am',
     restore: 'Wiederherstellen',
     emptyAction: 'Papierkorb leeren',
+    emptyTitle: 'Papierkorb leeren',
+    emptyConfirmAction: 'Leeren',
     emptyConfirm: 'Alle Einträge endgültig löschen? Das kann nicht rückgängig gemacht werden.',
   },
 
@@ -212,6 +214,7 @@ export default {
     create: 'Anlegen',
     rename: 'Umbenennen',
     cancel: 'Abbrechen',
+    confirm: 'OK',
     newFolderTitle: 'Neuer Ordner',
     newFolderLabel: 'Ordnername',
     newFileTitle: 'Neue Datei',
@@ -223,7 +226,11 @@ export default {
   editor: {
     save: 'Speichern (Strg+S)',
     discardConfirm: 'Ungespeicherte Änderungen verwerfen?',
+    discardTitle: 'Ungespeicherte Änderungen',
+    discardAction: 'Verwerfen',
     conflictConfirm: 'Die Datei wurde seit dem Öffnen extern geändert. Mit Ihrer Fassung überschreiben?',
+    conflictTitle: 'Datei extern geändert',
+    conflictAction: 'Überschreiben',
     cursor: 'Zeile {0}, Spalte {1}',
     plainText: 'Text',
     undo: 'Rückgängig (Strg+Z)',

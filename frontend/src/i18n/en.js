@@ -197,6 +197,8 @@ export default {
     colDeleted: 'Deleted',
     restore: 'Restore',
     emptyAction: 'Empty trash',
+    emptyTitle: 'Empty trash',
+    emptyConfirmAction: 'Empty',
     emptyConfirm: 'Permanently delete all entries? This cannot be undone.',
   },
 
@@ -211,6 +213,7 @@ export default {
   dialog: {
     create: 'Create',
     rename: 'Rename',
+    confirm: 'OK',
     cancel: 'Cancel',
     newFolderTitle: 'New folder',
     newFolderLabel: 'Folder name',
@@ -223,7 +226,11 @@ export default {
   editor: {
     save: 'Save (Ctrl+S)',
     discardConfirm: 'Discard unsaved changes?',
+    discardTitle: 'Unsaved changes',
+    discardAction: 'Discard',
     conflictConfirm: 'The file was changed externally since it was opened. Overwrite with your version?',
+    conflictTitle: 'File changed externally',
+    conflictAction: 'Overwrite',
     cursor: 'Line {0}, column {1}',
     plainText: 'Plain text',
     undo: 'Undo (Ctrl+Z)',
