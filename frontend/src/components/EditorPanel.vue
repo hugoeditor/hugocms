@@ -7,6 +7,7 @@ import CodeMirrorEditor from './CodeMirrorEditor.vue'
 import { setEditorSaver } from '../util/editorBridge'
 import WysiwygEditor from './WysiwygEditor.vue'
 import FrontMatterPanel from './FrontMatterPanel.vue'
+import HugoConfigEditor from './settings/HugoConfigEditor.vue'
 import { useTransientError } from '../util/transientError'
 import { useConfirm } from '../util/confirm'
 
@@ -22,22 +23,59 @@ const error = useTransientError() // blendet sich nach kurzer Zeit selbst aus
 // Nur für Markdown-Dateien. Das Front-Matter (--- … ---) wird VOR TipTap
 // abgetrennt und separat als Rohtext bearbeitet — der visuelle Editor sieht
 // nur den Body und kann die Metadaten nicht beschädigen.
-const MODE_KEY = 'hugocms_md_mode'
+const MD_MODE_KEY = 'hugocms_md_mode'
+const JSON_MODE_KEY = 'hugocms_json_mode'
 
 const isMarkdown = computed(() => /\.(md|markdown)$/i.test(files.openFile?.name ?? ''))
+// Visuellen JSON-Editor gibt es nur für die Hugo-Konfigurationsdatei
+// (hugo.json/config.json) — andere JSON-Dateien bleiben im Quelltext.
+const isHugoConfig = computed(() => /^(hugo|config)\.json$/i.test(files.openFile?.name ?? ''))
+const supportsVisual = computed(() => isMarkdown.value || isHugoConfig.value)
 
-function readMode() {
+function readMode(key, fallback) {
   try {
-    const m = localStorage.getItem(MODE_KEY)
-    if (m === 'source' || m === 'wysiwyg') return m
+    const m = localStorage.getItem(key)
+    if (m === 'source' || m === 'wysiwyg' || m === 'visual') return m
   } catch {
     // ignorieren
   }
-  return 'wysiwyg'
+  return fallback
+}
+function persistMode(key, value) {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    // ohne lokalen Speicher unkritisch
+  }
 }
 
-const mdMode = ref(readMode())
-const mode = computed(() => (isMarkdown.value ? mdMode.value : 'source'))
+// Vorgabe je Typ getrennt gemerkt: Markdown startet visuell, JSON bewusst im
+// Quelltext (siehe Phase-1-Entscheidung).
+const mdMode = ref(readMode(MD_MODE_KEY, 'wysiwyg')) // 'wysiwyg' | 'source'
+const jsonMode = ref(readMode(JSON_MODE_KEY, 'source')) // 'visual' | 'source'
+
+// Ungültiges JSON kann der visuelle Editor nicht darstellen — dann bleibt nur
+// der Quelltext (zur Reparatur). Bei diesen Dateigrößen ist das Parsen je
+// Tastendruck unkritisch.
+const jsonParseable = computed(() => {
+  if (!isHugoConfig.value) return true
+  try {
+    JSON.parse(draft.value)
+    return true
+  } catch {
+    return false
+  }
+})
+
+// Der Wert des „Visuell“-Knopfs unterscheidet sich je Typ (Markdown: wysiwyg,
+// Hugo-Konfig: visual), damit derselbe Umschalter beide bedient.
+const visualValue = computed(() => (isHugoConfig.value ? 'visual' : 'wysiwyg'))
+
+const mode = computed(() => {
+  if (isMarkdown.value) return mdMode.value
+  if (isHugoConfig.value) return jsonParseable.value ? jsonMode.value : 'source'
+  return 'source'
+})
 
 const fmDraft = ref('') // Front-Matter-Block inkl. ----Zeilen (oder '')
 const bodyDraft = ref('') // Markdown-Body für TipTap
@@ -55,13 +93,16 @@ function syncFromDraft() {
 }
 
 function setMode(m) {
-  if (m === mdMode.value) return
-  if (m === 'wysiwyg') syncFromDraft()
-  mdMode.value = m
-  try {
-    localStorage.setItem(MODE_KEY, m)
-  } catch {
-    // ignorieren
+  if (!m) return
+  if (isMarkdown.value) {
+    if (m === mdMode.value) return
+    if (m === 'wysiwyg') syncFromDraft()
+    mdMode.value = m
+    persistMode(MD_MODE_KEY, m)
+  } else if (isHugoConfig.value) {
+    if (m === jsonMode.value) return
+    jsonMode.value = m
+    persistMode(JSON_MODE_KEY, m)
   }
 }
 
@@ -245,24 +286,40 @@ onBeforeUnmount(() => {
         </v-toolbar-title>
         <v-spacer />
 
-        <!-- Moduswechsel (nur Markdown): Visuell <-> Quelltext -->
-        <v-btn-toggle
-          v-if="isMarkdown"
-          :model-value="mode"
-          density="comfortable"
-          variant="outlined"
-          divided
-          mandatory
-          class="mr-3"
-          @update:model-value="setMode"
+        <!-- Moduswechsel (Markdown/Hugo-Konfig): Visuell <-> Quelltext. Bei
+             ungültigem JSON ist „Visuell“ gesperrt (erst im Quelltext
+             reparieren). -->
+        <v-tooltip
+          v-if="supportsVisual"
+          :text="$t('editor.jsonInvalid')"
+          :disabled="!(isHugoConfig && !jsonParseable)"
+          location="bottom"
         >
-          <v-btn value="wysiwyg" size="small" prepend-icon="mdi-format-text">
-            {{ $t('editor.wysiwygView') }}
-          </v-btn>
-          <v-btn value="source" size="small" prepend-icon="mdi-code-tags">
-            {{ $t('editor.sourceView') }}
-          </v-btn>
-        </v-btn-toggle>
+          <template #activator="{ props: tip }">
+            <div v-bind="tip" class="mr-3">
+              <v-btn-toggle
+                :model-value="mode"
+                density="comfortable"
+                variant="outlined"
+                divided
+                mandatory
+                @update:model-value="setMode"
+              >
+                <v-btn
+                  :value="visualValue"
+                  :disabled="isHugoConfig && !jsonParseable"
+                  size="small"
+                  :prepend-icon="isHugoConfig ? 'mdi-cog-outline' : 'mdi-format-text'"
+                >
+                  {{ $t('editor.wysiwygView') }}
+                </v-btn>
+                <v-btn value="source" size="small" prepend-icon="mdi-code-tags">
+                  {{ $t('editor.sourceView') }}
+                </v-btn>
+              </v-btn-toggle>
+            </div>
+          </template>
+        </v-tooltip>
 
         <v-btn icon="mdi-close" variant="text" @click="close" />
       </v-toolbar>
@@ -312,6 +369,19 @@ onBeforeUnmount(() => {
             @clipboard-denied="error = t('editor.clipboardDenied')"
           />
         </template>
+
+        <!-- Visueller Hugo-Konfigurations-Editor -->
+        <HugoConfigEditor
+          v-else-if="mode === 'visual'"
+          :key="files.openFile.id + ':hugo:' + files.reloadTick"
+          :model-value="draft"
+          :save-disabled="!files.dirty"
+          :saving="saving"
+          class="flex-grow-1"
+          style="min-height: 0"
+          @update:model-value="onInput"
+          @save="save"
+        />
 
         <CodeMirrorEditor
           v-else
