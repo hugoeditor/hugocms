@@ -21,6 +21,10 @@ import ConfirmDialog from './components/ConfirmDialog.vue'
 import { useConfirm } from './util/confirm'
 import { buildNumber } from './util/version'
 
+// Ziel-URLs der Links im Versionsdialog (sprachunabhängig).
+const HUGOCMS_URL = 'https://hugocms.com/'
+const COMPANY_URL = 'https://inter-data.de/'
+
 const { t } = useI18n()
 const confirm = useConfirm()
 
@@ -383,6 +387,11 @@ async function build() {
             <span class="text-medium-emphasis">{{ $t('version.build') }}</span>
             <span class="text-h6 font-weight-medium">{{ buildNumber }}</span>
           </div>
+          <div class="text-caption text-medium-emphasis mt-4 nemo-version-credit">
+            <a :href="HUGOCMS_URL" target="_blank" rel="noopener noreferrer">{{ $t('app.title') }}</a>
+            {{ $t('version.copyright') }}
+            <a :href="COMPANY_URL" target="_blank" rel="noopener noreferrer">{{ $t('version.company') }}</a>
+          </div>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -473,6 +482,12 @@ async function build() {
   cursor: pointer;
 }
 .nemo-brand-btn:hover .nemo-title { text-decoration: underline; }
+/* Links in der Versionsinfo (HugoCMS, Inter-Data) im Akzentgrün. */
+.nemo-version-credit a {
+  color: var(--mint-green);
+  text-decoration: none;
+}
+.nemo-version-credit a:hover { text-decoration: underline; }
 .nemo-title {
   font-weight: 600;
   font-size: 0.95rem;

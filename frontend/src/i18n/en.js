@@ -20,6 +20,8 @@ export default {
     open: 'Show version',
     title: 'Version',
     build: 'Build number',
+    copyright: '© 2026',
+    company: 'Inter-Data',
   },
 
   login: {
