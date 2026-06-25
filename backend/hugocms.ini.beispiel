@@ -32,6 +32,11 @@ password_hash = "HIER-PASSWORT-HASH-EINTRAGEN"
 ; bei Inaktivität gültig; jede Aktion frischt das Fenster auf. Optional;
 ; fehlt der Wert, gilt der Standard von 8 Stunden.
 ;session_lifetime = 8
+; content_width: Breite des zentrierten Hauptfensters in PIXELN auf großen
+; Bildschirmen. Optional; fehlt der Wert, gilt der Standard 1200. Im
+; Einzelbenutzer-Modus ist dies der Startwert nach jedem Neuladen (per Maus
+; ziehbare Änderungen werden derzeit nicht gespeichert).
+;content_width = 1200
 
 [session]
 ; Verzeichnis für die PHP-Sitzungsdateien (muss für den Webserver-Benutzer

@@ -20,7 +20,7 @@ function open(mount) {
         @click="open(mount)"
       >
         <v-icon
-          :icon="files.activeMount === mount.name ? 'mdi-folder-open' : 'mdi-folder-network-outline'"
+          :icon="files.activeMount === mount.name ? 'mdi-folder-open' : 'mdi-folder'"
           size="18"
           class="nemo-place-icon"
         />

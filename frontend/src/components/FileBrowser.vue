@@ -270,7 +270,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 <template>
   <section class="nemo-view">
     <div v-if="!files.cwd" class="nemo-empty">
-      <v-icon icon="mdi-folder-network-outline" size="64" class="nemo-empty-icon" />
+      <v-icon icon="mdi-folder" size="64" class="nemo-empty-icon" />
       <p>{{ $t('files.chooseMount') }}</p>
     </div>
 

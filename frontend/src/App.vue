@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from './stores/auth'
 import { useFilesStore } from './stores/files'
@@ -43,6 +43,56 @@ const assistant = useAssistantStore()
 const error = ref(null)
 const fatalError = ref(null)
 const warningsVisible = ref(false)
+
+// --- Fensterbreite (Hauptfenster, große Bildschirme) -----------------------
+// Die Breite des zentrierten Fensters lässt sich über Greifränder mit der Maus
+// einstellen. Startwert ist die [user] content_width aus der hugocms.ini (über
+// whoami geliefert). Laufzeit-Änderungen werden NICHT gespeichert — nach dem
+// Neuladen gilt wieder der INI-Wert (Persistenz folgt mit der Mehrbenutzer-
+// Umsetzung).
+const MIN_CONTENT_WIDTH = 640
+const contentWidth = ref(auth.ui?.contentWidth ?? 1200)
+
+// Den Vorgabewert übernehmen, sobald whoami ihn liefert (bzw. wenn er sich
+// durch eine Umkonfiguration ändert). Gleichbleibende Werte lassen eine bereits
+// per Maus eingestellte Breite unberührt, da der Watcher nur auf Änderungen reagiert.
+watch(
+  () => auth.ui?.contentWidth,
+  (w) => {
+    if (typeof w === 'number' && w > 0) contentWidth.value = w
+  },
+)
+
+let resizing = false
+
+function startResize(event) {
+  resizing = true
+  event.preventDefault()
+  window.addEventListener('pointermove', onResize)
+  window.addEventListener('pointerup', stopResize)
+}
+
+function onResize(event) {
+  if (!resizing) return
+  // Die gezogene Kante folgt dem Zeiger: Da das Fenster mittig sitzt, ergibt
+  // sich die Breite aus dem doppelten Abstand des Zeigers zur Bildschirmmitte.
+  const center = window.innerWidth / 2
+  const w = Math.round(Math.abs(event.clientX - center) * 2)
+  contentWidth.value = Math.max(MIN_CONTENT_WIDTH, Math.min(window.innerWidth, w))
+}
+
+function stopResize() {
+  resizing = false
+  window.removeEventListener('pointermove', onResize)
+  window.removeEventListener('pointerup', stopResize)
+}
+
+// Doppelklick auf einen Greifrand: zurück auf den Vorgabewert aus [user].
+function resetWidth() {
+  contentWidth.value = auth.ui?.contentWidth ?? 1200
+}
+
+onBeforeUnmount(stopResize)
 
 // Läuft eine geschützte Anfrage in EAUTH (Sitzung serverseitig abgelaufen),
 // zentral zur Login-Ansicht zurückkehren: abmelden, alle geladenen Daten
@@ -218,7 +268,20 @@ async function build() {
       <!-- Äußerer Rahmen: zentriert das gesamte Fenster und begrenzt seine
            Breite auf großen Monitoren (volle Höhe bleibt erhalten). -->
       <div class="nemo-shell">
-        <div class="nemo-window">
+        <div class="nemo-window" :style="{ maxWidth: contentWidth + 'px' }">
+        <!-- Greifränder zum Einstellen der Fensterbreite (nur große Schirme). -->
+        <div
+          class="nemo-resize nemo-resize--left"
+          :title="$t('app.resizeWindow')"
+          @pointerdown="startResize"
+          @dblclick="resetWidth"
+        />
+        <div
+          class="nemo-resize nemo-resize--right"
+          :title="$t('app.resizeWindow')"
+          @pointerdown="startResize"
+          @dblclick="resetWidth"
+        />
         <!-- Fenster-Titelleiste (Marke, Sprache, Benutzer, Abmelden) -->
         <header class="nemo-titlebar nemo-noselect">
           <!-- Marke: Klick auf Symbol oder Titel öffnet die Versionsinfo. -->
@@ -245,7 +308,7 @@ async function build() {
                 v-bind="props"
                 variant="text"
                 size="small"
-                prepend-icon="mdi-folder-network-outline"
+                prepend-icon="mdi-folder"
                 append-icon="mdi-menu-down"
                 class="ml-2 nemo-places-btn"
               >
@@ -256,7 +319,7 @@ async function build() {
               <v-list-item
                 v-for="mount in files.mounts"
                 :key="mount.id"
-                :prepend-icon="!files.trashMode && files.activeMount === mount.name ? 'mdi-folder-open' : 'mdi-folder-network-outline'"
+                :prepend-icon="!files.trashMode && files.activeMount === mount.name ? 'mdi-folder-open' : 'mdi-folder'"
                 :title="mount.label"
                 :active="!files.trashMode && files.activeMount === mount.name"
                 @click="openPlace(mount)"
@@ -449,6 +512,7 @@ async function build() {
   background: var(--mint-shell-bg);
 }
 .nemo-window {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -456,6 +520,30 @@ async function build() {
   height: 100vh;
   background: var(--mint-content);
   box-shadow: 0 0 1px rgba(0, 0, 0, 0.25), 0 0 22px rgba(0, 0, 0, 0.1);
+}
+
+/* Greifränder zum Einstellen der Fensterbreite. Liegen über dem Inhalt (auch
+   über der Editor-Überlagerung), damit die Breite überall anpassbar ist. Nur
+   auf großen Bildschirmen, wo das Fenster zentriert und begrenzt ist. */
+.nemo-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  z-index: 20;
+  cursor: ew-resize;
+  background: transparent;
+  transition: background 0.12s;
+  touch-action: none; /* Drag statt Scroll-Geste */
+}
+.nemo-resize--left { left: 0; }
+.nemo-resize--right { right: 0; }
+.nemo-resize:hover,
+.nemo-resize:active {
+  background: var(--mint-green-soft);
+}
+@media (max-width: 959.98px) {
+  .nemo-resize { display: none; }
 }
 
 .nemo-titlebar {

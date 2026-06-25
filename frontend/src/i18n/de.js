@@ -14,6 +14,7 @@ export default {
     setupWarningTitle: 'Server-Hinweis zur Einrichtung',
     close: 'Schließen',
     sessionExpired: 'Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.',
+    resizeWindow: 'Fensterbreite ziehen (Doppelklick: zurücksetzen)',
   },
 
   version: {

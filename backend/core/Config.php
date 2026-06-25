@@ -38,10 +38,16 @@ final class Config
     /** Standard-Sitzungsdauer in Sekunden, falls [user] session_lifetime fehlt (8 Stunden). */
     private const DEFAULT_SESSION_LIFETIME = 28800;
 
+    /** Standard-Inhaltsbreite in px, falls [user] content_width fehlt. */
+    private const DEFAULT_CONTENT_WIDTH = 1200;
+
+    /** Untergrenze für content_width; kleinere Werte fallen auf den Standard zurück. */
+    private const MIN_CONTENT_WIDTH = 320;
+
     /**
      * @return array{
      *   auth: array<string, mixed>,
-     *   user: array{sessionLifetime: int},
+     *   user: array{sessionLifetime: int, contentWidth: int},
      *   session: array{path: string},
      *   log: array{file: string, level: string},
      *   hugoBin: ?string
@@ -112,7 +118,11 @@ final class Config
      * Anmeldung bei Inaktivität gültig. Fehlt der Wert oder ist er ungültig
      * (≤ 0), gilt der Standard von 8 Stunden.
      *
-     * @return array{sessionLifetime: int}  sessionLifetime in Sekunden
+     * content_width: Breite des zentrierten Hauptfensters in PIXELN auf großen
+     * Bildschirmen. Fehlt der Wert oder ist er zu klein, gilt der Standard 1200.
+     * Im Einzelbenutzer-Modus ist dies der Startwert nach jedem Neuladen.
+     *
+     * @return array{sessionLifetime: int, contentWidth: int}  sessionLifetime in Sekunden
      */
     private static function userSection(mixed $section): array
     {
@@ -120,7 +130,12 @@ final class Config
         $hours = isset($section['session_lifetime']) ? (float) $section['session_lifetime'] : 0.0;
         $seconds = $hours > 0 ? (int) round($hours * 3600) : self::DEFAULT_SESSION_LIFETIME;
 
-        return ['sessionLifetime' => $seconds];
+        $width = isset($section['content_width']) ? (int) $section['content_width'] : 0;
+        if ($width < self::MIN_CONTENT_WIDTH) {
+            $width = self::DEFAULT_CONTENT_WIDTH;
+        }
+
+        return ['sessionLifetime' => $seconds, 'contentWidth' => $width];
     }
 
     /**

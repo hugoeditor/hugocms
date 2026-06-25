@@ -133,7 +133,7 @@ function onSearch() {
         :class="{ current: i === files.breadcrumb.length - 1 }"
         @click="crumb(item)"
       >
-        <v-icon v-if="i === 0" icon="mdi-folder-network-outline" size="16" class="mr-1" />
+        <v-icon v-if="i === 0" icon="mdi-folder" size="16" class="mr-1" />
         {{ item.name }}
       </button>
     </div>

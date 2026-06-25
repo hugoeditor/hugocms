@@ -12,6 +12,7 @@ export const useAuthStore = defineStore('auth', {
     buildable: false, // true, wenn für diese Webseite ein Hugo-Aufruf konfiguriert ist
     reconfigurable: false, // true, wenn die hugocms.ini im Betrieb änderbar ist
     ai: { enabled: false, writeMode: 'confirm' }, // KI-Assistent (aus whoami)
+    ui: { contentWidth: 1200 }, // globale UI-Vorgaben aus [user] (Fensterbreite)
   }),
 
   actions: {
@@ -25,6 +26,7 @@ export const useAuthStore = defineStore('auth', {
       this.buildable = data.buildable ?? false
       this.reconfigurable = data.reconfigurable ?? false
       this.ai = data.ai ?? { enabled: false, writeMode: 'confirm' }
+      this.ui = data.ui ?? { contentWidth: 1200 }
       setCsrfToken(data.csrf)
       this.ready = true
     },

@@ -59,6 +59,9 @@ final class Connector
      */
     private array $ai = ['apiKey' => null, 'model' => 'claude-opus-4-8', 'writeMode' => 'confirm'];
 
+    /** Globale [user]-Einstellungen (Sitzungsdauer, Inhaltsbreite). */
+    private array $user = ['sessionLifetime' => 28800, 'contentWidth' => 1200];
+
     public function __construct(array $options)
     {
         // Hauptkonfiguration (hugocms.ini) ggf. zuerst einlesen — daraus
@@ -90,6 +93,7 @@ final class Connector
             $options['logLevel'] ??= $cfg['log']['level'] ?? 'error';
             $options['hugoBin'] ??= $cfg['hugoBin'];
             $this->ai = $cfg['ai'];
+            $this->user = $cfg['user'];
             $authConfig = $cfg['auth'];
             // Globale [user]-Einstellungen an den Auth-Treiber durchreichen
             // (z. B. Sitzungsdauer für SingleUser).
@@ -336,6 +340,11 @@ final class Connector
             'ai' => [
                 'enabled' => $this->ai['apiKey'] !== null,
                 'writeMode' => $this->ai['writeMode'],
+            ],
+            // Globale UI-Vorgaben aus [user]. contentWidth ist im Einzelbenutzer-
+            // Modus der Startwert für die Fensterbreite nach jedem Neuladen.
+            'ui' => [
+                'contentWidth' => $this->user['contentWidth'],
             ],
         ];
     }

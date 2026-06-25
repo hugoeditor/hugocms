@@ -14,6 +14,7 @@ export default {
     setupWarningTitle: 'Server setup notice',
     close: 'Close',
     sessionExpired: 'Your session has expired. Please sign in again.',
+    resizeWindow: 'Drag to resize window (double-click to reset)',
   },
 
   version: {
