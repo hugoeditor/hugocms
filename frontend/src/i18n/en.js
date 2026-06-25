@@ -16,6 +16,12 @@ export default {
     sessionExpired: 'Your session has expired. Please sign in again.',
   },
 
+  version: {
+    open: 'Show version',
+    title: 'Version',
+    build: 'Build number',
+  },
+
   login: {
     title: 'Sign in',
     username: 'Username',

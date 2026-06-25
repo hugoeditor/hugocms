@@ -16,6 +16,12 @@ export default {
     sessionExpired: 'Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.',
   },
 
+  version: {
+    open: 'Version anzeigen',
+    title: 'Version',
+    build: 'Buildnummer',
+  },
+
   login: {
     title: 'Anmeldung',
     username: 'Benutzername',

@@ -19,6 +19,7 @@ import { useAssistantStore } from './stores/assistant'
 import LanguageSwitcher from './components/LanguageSwitcher.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import { useConfirm } from './util/confirm'
+import { buildNumber } from './util/version'
 
 const { t } = useI18n()
 const confirm = useConfirm()
@@ -140,6 +141,7 @@ const editorPanelRef = ref(null)
 // --- Konfiguration im laufenden Betrieb ändern -----------------------------
 const reconfigureOpen = ref(false)
 const accountOpen = ref(false)
+const versionOpen = ref(false)
 const notice = ref(null) // kurze Erfolgsmeldung (Snackbar)
 
 function onAccountChanged() {
@@ -215,8 +217,20 @@ async function build() {
         <div class="nemo-window">
         <!-- Fenster-Titelleiste (Marke, Sprache, Benutzer, Abmelden) -->
         <header class="nemo-titlebar nemo-noselect">
-          <v-icon icon="mdi-folder-multiple-outline" size="20" class="nemo-brand-icon" />
-          <span class="nemo-title d-none d-md-inline">{{ $t('app.title') }}</span>
+          <!-- Marke: Klick auf Symbol oder Titel öffnet die Versionsinfo. -->
+          <v-tooltip :text="$t('version.open')" location="bottom">
+            <template #activator="{ props }">
+              <button
+                v-bind="props"
+                type="button"
+                class="nemo-brand-btn nemo-noselect"
+                @click="versionOpen = true"
+              >
+                <v-icon icon="mdi-folder-multiple-outline" size="20" class="nemo-brand-icon" />
+                <span class="nemo-title d-none d-md-inline">{{ $t('app.title') }}</span>
+              </button>
+            </template>
+          </v-tooltip>
 
           <!-- Orte-Menü: schneller Sprung zu einem Mount-Point oder dem
                Papierkorb. Auf schmalen Schirmen ersetzt es die ausgeblendete
@@ -357,6 +371,26 @@ async function build() {
       </v-card>
     </v-dialog>
 
+    <!-- Versionsinfo (Klick auf Marke in der Titelleiste) -->
+    <v-dialog v-model="versionOpen" width="380">
+      <v-card>
+        <v-card-title class="d-flex align-center text-subtitle-1">
+          <v-icon icon="mdi-folder-multiple-outline" color="primary" class="mr-2" />
+          {{ $t('version.title') }}
+        </v-card-title>
+        <v-card-text>
+          <div class="d-flex justify-space-between align-center">
+            <span class="text-medium-emphasis">{{ $t('version.build') }}</span>
+            <span class="text-h6 font-weight-medium">{{ buildNumber }}</span>
+          </div>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="versionOpen = false">{{ $t('app.close') }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Konfiguration im laufenden Betrieb ändern -->
     <ReconfigureDialog v-model="reconfigureOpen" @saved="onReconfigured" />
     <AccountDialog v-model="accountOpen" @changed="onAccountChanged" />
@@ -426,6 +460,19 @@ async function build() {
   color: var(--mint-text);
 }
 .nemo-brand-icon { color: var(--mint-green); }
+/* Marke als Schaltfläche: ohne eigenen Knopf-Look, öffnet die Versionsinfo. */
+.nemo-brand-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.nemo-brand-btn:hover .nemo-title { text-decoration: underline; }
 .nemo-title {
   font-weight: 600;
   font-size: 0.95rem;

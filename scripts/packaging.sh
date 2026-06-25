@@ -78,8 +78,11 @@ if [ -d "$PKG_REPO/hugocms" ]; then
 fi
 
 # 1. Frontend bauen (erzeugt frontend/dist über das vorhandene build.sh)
+#    HUGOCMS_RELEASE=1 markiert den Lauf als Release-Build: Nur dann zählt Vite
+#    die Buildnummer hoch (frontend/build-number.json). Reine Dev-/Test-Builds
+#    ohne diese Variable lassen den Zähler unverändert.
 echo "1. Frontend bauen..."
-"$SCRIPT_DIR/build.sh"
+HUGOCMS_RELEASE=1 "$SCRIPT_DIR/build.sh"
 if [ ! -f "$PROJECT_DIR/frontend/dist/index.html" ]; then
     echo "❌ Build-Ergebnis 'frontend/dist' fehlt. Abbruch."
     exit 1
@@ -169,9 +172,12 @@ echo "-----------------------------------------"
 if [ "$DO_COMMIT" = 1 ]; then
     # Commit-Message aus dem Quell-Commit ableiten (Rückverfolgbarkeit). Ist der
     # Arbeitsbaum des Quell-Repos nicht sauber, wird der Stand als -dev markiert.
+    # Die vom Release-Build selbst hochgezählte Buildnummer (build-number.json)
+    # ist dabei zu erwarten und gilt nicht als "unsauber" — sie wird mit dem
+    # nächsten regulären Commit übernommen.
     SRC_REV="$(git -C "$PROJECT_DIR" rev-parse --short HEAD 2>/dev/null || echo '?')"
     SRC_SUBJ="$(git -C "$PROJECT_DIR" log -1 --pretty=%s 2>/dev/null || echo 'Release')"
-    if ! git -C "$PROJECT_DIR" diff --quiet HEAD 2>/dev/null; then
+    if ! git -C "$PROJECT_DIR" diff --quiet HEAD -- . ':(exclude)frontend/build-number.json' 2>/dev/null; then
         SRC_REV="${SRC_REV}-dev"
         # Der Quell-Arbeitsbaum ist nicht sauber — der Commit würde als -dev
         # markiert. Vor dem Erzeugen bestätigen lassen (Default: Ja). Ohne
