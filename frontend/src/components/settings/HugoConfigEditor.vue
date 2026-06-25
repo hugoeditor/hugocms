@@ -10,7 +10,7 @@
 // Aufbau (Akkordeon): bekannte Skalar-Felder in Sektionen → params (flach) →
 // Menüs → „Weitere Einstellungen“ (rekursiver Baum für strukturierte/unbekannte
 // Blöcke) → „Gesamtes JSON (Roh)“ als Auffangebene. Nichts geht verloren.
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   PARAMS_KEY,
@@ -55,21 +55,93 @@ function load(text) {
     draft.value = {}
   }
 }
+
+// --- Undo/Redo -------------------------------------------------------------
+// Verlauf als Folge serialisierter Textzustände (der Quelltext ist die
+// kanonische Form). Schnell aufeinanderfolgende Tipp-Änderungen werden zu einem
+// Schritt zusammengefasst, damit Rückgängig nicht zeichenweise springt.
+const MAX_HISTORY = 100
+const COALESCE_MS = 500
+const history = ref([])
+const histIndex = ref(-1)
+let lastRecordTime = 0
+
+function resetHistory(text) {
+  history.value = [text]
+  histIndex.value = 0
+  lastRecordTime = 0
+}
+
+function record(text) {
+  if (text === history.value[histIndex.value]) return
+  const now = Date.now()
+  const coalesce = now - lastRecordTime < COALESCE_MS && histIndex.value >= 0
+  lastRecordTime = now
+  if (coalesce) {
+    history.value[histIndex.value] = text
+    return
+  }
+  // Etwaigen Redo-Zweig verwerfen, neuen Zustand anhängen.
+  history.value = history.value.slice(0, histIndex.value + 1)
+  history.value.push(text)
+  if (history.value.length > MAX_HISTORY) history.value.shift()
+  histIndex.value = history.value.length - 1
+}
+
+const canUndo = computed(() => histIndex.value > 0)
+const canRedo = computed(() => histIndex.value < history.value.length - 1)
+
+function applyState(text) {
+  load(text)
+  lastEmitted = text
+  emit('update:modelValue', text)
+}
+function undo() {
+  if (!canUndo.value) return
+  histIndex.value -= 1
+  lastRecordTime = 0 // nächste Eingabe beginnt einen neuen Schritt
+  applyState(history.value[histIndex.value])
+}
+function redo() {
+  if (!canRedo.value) return
+  histIndex.value += 1
+  lastRecordTime = 0
+  applyState(history.value[histIndex.value])
+}
+
 load(props.modelValue)
+resetHistory(props.modelValue)
 
 watch(
   () => props.modelValue,
   (v) => {
     if (v === lastEmitted) return
     load(v)
+    resetHistory(v) // externe Änderung (z. B. Neuladen) beginnt einen frischen Verlauf
   },
 )
 
 function emitChange() {
   const text = serializeJson(draft.value, indent, trailingNl)
   lastEmitted = text
+  record(text)
   emit('update:modelValue', text)
 }
+
+// Tastatur: Strg/Cmd+Z rückgängig, Strg/Cmd+Y bzw. Strg/Cmd+Umschalt+Z wiederholen.
+function onKeydown(e) {
+  if (!(e.ctrlKey || e.metaKey)) return
+  const key = e.key.toLowerCase()
+  if (key === 'z' && !e.shiftKey) {
+    e.preventDefault()
+    undo()
+  } else if (key === 'y' || (key === 'z' && e.shiftKey)) {
+    e.preventDefault()
+    redo()
+  }
+}
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
 // --- Bekannte Sektionen ----------------------------------------------------
 const visibleSections = computed(() =>
@@ -160,6 +232,9 @@ const expandedPanels = ref(['siteBasics'])
       >
         {{ t('editor.save') }}
       </v-btn>
+      <v-divider vertical class="mx-1 align-self-center" style="height: 20px" />
+      <v-btn icon="mdi-undo" size="small" variant="text" density="comfortable" :disabled="!canUndo" :title="t('editor.undo')" @click="undo" />
+      <v-btn icon="mdi-redo" size="small" variant="text" density="comfortable" :disabled="!canRedo" :title="t('editor.redo')" @click="redo" />
       <v-spacer />
       <span class="text-caption text-medium-emphasis">{{ t('settings.hugoConfig') }}</span>
     </div>

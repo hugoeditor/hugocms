@@ -3,9 +3,11 @@
 // und vermittelt zwischen JS-Wert (modelValue) und Knotenmodell. Genutzt im
 // Hugo-Editor für strukturierte bekannte Blöcke und für unbekannte Schlüssel.
 //
-// Eigene Meldungen werden über Referenzgleichheit erkannt (der Aufrufer schreibt
-// exakt den emittierten Wert zurück), damit der Baum bei eigenen Änderungen nicht
-// neu aufgebaut wird und Fokus/Aufklappzustand behält.
+// Eigene Meldungen werden STRUKTURELL erkannt (per JSON-Vergleich), damit der
+// Baum bei eigenen Änderungen nicht neu aufgebaut wird und Fokus/Aufklappzustand
+// behält. Referenzgleichheit reicht nicht: Vue verpackt den im Aufrufer
+// abgelegten Wert in einen reaktiven Proxy, der beim Zurücklesen eine andere
+// Objektreferenz ist als der gemeldete Rohwert.
 import { ref, watch } from 'vue'
 import JsonNode from '../JsonNode.vue'
 import { valueToNode, nodeToValue } from '../../util/jsonFormat'
@@ -16,20 +18,21 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue'])
 
 const node = ref(valueToNode(props.modelValue, null))
-let lastEmitted = props.modelValue
+let lastEmitted = JSON.stringify(props.modelValue ?? null)
 
 watch(
   () => props.modelValue,
   (v) => {
-    if (v === lastEmitted) return
+    const sig = JSON.stringify(v ?? null)
+    if (sig === lastEmitted) return // eigene Meldung – Baum nicht neu aufbauen
     node.value = valueToNode(v, null)
-    lastEmitted = v
+    lastEmitted = sig
   },
 )
 
 function onChanged() {
   const value = nodeToValue(node.value)
-  lastEmitted = value
+  lastEmitted = JSON.stringify(value)
   emit('update:modelValue', value)
 }
 </script>
