@@ -146,7 +146,7 @@ watch(
     <div class="d-flex flex-column assistant-body">
       <!-- Kopf -->
       <div class="d-flex align-center px-3 py-2 border-b">
-        <v-icon icon="mdi-robot-happy-outline" class="mr-2" />
+        <v-icon icon="mdi-creation" class="mr-2" />
         <span class="text-subtitle-1">{{ $t('assistant.title') }}</span>
         <v-chip size="x-small" class="ml-2" variant="tonal">{{ writeModeLabel }}</v-chip>
         <v-spacer />
@@ -267,9 +267,8 @@ watch(
     width: 100% !important;
     max-width: 100% !important;
     box-sizing: border-box !important;
-    /* Innenkanten-Rand entfernen: Bei voller Breite ist er überflüssig und
-       würde als 1 px über die Viewport-Breite hinausragen (horizontaler
-       Überlauf — "ein paar Pixel nach links schiebbar"). */
+    /* Innenkanten-Rand entfernen: Bei voller Breite überflüssig und würde als
+       1 px über die Breite hinausragen. */
     border: none !important;
   }
 }

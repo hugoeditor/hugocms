@@ -274,7 +274,7 @@ async function build() {
             <template #activator="{ props }">
               <v-btn
                 v-bind="props"
-                icon="mdi-robot-happy-outline"
+                icon="mdi-creation"
                 variant="text"
                 size="small"
                 class="mr-1"
@@ -430,11 +430,26 @@ async function build() {
   font-weight: 600;
   font-size: 0.95rem;
 }
-.nemo-titlebar-spacer { flex: 1 1 auto; }
+.nemo-titlebar-spacer { flex: 1 1 auto; min-width: 0; }
 .nemo-user {
   font-size: 0.85rem;
   color: var(--mint-text-muted);
   margin: 0 4px 0 8px;
+}
+
+/* Schmale Schirme: Titelleiste kompakt halten, damit alle Schaltflächen in eine
+   Zeile passen. Vuetify gibt jedem v-btn min-width:64px — bei mehreren Buttons
+   (Orte, Veröffentlichen, Konfig, Sprache, Abmelden) überläuft die Leiste sonst
+   den Viewport, verbreitert den Body und löst horizontales Scrollen aus (was
+   u. a. das vollbreite KI-Panel zu breit wirken ließ). */
+@media (max-width: 959.98px) {
+  .nemo-titlebar {
+    gap: 2px;
+    padding: 0 4px;
+  }
+  .nemo-titlebar :deep(.v-btn) {
+    min-width: 0;
+  }
 }
 
 /* Klickbarer Benutzername (öffnet den Anmeldedaten-Dialog) — als Text gestaltet,
