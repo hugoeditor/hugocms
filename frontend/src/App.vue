@@ -190,6 +190,14 @@ function openTrashView() {
 // --- Hugo aufrufen (Veröffentlichen) ---------------------------------------
 const building = ref(false)
 const buildResult = ref(null) // { success, exitCode, output, seconds } oder null
+const buildDialogOpen = ref(false) // Ergebnis-Dialog mit Statistiken/Ausgabe
+const buildSuccessToast = ref(false) // kurzer Erfolgs-Toast mit Details-Knopf
+
+// Den Ergebnis-Dialog (Statistiken/Ausgabe) aus dem Erfolgs-Toast heraus öffnen.
+function openBuildDetails() {
+  buildSuccessToast.value = false
+  buildDialogOpen.value = true
+}
 const editorPanelRef = ref(null)
 
 // --- Konfiguration im laufenden Betrieb ändern -----------------------------
@@ -227,6 +235,13 @@ async function build() {
   building.value = true
   try {
     buildResult.value = await api.post('build')
+    // Erfolg: nur ein kurzer Toast mit Details-Knopf. Fehler: der vollständige
+    // Dialog mit Ausgabe wie bisher, damit die Fehlersuche sofort sichtbar ist.
+    if (buildResult.value?.success) {
+      buildSuccessToast.value = true
+    } else {
+      buildDialogOpen.value = true
+    }
   } catch (e) {
     error.value = errorText(t, e) // Konfigurationsfehler als Snackbar
   } finally {
@@ -413,8 +428,9 @@ async function build() {
       </div>
     </template>
 
-    <!-- Ergebnis des Hugo-Laufs: Erfolg oder vollständige Fehlerausgabe -->
-    <v-dialog :model-value="!!buildResult" width="720" @update:model-value="buildResult = null">
+    <!-- Ergebnis des Hugo-Laufs: vollständige Anzeige mit Statistiken/Ausgabe.
+         Im Fehlerfall automatisch, im Erfolgsfall über „Details" im Toast. -->
+    <v-dialog v-model="buildDialogOpen" width="720">
       <v-card v-if="buildResult">
         <v-card-title class="d-flex align-center text-subtitle-1">
           <v-icon
@@ -433,7 +449,7 @@ async function build() {
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="buildResult = null">{{ $t('app.close') }}</v-btn>
+          <v-btn variant="text" @click="buildDialogOpen = false">{{ $t('app.close') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -476,6 +492,14 @@ async function build() {
 
     <v-snackbar :model-value="!!notice" color="success" :timeout="3000" @update:model-value="notice = null">
       {{ notice }}
+    </v-snackbar>
+
+    <!-- Erfolgreicher Hugo-Lauf: kurzer Toast; „Details" öffnet den Dialog. -->
+    <v-snackbar v-model="buildSuccessToast" color="success" :timeout="6000">
+      {{ $t('build.successTitle') }}
+      <template #actions>
+        <v-btn variant="text" @click="openBuildDetails">{{ $t('build.details') }}</v-btn>
+      </template>
     </v-snackbar>
 
     <v-snackbar

@@ -122,6 +122,7 @@ export default {
     running: 'Hugo is running …',
     successTitle: 'Site built',
     failTitle: 'Hugo run failed',
+    details: 'Details',
     duration: 'Duration: {0} s',
     exitCode: 'Exit code: {0}',
   },
