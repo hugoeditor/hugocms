@@ -35,18 +35,17 @@
 
 set -euo pipefail
 
-# --- Namen im Publish-Ordner -----------------------------------------------
-EDIT_DIR="edit"         # Kopie von app/ (Frontend, URL /edit/)
-API_DIR="cms-api"       # Endpunkt-Verzeichnis = Endpunkt-Pfad für den Hash
-BACKEND_LINK="backend"  # Alter Symlink-Name in cms-api/ (frühere Symlink-
-                        # Installation); wird, falls vorhanden, aufgeräumt.
-
 # --- Release-Wurzel relativ zum Skript -----------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 APP_DIR="$PKG_ROOT/app"
 BACKEND_DIR="$PKG_ROOT/backend"
 MOUNTS_DIR="$BACKEND_DIR/mounts"
+
+# Gemeinsame Auslieferungslogik (deploy_app sowie die Verzeichnisnamen
+# EDIT_DIR/API_DIR/BACKEND_LINK) — dieselbe Quelle wie update.sh, damit
+# Ersteinrichtung und Aktualisierung nicht auseinanderdriften.
+source "$SCRIPT_DIR/lib/deploy.sh"
 
 # --- Parameter prüfen ------------------------------------------------------
 ARGS=()
@@ -258,36 +257,9 @@ echo ""
 # Nach einem Update (git pull) dieses Skript erneut ausführen, damit beide
 # Kopien aktualisiert werden.
 
-# Legt Frontend (edit/) und API-Endpunkt (cms-api/index.php) im Basisverzeichnis
-# $1 an. Vorhandener Stand (Kopie oder früherer Symlink) wird ersetzt.
-deploy_app() {
-    local base="$1"
-    if [ -L "$base/$EDIT_DIR" ] || [ -d "$base/$EDIT_DIR" ]; then
-        rm -rf "$base/$EDIT_DIR"
-    fi
-    mkdir -p "$base/$EDIT_DIR"
-    cp -a "$APP_DIR/." "$base/$EDIT_DIR/"
-
-    mkdir -p "$base/$API_DIR"
-    cat > "$base/$API_DIR/index.php" <<PHP
-<?php
-
-/**
- * HugoCMS – API-Endpunkt (von install.sh erzeugt).
- * Bindet das Backend direkt im Release-Repo ein; nach einem Update dort
- * (git pull) ist dieser Endpunkt ohne weiteres Zutun aktuell.
- */
-
-declare(strict_types=1);
-
-require '$BACKEND_DIR/core/hugocms.php';
-PHP
-
-    # Symlink-Reste einer früheren Symlink-Installation entfernen.
-    if [ -L "$base/$API_DIR/$BACKEND_LINK" ]; then
-        rm "$base/$API_DIR/$BACKEND_LINK"
-    fi
-}
+# deploy_app() — legt Frontend (edit/) und API-Endpunkt (cms-api/index.php) im
+# übergebenen Basisverzeichnis ab. Definiert in bin/lib/deploy.sh (oben per
+# `source` eingebunden), damit install.sh und update.sh identisch ausliefern.
 
 echo "2. App einrichten (Frontend + API-Endpunkt)"
 STATIC_DIR="$HUGO_ROOT/static"
