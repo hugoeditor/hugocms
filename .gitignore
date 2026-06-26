@@ -29,6 +29,7 @@ backend/var/audit/
 
 # Beispiel-Datenverzeichnis (in echten Installationen nicht versionieren)
 daten/
+site/
 
 # Auslieferungs-Repo mit dem fertigen Produkt (eigenes Repo: hugocms-release)
 hugocms-release/
@@ -37,6 +38,7 @@ hugocms-release/
 # bleiben versioniert, da sie nicht auf .ini enden).
 *.ini
 *.bak
+*.ini.daten
 
 # Anwenderspezifischer Bootstrap (Vorlage: custom.php.beispiel).
 custom.php

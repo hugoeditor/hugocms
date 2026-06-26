@@ -11,6 +11,15 @@ namespace HugoCMS\FileManager\Audit;
  */
 final class UrlMap
 {
+    /**
+     * Dateinamen, die ein Verzeichnis als Standardseite ausliefern. Neben
+     * Hugos index.html zählen dazu die per DirectoryIndex servierten
+     * Handler — z. B. ein index.php-Formular unter /anfrage/. Ohne sie würde
+     * ein Link auf das Verzeichnis (/anfrage/) fälschlich als ins Leere
+     * führend gemeldet, obwohl der Server es korrekt ausliefert.
+     */
+    private const INDEX_FILES = ['index.html', 'index.htm', 'index.php'];
+
     /** @var array<string, true> Menge bekannter Pfade (mit führendem /). */
     private array $known = [];
 
@@ -22,11 +31,15 @@ final class UrlMap
         foreach ($files as $rel) {
             $path = '/' . ltrim(str_replace('\\', '/', $rel), '/');
             $this->known[$path] = true;
-            // index.html → das Verzeichnis selbst (Pretty-URL) mit und ohne /.
-            if (str_ends_with($path, '/index.html')) {
-                $dir = substr($path, 0, -strlen('index.html')); // endet mit /
-                $this->known[$dir] = true;
-                $this->known[rtrim($dir, '/') === '' ? '/' : rtrim($dir, '/')] = true;
+            // Verzeichnis-Index → das Verzeichnis selbst (Pretty-URL) mit und ohne /.
+            foreach (self::INDEX_FILES as $index) {
+                if (str_ends_with($path, '/' . $index)) {
+                    $dir = substr($path, 0, -strlen($index)); // endet mit /
+                    $this->known[$dir] = true;
+                    $trimmed = rtrim($dir, '/');
+                    $this->known[$trimmed === '' ? '/' : $trimmed] = true;
+                    break;
+                }
             }
         }
     }
