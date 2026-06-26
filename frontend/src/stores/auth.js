@@ -13,7 +13,18 @@ export const useAuthStore = defineStore('auth', {
     reconfigurable: false, // true, wenn die hugocms.ini im Betrieb änderbar ist
     ai: { enabled: false, writeMode: 'confirm' }, // KI-Assistent (aus whoami)
     ui: { contentWidth: 1200 }, // globale UI-Vorgaben aus [user] (Fensterbreite)
+    // Pro-Lizenz (aus whoami). configured = ein Schlüssel ist hinterlegt (ggf.
+    // ungültig/falsche Domain). git = Git-Funktion nutzbar (Pro + Hugo-Projekt).
+    // Die Lizenz gilt pro Webseite; licensable = aktivierbar (Mount-Datei vorhanden).
+    license: { edition: 'community', licensee: null, domain: '', configured: false },
+    licensable: false,
+    git: false,
   }),
+
+  getters: {
+    // Pro-Edition freigeschaltet (gültige, host-gebundene Lizenz).
+    isPro: (state) => state.license.edition === 'pro',
+  },
 
   actions: {
     async check() {
@@ -27,8 +38,20 @@ export const useAuthStore = defineStore('auth', {
       this.reconfigurable = data.reconfigurable ?? false
       this.ai = data.ai ?? { enabled: false, writeMode: 'confirm' }
       this.ui = data.ui ?? { contentWidth: 1200 }
+      this.license = data.license ?? { edition: 'community', licensee: null, domain: '', configured: false }
+      this.licensable = data.licensable ?? false
+      this.git = data.git ?? false
       setCsrfToken(data.csrf)
       this.ready = true
+    },
+
+    // Aktiviert eine Pro-Lizenz (Schlüssel an den Host gebunden). Danach den
+    // vollen Status neu laden (git-Flag, Edition) und das Ergebnis zurückgeben.
+    async activateLicense(key) {
+      const info = await api.post('activate', { key })
+      this.license = info
+      await this.check()
+      return info
     },
 
     // Aktuelle (rohe) Konfigurationswerte zum Vorbefüllen des Umkonfigurations-

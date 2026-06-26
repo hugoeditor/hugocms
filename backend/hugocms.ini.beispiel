@@ -69,3 +69,8 @@ bin = ../bin/hugo/hugo
 ;api_key = "sk-ant-..."
 ;model = claude-opus-4-8
 ;write_mode = confirm
+
+; Hinweis: Die Pro-Lizenz steht NICHT hier, sondern PRO WEBSEITE in der
+; jeweiligen Mount-Konfiguration (mounts/<hash>.ini, [license]-Sektion) —
+; HugoCMS verwaltet mehrere Webseiten, jede mit eigener, domain-gebundener
+; Lizenz. Siehe mounts.ini.beispiel.

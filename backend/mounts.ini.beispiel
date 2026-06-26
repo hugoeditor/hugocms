@@ -61,3 +61,14 @@ label = Medien
 ;source = /pfad/zum/hugo-projekt
 ;destination = /pfad/zum/hugo-projekt/public
 ;minify = true
+
+; Reservierte Sektion [license] (KEIN Mount): Pro-Lizenz DIESER Webseite.
+; Schaltet die Pro-Funktionen frei (derzeit die Git-Versionierung). Optional —
+; ohne gültigen Schlüssel läuft die Community-Edition. Der Schlüssel ist an die
+; DOMAIN dieser Webseite gebunden (starr, ohne Ablaufdatum, ohne Port/Endpunkt-
+; Pfad) und wird über das Lizenzformular im Client eingetragen — dieser Eintrag
+; wird dabei automatisch geschrieben. Da jede Webseite ihre eigene mounts/
+; <hash>.ini hat, bekommt so jede Webseite ihre eigene Lizenz.
+;   key   Lizenzschlüssel im Format HUGOCMS-...-...
+;[license]
+;key = "HUGOCMS-...-..."

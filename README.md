@@ -11,7 +11,9 @@ Mounts erreichbar sind, wird je Webseite über INI-Dateien festgelegt.
 > Download, Bildvorschauen, Bildbetrachter, Symbolansicht; visueller
 > Markdown-Editor (TipTap), Papierkorb-Verwaltung (Wiederherstellen/Leeren),
 > CSRF-Schutz, rekursive Suche. Optionaler **KI-Assistent** (Claude) mit Zugriff
-> auf die Mounts, Editor-Anbindung und drei Schreibmodi. Konfiguration und
+> auf die Mounts, Editor-Anbindung und drei Schreibmodi. Optionale
+> **Pro-Version** mit Git-Versionierung, je Webseite über einen Lizenzschlüssel
+> freigeschaltet. Konfiguration und
 > Anmeldedaten lassen sich im laufenden Betrieb über die Oberfläche ändern.
 > Mehrbenutzer mit Rollen folgt (Stufe 5).
 > Mandantenfähigkeit und der Auslieferungsweg (`packaging.sh` / `install.sh`)
@@ -386,6 +388,57 @@ Inhalt wird als vorrangige, projektweite Anweisung in den Systemkontext geladen
 (z. B. „Front Matter immer YAML", „Theme ananke", „Inhalte auf Deutsch"). Fehlt
 die Datei, greift die allgemeine Konventionserkennung.
 
+## Pro-Version: Git-Versionierung
+
+Die **Pro-Version** schaltet zusätzliche Funktionen frei — derzeit die
+**Git-Versionierung** des Hugo-Projekts: Status (Branch, geänderte Dateien),
+Commit-Verlauf, Diff eines Commits, Commit, Push und Zurücksetzen des
+Arbeitsbaums. Ist eine Webseite freigeschaltet, erscheint in der Titelleiste ein
+**Repository-Knopf** (`mdi-source-branch`), der den Git-Dialog öffnet. Git
+arbeitet im **Hugo-Projektverzeichnis** der Webseite (`[hugo] source` der
+Mount-Konfiguration) — dort liegt das Repository.
+
+Voraussetzungen: `git` ist auf dem Server installiert, das Projektverzeichnis
+ist ein Git-Repository, und für `push` sind die Zugangsdaten der Gegenstelle in
+der Serverumgebung eingerichtet (SSH-Schlüssel bzw. Credential-Helper).
+
+### Lizenzmodell
+
+Die Lizenz gilt **pro Webseite** und ist an deren **Domain** gebunden
+(normalisierter Host: klein, ohne Port, ohne Endpunkt-Pfad). Ein Umzug des
+API-Endpunkts (`/cms-api` → `/hugocms-api`) lässt die Lizenz gültig; eine andere
+Domain nicht. Es gibt **kein Ablaufdatum**. Da eine Installation mehrere
+Webseiten bedient, bekommt jede Webseite ihren eigenen Schlüssel.
+
+Geprüft wird die Lizenz mit einem im Backend eingebetteten **öffentlichen**
+Ed25519-Schlüssel (`backend/core/License.php`); manipulierte Schlüssel werden
+abgewiesen. Die Schlüssel werden vom Anbieter ausgestellt (signiert) — der
+zugehörige private Schlüssel ist nicht Teil dieses Repos.
+
+### Einen Pro-Schlüssel verwenden
+
+1. In der Titelleiste den **Lizenz-Knopf** öffnen (`mdi-key-outline`; bei
+   aktiver Pro-Lizenz `mdi-license`). Der Dialog zeigt Edition, Lizenznehmer und
+   die Domain dieser Webseite.
+2. Den vom Anbieter erhaltenen Schlüssel (`HUGOCMS-…-…`) einfügen und
+   **Aktivieren**.
+3. HugoCMS prüft Signatur und Domain und schreibt den Schlüssel in die
+   `[license]`-Sektion der **geladenen** Mount-Konfiguration dieser Webseite
+   (host-eigene `mounts/<hash>.ini` oder der Rückfall `mounts.ini` — letzterer
+   greift bei Einzelprojekt-Installationen und in der Entwicklung). Die übrigen
+   Sektionen bleiben unverändert. Die Pro-Funktionen greifen ab der nächsten
+   Anfrage; der Repository-Knopf erscheint.
+
+Ein für eine andere Domain ausgestellter Schlüssel wird abgewiesen
+(`LICENSE-INVALID`); ohne gültige Lizenz sind die Git-Befehle gesperrt
+(`PRO-REQUIRED`). Der Schlüssel lässt sich auch direkt in der
+`mounts/<hash>.ini` hinterlegen:
+
+```ini
+[license]
+key = "HUGOCMS-...-..."
+```
+
 ## API-Befehle
 
 | Befehl     | Methode | Parameter                            | Zweck                                  |
@@ -416,6 +469,14 @@ die Datei, greift die allgemeine Konventionserkennung.
 | `config`   | GET     | –                                    | Aktuelle Konfigurationswerte inkl. AI-Status (ohne Geheimnisse) |
 | `reconfigure`| POST  | `sessionPath`, `logFile`, `logLevel`, `hugoBin`?, `aiApiKey`?, `aiModel`?, `aiWriteMode`? | hugocms.ini ändern (Verzeichnisse/Log/Hugo/AI) |
 | `account`  | POST    | `currentPassword`, `username`, `password`? | Anmeldedaten ändern (danach Neuanmeldung) |
+| `license`  | GET     | –                                    | Lizenzstatus (Edition, Lizenznehmer, Domain) |
+| `activate` | POST    | `key`                                | Pro-Lizenz aktivieren (schreibt `mounts/<hash>.ini`) |
+| `gitstatus`| GET     | –                                    | **Pro:** Git-Status (Branch, geänderte Dateien) |
+| `gitlog`   | GET     | `page`?, `perPage`?                  | **Pro:** Commit-Verlauf (seitenweise)  |
+| `gitdiff`  | GET     | `sha`                                | **Pro:** Diff eines Commits            |
+| `gitcommit`| POST    | `message`                            | **Pro:** alle Änderungen committen     |
+| `gitpush`  | POST    | –                                    | **Pro:** zum konfigurierten Remote pushen |
+| `gitreset` | POST    | `ref`?                               | **Pro:** Arbeitsbaum zurücksetzen (Standard: `HEAD`) |
 
 Alle POST-Befehle verlangen das **CSRF-Token** aus `whoami` (Feld `csrf`) im
 Header `X-CSRF-Token`; sonst antwortet das Backend mit `ECSRF` (403).

@@ -34,6 +34,11 @@ hugocms-release/
 # Anwenderspezifischer Bootstrap (Vorlage: custom.php.beispiel).
 custom.php
 
+# Der private Lizenz-Signierschlüssel darf NIEMALS ins Repository.
+private.key
+scripts/keygen/private.key
+scripts/keygen/
+
 # Persönliche/Umgebungs-Konfiguration im Projektwurzelverzeichnis
 # (Shell-rc, Editor- und Tool-Configs wie .bashrc, .mcp.json, .idea, .vscode …).
 # Führender / = nur Wurzelebene, damit .htaccess/.gitkeep in Unterordnern

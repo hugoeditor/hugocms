@@ -267,6 +267,11 @@ final class Config
      * Extrahiert eine Sektion [name] samt Inhalt WÖRTLICH (von der
      * Sektionszeile bis zur nächsten Sektion bzw. Dateiende, ohne
      * abschließende Leerzeilen). null, wenn die Sektion fehlt.
+     *
+     * Der Abgleich ist ohne Belang der Groß-/Kleinschreibung ($name ist klein),
+     * die Kopfzeile wird aber ORIGINALGETREU übernommen — so behält ein
+     * Mount-Name wie [Inhalte] seine Schreibweise (und damit seine ID), auch
+     * wenn eine andere Sektion derselben Datei geschrieben wird.
      */
     private static function extractSection(string $ini, string $name): ?string
     {
@@ -281,7 +286,8 @@ final class Config
                 }
                 $inSection = $isTarget;
                 if ($inSection) {
-                    $out[] = '[' . $name . ']';
+                    // Originalschreibweise des Sektionsnamens erhalten.
+                    $out[] = '[' . trim($m[1]) . ']';
                 }
                 continue;
             }

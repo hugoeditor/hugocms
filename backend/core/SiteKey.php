@@ -29,11 +29,21 @@ final class SiteKey
      */
     public static function fromServer(array $server): string
     {
+        return self::host($server) . self::endpointPath((string) ($server['SCRIPT_NAME'] ?? ''));
+    }
+
+    /**
+     * Nur der normalisierte Host (Domain): klein geschrieben, ohne Port und
+     * ohne FQDN-Punkt — z. B. „kunde-a.example.com". Bezugsgröße der
+     * Lizenz-Bindung (eine Lizenz je Domain), bewusst OHNE den Endpunkt-Pfad:
+     * ein Umzug von /cms-api nach /hugocms-api lässt die Lizenz gültig.
+     */
+    public static function host(array $server): string
+    {
         $host = strtolower((string) ($server['HTTP_HOST'] ?? $server['SERVER_NAME'] ?? ''));
         $host = (string) strtok($host, ':'); // Port abtrennen
-        $host = rtrim($host, '.');           // FQDN-Punkt entfernen
 
-        return $host . self::endpointPath((string) ($server['SCRIPT_NAME'] ?? ''));
+        return rtrim($host, '.');             // FQDN-Punkt entfernen
     }
 
     /**

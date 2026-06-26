@@ -62,6 +62,24 @@ final class Connector
     /** Globale [user]-Einstellungen (Sitzungsdauer, Inhaltsbreite). */
     private array $user = ['sessionLifetime' => 28800, 'contentWidth' => 1200];
 
+    /**
+     * Roher Pro-Lizenzschlüssel dieser WEBSEITE (aus der [license]-Sektion der
+     * Mount-Konfiguration) oder null. Schaltet die Pro-Funktionen frei (derzeit
+     * Git). Da die Lizenz pro Webseite gilt, steht sie in mounts/<hash>.ini —
+     * nicht installationsweit. Lazy zu einer License-Instanz aufgelöst.
+     */
+    private ?string $licenseKey = null;
+
+    /** Zwischengespeicherte License-Instanz (an die Domain der Anfrage gebunden). */
+    private ?License $licenseObj = null;
+
+    /**
+     * Pfad der geladenen Mount-Konfiguration (mounts/<hash>.ini bzw. Rückfall
+     * mounts.ini). Ziel der Lizenz-Aktivierung. null bei programmatischer
+     * Konfiguration (custom.php) — dann ist keine Aktivierung möglich.
+     */
+    private ?string $mountsPath = null;
+
     public function __construct(array $options)
     {
         // Hauptkonfiguration (hugocms.ini) ggf. zuerst einlesen — daraus
@@ -147,6 +165,12 @@ final class Connector
             }
         }
         $this->hugoBin = isset($options['hugoBin']) ? (string) $options['hugoBin'] : null;
+
+        // Programmatisch gesetzter Lizenzschlüssel (custom.php). Im INI-Betrieb
+        // stammt er aus der Mount-Konfiguration (siehe mountsFromFile).
+        if (isset($options['licenseKey'])) {
+            $this->licenseKey = (string) $options['licenseKey'];
+        }
     }
 
     /**
@@ -177,6 +201,11 @@ final class Connector
         $config = MountConfig::load($configPath);
         foreach ($config['mounts'] as $spec) {
             $this->mount($spec['name'], $spec['path'], $spec['options']);
+        }
+        // Pro-Lizenz dieser Webseite und das Ziel künftiger Aktivierungen.
+        $this->mountsPath = $configPath;
+        if ($config['license'] !== null) {
+            $this->licenseKey = $config['license'];
         }
         if ($config['hugo'] !== null) {
             $this->hugo = $config['hugo'];
@@ -255,6 +284,14 @@ final class Connector
                 'config' => $this->cmdConfig(),
                 'reconfigure' => $this->cmdReconfigure($request),
                 'account' => $this->cmdAccount($request),
+                'license' => $this->cmdLicense(),
+                'activate' => $this->cmdActivate($request),
+                'gitstatus' => $this->cmdGitStatus(),
+                'gitlog' => $this->cmdGitLog($request),
+                'gitdiff' => $this->cmdGitDiff($request),
+                'gitcommit' => $this->cmdGitCommit($request),
+                'gitpush' => $this->cmdGitPush(),
+                'gitreset' => $this->cmdGitReset($request),
                 default => throw ApiException::badRequest('UNKNOWN-COMMAND', [$cmd]),
             };
 
@@ -346,6 +383,17 @@ final class Connector
             'ui' => [
                 'contentWidth' => $this->user['contentWidth'],
             ],
+            // Pro-Edition (Git u. Ä.). 'configured' meldet einen hinterlegten,
+            // ggf. ungültigen Schlüssel (falsche Domain) — für einen Hinweis im
+            // Client. Der Schlüssel selbst wird nie zurückgegeben.
+            'license' => $this->license()->info(),
+            // Lässt sich eine Lizenz aktivieren? Nur, wenn eine Mount-Datei
+            // geladen wurde (mounts/<hash>.ini bzw. mounts.ini) — dorthin wird
+            // geschrieben. Bei custom.php (programmatisch) nicht möglich.
+            'licensable' => $this->mountsPath !== null,
+            // Git ist nur nutzbar, wenn die Webseite ein Hugo-Projekt hat
+            // (dort liegt das Repository) UND eine gültige Pro-Lizenz vorliegt.
+            'git' => $this->hugo !== null && $this->license()->isPro(),
         ];
     }
 
@@ -941,6 +989,144 @@ final class Connector
         $this->auth->logout();
 
         return ['ok' => true, 'reauth' => true];
+    }
+
+    // --- Pro-Lizenz --------------------------------------------------------
+
+    /**
+     * Lazy aufgelöste License-Instanz dieser Webseite, an die Domain der Anfrage
+     * gebunden ({@see SiteKey::host}). Der Schlüssel stammt aus der Mount-Konfig.
+     */
+    private function license(): License
+    {
+        return $this->licenseObj ??= new License($this->licenseKey, SiteKey::host($_SERVER));
+    }
+
+    /** Liefert den Lizenzstatus (Edition, Lizenznehmer, Domain) — ohne Schlüssel. */
+    private function cmdLicense(): array
+    {
+        $this->requireAuth();
+
+        return $this->license()->info();
+    }
+
+    /**
+     * Aktiviert eine Pro-Lizenz für DIESE Webseite: prüft den Schlüssel gegen
+     * die aktuelle Domain und schreibt ihn in die [license]-Sektion der
+     * geladenen Mount-Konfiguration (mounts/<hash>.ini). Die übrigen Sektionen
+     * (Mounts, [hugo]) bleiben wörtlich erhalten. Ein ungültiger Schlüssel
+     * (falsche Domain, Signatur) wird abgelehnt, bevor etwas persistiert wird.
+     * Die Edition greift ab dem nächsten Request.
+     */
+    private function cmdActivate(array $request): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+        if ($this->mountsPath === null) {
+            // Programmatische Konfiguration (custom.php): keine Datei zum Schreiben.
+            throw new ApiException('ECONFIG', 409, 'ACTIVATION-UNAVAILABLE');
+        }
+
+        $key = trim((string) ($request['key'] ?? ''));
+        if ($key === '') {
+            throw ApiException::badRequest('PARAM-MISSING', ['key']);
+        }
+
+        $domain = SiteKey::host($_SERVER);
+        $decoded = License::decode($key, $domain);
+        if ($decoded === null) {
+            // Bewusst keine Unterscheidung Signatur/Domain nach außen.
+            throw new ApiException('ELICENSE', 422, 'LICENSE-INVALID');
+        }
+
+        Config::updateSections($this->mountsPath, ['license' => ['key' => $key]]);
+        $this->logger->info("Pro-Lizenz aktiviert für {$decoded['licensee']} @ {$decoded['domain']}.");
+
+        // Status mit dem frisch eingetragenen Schlüssel zurückgeben.
+        return (new License($key, $domain))->info();
+    }
+
+    /** Wirft 403, wenn keine gültige Pro-Lizenz für diese Domain vorliegt. */
+    private function requirePro(): void
+    {
+        if (!$this->license()->isPro()) {
+            throw new ApiException('ELICENSE', 403, 'PRO-REQUIRED');
+        }
+    }
+
+    // --- Git (Pro-Funktion) ------------------------------------------------
+
+    /**
+     * Gemeinsamer Einstieg aller Git-Befehle: Anmeldung, Pro-Lizenz und ein
+     * konfiguriertes Hugo-Projekt (dessen source-Verzeichnis das Repository
+     * ist). Liefert den auf dieses Verzeichnis eingesperrten GitService.
+     */
+    private function git(): GitService
+    {
+        $this->requireAuth();
+        $this->requirePro();
+        if ($this->hugo === null) {
+            throw new ApiException('ECONFIG', 409, 'GIT-NO-PROJECT');
+        }
+        $source = (string) $this->hugo['source'];
+        if (!is_dir($source)) {
+            throw new ApiException('ECONFIG', 500, 'HUGO-SOURCE-MISSING', [$source]);
+        }
+
+        return new GitService($source);
+    }
+
+    private function cmdGitStatus(): array
+    {
+        return $this->git()->status();
+    }
+
+    private function cmdGitLog(array $request): array
+    {
+        $page = (int) ($request['page'] ?? 1);
+        $perPage = (int) ($request['perPage'] ?? 20);
+
+        return $this->git()->log($page, $perPage);
+    }
+
+    private function cmdGitDiff(array $request): array
+    {
+        $sha = $this->requireParam($request, 'sha');
+
+        return $this->git()->diff($sha);
+    }
+
+    private function cmdGitCommit(array $request): array
+    {
+        $this->requireMethod('POST');
+        $git = $this->git();
+        $result = $git->commit((string) ($request['message'] ?? ''));
+        if ($result['success']) {
+            $this->logger->info('Git-Commit erstellt: ' . ($result['sha'] ?? '?'));
+        } else {
+            $this->logger->warning('Git-Commit fehlgeschlagen: ' . $result['output']);
+        }
+
+        return $result;
+    }
+
+    private function cmdGitPush(): array
+    {
+        $this->requireMethod('POST');
+        $result = $this->git()->push();
+        if (!$result['success']) {
+            $this->logger->warning('Git-Push fehlgeschlagen: ' . $result['output']);
+        }
+
+        return $result;
+    }
+
+    private function cmdGitReset(array $request): array
+    {
+        $this->requireMethod('POST');
+        $ref = trim((string) ($request['ref'] ?? 'HEAD'));
+
+        return $this->git()->reset($ref);
     }
 
     /**

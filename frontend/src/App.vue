@@ -14,6 +14,8 @@ import TrashView from './components/TrashView.vue'
 import EditorPanel from './components/EditorPanel.vue'
 import ReconfigureDialog from './components/ReconfigureDialog.vue'
 import AccountDialog from './components/AccountDialog.vue'
+import LicenseDialog from './components/LicenseDialog.vue'
+import RepositoryDialog from './components/RepositoryDialog.vue'
 import AssistantPanel from './components/AssistantPanel.vue'
 import { useAssistantStore } from './stores/assistant'
 import LanguageSwitcher from './components/LanguageSwitcher.vue'
@@ -204,7 +206,13 @@ const editorPanelRef = ref(null)
 const reconfigureOpen = ref(false)
 const accountOpen = ref(false)
 const versionOpen = ref(false)
+const licenseOpen = ref(false)
+const repositoryOpen = ref(false)
 const notice = ref(null) // kurze Erfolgsmeldung (Snackbar)
+
+function onLicenseActivated() {
+  notice.value = auth.isPro ? t('license.activatedPro') : t('license.activated')
+}
 
 function onAccountChanged() {
   // Der Server hat die Sitzung beendet; der Store-Zustand ist bereits auf
@@ -365,6 +373,21 @@ async function build() {
             <span class="d-none d-md-inline">{{ $t('build.publish') }}</span>
           </v-btn>
 
+          <!-- Repository (Git) — Pro-Funktion, nur bei gültiger Lizenz und
+               konfiguriertem Hugo-Projekt (dort liegt das Repository). -->
+          <v-tooltip v-if="auth.git" :text="$t('repo.open')" location="bottom">
+            <template #activator="{ props }">
+              <v-btn
+                v-bind="props"
+                icon="mdi-source-branch"
+                variant="text"
+                size="small"
+                class="mr-1"
+                @click="repositoryOpen = true"
+              />
+            </template>
+          </v-tooltip>
+
           <!-- KI-Assistent (nur wenn ein API-Schlüssel konfiguriert ist) -->
           <v-tooltip v-if="auth.ai.enabled" :text="$t('assistant.open')" location="bottom">
             <template #activator="{ props }">
@@ -389,6 +412,22 @@ async function build() {
                 size="small"
                 class="mr-1"
                 @click="reconfigureOpen = true"
+              />
+            </template>
+          </v-tooltip>
+
+          <!-- Pro-Lizenz aktivieren/anzeigen (pro Webseite; sichtbar, sobald eine
+               Mount-Konfiguration geladen ist — dorthin schreibt die Aktivierung) -->
+          <v-tooltip v-if="auth.licensable" :text="$t('license.open')" location="bottom">
+            <template #activator="{ props }">
+              <v-btn
+                v-bind="props"
+                :icon="auth.isPro ? 'mdi-license' : 'mdi-key-outline'"
+                :color="auth.isPro ? 'success' : undefined"
+                variant="text"
+                size="small"
+                class="mr-1"
+                @click="licenseOpen = true"
               />
             </template>
           </v-tooltip>
@@ -482,6 +521,10 @@ async function build() {
     <!-- Konfiguration im laufenden Betrieb ändern -->
     <ReconfigureDialog v-model="reconfigureOpen" @saved="onReconfigured" />
     <AccountDialog v-model="accountOpen" @changed="onAccountChanged" />
+
+    <!-- Pro-Lizenz aktivieren · Git-Versionierung (Pro-Funktion) -->
+    <LicenseDialog v-model="licenseOpen" @activated="onLicenseActivated" />
+    <RepositoryDialog v-model="repositoryOpen" />
 
     <!-- KI-Assistent (rechtes Seitenpanel) -->
     <AssistantPanel v-if="auth.ai.enabled" />

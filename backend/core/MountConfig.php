@@ -39,13 +39,15 @@ use HugoCMS\FileManager\Exception\ApiException;
  */
 final class MountConfig
 {
-    /** Sektionsname, der NICHT als Mount interpretiert wird. */
+    /** Sektionsnamen, die NICHT als Mount interpretiert werden. */
     private const HUGO_SECTION = 'hugo';
+    private const LICENSE_SECTION = 'license';
 
     /**
      * @return array{
      *   mounts: list<array{name: string, path: string, options: array}>,
      *   hugo: ?array{source: string, destination: string, minify: bool, clean: bool},
+     *   license: ?string,
      *   warnings: list<array{key: string, params: list<mixed>}>
      * }
      */
@@ -63,6 +65,7 @@ final class MountConfig
         $baseDir = dirname($configPath);
         $mounts = [];
         $hugo = null;
+        $license = null;
         $warnings = [];
 
         foreach ($raw as $name => $section) {
@@ -78,6 +81,14 @@ final class MountConfig
                 if ($hugo === null) {
                     $warnings[] = ['key' => 'HUGO-CONFIG-INCOMPLETE', 'params' => [$configPath]];
                 }
+                continue;
+            }
+
+            // Pro-Lizenz dieser Webseite (optional). Nur der rohe Schlüssel;
+            // geprüft (Signatur, Domain-Bindung) wird er von {@see License}.
+            if (strtolower((string) $name) === self::LICENSE_SECTION) {
+                $key = trim((string) ($section['key'] ?? ''));
+                $license = $key === '' ? null : $key;
                 continue;
             }
 
@@ -108,7 +119,7 @@ final class MountConfig
             throw new ApiException('ECONFIG', 500, 'MOUNTS-NO-SECTION', [$configPath]);
         }
 
-        return ['mounts' => $mounts, 'hugo' => $hugo, 'warnings' => $warnings];
+        return ['mounts' => $mounts, 'hugo' => $hugo, 'license' => $license, 'warnings' => $warnings];
     }
 
     /**
