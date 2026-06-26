@@ -382,34 +382,11 @@ async function build() {
 
           <div class="nemo-titlebar-spacer" />
 
-          <!-- Hugo veröffentlichen, Repository, KI-Assistent und Lizenz sind in
-               die vertikale Werkzeugleiste (links) umgezogen. -->
-
-          <!-- Konfiguration ändern (nur bei INI-basierter Installation) -->
-          <v-tooltip v-if="auth.reconfigurable" :text="$t('reconfigure.open')" location="bottom">
-            <template #activator="{ props }">
-              <v-btn
-                v-bind="props"
-                icon="mdi-cog-outline"
-                variant="text"
-                size="small"
-                class="mr-1"
-                @click="reconfigureOpen = true"
-              />
-            </template>
-          </v-tooltip>
+          <!-- Veröffentlichen, Repository, KI-Assistent, Lizenz sowie Konto und
+               Konfiguration sind in die vertikale Werkzeugleiste (links)
+               umgezogen — Konto und Konfiguration sitzen dort unten. -->
 
           <LanguageSwitcher />
-          <v-tooltip :text="$t('account.open')" location="bottom">
-            <template #activator="{ props }">
-              <button
-                v-bind="props"
-                type="button"
-                class="nemo-user nemo-user-btn d-none d-sm-inline-block"
-                @click="accountOpen = true"
-              >{{ auth.user?.name }}</button>
-            </template>
-          </v-tooltip>
           <v-btn variant="text" size="small" prepend-icon="mdi-logout" @click="logout">
             <span class="d-none d-md-inline">{{ $t('app.logout') }}</span>
           </v-btn>
@@ -502,6 +479,39 @@ async function build() {
                   >
                     <v-icon :icon="auth.isPro ? 'mdi-license' : 'mdi-key-outline'" size="20" />
                     <span class="nemo-tool-label">{{ $t('license.open') }}</span>
+                  </button>
+                </template>
+              </v-tooltip>
+
+              <!-- Spacer schiebt Konto und Konfiguration nach unten (VS-Code). -->
+              <div class="nemo-tool-spacer" />
+
+              <!-- Konto/Anmeldedaten (unten) -->
+              <v-tooltip :text="$t('account.open')" location="right">
+                <template #activator="{ props }">
+                  <button
+                    v-bind="props"
+                    type="button"
+                    class="nemo-tool-btn"
+                    @click="accountOpen = true"
+                  >
+                    <v-icon icon="mdi-account-circle-outline" size="20" />
+                    <span class="nemo-tool-label">{{ auth.user?.name || $t('account.open') }}</span>
+                  </button>
+                </template>
+              </v-tooltip>
+
+              <!-- Konfiguration ändern (nur bei INI-basierter Installation) -->
+              <v-tooltip v-if="auth.reconfigurable" :text="$t('reconfigure.open')" location="right">
+                <template #activator="{ props }">
+                  <button
+                    v-bind="props"
+                    type="button"
+                    class="nemo-tool-btn"
+                    @click="reconfigureOpen = true"
+                  >
+                    <v-icon icon="mdi-cog-outline" size="20" />
+                    <span class="nemo-tool-label">{{ $t('reconfigure.open') }}</span>
                   </button>
                 </template>
               </v-tooltip>
@@ -704,17 +714,12 @@ async function build() {
   font-size: 0.95rem;
 }
 .nemo-titlebar-spacer { flex: 1 1 auto; min-width: 0; }
-.nemo-user {
-  font-size: 0.85rem;
-  color: var(--mint-text-muted);
-  margin: 0 4px 0 8px;
-}
 
 /* Schmale Schirme: Titelleiste kompakt halten, damit alle Schaltflächen in eine
    Zeile passen. Vuetify gibt jedem v-btn min-width:64px — bei mehreren Buttons
-   (Orte, Veröffentlichen, Konfig, Sprache, Abmelden) überläuft die Leiste sonst
-   den Viewport, verbreitert den Body und löst horizontales Scrollen aus (was
-   u. a. das vollbreite KI-Panel zu breit wirken ließ). */
+   (Werkzeug-Umschalter, Orte, Sprache, Abmelden) überläuft die Leiste sonst den
+   Viewport, verbreitert den Body und löst horizontales Scrollen aus (was u. a.
+   das vollbreite KI-Panel zu breit wirken ließ). */
 @media (max-width: 959.98px) {
   .nemo-titlebar {
     gap: 2px;
@@ -723,21 +728,6 @@ async function build() {
   .nemo-titlebar :deep(.v-btn) {
     min-width: 0;
   }
-}
-
-/* Klickbarer Benutzername (öffnet den Anmeldedaten-Dialog) — als Text gestaltet,
-   nicht als Standard-Button. */
-.nemo-user-btn {
-  background: none;
-  border: none;
-  padding: 2px 6px;
-  border-radius: 4px;
-  cursor: pointer;
-  font: inherit;
-}
-.nemo-user-btn:hover {
-  color: var(--mint-text);
-  background: var(--mint-hover, rgba(0, 0, 0, 0.06));
 }
 
 /* Zeilen-Ebene unterhalb der Titelleiste: links die vertikale Werkzeugleiste,
@@ -843,6 +833,9 @@ async function build() {
   margin-bottom: 2px;
   color: var(--mint-text-muted);
 }
+
+/* Schiebt die unteren Werkzeuge (Konto, Konfiguration) ans Leistenende. */
+.nemo-tool-spacer { flex: 1 1 auto; }
 
 /* Eingeklappt (Desktop): nur Icons, zentriert; Namen ausblenden. */
 .nemo-toolrail.collapsed .nemo-tool-label { display: none; }
