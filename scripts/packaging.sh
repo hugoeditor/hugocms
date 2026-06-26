@@ -30,6 +30,11 @@
 #   packaging.sh --no-commit  nur bauen; weder committen noch pushen (danach
 #                             'git status' des Release-Repos).
 # Ohne Flag wird also committet UND gepusht.
+#
+# Zum Schluss wird zusätzlich die vom Release-Build hochgezählte Buildnummer
+# (frontend/build-number.json) im QUELL-Repo mit der Message
+# "Neues Build erzeugt #<nummer>" committet und gepusht — gesteuert über
+# dieselben Flags (--no-commit unterdrückt beides, --no-push nur den Push).
 
 set -euo pipefail
 
@@ -206,5 +211,29 @@ if [ "$DO_COMMIT" = 1 ]; then
 else
     echo "Kein Commit (--no-commit). Zum manuellen Übernehmen:"
     echo "  git -C '$PKG_REPO' add -A && git -C '$PKG_REPO' commit"
+fi
+
+# 7. Hochgezählte Buildnummer im QUELL-Repo festschreiben. Der Release-Build
+#    (Schritt 1) erhöht die versionierte Datei frontend/build-number.json; sie
+#    bleibt sonst als loser Arbeitsbaum-Rest liegen (deshalb wird sie oben aus
+#    der Sauberkeitsprüfung ausgenommen). Hier bekommt nur diese Datei einen
+#    eigenen Commit — bewusst NACH dem Release-Commit, damit dessen Betreff aus
+#    dem echten Feature-Commit stammt, nicht aus dieser Buildnummer. Gleiche
+#    Flags wie das Release-Repo: --no-commit unterdrückt beides, --no-push den Push.
+BUILD_FILE="$PROJECT_DIR/frontend/build-number.json"
+if [ "$DO_COMMIT" = 1 ] && [ -f "$BUILD_FILE" ]; then
+    if git -C "$PROJECT_DIR" diff --quiet HEAD -- frontend/build-number.json; then
+        echo "Quell-Repo: Buildnummer unverändert — kein Commit nötig."
+    else
+        BUILD_NO="$(grep -oE '[0-9]+' "$BUILD_FILE" | head -n1)"
+        # Nur diese eine Datei festschreiben (Pathspec), unabhängig von anderen
+        # Änderungen im Arbeitsbaum oder Index.
+        git -C "$PROJECT_DIR" commit -q -m "Neues Build erzeugt #${BUILD_NO}" -- frontend/build-number.json
+        echo "Quell-Repo: Buildnummer #${BUILD_NO} committet."
+        if [ "$DO_PUSH" = 1 ]; then
+            echo "Push (Quell-Repo)…"
+            git -C "$PROJECT_DIR" push
+        fi
+    fi
 fi
 echo "========================================="

@@ -120,6 +120,10 @@ export default {
     leave: 'Suche verlassen',
   },
 
+  site: {
+    open: 'Webseite ansehen',
+  },
+
   build: {
     publish: 'Veröffentlichen',
     running: 'Hugo läuft …',

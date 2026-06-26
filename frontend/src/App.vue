@@ -28,6 +28,10 @@ import { buildNumber } from './util/version'
 const HUGOCMS_URL = 'https://hugocms.com/'
 const COMPANY_URL = 'https://inter-data.de/'
 
+// Adresse der veröffentlichten Webseite: die Domain-Wurzel, unter der HugoCMS
+// läuft (die erzeugte public/ wird dort ausgeliefert). Konstant pro Seitenaufruf.
+const siteUrl = window.location.origin
+
 const { t } = useI18n()
 const confirm = useConfirm()
 
@@ -421,6 +425,22 @@ async function build() {
                 </template>
               </v-tooltip>
 
+              <!-- Veröffentlichte Webseite ansehen (Domain-Wurzel, neuer Tab) -->
+              <v-tooltip v-if="auth.buildable" :text="$t('site.open')" location="right">
+                <template #activator="{ props }">
+                  <a
+                    v-bind="props"
+                    :href="siteUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="nemo-tool-btn"
+                  >
+                    <v-icon icon="mdi-web" size="20" />
+                    <span class="nemo-tool-label">{{ $t('site.open') }}</span>
+                  </a>
+                </template>
+              </v-tooltip>
+
               <!-- Hugo veröffentlichen (nur wenn für die Webseite konfiguriert) -->
               <v-tooltip v-if="auth.buildable" :text="$t('build.publish')" location="right">
                 <template #activator="{ props }">
@@ -811,6 +831,7 @@ async function build() {
   font: inherit;
   font-size: 0.9rem;
   text-align: left;
+  text-decoration: none; /* auch als <a> (Webseiten-Link) ohne Unterstreichung */
   white-space: nowrap;
   cursor: pointer;
 }

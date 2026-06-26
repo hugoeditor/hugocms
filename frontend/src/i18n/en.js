@@ -120,6 +120,10 @@ export default {
     leave: 'Leave search',
   },
 
+  site: {
+    open: 'View website',
+  },
+
   build: {
     publish: 'Publish',
     running: 'Hugo is running …',
