@@ -49,6 +49,11 @@ final class Response
             http_response_code($httpStatus);
             header('Content-Type: application/json; charset=utf-8');
             header('X-Content-Type-Options: nosniff');
+            // API-Antworten NIE zwischenspeichern. Sonst liefert ein
+            // vorgeschalteter Cache (Cloudflare/Proxy) oder der Browser bei
+            // GET-Befehlen wie whoami einen veralteten Stand — etwa weiterhin
+            // "community", nachdem die Pro-Lizenz schon aktiviert wurde.
+            header('Cache-Control: no-store, max-age=0');
         }
 
         echo json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
