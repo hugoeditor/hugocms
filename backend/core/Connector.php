@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace HugoCMS\FileManager;
 
+use HugoCMS\FileManager\Audit\AuditService;
 use HugoCMS\FileManager\Auth\AuthInterface;
 use HugoCMS\FileManager\Exception\ApiException;
 use Throwable;
@@ -292,6 +293,10 @@ final class Connector
                 'gitcommit' => $this->cmdGitCommit($request),
                 'gitpush' => $this->cmdGitPush(),
                 'gitreset' => $this->cmdGitReset($request),
+                'audit' => $this->cmdAudit(),
+                'auditlist' => $this->cmdAuditList(),
+                'auditget' => $this->cmdAuditGet($request),
+                'auditdelete' => $this->cmdAuditDelete($request),
                 default => throw ApiException::badRequest('UNKNOWN-COMMAND', [$cmd]),
             };
 
@@ -394,6 +399,9 @@ final class Connector
             // Git ist nur nutzbar, wenn die Webseite ein Hugo-Projekt hat
             // (dort liegt das Repository) UND eine gültige Pro-Lizenz vorliegt.
             'git' => $this->hugo !== null && $this->license()->isPro(),
+            // Das SEO-Audit hat dieselbe Voraussetzung wie Git: Pro-Lizenz und
+            // ein konfiguriertes Hugo-Projekt (für public/ und content/).
+            'audit' => $this->hugo !== null && $this->license()->isPro(),
         ];
     }
 
@@ -1127,6 +1135,135 @@ final class Connector
         $ref = trim((string) ($request['ref'] ?? 'HEAD'));
 
         return $this->git()->reset($ref);
+    }
+
+    // --- SEO-Audit (Pro-Funktion) -----------------------------------------
+
+    /**
+     * Gemeinsamer Einstieg aller Audit-Befehle: Anmeldung, Pro-Lizenz und ein
+     * konfiguriertes Hugo-Projekt. Liefert den auf public/ (Build) und content/
+     * (Quellen) dieser Webseite eingestellten AuditService. Die Berichte liegen
+     * je Webseite getrennt unter var/audit/<hash(source)>/.
+     */
+    private function audit(): AuditService
+    {
+        $this->requireAuth();
+        $this->requirePro();
+        if ($this->hugo === null) {
+            throw new ApiException('ECONFIG', 409, 'AUDIT-NO-PROJECT');
+        }
+        $source = (string) $this->hugo['source'];
+        $public = (string) ($this->hugo['destination'] ?? $source . '/public');
+        $storage = __DIR__ . '/../var/audit/' . sha1($source);
+
+        return new AuditService($public, $source, $storage);
+    }
+
+    /** Führt einen neuen Audit-Lauf aus (synchron) und liefert den Bericht. */
+    private function cmdAudit(): array
+    {
+        $service = $this->audit();
+        $this->requireMethod('POST');
+        if (!$this->auth->can('build')) {
+            throw ApiException::denied('OPERATION-NOT-ALLOWED', ['build']);
+        }
+        // Der Lauf parst alle gebauten Seiten — wie der Hugo-Lauf großzügig
+        // bemessen, aber ohne Hintergrundprozess (ein Request → eine Antwort).
+        @set_time_limit(120);
+
+        $report = $service->run();
+        $this->logger->info(sprintf(
+            'SEO-Audit: %d Seiten, %d Fehler / %d Warnungen / %d Hinweise (%ss).',
+            (int) ($report['pagesScanned'] ?? 0),
+            (int) ($report['summary']['error'] ?? 0),
+            (int) ($report['summary']['warning'] ?? 0),
+            (int) ($report['summary']['hint'] ?? 0),
+            (string) ($report['seconds'] ?? '0'),
+        ));
+
+        return $this->enrichReport($report);
+    }
+
+    /** Metadaten der gespeicherten Läufe (neueste zuerst). */
+    private function cmdAuditList(): array
+    {
+        return ['runs' => $this->audit()->list()];
+    }
+
+    /** Vollständiger Bericht eines gespeicherten Laufs. */
+    private function cmdAuditGet(array $request): array
+    {
+        $id = $this->requireParam($request, 'id');
+
+        return $this->enrichReport($this->audit()->get($id));
+    }
+
+    /** Löscht einen gespeicherten Lauf. */
+    private function cmdAuditDelete(array $request): array
+    {
+        $this->requireMethod('POST');
+        $id = $this->requireParam($request, 'id');
+
+        return $this->audit()->delete($id);
+    }
+
+    /**
+     * Reichert die Funde eines Berichts um eine Dateimanager-ID (fileId) an,
+     * sofern die Quelldatei in einem Mount liegt — damit das Frontend direkt
+     * zur editierbaren Quelle springen kann. Es wird NIE ein Serverpfad
+     * ausgegeben, nur die undurchsichtige ID.
+     *
+     * @param array<string, mixed> $report
+     * @return array<string, mixed>
+     */
+    private function enrichReport(array $report): array
+    {
+        if ($this->hugo === null || !isset($report['issues']) || !is_array($report['issues'])) {
+            return $report;
+        }
+        $source = (string) $this->hugo['source'];
+        $cache = [];
+        foreach ($report['issues'] as &$issue) {
+            $rel = is_array($issue) ? ($issue['sourceFile'] ?? null) : null;
+            if (!is_string($rel) || $rel === '') {
+                continue;
+            }
+            if (!array_key_exists($rel, $cache)) {
+                $cache[$rel] = $this->resolveFileId($source . '/' . $rel);
+            }
+            if ($cache[$rel] !== null) {
+                $issue['fileId'] = $cache[$rel];
+            }
+        }
+        unset($issue);
+
+        return $report;
+    }
+
+    /**
+     * Übersetzt einen absoluten Serverpfad in eine Dateimanager-ID, falls er
+     * innerhalb eines Mounts liegt; sonst null. Nutzt dieselbe ID-Kodierung wie
+     * der Dateimanager ({@see MountResolver::encodeId}).
+     */
+    private function resolveFileId(string $absPath): ?string
+    {
+        $real = realpath($absPath);
+        if ($real === false) {
+            return null;
+        }
+        foreach ($this->resolver->all() as $mount) {
+            $root = $mount->root();
+            if ($real === $root) {
+                return $this->resolver->encodeId($mount->name(), '');
+            }
+            if (str_starts_with($real, $root . DIRECTORY_SEPARATOR)) {
+                $rel = str_replace('\\', '/', substr($real, strlen($root) + 1));
+
+                return $this->resolver->encodeId($mount->name(), $rel);
+            }
+        }
+
+        return null;
     }
 
     /**

@@ -53,6 +53,10 @@ export const useFilesStore = defineStore('files', {
     trashEntries: [],
     trashSelected: [], // [{mount, trashName}]
 
+    // SEO-Audit-Ansicht (Pro-Funktion). Wie trashMode eine Vollbild-Ansicht im
+    // Hauptbereich; die eigentlichen Audit-Daten liegen im audit-Store.
+    auditMode: false,
+
     // Navigationsverlauf (wie Nemo Zurück/Vor). Jeder Eintrag ist eine
     // Momentaufnahme { id, breadcrumb, activeMount }.
     history: [],
@@ -118,6 +122,7 @@ export const useFilesStore = defineStore('files', {
 
     async openDir(id, label = null) {
       this.trashMode = false
+      this.auditMode = false
       const data = await this._list(id)
 
       const mount = this.mounts.find((m) => m.id === id)
@@ -294,6 +299,7 @@ export const useFilesStore = defineStore('files', {
 
     async openTrash() {
       this.trashMode = true
+      this.auditMode = false
       this.leaveSearch()
       await this.loadTrash()
     },
@@ -302,6 +308,26 @@ export const useFilesStore = defineStore('files', {
       this.trashMode = false
       this.trashEntries = []
       this.trashSelected = []
+    },
+
+    // --- SEO-Audit-Ansicht ----------------------------------------------
+
+    openAudit() {
+      this.auditMode = true
+      this.trashMode = false
+      this.leaveSearch()
+    },
+
+    leaveAudit() {
+      this.auditMode = false
+    },
+
+    // Öffnet eine Datei direkt über ihre (undurchsichtige) Dateimanager-ID —
+    // genutzt vom Audit, um aus einem Fund zur Quelldatei zu springen.
+    async openFileById(id) {
+      const data = await api.get('read', { target: id })
+      this.openFile = { id, name: data.name, content: data.content, mtime: data.mtime, path: data.path }
+      this.dirty = false
     },
 
     async loadTrash() {

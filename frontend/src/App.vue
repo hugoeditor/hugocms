@@ -11,6 +11,7 @@ import MountSidebar from './components/MountSidebar.vue'
 import NemoToolbar from './components/NemoToolbar.vue'
 import FileBrowser from './components/FileBrowser.vue'
 import TrashView from './components/TrashView.vue'
+import AuditView from './components/AuditView.vue'
 import EditorPanel from './components/EditorPanel.vue'
 import ReconfigureDialog from './components/ReconfigureDialog.vue'
 import AccountDialog from './components/AccountDialog.vue'
@@ -187,6 +188,9 @@ function openPlace(mount) {
 }
 function openTrashView() {
   leaveEditorThen(() => files.openTrash())
+}
+function openAuditView() {
+  leaveEditorThen(() => files.openAudit())
 }
 
 // --- Hugo aufrufen (Veröffentlichen) ---------------------------------------
@@ -450,6 +454,23 @@ async function build() {
                 </template>
               </v-tooltip>
 
+              <!-- SEO-Audit — Pro-Funktion, nur bei gültiger Lizenz und
+                   konfiguriertem Hugo-Projekt (public/ und content/). -->
+              <v-tooltip v-if="auth.audit" :text="$t('audit.open')" location="right">
+                <template #activator="{ props }">
+                  <button
+                    v-bind="props"
+                    type="button"
+                    class="nemo-tool-btn"
+                    :class="{ active: files.auditMode }"
+                    @click="openAuditView"
+                  >
+                    <v-icon icon="mdi-clipboard-search-outline" size="20" />
+                    <span class="nemo-tool-label">{{ $t('audit.open') }}</span>
+                  </button>
+                </template>
+              </v-tooltip>
+
               <!-- KI-Assistent (nur wenn ein API-Schlüssel konfiguriert ist) -->
               <v-tooltip v-if="auth.ai.enabled" :text="$t('assistant.open')" location="right">
                 <template #activator="{ props }">
@@ -523,6 +544,7 @@ async function build() {
               <aside class="nemo-aside d-none d-md-block" :class="{ collapsed: files.sidebarCollapsed }"><MountSidebar /></aside>
               <main class="nemo-mainarea">
                 <TrashView v-if="files.trashMode" />
+                <AuditView v-else-if="files.auditMode" />
                 <FileBrowser v-else />
               </main>
             </div>

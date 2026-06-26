@@ -19,6 +19,7 @@ export const useAuthStore = defineStore('auth', {
     license: { edition: 'community', licensee: null, domain: '', configured: false },
     licensable: false,
     git: false,
+    audit: false, // SEO-Audit nutzbar (Pro + Hugo-Projekt) — wie git
   }),
 
   getters: {
@@ -41,6 +42,7 @@ export const useAuthStore = defineStore('auth', {
       this.license = data.license ?? { edition: 'community', licensee: null, domain: '', configured: false }
       this.licensable = data.licensable ?? false
       this.git = data.git ?? false
+      this.audit = data.audit ?? false
       setCsrfToken(data.csrf)
       this.ready = true
     },

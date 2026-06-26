@@ -8,6 +8,12 @@ frontend/.env.local
 frontend/.claude/
 frontend/.mcp.json
 
+# MCP-Konfiguration in JEDEM Verzeichnis ausschließen. In der Sandbox werden
+# solche Dateien als /dev/null-Geräteknoten eingeblendet (nobody:nogroup); sie
+# dürfen nie ins Repository geraten. Ohne führenden / greift die Regel auf allen
+# Ebenen (z. B. frontend/src/.mcp.json, frontend/src/i18n/.mcp.json).
+.mcp.json
+
 # PHP
 vendor/
 
@@ -18,6 +24,7 @@ bin/hugo/
 *.log
 backend/log/*.log
 backend/var/sessions/
+backend/var/audit/
 .DS_Store
 
 # Beispiel-Datenverzeichnis (in echten Installationen nicht versionieren)
