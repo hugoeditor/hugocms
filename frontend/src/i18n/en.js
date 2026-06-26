@@ -73,6 +73,9 @@ export default {
     refresh: 'Refresh',
     showSidebar: 'Show places sidebar',
     hideSidebar: 'Hide places sidebar',
+    tools: 'Tools',
+    expandTools: 'Expand toolbar',
+    collapseTools: 'Collapse toolbar',
   },
 
   view: {

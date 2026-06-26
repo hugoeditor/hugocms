@@ -210,6 +210,13 @@ const licenseOpen = ref(false)
 const repositoryOpen = ref(false)
 const notice = ref(null) // kurze Erfolgsmeldung (Snackbar)
 
+// --- Vertikale Werkzeugleiste (links, vor der Orte-Seitenleiste) -----------
+// Eingeklappt/ausgeklappt; Vorgabe ausgeklappt. Das Erscheinungsbild richtet
+// sich zusätzlich nach der Breite (CSS-Umbruchpunkt 960 px):
+//   Desktop ausgeklappt → Icon + Name · Desktop eingeklappt → nur Icon-Schiene
+//   Schmal  ausgeklappt → nur Icon-Schiene (Tooltip) · Schmal eingeklappt → ganz aus
+const toolbarCollapsed = ref(false)
+
 function onLicenseActivated() {
   notice.value = auth.isPro ? t('license.activatedPro') : t('license.activated')
 }
@@ -307,6 +314,22 @@ async function build() {
         />
         <!-- Fenster-Titelleiste (Marke, Sprache, Benutzer, Abmelden) -->
         <header class="nemo-titlebar nemo-noselect">
+          <!-- Werkzeugleiste ein-/ausblenden (nur schmale Schirme: dort ist die
+               vertikale Leiste im eingeklappten Zustand vollständig ausgeblendet
+               und braucht hier ihren Umschalter). -->
+          <v-tooltip :text="$t('nav.tools')" location="bottom">
+            <template #activator="{ props }">
+              <v-btn
+                v-bind="props"
+                icon="mdi-menu"
+                variant="text"
+                size="small"
+                class="d-md-none mr-1"
+                @click="toolbarCollapsed = !toolbarCollapsed"
+              />
+            </template>
+          </v-tooltip>
+
           <!-- Marke: Klick auf Symbol oder Titel öffnet die Versionsinfo. -->
           <v-tooltip :text="$t('version.open')" location="bottom">
             <template #activator="{ props }">
@@ -359,48 +382,8 @@ async function build() {
 
           <div class="nemo-titlebar-spacer" />
 
-          <!-- Hugo aufrufen (nur wenn für die Webseite konfiguriert) -->
-          <v-btn
-            v-if="auth.buildable"
-            variant="flat"
-            color="primary"
-            size="small"
-            prepend-icon="mdi-rocket-launch-outline"
-            class="mr-2"
-            :loading="building"
-            @click="build"
-          >
-            <span class="d-none d-md-inline">{{ $t('build.publish') }}</span>
-          </v-btn>
-
-          <!-- Repository (Git) — Pro-Funktion, nur bei gültiger Lizenz und
-               konfiguriertem Hugo-Projekt (dort liegt das Repository). -->
-          <v-tooltip v-if="auth.git" :text="$t('repo.open')" location="bottom">
-            <template #activator="{ props }">
-              <v-btn
-                v-bind="props"
-                icon="mdi-source-branch"
-                variant="text"
-                size="small"
-                class="mr-1"
-                @click="repositoryOpen = true"
-              />
-            </template>
-          </v-tooltip>
-
-          <!-- KI-Assistent (nur wenn ein API-Schlüssel konfiguriert ist) -->
-          <v-tooltip v-if="auth.ai.enabled" :text="$t('assistant.open')" location="bottom">
-            <template #activator="{ props }">
-              <v-btn
-                v-bind="props"
-                icon="mdi-creation"
-                variant="text"
-                size="small"
-                class="mr-1"
-                @click="assistant.open = !assistant.open"
-              />
-            </template>
-          </v-tooltip>
+          <!-- Hugo veröffentlichen, Repository, KI-Assistent und Lizenz sind in
+               die vertikale Werkzeugleiste (links) umgezogen. -->
 
           <!-- Konfiguration ändern (nur bei INI-basierter Installation) -->
           <v-tooltip v-if="auth.reconfigurable" :text="$t('reconfigure.open')" location="bottom">
@@ -412,22 +395,6 @@ async function build() {
                 size="small"
                 class="mr-1"
                 @click="reconfigureOpen = true"
-              />
-            </template>
-          </v-tooltip>
-
-          <!-- Pro-Lizenz aktivieren/anzeigen (pro Webseite; sichtbar, sobald eine
-               Mount-Konfiguration geladen ist — dorthin schreibt die Aktivierung) -->
-          <v-tooltip v-if="auth.licensable" :text="$t('license.open')" location="bottom">
-            <template #activator="{ props }">
-              <v-btn
-                v-bind="props"
-                :icon="auth.isPro ? 'mdi-license' : 'mdi-key-outline'"
-                :color="auth.isPro ? 'success' : undefined"
-                variant="text"
-                size="small"
-                class="mr-1"
-                @click="licenseOpen = true"
               />
             </template>
           </v-tooltip>
@@ -452,16 +419,105 @@ async function build() {
              Seitenleiste + Inhalt. Der Editor legt sich als Überlagerung
              NUR über diesen Bereich — die Titelleiste (Sprache, Benutzer,
              Abmelden) bleibt auch im Editor sichtbar. -->
-        <div class="nemo-workspace">
-          <NemoToolbar />
-          <div class="nemo-body">
-            <aside class="nemo-aside d-none d-md-block" :class="{ collapsed: files.sidebarCollapsed }"><MountSidebar /></aside>
-            <main class="nemo-mainarea">
-              <TrashView v-if="files.trashMode" />
-              <FileBrowser v-else />
-            </main>
+        <div class="nemo-main">
+          <!-- Vertikale Werkzeugleiste: globale Aktionen (Veröffentlichen,
+               Repository, KI-Assistent, Lizenz). Liegt bewusst AUSSERHALB des
+               Arbeitsbereichs, damit sie auch bei geöffnetem Editor erreichbar
+               bleibt — der Editor überlagert nur den nemo-workspace rechts. -->
+          <nav class="nemo-toolrail nemo-noselect" :class="{ collapsed: toolbarCollapsed }">
+              <!-- Ein-/Ausklappen (nur Desktop: auf schmalen Schirmen übernimmt
+                   der Hamburger in der Titelleiste das Ein-/Ausblenden). -->
+              <v-tooltip :text="toolbarCollapsed ? $t('nav.expandTools') : $t('nav.collapseTools')" location="right">
+                <template #activator="{ props }">
+                  <button
+                    v-bind="props"
+                    type="button"
+                    class="nemo-tool-btn nemo-tool-toggle d-none d-md-flex"
+                    @click="toolbarCollapsed = !toolbarCollapsed"
+                  >
+                    <v-icon :icon="toolbarCollapsed ? 'mdi-chevron-right' : 'mdi-chevron-left'" size="20" />
+                  </button>
+                </template>
+              </v-tooltip>
+
+              <!-- Hugo veröffentlichen (nur wenn für die Webseite konfiguriert) -->
+              <v-tooltip v-if="auth.buildable" :text="$t('build.publish')" location="right">
+                <template #activator="{ props }">
+                  <button
+                    v-bind="props"
+                    type="button"
+                    class="nemo-tool-btn nemo-tool-btn--primary"
+                    :disabled="building"
+                    @click="build"
+                  >
+                    <v-progress-circular v-if="building" indeterminate size="18" width="2" />
+                    <v-icon v-else icon="mdi-rocket-launch-outline" size="20" />
+                    <span class="nemo-tool-label">{{ $t('build.publish') }}</span>
+                  </button>
+                </template>
+              </v-tooltip>
+
+              <!-- Repository (Git) — Pro-Funktion, nur bei gültiger Lizenz und
+                   konfiguriertem Hugo-Projekt (dort liegt das Repository). -->
+              <v-tooltip v-if="auth.git" :text="$t('repo.open')" location="right">
+                <template #activator="{ props }">
+                  <button
+                    v-bind="props"
+                    type="button"
+                    class="nemo-tool-btn"
+                    @click="repositoryOpen = true"
+                  >
+                    <v-icon icon="mdi-source-branch" size="20" />
+                    <span class="nemo-tool-label">{{ $t('repo.open') }}</span>
+                  </button>
+                </template>
+              </v-tooltip>
+
+              <!-- KI-Assistent (nur wenn ein API-Schlüssel konfiguriert ist) -->
+              <v-tooltip v-if="auth.ai.enabled" :text="$t('assistant.open')" location="right">
+                <template #activator="{ props }">
+                  <button
+                    v-bind="props"
+                    type="button"
+                    class="nemo-tool-btn"
+                    :class="{ active: assistant.open }"
+                    @click="assistant.open = !assistant.open"
+                  >
+                    <v-icon icon="mdi-creation" size="20" />
+                    <span class="nemo-tool-label">{{ $t('assistant.open') }}</span>
+                  </button>
+                </template>
+              </v-tooltip>
+
+              <!-- Pro-Lizenz aktivieren/anzeigen (pro Webseite; sichtbar, sobald
+                   eine Mount-Konfiguration geladen ist) -->
+              <v-tooltip v-if="auth.licensable" :text="$t('license.open')" location="right">
+                <template #activator="{ props }">
+                  <button
+                    v-bind="props"
+                    type="button"
+                    class="nemo-tool-btn"
+                    :class="{ 'nemo-tool-btn--pro': auth.isPro }"
+                    @click="licenseOpen = true"
+                  >
+                    <v-icon :icon="auth.isPro ? 'mdi-license' : 'mdi-key-outline'" size="20" />
+                    <span class="nemo-tool-label">{{ $t('license.open') }}</span>
+                  </button>
+                </template>
+              </v-tooltip>
+          </nav>
+
+          <div class="nemo-workspace">
+            <NemoToolbar />
+            <div class="nemo-body">
+              <aside class="nemo-aside d-none d-md-block" :class="{ collapsed: files.sidebarCollapsed }"><MountSidebar /></aside>
+              <main class="nemo-mainarea">
+                <TrashView v-if="files.trashMode" />
+                <FileBrowser v-else />
+              </main>
+            </div>
+            <EditorPanel ref="editorPanelRef" />
           </div>
-          <EditorPanel ref="editorPanelRef" />
         </div>
         </div>
       </div>
@@ -684,12 +740,23 @@ async function build() {
   background: var(--mint-hover, rgba(0, 0, 0, 0.06));
 }
 
-/* Bezugsrahmen für die Editor-Überlagerung (unterhalb der Titelleiste). */
+/* Zeilen-Ebene unterhalb der Titelleiste: links die vertikale Werkzeugleiste,
+   rechts der Arbeitsbereich. Die Leiste liegt hier (nicht im Workspace), damit
+   die Editor-Überlagerung sie nicht verdeckt und die Werkzeuge immer
+   erreichbar bleiben. */
+.nemo-main {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+
+/* Bezugsrahmen für die Editor-Überlagerung (rechts neben der Werkzeugleiste). */
 .nemo-workspace {
   position: relative;
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -698,6 +765,106 @@ async function build() {
   display: flex;
   min-height: 0;
 }
+
+/* --- Vertikale Werkzeugleiste (links vor der Orte-Seitenleiste) ------------ */
+.nemo-toolrail {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 188px;            /* Desktop ausgeklappt: Platz für Icon + Name */
+  padding: 8px 8px;
+  background: var(--mint-panel);
+  border-right: 1px solid var(--mint-border);
+  overflow: hidden;
+  transition: width 0.18s ease;
+}
+/* Desktop eingeklappt: schmale Icon-Schiene. */
+.nemo-toolrail.collapsed {
+  width: 48px;
+}
+
+/* Werkzeug-Schaltfläche: Icon links, Name rechts (GTK-artig flach). */
+.nemo-tool-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 38px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--mint-radius);
+  background: transparent;
+  color: var(--mint-text);
+  font: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.nemo-tool-btn :deep(.v-icon) { flex: 0 0 auto; }
+.nemo-tool-label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nemo-tool-btn:hover:not(:disabled) {
+  background: var(--mint-panel-hover);
+  border-color: var(--mint-border);
+}
+.nemo-tool-btn:active:not(:disabled) {
+  background: #e0e0dd;
+}
+.nemo-tool-btn:disabled {
+  color: #b6b6b3;
+  cursor: default;
+}
+/* Aktiver Zustand (z. B. KI-Panel geöffnet). */
+.nemo-tool-btn.active {
+  background: var(--mint-green-soft);
+  border-color: #cfe0c5;
+  color: var(--mint-green-soft-text);
+}
+/* Veröffentlichen: hervorgehobene Hauptaktion. */
+.nemo-tool-btn--primary {
+  background: var(--mint-green);
+  color: #fff;
+}
+.nemo-tool-btn--primary:hover:not(:disabled) {
+  background: var(--mint-green-dark);
+  border-color: var(--mint-green-dark);
+}
+/* Pro-Lizenz aktiv: grün eingefärbtes Symbol. */
+.nemo-tool-btn--pro { color: var(--mint-green-soft-text); }
+/* Umschalter sitzt am oberen Rand, etwas abgesetzt. */
+.nemo-tool-toggle {
+  justify-content: flex-end;
+  height: 30px;
+  margin-bottom: 2px;
+  color: var(--mint-text-muted);
+}
+
+/* Eingeklappt (Desktop): nur Icons, zentriert; Namen ausblenden. */
+.nemo-toolrail.collapsed .nemo-tool-label { display: none; }
+.nemo-toolrail.collapsed .nemo-tool-btn { justify-content: center; padding: 0; }
+.nemo-toolrail.collapsed .nemo-tool-toggle { justify-content: center; }
+
+/* Schmale Schirme (Handy/Tablet): Namen passen nicht — immer Icon-Schiene.
+   Eingeklappt heißt hier vollständig ausgeblendet (Umschalter in der
+   Titelleiste). */
+@media (max-width: 959.98px) {
+  .nemo-toolrail {
+    width: 48px;
+  }
+  .nemo-toolrail .nemo-tool-label { display: none; }
+  .nemo-toolrail .nemo-tool-btn { justify-content: center; padding: 0; }
+  .nemo-toolrail.collapsed {
+    width: 0;
+    padding: 0;
+    border-right: none;
+  }
+}
+
 .nemo-aside {
   flex: 0 0 210px;
   min-height: 0;

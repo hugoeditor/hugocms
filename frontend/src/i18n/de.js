@@ -73,6 +73,9 @@ export default {
     refresh: 'Aktualisieren',
     showSidebar: 'Orte-Seitenleiste einblenden',
     hideSidebar: 'Orte-Seitenleiste ausblenden',
+    tools: 'Werkzeuge',
+    expandTools: 'Werkzeugleiste ausklappen',
+    collapseTools: 'Werkzeugleiste einklappen',
   },
 
   view: {
