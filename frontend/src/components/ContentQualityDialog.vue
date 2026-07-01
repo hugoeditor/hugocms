@@ -1,21 +1,27 @@
 <script setup>
-// Dialog der LLM-Content-Qualität (Pro-Funktion). Zeigt das Ergebnis einer
-// Prüfung (Score, Lesbarkeit, Funde, Vorschläge) und darunter die Liste der
-// bereits geprüften Seiten. Wird aus dem Editor und aus dem Kontextmenü der
-// Dateiliste geöffnet; von der Liste aus lassen sich frühere Ergebnisse wieder
-// aufrufen. Kein eigener Modus/Overlay — bewusst als überlagernder Dialog.
+// Dialog des Gesamt-Berichts einer Content-Datei (Pro-Funktion): das
+// LLM-Qualitätsurteil (Score, Lesbarkeit, Befunde, Vorschläge) UND die SEO-Funde
+// derselben Datei aus dem jüngsten Audit-Lauf. Wird aus dem Editor, dem
+// Kontextmenü der Dateiliste und dem Content-Reiter der AuditView geöffnet. Kein
+// eigener Modus/Overlay — bewusst als überlagernder Dialog.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuditContentStore } from '../stores/auditContent'
 import { useFilesStore } from '../stores/files'
+import { useHelpStore } from '../stores/help'
 import { errorText } from '../i18n/apiMessage'
 import AuditSeverityChip from './AuditSeverityChip.vue'
+import AuditIssueTable from './AuditIssueTable.vue'
 
 const { t, locale } = useI18n()
 const store = useAuditContentStore()
 const files = useFilesStore()
+const help = useHelpStore()
 
-const verdict = computed(() => store.current?.verdict ?? null)
+const entry = computed(() => store.current?.contentQuality ?? null)
+const verdict = computed(() => entry.value?.verdict ?? null)
+const audit = computed(() => store.current?.audit ?? null)
+const fileId = computed(() => store.current?.file?.fileId ?? null)
 
 function scoreColor(score) {
   if (score == null) return 'grey'
@@ -32,18 +38,27 @@ function formatDate(iso) {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString(locale.value)
 }
 
-// Erneut prüfen: nutzt die fileId des aktuellen Eintrags.
+// Erneut prüfen: nutzt die fileId der aktuellen Datei.
 function recheck() {
-  const id = store.current?.fileId
-  if (id) store.recheck(id, store.current.title, locale.value)
+  if (fileId.value) store.recheck(fileId.value, store.current?.file?.title, locale.value)
 }
 
 // Zur Quelldatei springen: Editor öffnen, Dialog schließen.
 async function toSource() {
-  const id = store.current?.fileId
-  if (!id) return
+  if (!fileId.value) return
   store.closeDialog()
-  await files.openFileById(id)
+  await files.openFileById(fileId.value)
+}
+
+// SEO-Fund: zur Quelle springen bzw. ausführliche Regel-Hilfe öffnen.
+async function openIssueSource(issue) {
+  if (!issue.fileId) return
+  store.closeDialog()
+  await files.openFileById(issue.fileId)
+}
+
+function openHelp(ruleId) {
+  help.open('audit', ruleId, locale.value)
 }
 </script>
 
@@ -127,10 +142,39 @@ async function toSource() {
           </template>
 
           <div class="text-caption text-medium-emphasis mt-4">
-            {{ $t('contentQuality.checkedAt', [formatDate(store.current.checkedAt)]) }}
-            <template v-if="store.current.model"> · {{ store.current.model }}</template>
-            <span v-if="store.current.truncated"> · {{ $t('contentQuality.truncated') }}</span>
+            {{ $t('contentQuality.checkedAt', [formatDate(entry.checkedAt)]) }}
+            <template v-if="entry.model"> · {{ entry.model }}</template>
+            <span v-if="entry.truncated"> · {{ $t('contentQuality.truncated') }}</span>
           </div>
+
+          <!-- SEO-Funde derselben Datei aus dem jüngsten Audit-Lauf -->
+          <template v-if="audit">
+            <v-divider class="my-4" />
+            <div class="d-flex align-center mb-2">
+              <div class="text-subtitle-2">{{ $t('contentQuality.seoIssues') }}</div>
+              <v-spacer />
+              <AuditSeverityChip
+                v-for="sev in ['error', 'warning', 'hint']"
+                :key="sev"
+                :severity="sev"
+                :count="audit.summary[sev] ?? 0"
+                size="x-small"
+                class="ml-1"
+              />
+            </div>
+            <div v-if="!audit.issues.length" class="text-body-2 text-medium-emphasis">
+              {{ $t('contentQuality.seoNoIssues') }}
+            </div>
+            <AuditIssueTable
+              v-else
+              :issues="audit.issues"
+              @open-source="openIssueSource"
+              @open-help="openHelp"
+            />
+          </template>
+          <p v-else class="text-caption text-medium-emphasis mt-2">
+            {{ $t('contentQuality.noAuditRun') }}
+          </p>
         </template>
 
         <div v-else class="text-medium-emphasis text-center py-6">
@@ -142,7 +186,7 @@ async function toSource() {
 
       <v-card-actions>
         <v-btn
-          v-if="store.current?.fileId"
+          v-if="fileId"
           prepend-icon="mdi-file-document-edit-outline"
           variant="text"
           @click="toSource"
@@ -151,7 +195,7 @@ async function toSource() {
         </v-btn>
         <v-spacer />
         <v-btn
-          v-if="store.current?.fileId"
+          v-if="fileId"
           prepend-icon="mdi-refresh"
           variant="text"
           :disabled="store.busy"

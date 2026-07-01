@@ -81,6 +81,18 @@ final class AuditService
     }
 
     /**
+     * Vollständiger Bericht des jüngsten Laufs oder null, falls es keinen gibt.
+     * Für die Verknüpfung eines einzelnen Content-Berichts mit den SEO-Funden.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function latest(): ?array
+    {
+        $files = $this->files(); // neueste zuerst
+        return $files === [] ? null : $this->readReport($files[0]);
+    }
+
+    /**
      * Vollständiger Bericht eines Laufs.
      *
      * @return array<string, mixed>

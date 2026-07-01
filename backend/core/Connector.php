@@ -313,6 +313,7 @@ final class Connector
                 'auditcontent' => $this->cmdAuditContent($request),
                 'auditcontentlist' => $this->cmdAuditContentList(),
                 'auditcontentget' => $this->cmdAuditContentGet($request),
+                'auditcontentreport' => $this->cmdAuditContentReport($request),
                 'auditcontentdelete' => $this->cmdAuditContentDelete($request),
                 default => throw ApiException::badRequest('UNKNOWN-COMMAND', [$cmd]),
             };
@@ -1319,6 +1320,101 @@ final class Connector
         $key = $this->requireParam($request, 'key');
 
         return $this->contentQuality()->delete($key);
+    }
+
+    /**
+     * Gesamt-Bericht über EINE Content-Datei: das gespeicherte Qualitätsurteil
+     * plus die SEO-Funde derselben Datei aus dem JÜNGSTEN Audit-Lauf. Der
+     * Audit-Teil ist null, wenn (noch) kein Lauf vorliegt. Dieselbe Struktur
+     * nutzen später sowohl die Ansicht als auch der KI-Assistent, um gezielt
+     * eine Datei zu verbessern.
+     */
+    private function cmdAuditContentReport(array $request): array
+    {
+        $service = $this->contentQuality();
+        $key = $this->requireParam($request, 'key');
+        $entry = $service->get($key); // wirft AUDIT-CONTENT-NOT-FOUND, falls unbekannt
+
+        return [
+            'file' => $this->withContentFileId([
+                'mount' => $entry['mount'] ?? null,
+                'rel' => $entry['rel'] ?? null,
+                'title' => $entry['title'] ?? null,
+            ]),
+            'contentQuality' => $entry,
+            'audit' => $this->auditIssuesForEntry($entry),
+        ];
+    }
+
+    /**
+     * SEO-Funde des jüngsten Audit-Laufs, die zur Quelldatei eines Content-
+     * Eintrags gehören. null, wenn kein Lauf vorliegt. Jeder Fund erhält die
+     * fileId der Datei, damit das Frontend zur Quelle springen kann.
+     *
+     * @param array<string, mixed> $entry
+     * @return array<string, mixed>|null
+     */
+    private function auditIssuesForEntry(array $entry): ?array
+    {
+        $report = $this->audit()->latest();
+        if ($report === null) {
+            return null;
+        }
+        $summary = ['error' => 0, 'warning' => 0, 'hint' => 0];
+        $issues = [];
+        $rel = $this->sourceRelForEntry($entry);
+        if ($rel !== null) {
+            $fileId = $this->withContentFileId($entry)['fileId'] ?? null;
+            foreach ($report['issues'] ?? [] as $issue) {
+                if (!is_array($issue) || ($issue['sourceFile'] ?? null) !== $rel) {
+                    continue;
+                }
+                if ($fileId !== null) {
+                    $issue['fileId'] = $fileId;
+                }
+                $issues[] = $issue;
+                $sev = (string) ($issue['severity'] ?? '');
+                if (isset($summary[$sev])) {
+                    $summary[$sev]++;
+                }
+            }
+        }
+
+        return [
+            'runId' => $report['id'] ?? null,
+            'startedAt' => $report['startedAt'] ?? null,
+            'issues' => $issues,
+            'summary' => $summary,
+        ];
+    }
+
+    /**
+     * Quellpfad relativ zum Hugo-Projekt (wie das sourceFile der Audit-Funde)
+     * für einen Content-Eintrag, oder null, wenn die Datei nicht mehr auflösbar
+     * ist oder außerhalb des Projekts liegt.
+     *
+     * @param array<string, mixed> $entry
+     */
+    private function sourceRelForEntry(array $entry): ?string
+    {
+        $mount = $entry['mount'] ?? null;
+        $rel = $entry['rel'] ?? null;
+        if ($this->hugo === null || !is_string($mount) || !is_string($rel)
+            || !isset($this->resolver->all()[$mount])) {
+            return null;
+        }
+        try {
+            $r = $this->resolver->resolve($this->resolver->encodeId($mount, $rel), true);
+        } catch (Throwable) {
+            return null;
+        }
+        $sourceReal = realpath((string) $this->hugo['source']);
+        $abs = $r['abs']; // von resolve(mustExist) bereits als realpath geliefert
+        if ($sourceReal === false) {
+            return null;
+        }
+
+        return str_starts_with($abs, $sourceReal . '/') ? substr($abs, strlen($sourceReal) + 1) : null;
     }
 
     /**

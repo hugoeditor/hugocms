@@ -156,6 +156,71 @@ und liefert `stale` (Quelle seit der Prüfung geändert) sowie `sourceMissing`
 (Datei/Mount weg). Die Liste zeigt entsprechend einen Marker „veraltet" bzw.
 „Quelle fehlt".
 
+## Phase 3 — Gesamt-Bericht je Datei (umgesetzt)
+
+Verknüpft das LLM-Qualitätsurteil einer Content-Datei mit den SEO-Funden
+derselben Datei aus dem **jüngsten** Audit-Lauf. Basis für die spätere
+Assistenten-/Cron-Verbesserung.
+
+### Backend ✓
+
+- `AuditService::latest()` — vollständiger Bericht des jüngsten Laufs (oder null).
+- Connector `auditcontentreport` (param `key`) → `{ file, contentQuality, audit }`.
+  `audit` ist null, wenn kein Lauf vorliegt; sonst `{ runId, startedAt, issues,
+  summary }` mit den Funden dieser Datei. Verknüpfung über den Quellpfad relativ
+  zum Hugo-Projekt (`sourceRelForEntry` ↔ `Issue::sourceFile`); jeder Fund erhält
+  die `fileId` der Datei.
+
+### Frontend ✓
+
+- Store: `current` hält den Gesamt-Bericht; `loadReport(key)` lädt ihn, `check`
+  und `openResult` nutzen ihn.
+- `ContentQualityDialog.vue`: unter dem Qualitätsurteil ein Abschnitt
+  „SEO-Befunde dieser Seite" (Schweregrad-Zusammenfassung + `AuditIssueTable` mit
+  Hilfe-/Quelllinks). Hinweis, wenn kein Audit-Lauf vorliegt.
+- i18n `contentQuality.{seoIssues,seoNoIssues,noAuditRun}`.
+
+## Phase 4 — KI-Verbesserung einer Datei (geplant, noch nicht gebaut)
+
+Ziel: Der KI-Assistent verbessert eine einzelne Datei anhand ihres
+Gesamt-Berichts. Auslösung manuell (Benutzer, beliebige Datei) — Cron
+(zukünftig, erste Datei der AuditContent-Liste).
+
+Entschieden:
+- **Berichtszugang:** eigenes Assistenten-Werkzeug `get_file_report` — der
+  Assistent ruft es im Tool-Loop selbst auf (für beliebige Dateien
+  wiederverwendbar, passt zum bestehenden dünnen Tool-Muster).
+- **Schreibmodus (manuell):** den in der `hugocms.ini` konfigurierten
+  `write_mode` respektieren (Standard `confirm` → Benutzer bestätigt jede
+  Änderung). Der spätere Cron nutzt separat `auto`.
+- **Beschränkung:** Der Verbesserungslauf arbeitet ausschließlich an der
+  Zieldatei.
+
+Bauplan (bei Freigabe):
+
+1. **Bericht-Erzeugung ausfaktorisieren.** Die Zusammenstellung aus
+   `cmdAuditContentReport` (Qualitätsurteil + SEO-Funde je Datei) in einen
+   wiederverwendbaren Baustein ziehen, den sowohl der Connector-Befehl als auch
+   das Assistenten-Werkzeug nutzen. Braucht Zugriff auf `ContentQualityService`,
+   `AuditService::latest()`, Resolver und Hugo-Quellpfad.
+2. **Assistenten-Werkzeug `get_file_report`.** Dünne Hülle in `AssistantService`,
+   die zu einer Datei (Pfad → fileId) den Gesamt-Bericht als Text/JSON liefert.
+   `AssistantService` muss dafür die Bericht-Erzeugung erreichen (zusätzliche
+   Abhängigkeit im Konstruktor, vom Connector injiziert — nur wenn Pro + Audit
+   vorhanden, sonst Werkzeug weglassen).
+3. **Auslöser-Befehl** `assistantimprove` (o. Ä.): nimmt eine `fileId`, baut eine
+   Startnachricht („Verbessere diese Datei anhand ihres Qualitäts-/SEO-Berichts;
+   ändere ausschließlich diese Datei"), startet den Assistenten mit dem
+   konfigurierten Schreibmodus. Gate: Pro + KI-Schlüssel.
+4. **Frontend:** Button „Mit KI verbessern" im `ContentQualityDialog` und je Zeile
+   in `AuditContentList`; führt in den bestehenden Bestätigungs-/Assistenten-Fluss
+   (bei `confirm` bestätigt der Benutzer die Schreibvorgänge wie gewohnt).
+5. **Cron (zukünftig):** eigener CLI-Einstieg, wählt die erste Datei der
+   AuditContent-Liste, Schreibmodus `auto`, kein interaktives Bestätigen.
+
+Verifikation: `php -l`; Wegwerf-Test der Bericht-Erzeugung mit Fake-Client;
+`npm run build`; manueller Durchlauf mit Pro-Lizenz + KI-Schlüssel.
+
 ## Offene Punkte / Phase 2
 
 - „Veraltet"-Erkennung im Editor (Vergleich `contentHash`).

@@ -9,18 +9,18 @@ import { api } from '../api/client'
 export const useAuditContentStore = defineStore('auditContent', {
   state: () => ({
     checked: [], // Metadaten bereits geprüfter Seiten (neueste zuerst)
-    current: null, // vollständiger Eintrag im Dialog
+    current: null, // Gesamt-Bericht im Dialog: { file, contentQuality, audit }
     dialogOpen: false,
     busy: false, // ein Prüflauf läuft (LLM-Aufruf)
-    loading: false, // ein gespeichertes Ergebnis wird geladen
+    loading: false, // ein gespeicherter Bericht wird geladen
     error: null, // roher Fehler des letzten Aufrufs (Dialog übersetzt ihn)
     fileName: '', // Name der geprüften/angezeigten Datei (Dialogtitel)
   }),
 
   actions: {
-    // Prüft eine Datei per LLM und zeigt das Ergebnis im Dialog. Fehler werden
-    // im Dialog angezeigt (nicht geworfen), damit der Aufrufer nichts weiter
-    // behandeln muss.
+    // Prüft eine Datei per LLM und zeigt den Gesamt-Bericht im Dialog. Fehler
+    // werden im Dialog angezeigt (nicht geworfen), damit der Aufrufer nichts
+    // weiter behandeln muss.
     async check(fileId, fileName = '', locale = 'de') {
       this.dialogOpen = true
       this.busy = true
@@ -28,8 +28,8 @@ export const useAuditContentStore = defineStore('auditContent', {
       this.current = null
       this.fileName = fileName
       try {
-        this.current = await api.post('auditcontent', { id: fileId, locale })
-        this.fileName = this.current.title || fileName
+        const entry = await api.post('auditcontent', { id: fileId, locale })
+        await this.loadReport(entry.key, entry.title || fileName)
         await this.fetchChecked()
       } catch (e) {
         this.error = e
@@ -44,7 +44,14 @@ export const useAuditContentStore = defineStore('auditContent', {
       this.checked = data.pages ?? []
     },
 
-    // Öffnet ein gespeichertes Ergebnis im Dialog (aus der Liste heraus).
+    // Lädt den Gesamt-Bericht (Qualitätsurteil + zugehörige SEO-Funde) einer
+    // geprüften Seite in den Dialog.
+    async loadReport(key, fileName = '') {
+      this.current = await api.get('auditcontentreport', { key })
+      this.fileName = this.current.contentQuality?.title || this.current.file?.title || fileName
+    },
+
+    // Öffnet den gespeicherten Gesamt-Bericht im Dialog (aus der Liste heraus).
     async openResult(key, fileName = '') {
       this.dialogOpen = true
       this.loading = true
@@ -52,8 +59,7 @@ export const useAuditContentStore = defineStore('auditContent', {
       this.current = null
       this.fileName = fileName
       try {
-        this.current = await api.get('auditcontentget', { key })
-        this.fileName = this.current.title || fileName
+        await this.loadReport(key, fileName)
       } catch (e) {
         this.error = e
       } finally {
@@ -69,7 +75,7 @@ export const useAuditContentStore = defineStore('auditContent', {
     // Löscht ein gespeichertes Ergebnis.
     async remove(key) {
       await api.post('auditcontentdelete', { key })
-      if (this.current?.key === key) {
+      if (this.current?.contentQuality?.key === key) {
         this.current = null
       }
       await this.fetchChecked()
