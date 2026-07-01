@@ -5,6 +5,8 @@
 import { onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuditStore } from '../stores/audit'
+import { useAuditContentStore } from '../stores/auditContent'
+import { useAuthStore } from '../stores/auth'
 import { useFilesStore } from '../stores/files'
 import { useHelpStore } from '../stores/help'
 import { errorText } from '../i18n/apiMessage'
@@ -12,13 +14,20 @@ import { useTransientError } from '../util/transientError'
 import { useConfirm } from '../util/confirm'
 import AuditSeverityChip from './AuditSeverityChip.vue'
 import AuditIssueTable from './AuditIssueTable.vue'
+import AuditContentList from './AuditContentList.vue'
 
 const { t, locale } = useI18n()
 const audit = useAuditStore()
+const auditContent = useAuditContentStore()
+const auth = useAuthStore()
 const files = useFilesStore()
 const help = useHelpStore()
 const confirm = useConfirm()
 const error = useTransientError()
+
+// Reiter: SEO-Bericht (Standard) oder LLM-Content-Qualität. Der zweite Reiter
+// erscheint nur, wenn freigeschaltet (Pro + KI-Schlüssel).
+const tab = ref('report')
 
 // Klick auf die Problembeschreibung: ausführliche Hilfe zur Regel öffnen. Die
 // HelpView legt sich als Überlagerung über den Bericht; beim Schließen erscheint
@@ -119,30 +128,43 @@ function runLabel(run) {
       <span class="audit-title">{{ $t('audit.title') }}</span>
       <div class="audit-head-spacer" />
 
-      <v-select
-        v-if="audit.runs.length"
-        :model-value="audit.current?.id ?? null"
-        :items="audit.runs"
-        :item-title="runLabel"
-        item-value="id"
-        density="compact"
-        variant="outlined"
-        hide-details
-        class="audit-runselect"
-        :label="$t('audit.history')"
-        @update:model-value="selectRun"
-      />
+      <template v-if="tab === 'report'">
+        <v-select
+          v-if="audit.runs.length"
+          :model-value="audit.current?.id ?? null"
+          :items="audit.runs"
+          :item-title="runLabel"
+          item-value="id"
+          density="compact"
+          variant="outlined"
+          hide-details
+          class="audit-runselect"
+          :label="$t('audit.history')"
+          @update:model-value="selectRun"
+        />
 
-      <button class="audit-btn primary" :disabled="audit.running" @click="startRun">
-        <v-progress-circular v-if="audit.running" indeterminate size="14" width="2" class="mr-1" />
-        <v-icon v-else icon="mdi-play" size="16" class="mr-1" />{{ $t('audit.run') }}
+        <button class="audit-btn primary" :disabled="audit.running" @click="startRun">
+          <v-progress-circular v-if="audit.running" indeterminate size="14" width="2" class="mr-1" />
+          <v-icon v-else icon="mdi-play" size="16" class="mr-1" />{{ $t('audit.run') }}
+        </button>
+        <button
+          class="audit-btn danger"
+          :disabled="audit.running || !audit.current"
+          @click="removeRun"
+        >
+          <v-icon icon="mdi-delete-outline" size="16" class="mr-1" />{{ $t('audit.delete') }}
+        </button>
+      </template>
+    </div>
+
+    <!-- Reiter: nur wenn die Content-Prüfung freigeschaltet ist (sonst gibt es
+         nur den Bericht und eine Reiterleiste wäre überflüssig). -->
+    <div v-if="auth.auditContent" class="audit-tabs nemo-noselect">
+      <button class="audit-tab" :class="{ active: tab === 'report' }" @click="tab = 'report'">
+        <v-icon icon="mdi-clipboard-search-outline" size="16" class="mr-1" />{{ $t('audit.tabReport') }}
       </button>
-      <button
-        class="audit-btn danger"
-        :disabled="audit.running || !audit.current"
-        @click="removeRun"
-      >
-        <v-icon icon="mdi-delete-outline" size="16" class="mr-1" />{{ $t('audit.delete') }}
+      <button class="audit-tab" :class="{ active: tab === 'content' }" @click="tab = 'content'">
+        <v-icon icon="mdi-text-search" size="16" class="mr-1" />{{ $t('contentQuality.title') }}
       </button>
     </div>
 
@@ -154,7 +176,7 @@ function runLabel(run) {
          Der Umschalter steht vor der Zusammenfassung und bleibt auch eingeklappt
          sichtbar, damit sich der Kopf wieder ausklappen lässt. -->
     <div
-      v-if="audit.current && !audit.running && !audit.loading"
+      v-if="tab === 'report' && audit.current && !audit.running && !audit.loading"
       class="audit-rhead nemo-noselect"
     >
       <div class="audit-summary">
@@ -205,8 +227,11 @@ function runLabel(run) {
     </div>
 
     <div class="nemo-content nemo-scroll">
+      <!-- Reiter „Content-Qualität": Liste der geprüften Seiten -->
+      <AuditContentList v-if="tab === 'content'" />
+
       <!-- Läuft gerade / Bericht wird geladen -->
-      <div v-if="audit.running || audit.loading" class="nemo-empty">
+      <div v-else-if="audit.running || audit.loading" class="nemo-empty">
         <v-progress-circular indeterminate size="40" width="3" color="primary" />
         <p>{{ audit.running ? $t('audit.running') : $t('audit.loading') }}</p>
       </div>
@@ -230,7 +255,10 @@ function runLabel(run) {
     </div>
 
     <footer class="nemo-statusbar nemo-noselect">
-      <span v-if="audit.current">
+      <span v-if="tab === 'content'">
+        {{ $t('contentQuality.pageCount', [auditContent.checked.length]) }}
+      </span>
+      <span v-else-if="audit.current">
         {{ $t('audit.issueCount', [audit.filteredIssues.length]) }}
       </span>
       <span v-else>{{ $t('audit.subtitle') }}</span>
@@ -305,6 +333,34 @@ function runLabel(run) {
   background: #fbeaea;
   border-color: #d9b0ab;
   color: #b03a2e;
+}
+
+/* Reiterleiste zwischen Kopfzeile und Bericht/Liste. */
+.audit-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px 12px 0;
+  background: var(--mint-panel);
+  border-bottom: 1px solid var(--mint-border);
+}
+.audit-tab {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: var(--mint-radius) var(--mint-radius) 0 0;
+  background: transparent;
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  color: var(--mint-text-muted);
+  cursor: pointer;
+}
+.audit-tab:hover { color: var(--mint-text); }
+.audit-tab.active {
+  background: var(--mint-content);
+  border-color: var(--mint-border);
+  color: var(--mint-text);
+  font-weight: 600;
 }
 
 /* Feststehender Berichtskopf: schrumpft nicht, scrollt nicht mit der Tabelle

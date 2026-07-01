@@ -138,11 +138,23 @@ Fähigkeit `auth.auditContent` (aus `whoami`).
 `npm run --prefix frontend build` fehlerfrei. Offen: manueller Durchlauf gegen
 eine echte Instanz mit Pro-Lizenz + KI-Schlüssel.
 
-### Offen / Phase 2 (Frontend)
+## Phase 2 (umgesetzt)
 
-- „Veraltet"-Marker: `contentHash` beim Öffnen einer Datei gegen den aktuellen
-  Text vergleichen.
-- Bei Bedarf die Liste zusätzlich als eigener Abschnitt in `AuditView.vue`.
+### Liste als Reiter in der AuditView ✓
+
+Die Liste ist aus dem Dialog in einen zweiten Reiter der `AuditView.vue`
+gewandert (`AuditContentList.vue`). Reiter „SEO-Bericht" / „Content-Qualität";
+der zweite erscheint nur bei `auth.auditContent`. Der Dialog
+(`ContentQualityDialog.vue`) zeigt jetzt nur noch das Einzelergebnis; eine Zeile
+der Liste öffnet ihn (`openResult`), außerdem Neu prüfen/Löschen je Zeile.
+
+### „Veraltet"-Marker ✓
+
+`ContentQualityService::list()` berechnet je Eintrag den aktuellen Prüf-Hash der
+Quelle (`currentBodyHash`, dieselbe `prepareBody`-Aufbereitung wie beim Prüfen)
+und liefert `stale` (Quelle seit der Prüfung geändert) sowie `sourceMissing`
+(Datei/Mount weg). Die Liste zeigt entsprechend einen Marker „veraltet" bzw.
+„Quelle fehlt".
 
 ## Offene Punkte / Phase 2
 

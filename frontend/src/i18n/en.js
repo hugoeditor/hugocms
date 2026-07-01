@@ -207,6 +207,7 @@ export default {
   audit: {
     open: 'SEO audit',
     title: 'SEO audit',
+    tabReport: 'SEO report',
     close: 'Close SEO audit',
     collapseHeader: 'Collapse header',
     expandHeader: 'Expand header',
@@ -473,10 +474,14 @@ export default {
     suggestions: 'Suggestions',
     checkedAt: 'Checked on {0}',
     truncated: 'Checked on truncated text',
-    checkedList: 'Already checked pages',
     empty: 'No page checked yet.',
     toSource: 'Go to source',
     recheck: 'Re-check',
+    pageCount: '{0} checked pages',
+    stale: 'outdated',
+    sourceMissing: 'source missing',
+    deleteTitle: 'Delete check result',
+    deleteConfirm: 'Delete the stored result for “{0}”?',
   },
 
   // Visual Hugo configuration editor (hugo.json/config.json).

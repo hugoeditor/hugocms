@@ -207,6 +207,7 @@ export default {
   audit: {
     open: 'SEO-Audit',
     title: 'SEO-Audit',
+    tabReport: 'SEO-Bericht',
     close: 'SEO-Audit schließen',
     collapseHeader: 'Kopf einklappen',
     expandHeader: 'Kopf ausklappen',
@@ -473,10 +474,14 @@ export default {
     suggestions: 'Verbesserungsvorschläge',
     checkedAt: 'Geprüft am {0}',
     truncated: 'Text gekürzt geprüft',
-    checkedList: 'Bereits geprüfte Seiten',
     empty: 'Noch keine Seite geprüft.',
     toSource: 'Zur Quelldatei',
     recheck: 'Neu prüfen',
+    pageCount: '{0} geprüfte Seiten',
+    stale: 'veraltet',
+    sourceMissing: 'Quelle fehlt',
+    deleteTitle: 'Prüfergebnis löschen',
+    deleteConfirm: 'Das gespeicherte Ergebnis für „{0}“ löschen?',
   },
 
   // Visueller Hugo-Konfigurations-Editor (hugo.json/config.json).

@@ -45,10 +45,6 @@ async function toSource() {
   store.closeDialog()
   await files.openFileById(id)
 }
-
-function openChecked(page) {
-  store.openResult(page.key, page.title || page.rel)
-}
 </script>
 
 <template>
@@ -137,42 +133,7 @@ function openChecked(page) {
           </div>
         </template>
 
-        <!-- Liste bereits geprüfter Seiten -->
-        <template v-if="store.checked.length">
-          <v-divider class="my-4" />
-          <div class="text-subtitle-2 mb-2">{{ $t('contentQuality.checkedList') }}</div>
-          <v-list density="compact" class="py-0">
-            <v-list-item
-              v-for="page in store.checked"
-              :key="page.key"
-              :active="page.key === store.current?.key"
-              class="px-2"
-              @click="openChecked(page)"
-            >
-              <template #prepend>
-                <v-chip :color="scoreColor(page.score)" size="small" variant="flat" label class="mr-2">
-                  {{ page.score ?? '–' }}
-                </v-chip>
-              </template>
-              <v-list-item-title>{{ page.title || page.rel }}</v-list-item-title>
-              <v-list-item-subtitle>{{ formatDate(page.checkedAt) }}</v-list-item-subtitle>
-              <template #append>
-                <v-btn
-                  icon="mdi-delete-outline"
-                  size="small"
-                  variant="text"
-                  density="comfortable"
-                  @click.stop="store.remove(page.key)"
-                />
-              </template>
-            </v-list-item>
-          </v-list>
-        </template>
-
-        <div
-          v-else-if="!store.busy && !store.loading && !store.error && !verdict"
-          class="text-medium-emphasis text-center py-6"
-        >
+        <div v-else class="text-medium-emphasis text-center py-6">
           {{ $t('contentQuality.empty') }}
         </div>
       </v-card-text>

@@ -54,20 +54,12 @@ final class ContentQualityService
     {
         $r = $this->resolver->resolve($fileId, true);
         $read = $this->files->readText($r['mount'], $r['abs']);
-        $raw = (string) $read['content'];
 
-        [$front, $body] = self::splitFrontMatter($raw);
-        $body = trim($body);
+        [$title, $body, $truncated] = self::prepareBody((string) $read['content']);
         if ($body === '') {
             throw new ApiException('ECONTENT', 422, 'AUDIT-CONTENT-EMPTY', [(string) $read['name']]);
         }
-        $title = self::extractTitle($front) ?? (string) $read['name'];
-
-        $truncated = false;
-        if (mb_strlen($body) > self::MAX_BODY_CHARS) {
-            $body = mb_substr($body, 0, self::MAX_BODY_CHARS);
-            $truncated = true;
-        }
+        $title ??= (string) $read['name'];
 
         $verdict = $this->askModel($title, $body, $locale);
 
@@ -106,6 +98,9 @@ final class ContentQualityService
             }
             $verdict = is_array($entry['verdict'] ?? null) ? $entry['verdict'] : [];
             $readability = is_array($verdict['readability'] ?? null) ? $verdict['readability'] : [];
+            // Veraltet-Erkennung: aktuellen Prüf-Hash der Quelle mit dem
+            // gespeicherten vergleichen. null = Quelle fehlt/nicht lesbar.
+            $current = $this->currentBodyHash($entry['mount'] ?? null, $entry['rel'] ?? null);
             $out[] = [
                 'key' => $entry['key'] ?? basename($path, '.json'),
                 'mount' => $entry['mount'] ?? null,
@@ -116,6 +111,8 @@ final class ContentQualityService
                 'contentHash' => $entry['contentHash'] ?? null,
                 'score' => $verdict['score'] ?? null,
                 'rating' => $readability['rating'] ?? null,
+                'sourceMissing' => $current === null,
+                'stale' => $current !== null && $current !== ($entry['contentHash'] ?? null),
             ];
         }
         usort($out, static fn (array $a, array $b): int => strcmp((string) ($b['checkedAt'] ?? ''), (string) ($a['checkedAt'] ?? '')));
@@ -246,6 +243,50 @@ final class ContentQualityService
                 'required' => ['score', 'summary', 'readability', 'findings', 'suggestions'],
             ],
         ];
+    }
+
+    // --- Textaufbereitung ---------------------------------------------------
+
+    /**
+     * Zerlegt den Rohinhalt in Titel (aus dem Front-Matter) und den zu prüfenden
+     * Fließtext — getrimmt und auf {@see MAX_BODY_CHARS} begrenzt. Dieselbe
+     * Aufbereitung liefert den Prüf-Hash (sha1 des Body), sodass sich später
+     * erkennen lässt, ob die Quelle seit der Prüfung geändert wurde.
+     *
+     * @return array{0: ?string, 1: string, 2: bool} [title, body, truncated]
+     */
+    private static function prepareBody(string $raw): array
+    {
+        [$front, $body] = self::splitFrontMatter($raw);
+        $body = trim($body);
+        $truncated = false;
+        if (mb_strlen($body) > self::MAX_BODY_CHARS) {
+            $body = mb_substr($body, 0, self::MAX_BODY_CHARS);
+            $truncated = true;
+        }
+
+        return [self::extractTitle($front), $body, $truncated];
+    }
+
+    /**
+     * Aktueller Prüf-Hash der Quelldatei (Mount + Relativpfad) oder null, wenn
+     * der Mount weg, die Datei gelöscht oder nicht lesbar ist. Für die
+     * Veraltet-Erkennung in {@see list()}.
+     */
+    private function currentBodyHash(mixed $mountName, mixed $rel): ?string
+    {
+        if (!is_string($mountName) || !is_string($rel) || !isset($this->resolver->all()[$mountName])) {
+            return null;
+        }
+        try {
+            $r = $this->resolver->resolve($this->resolver->encodeId($mountName, $rel), true);
+            $read = $this->files->readText($r['mount'], $r['abs']);
+        } catch (\Throwable) {
+            return null;
+        }
+        [, $body] = self::prepareBody((string) $read['content']);
+
+        return sha1($body);
     }
 
     // --- Front-Matter -------------------------------------------------------
