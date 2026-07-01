@@ -194,6 +194,14 @@ export default {
     diffOf: 'Änderungen von {0}',
   },
 
+  help: {
+    title: 'Hilfe',
+    back: 'Zurück',
+    seeAlso: 'Siehe auch',
+    fallbackNote: 'Für diese Sprache liegt noch keine Fassung vor — angezeigt wird die englische.',
+    notFoundHint: 'Zu diesem Thema gibt es noch keinen Hilfetext.',
+  },
+
   audit: {
     open: 'SEO-Audit',
     title: 'SEO-Audit',
@@ -207,6 +215,7 @@ export default {
     empty: 'Noch kein Audit-Lauf vorhanden. Starte einen, um den Bericht zu sehen.',
     noIssues: 'Keine Funde in dieser Auswahl.',
     openSource: 'Quelldatei öffnen',
+    showHelp: 'Hilfe anzeigen',
     delete: 'Löschen',
     deleteTitle: 'Lauf löschen?',
     deleteConfirm: 'Dieser Audit-Lauf wird dauerhaft entfernt.',
@@ -664,6 +673,8 @@ export default {
     'PRO-REQUIRED': 'Diese Funktion erfordert eine Pro-Lizenz.',
     'LICENSE-INVALID': 'Der Lizenzschlüssel ist ungültig oder nicht für diese Domain ausgestellt.',
     'ACTIVATION-UNAVAILABLE': 'Für diese Webseite lässt sich keine Lizenz aktivieren (keine Mount-Konfigurationsdatei).',
+    'HELP-NOT-FOUND': 'Hilfethema nicht gefunden: {0}',
+    'HELP-INVALID-ID': 'Ungültige Hilfe-Kennung.',
     'GIT-NO-PROJECT': 'Für diese Webseite ist kein Hugo-Projekt konfiguriert — das Repository fehlt.',
     'GIT-NOT-A-REPO': 'Das Hugo-Projektverzeichnis ist kein Git-Repository: {0}',
     'GIT-COMMIT-NOT-FOUND': 'Commit nicht gefunden: {0}',

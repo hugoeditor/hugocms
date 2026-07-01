@@ -9,7 +9,7 @@ import AuditSeverityChip from './AuditSeverityChip.vue'
 const props = defineProps({
   issues: { type: Array, required: true },
 })
-const emit = defineEmits(['open-source'])
+const emit = defineEmits(['open-source', 'open-help'])
 
 const { t } = useI18n()
 
@@ -51,10 +51,22 @@ function ruleMessage(issue) {
       <tr v-for="(issue, idx) in visibleIssues" :key="idx" class="nemo-row">
         <td class="col-sev"><AuditSeverityChip :severity="issue.severity" /></td>
         <td class="col-msg">
-          <span class="audit-msg">{{ ruleMessage(issue) }}</span>
+          <button
+            class="audit-msg-help"
+            :title="$t('audit.showHelp')"
+            @click="emit('open-help', issue.ruleId)"
+          >
+            <span class="audit-msg">{{ ruleMessage(issue) }}</span>
+            <v-icon icon="mdi-help-circle-outline" size="14" class="audit-msg-hint" />
+          </button>
           <code class="audit-ruleid">{{ issue.ruleId }}</code>
         </td>
-        <td class="col-url">
+        <td
+          class="col-url"
+          :class="{ 'col-url-clickable': issue.fileId }"
+          :title="issue.fileId ? $t('audit.openSource') : null"
+          @click="issue.fileId && emit('open-source', issue)"
+        >
           <code v-if="issue.url">{{ issue.url }}</code>
           <span v-else-if="issue.sourceFile" class="audit-src">{{ issue.sourceFile }}</span>
           <span v-else>—</span>
@@ -106,7 +118,23 @@ function ruleMessage(issue) {
 .nemo-row:hover { background: var(--mint-row-hover); }
 
 .col-msg { color: var(--mint-text); }
-.audit-msg { display: block; }
+/* Problembeschreibung als Schaltfläche: öffnet die ausführliche Hilfe. */
+.audit-msg-help {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 4px;
+  border: 0;
+  background: none;
+  padding: 0;
+  text-align: left;
+  color: var(--mint-text);
+  cursor: help;
+  font: inherit;
+}
+.audit-msg-help:hover .audit-msg { text-decoration: underline; }
+.audit-msg-help:hover .audit-msg-hint { opacity: 1; }
+.audit-msg { display: inline; }
+.audit-msg-hint { color: var(--mint-green); opacity: 0.45; flex: 0 0 auto; margin-top: 2px; }
 .audit-ruleid {
   display: inline-block;
   margin-top: 2px;
@@ -117,6 +145,14 @@ function ruleMessage(issue) {
   font-size: 0.8rem;
   color: var(--mint-text-muted);
   word-break: break-all;
+}
+/* Zugeordnete Zeile: gesamte URL-/Quelldatei-Zelle öffnet die Datei im Editor
+   (wie der Springen-Button). */
+.col-url-clickable { cursor: pointer; }
+.col-url-clickable:hover code,
+.col-url-clickable:hover .audit-src {
+  color: var(--mint-green);
+  text-decoration: underline;
 }
 .audit-jump {
   display: inline-flex;

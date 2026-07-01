@@ -194,6 +194,14 @@ export default {
     diffOf: 'Changes of {0}',
   },
 
+  help: {
+    title: 'Help',
+    back: 'Back',
+    seeAlso: 'See also',
+    fallbackNote: 'No version in your language yet — showing the English one.',
+    notFoundHint: 'There is no help text for this topic yet.',
+  },
+
   audit: {
     open: 'SEO audit',
     title: 'SEO audit',
@@ -207,6 +215,7 @@ export default {
     empty: 'No audit run yet. Start one to see the report.',
     noIssues: 'No issues in this selection.',
     openSource: 'Open source file',
+    showHelp: 'Show help',
     delete: 'Delete',
     deleteTitle: 'Delete run?',
     deleteConfirm: 'This audit run will be permanently removed.',
@@ -662,6 +671,8 @@ export default {
     'PRO-REQUIRED': 'This feature requires a Pro license.',
     'LICENSE-INVALID': 'The license key is invalid or not issued for this domain.',
     'ACTIVATION-UNAVAILABLE': 'No license can be activated for this website (no mount configuration file).',
+    'HELP-NOT-FOUND': 'Help topic not found: {0}',
+    'HELP-INVALID-ID': 'Invalid help identifier.',
     'GIT-NO-PROJECT': 'No Hugo project is configured for this site — the repository is missing.',
     'GIT-NOT-A-REPO': 'The Hugo project directory is not a Git repository: {0}',
     'GIT-COMMIT-NOT-FOUND': 'Commit not found: {0}',

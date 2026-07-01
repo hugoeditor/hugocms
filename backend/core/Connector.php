@@ -81,6 +81,12 @@ final class Connector
      */
     private ?string $mountsPath = null;
 
+    /**
+     * Verzeichnis der Hilfe-/Wissensdatenbank (Markdown je Sektion/Sprache).
+     * Standard: backend/help (relativ zu backend/core). Frei, nicht Pro.
+     */
+    private readonly string $helpDir;
+
     public function __construct(array $options)
     {
         // Hauptkonfiguration (hugocms.ini) ggf. zuerst einlesen — daraus
@@ -172,6 +178,11 @@ final class Connector
         if (isset($options['licenseKey'])) {
             $this->licenseKey = (string) $options['licenseKey'];
         }
+
+        // Hilfe-Verzeichnis: Option "help" oder Standard backend/help.
+        $this->helpDir = isset($options['help'])
+            ? (string) $options['help']
+            : dirname(__DIR__) . '/help';
     }
 
     /**
@@ -287,6 +298,7 @@ final class Connector
                 'account' => $this->cmdAccount($request),
                 'license' => $this->cmdLicense(),
                 'activate' => $this->cmdActivate($request),
+                'help' => $this->cmdHelp($request),
                 'gitstatus' => $this->cmdGitStatus(),
                 'gitlog' => $this->cmdGitLog($request),
                 'gitdiff' => $this->cmdGitDiff($request),
@@ -997,6 +1009,23 @@ final class Connector
         $this->auth->logout();
 
         return ['ok' => true, 'reauth' => true];
+    }
+
+    // --- Hilfe / Wissensdatenbank (frei) -----------------------------------
+
+    /**
+     * Liefert ein Hilfethema (Markdown + Metadaten) aus backend/help. Frei
+     * verfügbar (nur Anmeldung nötig), damit die Hilfe die ganze App abdecken
+     * kann. Sprache aus "locale" (Standard de) mit Rückfall auf Englisch.
+     */
+    private function cmdHelp(array $request): array
+    {
+        $this->requireAuth();
+        $section = $this->requireParam($request, 'section');
+        $id = $this->requireParam($request, 'id');
+        $locale = (string) ($request['locale'] ?? 'de');
+
+        return (new HelpService($this->helpDir))->topic($section, $id, $locale);
     }
 
     // --- Pro-Lizenz --------------------------------------------------------

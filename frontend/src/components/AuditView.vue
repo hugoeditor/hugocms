@@ -6,17 +6,26 @@ import { onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuditStore } from '../stores/audit'
 import { useFilesStore } from '../stores/files'
+import { useHelpStore } from '../stores/help'
 import { errorText } from '../i18n/apiMessage'
 import { useTransientError } from '../util/transientError'
 import { useConfirm } from '../util/confirm'
 import AuditSeverityChip from './AuditSeverityChip.vue'
 import AuditIssueTable from './AuditIssueTable.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const audit = useAuditStore()
 const files = useFilesStore()
+const help = useHelpStore()
 const confirm = useConfirm()
 const error = useTransientError()
+
+// Klick auf die Problembeschreibung: ausführliche Hilfe zur Regel öffnen. Die
+// HelpView legt sich als Überlagerung über den Bericht; beim Schließen erscheint
+// er wieder (Audit-Modus bleibt aktiv).
+function openHelp(ruleId) {
+  help.open('audit', ruleId, locale.value)
+}
 
 const SEVERITIES = ['error', 'warning', 'hint']
 
@@ -186,7 +195,11 @@ function runLabel(run) {
           </button>
         </div>
 
-        <AuditIssueTable :issues="audit.filteredIssues" @open-source="openSource" />
+        <AuditIssueTable
+          :issues="audit.filteredIssues"
+          @open-source="openSource"
+          @open-help="openHelp"
+        />
       </template>
     </div>
 

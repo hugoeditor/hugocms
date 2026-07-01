@@ -17,6 +17,7 @@ import ReconfigureDialog from './components/ReconfigureDialog.vue'
 import AccountDialog from './components/AccountDialog.vue'
 import LicenseDialog from './components/LicenseDialog.vue'
 import RepositoryDialog from './components/RepositoryDialog.vue'
+import HelpView from './components/HelpView.vue'
 import AssistantPanel from './components/AssistantPanel.vue'
 import { useAssistantStore } from './stores/assistant'
 import LanguageSwitcher from './components/LanguageSwitcher.vue'
@@ -569,6 +570,9 @@ async function build() {
               </main>
             </div>
             <EditorPanel ref="editorPanelRef" />
+            <!-- Hilfe-/Wissensdatenbank: Überlagerung mit Zurück-Button, öffnet
+                 z. B. aus einem SEO-Audit-Fund die ausführliche Erklärung. -->
+            <HelpView />
           </div>
         </div>
         </div>
