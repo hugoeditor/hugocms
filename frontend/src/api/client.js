@@ -80,6 +80,12 @@ export const api = {
     const res = await fetch(`${BASE}?${query}`, {
       method: 'GET',
       credentials: 'include',
+      // Anfrageseitig den HTTP-Cache umgehen. Ergänzt das server­seitige
+      // no-store (Response.php): Erreicht dieser Header den Browser nicht
+      // zuverlässig (Shared Hosting, vorgeschaltete Proxys), lieferte er sonst
+      // bei GET-Befehlen wie whoami einen veralteten Stand — etwa den KI-
+      // Assistenten weiterhin als aus, nachdem der API-Schlüssel gesetzt wurde.
+      cache: 'no-store',
     })
     return handle(res)
   },
