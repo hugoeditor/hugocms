@@ -2,7 +2,7 @@
 // SEO-Audit-Vollbildansicht (Pro-Funktion). Startet Läufe, zeigt den Bericht
 // gruppiert nach Kategorie und Schweregrad und springt aus einem Fund zur
 // editierbaren Hugo-Quelldatei. Aufbau wie die Papierkorb-Ansicht (TrashView).
-import { onMounted } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuditStore } from '../stores/audit'
 import { useFilesStore } from '../stores/files'
@@ -28,6 +28,15 @@ function openHelp(ruleId) {
 }
 
 const SEVERITIES = ['error', 'warning', 'hint']
+
+// Feststehender Berichtskopf (Zusammenfassung + Kategoriefilter). Einklappbar,
+// damit die Fundtabelle mehr Platz bekommt; bei jedem neuen Bericht wieder
+// ausgeklappt.
+const headerOpen = ref(true)
+watch(
+  () => audit.current?.id,
+  () => { headerOpen.value = true },
+)
 
 onMounted(async () => {
   try {
@@ -100,9 +109,12 @@ function runLabel(run) {
 </script>
 
 <template>
-  <section class="nemo-view">
+  <section class="nemo-view audit-overlay">
     <!-- Kopfzeile mit Aktionen -->
     <div class="audit-head nemo-noselect">
+      <button class="audit-back" :title="$t('audit.close')" @click="files.leaveAudit()">
+        <v-icon icon="mdi-arrow-left" size="20" />
+      </button>
       <v-icon icon="mdi-clipboard-search-outline" size="18" />
       <span class="audit-title">{{ $t('audit.title') }}</span>
       <div class="audit-head-spacer" />
@@ -138,6 +150,60 @@ function runLabel(run) {
       {{ error }}
     </v-alert>
 
+    <!-- Feststehender Berichtskopf: bleibt beim Scrollen der Fundtabelle stehen.
+         Der Umschalter steht vor der Zusammenfassung und bleibt auch eingeklappt
+         sichtbar, damit sich der Kopf wieder ausklappen lässt. -->
+    <div
+      v-if="audit.current && !audit.running && !audit.loading"
+      class="audit-rhead nemo-noselect"
+    >
+      <div class="audit-summary">
+        <button
+          class="audit-headtoggle"
+          :title="headerOpen ? $t('audit.collapseHeader') : $t('audit.expandHeader')"
+          @click="headerOpen = !headerOpen"
+        >
+          <v-icon :icon="headerOpen ? 'mdi-unfold-less-horizontal' : 'mdi-unfold-more-horizontal'" size="20" />
+        </button>
+        <div class="audit-meta">
+          {{ $t('audit.pagesScanned', [audit.current.pagesScanned]) }} ·
+          {{ $t('audit.duration', [audit.current.seconds]) }}
+          <span v-if="audit.current.truncated" class="audit-trunc">· {{ $t('audit.truncated') }}</span>
+        </div>
+        <div v-show="headerOpen" class="audit-sevfilters">
+          <button
+            class="audit-chip"
+            :class="{ active: audit.severityFilter === 'all' }"
+            @click="audit.setSeverityFilter('all')"
+          >
+            {{ $t('audit.allSeverities') }}
+          </button>
+          <button
+            v-for="sev in SEVERITIES"
+            :key="sev"
+            class="audit-chip-wrap"
+            :class="{ dim: audit.severityFilter !== 'all' && audit.severityFilter !== sev }"
+            @click="audit.setSeverityFilter(audit.severityFilter === sev ? 'all' : sev)"
+          >
+            <AuditSeverityChip :severity="sev" :count="audit.current.summary[sev] ?? 0" />
+          </button>
+        </div>
+      </div>
+
+      <!-- Kategorie-Filter -->
+      <div v-show="headerOpen" class="audit-cats">
+        <button
+          v-for="cat in audit.categories"
+          :key="cat"
+          class="audit-chip"
+          :class="{ active: audit.categoryFilter === cat }"
+          @click="audit.setCategoryFilter(cat)"
+        >
+          {{ $t('audit.category.' + cat) }} <span class="audit-catcount">{{ categoryCount(cat) }}</span>
+        </button>
+      </div>
+    </div>
+
     <div class="nemo-content nemo-scroll">
       <!-- Läuft gerade / Bericht wird geladen -->
       <div v-if="audit.running || audit.loading" class="nemo-empty">
@@ -155,52 +221,12 @@ function runLabel(run) {
       </div>
 
       <!-- Bericht -->
-      <template v-else>
-        <div class="audit-summary nemo-noselect">
-          <div class="audit-meta">
-            {{ $t('audit.pagesScanned', [audit.current.pagesScanned]) }} ·
-            {{ $t('audit.duration', [audit.current.seconds]) }}
-            <span v-if="audit.current.truncated" class="audit-trunc">· {{ $t('audit.truncated') }}</span>
-          </div>
-          <div class="audit-sevfilters">
-            <button
-              class="audit-chip"
-              :class="{ active: audit.severityFilter === 'all' }"
-              @click="audit.setSeverityFilter('all')"
-            >
-              {{ $t('audit.allSeverities') }}
-            </button>
-            <button
-              v-for="sev in SEVERITIES"
-              :key="sev"
-              class="audit-chip-wrap"
-              :class="{ dim: audit.severityFilter !== 'all' && audit.severityFilter !== sev }"
-              @click="audit.setSeverityFilter(audit.severityFilter === sev ? 'all' : sev)"
-            >
-              <AuditSeverityChip :severity="sev" :count="audit.current.summary[sev] ?? 0" />
-            </button>
-          </div>
-        </div>
-
-        <!-- Kategorie-Filter -->
-        <div class="audit-cats nemo-noselect">
-          <button
-            v-for="cat in audit.categories"
-            :key="cat"
-            class="audit-chip"
-            :class="{ active: audit.categoryFilter === cat }"
-            @click="audit.setCategoryFilter(cat)"
-          >
-            {{ $t('audit.category.' + cat) }} <span class="audit-catcount">{{ categoryCount(cat) }}</span>
-          </button>
-        </div>
-
-        <AuditIssueTable
-          :issues="audit.filteredIssues"
-          @open-source="openSource"
-          @open-help="openHelp"
-        />
-      </template>
+      <AuditIssueTable
+        v-else
+        :issues="audit.filteredIssues"
+        @open-source="openSource"
+        @open-help="openHelp"
+      />
     </div>
 
     <footer class="nemo-statusbar nemo-noselect">
@@ -221,6 +247,16 @@ function runLabel(run) {
   min-width: 0;
 }
 
+/* Der Bericht legt sich als eigenständige Überlagerung über den gesamten
+   Arbeitsbereich (Werkzeugleiste + Seitenleiste + Dateiliste) — wie der
+   Editor, aber darunter (z-index kleiner als .editor-overlay = 10), damit ein
+   aus einem Fund geöffneter Editor obenauf liegt. */
+.audit-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+}
+
 .audit-head {
   display: flex;
   align-items: center;
@@ -230,6 +266,21 @@ function runLabel(run) {
   border-bottom: 1px solid var(--mint-border);
   color: var(--mint-text);
 }
+/* Zurück-Schaltfläche: schließt die Überlagerung (wie der Editor-Pfeil). */
+.audit-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: var(--mint-radius);
+  background: transparent;
+  color: var(--mint-text);
+  cursor: pointer;
+}
+.audit-back:hover { background: var(--mint-panel-hover); border-color: var(--mint-border); }
+
 .audit-title { font-weight: 600; font-size: 0.92rem; }
 .audit-runselect { max-width: 280px; }
 .audit-head-spacer { flex: 1 1 auto; }
@@ -255,6 +306,27 @@ function runLabel(run) {
   border-color: #d9b0ab;
   color: #b03a2e;
 }
+
+/* Feststehender Berichtskopf: schrumpft nicht, scrollt nicht mit der Tabelle
+   (liegt außerhalb des scrollenden .nemo-content). */
+.audit-rhead { flex: 0 0 auto; }
+
+/* Umschalter zum Ein-/Ausklappen des Kopfes: flache Icon-Schaltfläche,
+   steht vor der Zusammenfassung und bleibt auch eingeklappt sichtbar. */
+.audit-headtoggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: var(--mint-radius);
+  background: transparent;
+  color: var(--mint-text);
+  cursor: pointer;
+}
+.audit-headtoggle:hover { background: var(--mint-panel-hover); border-color: var(--mint-border); }
 
 .audit-summary {
   display: flex;

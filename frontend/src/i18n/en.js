@@ -205,6 +205,9 @@ export default {
   audit: {
     open: 'SEO audit',
     title: 'SEO audit',
+    close: 'Close SEO audit',
+    collapseHeader: 'Collapse header',
+    expandHeader: 'Expand header',
     subtitle: 'Analysis of the built website project.',
     history: 'Run',
     run: 'Start audit',

@@ -195,6 +195,11 @@ function openTrashView() {
   leaveEditorThen(() => files.openTrash())
 }
 function openAuditView() {
+  // Schaltfläche wirkt als Umschalter: bei offenem Bericht wieder schließen.
+  if (files.auditMode) {
+    files.leaveAudit()
+    return
+  }
   leaveEditorThen(() => files.openAudit())
 }
 
@@ -565,10 +570,14 @@ async function build() {
               <aside class="nemo-aside d-none d-md-block" :class="{ collapsed: files.sidebarCollapsed }"><MountSidebar /></aside>
               <main class="nemo-mainarea">
                 <TrashView v-if="files.trashMode" />
-                <AuditView v-else-if="files.auditMode" />
                 <FileBrowser v-else />
               </main>
             </div>
+            <!-- SEO-Audit als eigenständige Überlagerung über den gesamten
+                 Arbeitsbereich (wie der Editor). Klare Trennung vom
+                 Dateimanager; ein geöffneter Editor (z-index höher) legt sich
+                 zusätzlich darüber. -->
+            <AuditView v-if="files.auditMode" />
             <EditorPanel ref="editorPanelRef" />
             <!-- Hilfe-/Wissensdatenbank: Überlagerung mit Zurück-Button, öffnet
                  z. B. aus einem SEO-Audit-Fund die ausführliche Erklärung. -->
