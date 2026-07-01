@@ -192,6 +192,10 @@ function onSearch() {
   background: var(--mint-panel);
   border-bottom: 1px solid var(--mint-border);
   min-height: 44px;
+  /* Nicht schrumpfen: bricht die Leiste auf schmalen Schirmen um, muss sie
+     ihre volle (umgebrochene) Höhe behalten, sonst überdeckt die Listenansicht
+     die zweite Zeile (Pfadleiste). */
+  flex: 0 0 auto;
 }
 
 /* Schmale Schirme (Handy/Tablet): Werkzeugleiste umbrechen statt überlaufen.

@@ -92,7 +92,7 @@ function runLabel(run) {
     <div class="audit-head nemo-noselect">
       <v-icon icon="mdi-clipboard-search-outline" size="18" />
       <span class="audit-title">{{ $t('audit.title') }}</span>
-      <div style="flex: 1 1 auto" />
+      <div class="audit-head-spacer" />
 
       <v-select
         v-if="audit.runs.length"
@@ -126,10 +126,10 @@ function runLabel(run) {
     </v-alert>
 
     <div class="nemo-content nemo-scroll">
-      <!-- Läuft gerade -->
-      <div v-if="audit.running" class="nemo-empty">
+      <!-- Läuft gerade / Bericht wird geladen -->
+      <div v-if="audit.running || audit.loading" class="nemo-empty">
         <v-progress-circular indeterminate size="40" width="3" color="primary" />
-        <p>{{ $t('audit.running') }}</p>
+        <p>{{ audit.running ? $t('audit.running') : $t('audit.loading') }}</p>
       </div>
 
       <!-- Noch kein Bericht -->
@@ -215,6 +215,7 @@ function runLabel(run) {
 }
 .audit-title { font-weight: 600; font-size: 0.92rem; }
 .audit-runselect { max-width: 280px; }
+.audit-head-spacer { flex: 1 1 auto; }
 
 .audit-btn {
   display: inline-flex;
@@ -248,7 +249,7 @@ function runLabel(run) {
 }
 .audit-meta { font-size: 0.82rem; color: var(--mint-text-muted); }
 .audit-trunc { color: #b03a2e; }
-.audit-sevfilters { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.audit-sevfilters { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-left: auto; }
 .audit-chip-wrap { background: none; border: 0; padding: 0; cursor: pointer; }
 .audit-chip-wrap.dim { opacity: 0.4; }
 
@@ -272,6 +273,27 @@ function runLabel(run) {
 .audit-chip.active { background: var(--mint-green); border-color: var(--mint-green); color: #fff; }
 .audit-catcount { color: var(--mint-text-muted); margin-left: 4px; }
 .audit-chip.active .audit-catcount { color: #e8f1e3; }
+
+/* Schmale Schirme (Handy): Kopfzeile umbrechen statt nach rechts überlaufen.
+   Auswahlfeld füllt eine eigene Zeile, der Abstandshalter entfällt, damit die
+   Schaltflächen nicht auseinandergedrückt werden. */
+@media (max-width: 599.98px) {
+  .audit-head {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  .audit-head-spacer {
+    display: none;
+  }
+  .audit-runselect {
+    order: 10;
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+  .audit-sevfilters {
+    margin-left: 0;
+  }
+}
 
 .nemo-content { flex: 1 1 auto; overflow: auto; }
 .nemo-empty {
