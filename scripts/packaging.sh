@@ -4,7 +4,8 @@
 #
 # Erzeugt/erneuert die Struktur direkt im Repo-Wurzelverzeichnis:
 #   hugocms-release/
-#   ├── app/                 (gebautes Frontend = Client; URL-Pfad via Installationsroutine)
+#   ├── app/                 (gebautes Frontend = Client; inkl. .htaccess für das
+#   │                         Caching der App-Hülle; URL-Pfad via Installationsroutine)
 #   ├── bin/
 #   │     ├── get-hugo.sh          (lädt das Hugo-Binary nach bin/hugo/)
 #   │     └── install.sh           (richtet eine Webseite ein: Kopie + mounts/<hash>.ini)
@@ -103,6 +104,33 @@ echo "2. Client  -> $PKG/app"
 rm -rf "$PKG/edit" "$PKG/hugocms-app" "$PKG/app"
 mkdir -p "$PKG/app"
 cp -r "$PROJECT_DIR/frontend/dist/." "$PKG/app/"
+
+# 2b. Cache-Steuerung fürs App-Verzeichnis (Apache). Die App-Hülle wird unter
+#     /edit/ ausgeliefert; install.sh kopiert app/ dorthin (cp -a, inkl. Dot-
+#     dateien). index.html MUSS bei jedem Laden revalidiert werden, damit ein
+#     neuer Build sofort erscheint; die content-gehashten Assets tragen je Build
+#     einen neuen Dateinamen und dürfen daher unbegrenzt zwischengespeichert
+#     werden. Nginx wertet diese Datei NICHT aus — dort die location-Blöcke aus
+#     beispiel-konfigurationen/nginx.conf verwenden.
+echo "2b. Cache-.htaccess -> $PKG/app/.htaccess"
+cat > "$PKG/app/.htaccess" <<'HT'
+# App-Hülle (URL /edit/) — Caching-Steuerung.
+#
+# index.html: bei jedem Laden revalidieren (der Browser prüft per ETag), damit
+# ein neuer Build sofort erscheint. Content-gehashte Assets tragen je Build
+# einen neuen Dateinamen und werden daher unbegrenzt zwischengespeichert.
+#
+# Nginx wertet diese Datei NICHT aus — dort die location-Blöcke aus
+# beispiel-konfigurationen/nginx.conf verwenden.
+<IfModule mod_headers.c>
+    <Files "index.html">
+        Header set Cache-Control "no-cache"
+    </Files>
+    <FilesMatch "\.(js|css|woff2?|ttf|eot|svg|png|jpe?g|gif|webp|avif|ico)$">
+        Header set Cache-Control "public, max-age=31536000, immutable"
+    </FilesMatch>
+</IfModule>
+HT
 
 # 3. Backend übernehmen (backend/) — vollständig ersetzen.
 #    Enthält die Kern-Bibliothek unter core/ (inkl. autoload.php + hugocms.php),
