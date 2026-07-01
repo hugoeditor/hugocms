@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace HugoCMS\FileManager;
 
 use HugoCMS\FileManager\Audit\AuditService;
+use HugoCMS\FileManager\Audit\ContentQualityService;
 use HugoCMS\FileManager\Auth\AuthInterface;
 use HugoCMS\FileManager\Exception\ApiException;
 use Throwable;
@@ -309,6 +310,10 @@ final class Connector
                 'auditlist' => $this->cmdAuditList(),
                 'auditget' => $this->cmdAuditGet($request),
                 'auditdelete' => $this->cmdAuditDelete($request),
+                'auditcontent' => $this->cmdAuditContent($request),
+                'auditcontentlist' => $this->cmdAuditContentList(),
+                'auditcontentget' => $this->cmdAuditContentGet($request),
+                'auditcontentdelete' => $this->cmdAuditContentDelete($request),
                 default => throw ApiException::badRequest('UNKNOWN-COMMAND', [$cmd]),
             };
 
@@ -414,6 +419,9 @@ final class Connector
             // Das SEO-Audit hat dieselbe Voraussetzung wie Git: Pro-Lizenz und
             // ein konfiguriertes Hugo-Projekt (für public/ und content/).
             'audit' => $this->hugo !== null && $this->license()->isPro(),
+            // Die LLM-Content-Prüfung braucht zusätzlich einen konfigurierten
+            // KI-Schlüssel ([ai] api_key).
+            'auditContent' => $this->hugo !== null && $this->license()->isPro() && $this->ai['apiKey'] !== null,
         ];
     }
 
@@ -1234,6 +1242,103 @@ final class Connector
         $id = $this->requireParam($request, 'id');
 
         return $this->audit()->delete($id);
+    }
+
+    // --- LLM-Content-Qualität (Pro-Funktion, braucht KI-Schlüssel) ----------
+
+    /**
+     * Gemeinsamer Einstieg der Content-Prüfbefehle: wie das Audit (Anmeldung,
+     * Pro-Lizenz, Hugo-Projekt) plus ein konfigurierter KI-Schlüssel. Die
+     * Ergebnisse liegen je Webseite getrennt unter var/audit-content/<hash(source)>/.
+     */
+    private function contentQuality(): ContentQualityService
+    {
+        $this->requireAuth();
+        $this->requirePro();
+        if ($this->hugo === null) {
+            throw new ApiException('ECONFIG', 409, 'AUDIT-NO-PROJECT');
+        }
+        if ($this->ai['apiKey'] === null) {
+            throw new ApiException('ECONFIG', 409, 'AI-NOT-CONFIGURED');
+        }
+        $source = (string) $this->hugo['source'];
+        $storage = __DIR__ . '/../var/audit-content/' . sha1($source);
+
+        return new ContentQualityService(
+            new AnthropicClient($this->ai['apiKey']),
+            $this->ai['model'],
+            $this->resolver,
+            $this->files,
+            $storage,
+        );
+    }
+
+    /** Prüft EINE Content-Datei per LLM (synchron) und speichert das Ergebnis. */
+    private function cmdAuditContent(array $request): array
+    {
+        $service = $this->contentQuality();
+        $this->requireMethod('POST');
+        $id = $this->requireParam($request, 'id');
+        $locale = (string) ($request['locale'] ?? 'de');
+        // Ein einzelner LLM-Aufruf — wie beim Assistenten großzügig bemessen.
+        @set_time_limit(180);
+
+        $entry = $service->analyze($id, $locale);
+        $this->logger->info(sprintf(
+            'Content-Qualität geprüft: %s (Score %d).',
+            (string) ($entry['rel'] ?? ''),
+            (int) ($entry['verdict']['score'] ?? 0),
+        ));
+
+        return $this->withContentFileId($entry);
+    }
+
+    /** Metadaten aller geprüften Seiten (neueste zuerst). */
+    private function cmdAuditContentList(): array
+    {
+        $pages = array_map(
+            fn (array $entry): array => $this->withContentFileId($entry),
+            $this->contentQuality()->list(),
+        );
+
+        return ['pages' => $pages];
+    }
+
+    /** Vollständiges Ergebnis einer geprüften Seite. */
+    private function cmdAuditContentGet(array $request): array
+    {
+        $key = $this->requireParam($request, 'key');
+
+        return $this->withContentFileId($this->contentQuality()->get($key));
+    }
+
+    /** Löscht das Ergebnis einer geprüften Seite. */
+    private function cmdAuditContentDelete(array $request): array
+    {
+        $this->requireMethod('POST');
+        $key = $this->requireParam($request, 'key');
+
+        return $this->contentQuality()->delete($key);
+    }
+
+    /**
+     * Reichert einen Content-Eintrag um seine Dateimanager-ID (fileId) an, damit
+     * das Frontend zur Quelle springen kann. Rekonstruiert aus Mount + Relativ-
+     * pfad; nur, solange der Mount noch existiert. Nie ein roher Serverpfad.
+     *
+     * @param array<string, mixed> $entry
+     * @return array<string, mixed>
+     */
+    private function withContentFileId(array $entry): array
+    {
+        $mount = $entry['mount'] ?? null;
+        $rel = $entry['rel'] ?? null;
+        if (is_string($mount) && $mount !== '' && is_string($rel)
+            && isset($this->resolver->all()[$mount])) {
+            $entry['fileId'] = $this->resolver->encodeId($mount, $rel);
+        }
+
+        return $entry;
     }
 
     /**

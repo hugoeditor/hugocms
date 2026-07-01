@@ -1,11 +1,13 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
 import { useRepoStore } from '../stores/repo'
 import { errorText } from '../i18n/apiMessage'
 import { useConfirm } from '../util/confirm'
 
 const { t } = useI18n()
+const { smAndDown } = useDisplay()
 const repo = useRepoStore()
 const confirm = useConfirm()
 
@@ -14,6 +16,10 @@ const model = defineModel({ type: Boolean, default: false })
 
 const message = ref('')
 const loading = ref(false)
+// Diff wird in einem eigenen, überlagernden Dialog gezeigt (auf dem Smartphone
+// im Vollbild), damit die Auswahl unabhängig von der Scrollposition sichtbar ist.
+const diffDialog = ref(false)
+const diffLoading = ref(false)
 const committing = ref(false)
 const pushing = ref(false)
 const resetting = ref(false)
@@ -129,8 +135,17 @@ async function doReset() {
   }
 }
 
-function onRowClick(_event, { item }) {
-  repo.fetchDiff(item.sha).catch((e) => { error.value = errorText(t, e) })
+async function onRowClick(_event, { item }) {
+  diffDialog.value = true
+  diffLoading.value = true
+  try {
+    await repo.fetchDiff(item.sha)
+  } catch (e) {
+    error.value = errorText(t, e)
+    diffDialog.value = false
+  } finally {
+    diffLoading.value = false
+  }
 }
 
 const busy = computed(() => committing.value || pushing.value || resetting.value)
@@ -296,20 +311,6 @@ const busy = computed(() => committing.value || pushing.value || resetting.value
               </div>
             </template>
           </v-data-table>
-
-          <!-- Diff des ausgewählten Commits -->
-          <template v-if="repo.diff">
-            <div class="d-flex align-center mt-3 mb-1">
-              <div class="text-subtitle-2">{{ $t('repo.diffOf', [repo.selectedSha?.slice(0, 7)]) }}</div>
-              <v-spacer />
-              <v-btn icon="mdi-close" variant="text" size="x-small" @click="repo.clearDiff()" />
-            </div>
-            <pre class="repo-diff nemo-scroll"><template
-              v-for="(l, i) in diffLines"
-              :key="i"
-            ><span :class="'diff-' + l.kind">{{ l.line }}</span>
-</template></pre>
-          </template>
         </template>
       </v-card-text>
 
@@ -317,6 +318,38 @@ const busy = computed(() => committing.value || pushing.value || resetting.value
         <v-spacer />
         <v-btn variant="text" @click="model = false">{{ $t('app.close') }}</v-btn>
       </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <!-- Diff des ausgewählten Commits als überlagernder Dialog -->
+  <v-dialog
+    v-model="diffDialog"
+    width="900"
+    scrollable
+    :fullscreen="smAndDown"
+    @after-leave="repo.clearDiff()"
+  >
+    <v-card class="pa-2">
+      <v-card-title class="d-flex align-center text-h6">
+        <v-icon icon="mdi-file-compare" color="primary" class="mr-2" />
+        {{ $t('repo.diffOf', [repo.selectedSha?.slice(0, 7)]) }}
+        <v-spacer />
+        <v-btn icon="mdi-close" variant="text" size="small" @click="diffDialog = false" />
+      </v-card-title>
+
+      <v-card-text>
+        <div v-if="diffLoading" class="d-flex justify-center pa-6">
+          <v-progress-circular indeterminate color="primary" />
+        </div>
+        <div v-else-if="diffLines.length === 0" class="text-medium-emphasis text-body-2 pa-2">
+          {{ $t('repo.diffEmpty') }}
+        </div>
+        <pre v-else class="repo-diff nemo-scroll"><template
+          v-for="(l, i) in diffLines"
+          :key="i"
+        ><span :class="'diff-' + l.kind">{{ l.line }}</span>
+</template></pre>
+      </v-card-text>
     </v-card>
   </v-dialog>
 </template>
@@ -333,8 +366,8 @@ const busy = computed(() => committing.value || pushing.value || resetting.value
   overflow: auto;
 }
 .repo-diff {
-  max-height: 320px;
-  overflow: auto;
+  /* Kein eigenes max-height: der scrollbare Dialog-Text übernimmt das Scrollen,
+     damit der Diff im Vollbild (Smartphone) die volle Höhe nutzt. */
   background: #f4f4f3;
   border: 1px solid #d3d3d1;
   border-radius: 4px;

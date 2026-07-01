@@ -2,6 +2,8 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useFilesStore } from '../stores/files'
+import { useAuthStore } from '../stores/auth'
+import { useAuditContentStore } from '../stores/auditContent'
 import { errorText } from '../i18n/apiMessage'
 import CodeMirrorEditor from './CodeMirrorEditor.vue'
 import { setEditorSaver } from '../util/editorBridge'
@@ -11,9 +13,18 @@ import HugoConfigEditor from './settings/HugoConfigEditor.vue'
 import { useTransientError } from '../util/transientError'
 import { useConfirm } from '../util/confirm'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const files = useFilesStore()
+const auth = useAuthStore()
+const auditContent = useAuditContentStore()
 const confirm = useConfirm()
+
+// LLM-Content-Qualität der offenen Markdown-Datei prüfen (Pro + KI-Schlüssel).
+function checkContentQuality() {
+  if (files.openFile) {
+    auditContent.check(files.openFile.id, files.openFile.name, locale.value)
+  }
+}
 
 const draft = ref('')
 const saving = ref(false)
@@ -318,6 +329,20 @@ onBeforeUnmount(() => {
                 </v-btn>
               </v-btn-toggle>
             </div>
+          </template>
+        </v-tooltip>
+
+        <!-- LLM-Content-Qualität: nur für Markdown-Dateien und wenn freigeschaltet
+             (Pro-Lizenz + KI-Schlüssel). -->
+        <v-tooltip v-if="isMarkdown && auth.auditContent" :text="$t('contentQuality.check')" location="bottom">
+          <template #activator="{ props: tip }">
+            <v-btn
+              v-bind="tip"
+              icon="mdi-text-search"
+              variant="text"
+              :loading="auditContent.busy"
+              @click="checkContentQuality"
+            />
           </template>
         </v-tooltip>
 

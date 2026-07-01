@@ -105,6 +105,7 @@ export default {
     newFile: 'Neue Datei',
     download: 'Herunterladen',
     upload: 'Dateien hochladen …',
+    contentQuality: 'Content-Qualität prüfen',
   },
 
   dnd: {
@@ -192,6 +193,7 @@ export default {
     next: 'Weiter',
     pageOf: 'Seite {0} von {1}',
     diffOf: 'Änderungen von {0}',
+    diffEmpty: 'Dieser Commit enthält keine Änderungen am Inhalt.',
   },
 
   help: {
@@ -453,6 +455,28 @@ export default {
     remove: 'Entfernen',
     other: 'Weitere Einstellungen',
     noData: 'Keine Einträge',
+    close: 'Schließen',
+  },
+
+  // LLM-Content-Qualität (Pro-Funktion). Prüft eine Content-Datei per KI.
+  contentQuality: {
+    title: 'Content-Qualität',
+    check: 'Content-Qualität prüfen',
+    checking: 'Der Text wird geprüft — das kann einen Moment dauern …',
+    score: 'Gesamtbewertung',
+    readability: {
+      good: 'Gut lesbar',
+      medium: 'Mittel lesbar',
+      weak: 'Schwer lesbar',
+    },
+    findings: 'Befunde',
+    suggestions: 'Verbesserungsvorschläge',
+    checkedAt: 'Geprüft am {0}',
+    truncated: 'Text gekürzt geprüft',
+    checkedList: 'Bereits geprüfte Seiten',
+    empty: 'Noch keine Seite geprüft.',
+    toSource: 'Zur Quelldatei',
+    recheck: 'Neu prüfen',
   },
 
   // Visueller Hugo-Konfigurations-Editor (hugo.json/config.json).
@@ -689,6 +713,8 @@ export default {
     'AUDIT-NO-BUILD-OUTPUT': 'Kein gebautes Ergebnis gefunden. Bitte die Webseite zuerst veröffentlichen (Hugo-Lauf).',
     'AUDIT-RUN-NOT-FOUND': 'Audit-Lauf nicht gefunden: {0}',
     'AUDIT-STORAGE-FAILED': 'Der Audit-Bericht konnte nicht gespeichert werden.',
+    'AUDIT-CONTENT-EMPTY': 'Die Datei enthält keinen prüfbaren Fließtext: {0}',
+    'AUDIT-CONTENT-NOT-FOUND': 'Kein gespeichertes Prüfergebnis gefunden: {0}',
 
     'AI-NOT-CONFIGURED': 'Der KI-Assistent ist nicht konfiguriert ([ai] api_key in der hugocms.ini).',
     'AI-REQUEST-FAILED': 'Anfrage an die KI fehlgeschlagen: {0}',

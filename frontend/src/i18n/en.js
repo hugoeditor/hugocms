@@ -105,6 +105,7 @@ export default {
     newFile: 'New file',
     download: 'Download',
     upload: 'Upload files …',
+    contentQuality: 'Check content quality',
   },
 
   dnd: {
@@ -192,6 +193,7 @@ export default {
     next: 'Next',
     pageOf: 'Page {0} of {1}',
     diffOf: 'Changes of {0}',
+    diffEmpty: 'This commit contains no content changes.',
   },
 
   help: {
@@ -453,6 +455,28 @@ export default {
     remove: 'Remove',
     other: 'Other settings',
     noData: 'No entries',
+    close: 'Close',
+  },
+
+  // LLM content quality (Pro feature). Checks a content file via AI.
+  contentQuality: {
+    title: 'Content quality',
+    check: 'Check content quality',
+    checking: 'Analysing the text — this may take a moment …',
+    score: 'Overall score',
+    readability: {
+      good: 'Easy to read',
+      medium: 'Moderately readable',
+      weak: 'Hard to read',
+    },
+    findings: 'Findings',
+    suggestions: 'Suggestions',
+    checkedAt: 'Checked on {0}',
+    truncated: 'Checked on truncated text',
+    checkedList: 'Already checked pages',
+    empty: 'No page checked yet.',
+    toSource: 'Go to source',
+    recheck: 'Re-check',
   },
 
   // Visual Hugo configuration editor (hugo.json/config.json).
@@ -687,6 +711,8 @@ export default {
     'AUDIT-NO-BUILD-OUTPUT': 'No build output found. Please publish the site first (Hugo run).',
     'AUDIT-RUN-NOT-FOUND': 'Audit run not found: {0}',
     'AUDIT-STORAGE-FAILED': 'The audit report could not be saved.',
+    'AUDIT-CONTENT-EMPTY': 'The file contains no checkable body text: {0}',
+    'AUDIT-CONTENT-NOT-FOUND': 'No stored check result found: {0}',
 
     'AI-NOT-CONFIGURED': 'The AI assistant is not configured ([ai] api_key in hugocms.ini).',
     'AI-REQUEST-FAILED': 'AI request failed: {0}',
