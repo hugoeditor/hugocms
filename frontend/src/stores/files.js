@@ -318,12 +318,10 @@ export const useFilesStore = defineStore('files', {
       this.leaveSearch()
     },
 
-    leaveAudit() {
-      this.auditMode = false
-    },
-
     // Öffnet eine Datei direkt über ihre (undurchsichtige) Dateimanager-ID —
-    // genutzt vom Audit, um aus einem Fund zur Quelldatei zu springen.
+    // genutzt vom Audit, um aus einem Fund zur Quelldatei zu springen. Der
+    // Audit-Modus bleibt dabei aktiv, sodass der Editor sich nur überlagert und
+    // beim Schließen der Bericht wieder erscheint (siehe AuditView.openSource).
     async openFileById(id) {
       const data = await api.get('read', { target: id })
       this.openFile = { id, name: data.name, content: data.content, mtime: data.mtime, path: data.path }

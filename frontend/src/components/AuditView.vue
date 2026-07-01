@@ -68,8 +68,12 @@ async function removeRun() {
 
 async function openSource(issue) {
   try {
+    // Audit-Modus bewusst NICHT verlassen: Der Editor legt sich nur als
+    // Überlagerung über die Audit-Ansicht. Beim Schließen erscheint der Bericht
+    // wieder — mit unveränderten Filtern und Scrollposition, sodass sich die
+    // Funde ohne Unterbrechung abarbeiten lassen. (Aus der Dateiliste geöffnet
+    // liegt entsprechend diese darunter und erscheint beim Schließen.)
     await files.openFileById(issue.fileId)
-    files.leaveAudit()
   } catch (e) {
     error.value = errorText(t, e)
   }
