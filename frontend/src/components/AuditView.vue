@@ -2,7 +2,7 @@
 // SEO-Audit-Vollbildansicht (Pro-Funktion). Startet Läufe, zeigt den Bericht
 // gruppiert nach Kategorie und Schweregrad und springt aus einem Fund zur
 // editierbaren Hugo-Quelldatei. Aufbau wie die Papierkorb-Ansicht (TrashView).
-import { onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuditStore } from '../stores/audit'
 import { useAuditContentStore } from '../stores/auditContent'
@@ -46,6 +46,19 @@ watch(
   () => audit.current?.id,
   () => { headerOpen.value = true },
 )
+
+// Suchbegriff (URL/Quelle) für die Fundtabelle. Das Feld sitzt im Berichtskopf,
+// der Filter wirkt aber in AuditIssueTable — der entprellte Wert wird als Prop
+// dorthin gereicht. Entprellt, damit nicht bei jedem Tastendruck bis zu Tausende
+// Funde neu gefiltert und gerendert werden.
+const searchInput = ref('') // an das Eingabefeld gebunden
+const searchQuery = ref('') // entprellt, treibt den Filter in der Tabelle
+let searchTimer = null
+watch(searchInput, (v) => {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => { searchQuery.value = v ?? '' }, 200)
+})
+onBeforeUnmount(() => clearTimeout(searchTimer))
 
 onMounted(async () => {
   try {
@@ -119,42 +132,15 @@ function runLabel(run) {
 
 <template>
   <section class="nemo-view audit-overlay">
-    <!-- Kopfzeile mit Aktionen -->
+    <!-- Kopfzeile: Zurück + Titel. Bleibt über beide Reiter hinweg gleich; die
+         berichtsbezogenen Aktionen (Laufsteuerung, Suche) sitzen im
+         Berichtskopf, damit beim Reiterwechsel hier nichts erscheint/verschwindet. -->
     <div class="audit-head nemo-noselect">
       <button class="audit-back" :title="$t('audit.close')" @click="files.leaveAudit()">
         <v-icon icon="mdi-arrow-left" size="20" />
       </button>
       <v-icon icon="mdi-clipboard-search-outline" size="18" />
       <span class="audit-title">{{ $t('audit.title') }}</span>
-      <div class="audit-head-spacer" />
-
-      <template v-if="tab === 'report'">
-        <v-select
-          v-if="audit.runs.length"
-          :model-value="audit.current?.id ?? null"
-          :items="audit.runs"
-          :item-title="runLabel"
-          item-value="id"
-          density="compact"
-          variant="outlined"
-          hide-details
-          class="audit-runselect"
-          :label="$t('audit.history')"
-          @update:model-value="selectRun"
-        />
-
-        <button class="audit-btn primary" :disabled="audit.running" @click="startRun">
-          <v-progress-circular v-if="audit.running" indeterminate size="14" width="2" class="mr-1" />
-          <v-icon v-else icon="mdi-play" size="16" class="mr-1" />{{ $t('audit.run') }}
-        </button>
-        <button
-          class="audit-btn danger"
-          :disabled="audit.running || !audit.current"
-          @click="removeRun"
-        >
-          <v-icon icon="mdi-delete-outline" size="16" class="mr-1" />{{ $t('audit.delete') }}
-        </button>
-      </template>
     </div>
 
     <!-- Reiter: nur wenn die Content-Prüfung freigeschaltet ist (sonst gibt es
@@ -192,7 +178,54 @@ function runLabel(run) {
           {{ $t('audit.duration', [audit.current.seconds]) }}
           <span v-if="audit.current.truncated" class="audit-trunc">· {{ $t('audit.truncated') }}</span>
         </div>
-        <div v-show="headerOpen" class="audit-sevfilters">
+
+        <!-- Laufsteuerung: Verlauf wählen, Lauf starten/löschen. Sitzt jetzt im
+             Berichtskopf und klappt mit ihm ein und aus; die Zusammenfassung
+             (Umschalter + Meta) bleibt sichtbar. -->
+        <div v-show="headerOpen" class="audit-runctl">
+          <v-select
+            v-if="audit.runs.length"
+            :model-value="audit.current?.id ?? null"
+            :items="audit.runs"
+            :item-title="runLabel"
+            item-value="id"
+            density="compact"
+            variant="outlined"
+            hide-details
+            class="audit-runselect"
+            :label="$t('audit.history')"
+            @update:model-value="selectRun"
+          />
+          <button class="audit-btn primary" :disabled="audit.running" @click="startRun">
+            <v-progress-circular v-if="audit.running" indeterminate size="14" width="2" class="mr-1" />
+            <v-icon v-else icon="mdi-play" size="16" class="mr-1" />{{ $t('audit.run') }}
+          </button>
+          <button
+            class="audit-btn danger"
+            :disabled="audit.running || !audit.current"
+            @click="removeRun"
+          >
+            <v-icon icon="mdi-delete-outline" size="16" class="mr-1" />{{ $t('audit.delete') }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Suche (URL/Quelle) und Schweregradfilter: gemeinsame, einklappbare
+           Zeile. Die Suche filtert die Fundtabelle; der Wert wird entprellt an
+           AuditIssueTable gereicht. -->
+      <div v-show="headerOpen" class="audit-filterrow">
+        <div v-if="audit.current.issues?.length" class="audit-search">
+          <v-text-field
+            v-model="searchInput"
+            :placeholder="$t('audit.searchPlaceholder')"
+            prepend-inner-icon="mdi-magnify"
+            density="compact"
+            variant="outlined"
+            hide-details
+            clearable
+          />
+        </div>
+        <div class="audit-sevfilters">
           <button
             class="audit-chip"
             :class="{ active: audit.severityFilter === 'all' }"
@@ -249,6 +282,7 @@ function runLabel(run) {
       <AuditIssueTable
         v-else
         :issues="audit.filteredIssues"
+        :search="searchQuery"
         @open-source="openSource"
         @open-help="openHelp"
       />
@@ -311,7 +345,6 @@ function runLabel(run) {
 
 .audit-title { font-weight: 600; font-size: 0.92rem; }
 .audit-runselect { max-width: 280px; }
-.audit-head-spacer { flex: 1 1 auto; }
 
 .audit-btn {
   display: inline-flex;
@@ -394,6 +427,26 @@ function runLabel(run) {
 }
 .audit-meta { font-size: 0.82rem; color: var(--mint-text-muted); }
 .audit-trunc { color: #b03a2e; }
+
+/* Laufsteuerung im Berichtskopf: rechtsbündig neben der Zusammenfassung. */
+.audit-runctl {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* Gemeinsame Zeile für Suchfeld (links) und Schweregradfilter (rechts). */
+.audit-filterrow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--mint-border);
+}
+.audit-search { flex: 1 1 240px; max-width: 340px; }
 .audit-sevfilters { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-left: auto; }
 /* Nicht schrumpfen: sonst quetscht der Flex-Container den Chip zusammen und
    dessen interner overflow:hidden schneidet den Text ab ("Hin" statt "Hinweis").
@@ -422,20 +475,20 @@ function runLabel(run) {
 .audit-catcount { color: var(--mint-text-muted); margin-left: 4px; }
 .audit-chip.active .audit-catcount { color: #e8f1e3; }
 
-/* Schmale Schirme (Handy): Kopfzeile umbrechen statt nach rechts überlaufen.
-   Auswahlfeld füllt eine eigene Zeile, der Abstandshalter entfällt, damit die
-   Schaltflächen nicht auseinandergedrückt werden. */
+/* Schmale Schirme (Handy): Laufsteuerung und Filterzeile umbrechen statt nach
+   rechts überzulaufen. Auswahlfeld und Suchfeld füllen jeweils die volle Breite,
+   die Filter rücken nach links (kein margin-left:auto). */
 @media (max-width: 599.98px) {
-  .audit-head {
-    flex-wrap: wrap;
-    row-gap: 6px;
-  }
-  .audit-head-spacer {
-    display: none;
+  .audit-runctl {
+    width: 100%;
+    margin-left: 0;
   }
   .audit-runselect {
-    order: 10;
     flex: 1 1 100%;
+    max-width: 100%;
+  }
+  .audit-search {
+    flex-basis: 100%;
     max-width: 100%;
   }
   .audit-sevfilters {

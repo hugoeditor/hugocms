@@ -2,11 +2,15 @@
 // Tabelle der Audit-Funde. Übersetzt jede Regel-ID in eine lesbare Meldung
 // (Schlüssel audit.rules.<ruleId mit Unterstrichen>, Parameter aus dem Fund).
 // Hat ein Fund eine fileId, lässt sich die Quelldatei direkt im Editor öffnen.
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const props = defineProps({
   issues: { type: Array, required: true },
+  // Suchbegriff (URL/Quelle). Das Eingabefeld sitzt im Berichtskopf der
+  // AuditView; der bereits entprellte Wert kommt als Prop herein. Leer = kein
+  // Filter.
+  search: { type: String, default: '' },
 })
 const emit = defineEmits(['open-source', 'open-help'])
 
@@ -16,20 +20,9 @@ function ruleMessage(issue) {
   return t('audit.rules.' + issue.ruleId.replaceAll('.', '_'), issue.params || [])
 }
 
-// Filter ausschließlich über URL und Quelldatei. Die Eingabe wird entprellt,
-// damit nicht bei jedem Tastendruck die (bis zu Tausende) Funde neu gefiltert
-// und die Tabelle neu gerendert wird.
-const searchInput = ref('') // an das Eingabefeld gebunden
-const search = ref('') // entprellt, treibt den Filter
-let searchTimer = null
-watch(searchInput, (v) => {
-  clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => { search.value = v }, 200)
-})
-onBeforeUnmount(() => clearTimeout(searchTimer))
-
+// Filter ausschließlich über URL und Quelldatei.
 const filtered = computed(() => {
-  const q = search.value.trim().toLowerCase()
+  const q = props.search.trim().toLowerCase()
   if (!q) return props.issues
   return props.issues.filter((i) =>
     [i.url, i.sourceFile].some((v) => String(v ?? '').toLowerCase().includes(q)),
@@ -44,7 +37,7 @@ const visibleIssues = computed(() => filtered.value.slice(0, limit.value))
 const hasMore = computed(() => filtered.value.length > limit.value)
 
 // Bei Filterwechsel (neue Fundmenge oder Suchbegriff) wieder von vorn begrenzen.
-watch([() => props.issues, search], () => { limit.value = STEP })
+watch([() => props.issues, () => props.search], () => { limit.value = STEP })
 
 function showMore() {
   limit.value += STEP
@@ -58,18 +51,6 @@ function showMore() {
   </div>
 
   <template v-else>
-    <div class="audit-search">
-      <v-text-field
-        v-model="searchInput"
-        :placeholder="$t('audit.searchPlaceholder')"
-        prepend-inner-icon="mdi-magnify"
-        density="compact"
-        variant="outlined"
-        hide-details
-        clearable
-      />
-    </div>
-
     <div v-if="!filtered.length" class="nemo-empty">
       <v-icon icon="mdi-file-search-outline" size="56" class="nemo-empty-icon" />
       <p>{{ $t('audit.noMatches') }}</p>
@@ -131,19 +112,12 @@ function showMore() {
 </template>
 
 <style scoped>
-/* Klebriges Suchfeld über der Tabelle; der Tabellenkopf klebt darunter. */
-.audit-search {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  padding: 8px 10px;
-  background: var(--mint-panel);
-  border-bottom: 1px solid var(--mint-border);
-}
 .audit-list { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+/* Der Tabellenkopf klebt am oberen Rand des scrollenden Bereichs. Das Suchfeld
+   ist in den (nicht scrollenden) Berichtskopf der AuditView gewandert. */
 .audit-list thead th {
   position: sticky;
-  top: 56px;
+  top: 0;
   z-index: 1;
   text-align: left;
   font-weight: 600;
