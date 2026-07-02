@@ -21,6 +21,7 @@ import RepositoryDialog from './components/RepositoryDialog.vue'
 import HelpView from './components/HelpView.vue'
 import AssistantPanel from './components/AssistantPanel.vue'
 import { useAssistantStore } from './stores/assistant'
+import { useHelpStore } from './stores/help'
 import LanguageSwitcher from './components/LanguageSwitcher.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import { useConfirm } from './util/confirm'
@@ -49,6 +50,7 @@ function confirmDiscard() {
 const auth = useAuthStore()
 const files = useFilesStore()
 const assistant = useAssistantStore()
+const help = useHelpStore()
 const error = ref(null)
 const fatalError = ref(null)
 const warningsVisible = ref(false)
@@ -186,6 +188,9 @@ async function logout() {
 // (wie beim Schließen-Knopf des Editors).
 async function leaveEditorThen(action) {
   if (files.dirty && !(await confirmDiscard())) return
+  // Eine geöffnete Hilfe-Überlagerung schließen, sonst bliebe sie über der neu
+  // gewählten Ansicht (Dateimanager, Papierkorb, SEO-Audit) liegen.
+  help.close()
   if (files.openFile) files.closeFile()
   action()
 }
@@ -198,6 +203,7 @@ function openTrashView() {
 function openAuditView() {
   // Schaltfläche wirkt als Umschalter: bei offenem Bericht wieder schließen.
   if (files.auditMode) {
+    help.close()
     files.leaveAudit()
     return
   }
