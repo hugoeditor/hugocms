@@ -2,9 +2,8 @@
 // Tabelle der Audit-Funde. Übersetzt jede Regel-ID in eine lesbare Meldung
 // (Schlüssel audit.rules.<ruleId mit Unterstrichen>, Parameter aus dem Fund).
 // Hat ein Fund eine fileId, lässt sich die Quelldatei direkt im Editor öffnen.
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import AuditSeverityChip from './AuditSeverityChip.vue'
 
 const props = defineProps({
   issues: { type: Array, required: true },
@@ -17,8 +16,18 @@ function ruleMessage(issue) {
   return t('audit.rules.' + issue.ruleId.replaceAll('.', '_'), issue.params || [])
 }
 
-// Filter ausschließlich über URL und Quelldatei.
-const search = ref('')
+// Filter ausschließlich über URL und Quelldatei. Die Eingabe wird entprellt,
+// damit nicht bei jedem Tastendruck die (bis zu Tausende) Funde neu gefiltert
+// und die Tabelle neu gerendert wird.
+const searchInput = ref('') // an das Eingabefeld gebunden
+const search = ref('') // entprellt, treibt den Filter
+let searchTimer = null
+watch(searchInput, (v) => {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => { search.value = v }, 200)
+})
+onBeforeUnmount(() => clearTimeout(searchTimer))
+
 const filtered = computed(() => {
   const q = search.value.trim().toLowerCase()
   if (!q) return props.issues
@@ -51,7 +60,7 @@ function showMore() {
   <template v-else>
     <div class="audit-search">
       <v-text-field
-        v-model="search"
+        v-model="searchInput"
         :placeholder="$t('audit.searchPlaceholder')"
         prepend-inner-icon="mdi-magnify"
         density="compact"
@@ -77,7 +86,7 @@ function showMore() {
     </thead>
     <tbody>
       <tr v-for="(issue, idx) in visibleIssues" :key="idx" class="nemo-row">
-        <td class="col-sev"><AuditSeverityChip :severity="issue.severity" /></td>
+        <td class="col-sev"><span class="sev-chip" :class="'sev-chip--' + issue.severity">{{ $t('audit.severity.' + issue.severity) }}</span></td>
         <td class="col-msg">
           <button
             class="audit-msg-help"
@@ -145,6 +154,20 @@ function showMore() {
   white-space: nowrap;
 }
 .col-sev { width: 120px; }
+/* Leichter Schweregrad-Chip (statt v-chip) — spart je Zeile eine Vuetify-
+   Komponente, was bei hunderten Zeilen spürbar rendert. */
+.sev-chip {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: #fff;
+}
+.sev-chip--error { background: #c0392b; }
+.sev-chip--warning { background: #d98613; }
+.sev-chip--hint { background: #4a7bab; }
 .col-url { width: 28%; }
 .col-act { width: 44px; text-align: center; }
 

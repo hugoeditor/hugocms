@@ -1,3 +1,4 @@
+import { markRaw } from 'vue'
 import { defineStore } from 'pinia'
 import { api } from '../api/client'
 
@@ -36,7 +37,9 @@ export const useAuditStore = defineStore('audit', {
       this.running = true
       try {
         const report = await api.post('audit')
-        this.current = report
+        // markRaw: Der Bericht ist reine Anzeige (bis zu Tausende Funde). Ohne
+        // tiefe Reaktivität entfällt der Proxy-Aufwand beim Filtern/Rendern.
+        this.current = markRaw(report)
         this.resetFilters()
         await this.fetchRuns()
         return report
@@ -53,7 +56,7 @@ export const useAuditStore = defineStore('audit', {
     async fetchRun(id) {
       this.loading = true
       try {
-        this.current = await api.get('auditget', { id })
+        this.current = markRaw(await api.get('auditget', { id }))
         this.resetFilters()
       } finally {
         this.loading = false
