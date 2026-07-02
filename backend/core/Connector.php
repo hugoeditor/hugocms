@@ -315,6 +315,7 @@ final class Connector
                 'auditcontentlist' => $this->cmdAuditContentList(),
                 'auditcontentget' => $this->cmdAuditContentGet($request),
                 'auditcontentreport' => $this->cmdAuditContentReport($request),
+                'auditcontentrequeue' => $this->cmdAuditContentRequeue($request),
                 'auditcontentdelete' => $this->cmdAuditContentDelete($request),
                 default => throw ApiException::badRequest('UNKNOWN-COMMAND', [$cmd]),
             };
@@ -905,8 +906,14 @@ final class Connector
      */
     private function assistantService(): AssistantService
     {
-        $fileReport = ($this->hugo !== null && $this->license()->isPro())
+        // get_file_report und der Bearbeitungs-Vermerk brauchen beide das
+        // Content-Qualitäts-Feature (Pro-Lizenz + Hugo-Projekt).
+        $contentAware = $this->hugo !== null && $this->license()->isPro();
+        $fileReport = $contentAware
             ? fn (string $fileId): array => $this->buildFileReportById($fileId)
+            : null;
+        $onWrite = $contentAware
+            ? fn (string $fileId) => $this->markFileImproved($fileId)
             : null;
 
         return new AssistantService(
@@ -916,7 +923,29 @@ final class Connector
             $this->resolver,
             $this->files,
             $fileReport,
+            $onWrite,
         );
+    }
+
+    /**
+     * Vermerkt eine KI-Bearbeitung am Content-Qualitäts-Eintrag der Datei (jede
+     * vom Assistenten geschriebene Datei gilt als „verbessert"). Ohne
+     * Hugo-Projekt oder ohne vorhandenen Eintrag ein No-op. Das Modell ist das
+     * konfigurierte Assistenten-Modell.
+     */
+    private function markFileImproved(string $fileId): void
+    {
+        if ($this->hugo === null) {
+            return;
+        }
+        $storage = __DIR__ . '/../var/audit-content/' . sha1((string) $this->hugo['source']);
+        (new ContentQualityService(
+            new AnthropicClient((string) $this->ai['apiKey']),
+            $this->ai['model'],
+            $this->resolver,
+            $this->files,
+            $storage,
+        ))->markImproved($fileId, $this->ai['model']);
     }
 
     /**
@@ -1409,6 +1438,19 @@ final class Connector
         $key = $this->requireParam($request, 'key');
 
         return $this->contentQuality()->delete($key);
+    }
+
+    /**
+     * Nimmt eine bereits verbesserte Seite wieder in die Arbeitsliste auf
+     * (löscht den Verbesserungs-Vermerk, ohne neu zu prüfen).
+     */
+    private function cmdAuditContentRequeue(array $request): array
+    {
+        $service = $this->contentQuality();
+        $this->requireMethod('POST');
+        $key = $this->requireParam($request, 'key');
+
+        return $this->withContentFileId($service->requeue($key));
     }
 
     /**

@@ -3,7 +3,7 @@
 // Zeigt Bewertung, Prüfdatum und einen Veraltet-/Quelle-fehlt-Marker. Eine Zeile
 // öffnet das ausführliche Ergebnis im ContentQualityDialog; von hier lässt sich
 // auch erneut prüfen oder ein Eintrag löschen.
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuditContentStore } from '../stores/auditContent'
 import { useAssistantStore } from '../stores/assistant'
@@ -17,15 +17,46 @@ const assistant = useAssistantStore()
 const confirm = useConfirm()
 const error = useTransientError()
 
+// Abgeleitete Sichten: alle / zu verbessern (Score < 100 und noch nicht
+// verbessert) / bereits verbessert. Kombiniert mit dem Namensfilter.
+const mode = ref('toImprove') // 'all' | 'toImprove' | 'improved' — Standard: zu verbessern
+
+function inMode(p) {
+  if (mode.value === 'improved') return !!p.improvedAt
+  if (mode.value === 'toImprove') return !p.improvedAt && p.score != null && p.score < 100
+  return true
+}
+
 // Filter über Datei- bzw. Verzeichnisname (rel enthält beides) und Titel.
 const search = ref('')
 const filtered = computed(() => {
   const q = search.value.trim().toLowerCase()
-  if (!q) return store.checked
   return store.checked.filter(
-    (p) => (p.rel || '').toLowerCase().includes(q) || (p.title || '').toLowerCase().includes(q),
+    (p) =>
+      inMode(p) &&
+      (!q || (p.rel || '').toLowerCase().includes(q) || (p.title || '').toLowerCase().includes(q)),
   )
 })
+
+// Zähler je Sicht für die Umschalter-Beschriftung.
+const counts = computed(() => {
+  let toImprove = 0
+  let improved = 0
+  for (const p of store.checked) {
+    if (p.improvedAt) improved++
+    else if (p.score != null && p.score < 100) toImprove++
+  }
+  return { all: store.checked.length, toImprove, improved }
+})
+
+async function requeue(page) {
+  error.value = null
+  try {
+    await store.requeue(page.key)
+  } catch (e) {
+    error.value = errorText(t, e)
+  }
+}
 
 onMounted(load)
 
@@ -37,6 +68,22 @@ async function load() {
     error.value = errorText(t, e)
   }
 }
+
+// Schreibt der Assistent eine Datei, die in dieser Liste steht (z. B. nach einer
+// bestätigten Verbesserung), die Liste neu laden — der Verbesserungs-Vermerk
+// wurde serverseitig gesetzt. Der Drawer überlagert die Liste nur, mountet sie
+// also nicht neu; darum reicht das reine Zurückkehren nicht.
+watch(
+  () => assistant.actions,
+  (actions) => {
+    if (!Array.isArray(actions) || !actions.length) return
+    const listed = new Set(store.checked.map((p) => `${p.mount}/${p.rel}`))
+    const touched = actions.some(
+      (a) => a.path && listed.has(String(a.path).replace(/^\/+|\/+$/g, '')),
+    )
+    if (touched) load()
+  },
+)
 
 function scoreColor(score) {
   if (score == null) return 'grey'
@@ -91,6 +138,11 @@ async function remove(page) {
 
     <template v-else>
       <div class="cql-search">
+        <v-btn-toggle v-model="mode" mandatory density="compact" variant="outlined" divided class="mb-2 cql-modes">
+          <v-btn value="all" size="small">{{ $t('contentQuality.filterAll') }} · {{ counts.all }}</v-btn>
+          <v-btn value="toImprove" size="small">{{ $t('contentQuality.filterToImprove') }} · {{ counts.toImprove }}</v-btn>
+          <v-btn value="improved" size="small">{{ $t('contentQuality.filterImproved') }} · {{ counts.improved }}</v-btn>
+        </v-btn-toggle>
         <v-text-field
           v-model="search"
           :placeholder="$t('contentQuality.searchPlaceholder')"
@@ -123,7 +175,18 @@ async function remove(page) {
         <v-list-item-title class="d-flex align-center">
           <span class="text-truncate">{{ page.title || page.rel }}</span>
           <v-chip
-            v-if="page.sourceMissing"
+            v-if="page.improvedAt"
+            color="success"
+            size="x-small"
+            variant="tonal"
+            label
+            class="ml-2"
+            :title="$t('contentQuality.improvedAt', [formatDate(page.improvedAt)])"
+          >
+            {{ $t('contentQuality.improvedChip') }}
+          </v-chip>
+          <v-chip
+            v-else-if="page.sourceMissing"
             color="error"
             size="x-small"
             variant="tonal"
@@ -146,6 +209,15 @@ async function remove(page) {
         <v-list-item-subtitle>{{ page.rel }} · {{ formatDate(page.checkedAt) }}</v-list-item-subtitle>
 
         <template #append>
+          <v-btn
+            v-if="page.improvedAt"
+            icon="mdi-playlist-plus"
+            size="small"
+            variant="text"
+            density="comfortable"
+            :title="$t('contentQuality.requeue')"
+            @click.stop="requeue(page)"
+          />
           <v-btn
             :disabled="!page.fileId"
             icon="mdi-creation"

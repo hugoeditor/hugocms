@@ -72,6 +72,13 @@ export const useAuditContentStore = defineStore('auditContent', {
       await this.check(fileId, fileName, locale)
     },
 
+    // Nimmt eine bereits verbesserte Seite wieder in die Arbeitsliste auf
+    // (löscht den Verbesserungs-Vermerk, ohne neu zu prüfen).
+    async requeue(key) {
+      await api.post('auditcontentrequeue', { key })
+      await this.fetchChecked()
+    },
+
     // Löscht ein gespeichertes Ergebnis.
     async remove(key) {
       await api.post('auditcontentdelete', { key })

@@ -38,6 +38,10 @@ final class AssistantService
      *        Dateimanager-ID den Gesamt-Bericht (Qualität + SEO) einer Content-
      *        Datei. null → das Werkzeug get_file_report wird nicht angeboten
      *        (kein Pro-Audit verfügbar).
+     * @param ?\Closure(string): void $onWrite Wird nach jedem erfolgreichen
+     *        write_file mit der fileId der Datei aufgerufen (z. B. um eine
+     *        KI-Bearbeitung am Content-Qualitäts-Eintrag zu vermerken). Fehler
+     *        dort dürfen den Schreibvorgang nicht kippen.
      */
     public function __construct(
         private readonly AnthropicClient $client,
@@ -46,6 +50,7 @@ final class AssistantService
         private readonly MountResolver $resolver,
         private readonly FileService $files,
         private readonly ?\Closure $fileReport = null,
+        private readonly ?\Closure $onWrite = null,
     ) {
     }
 
@@ -241,6 +246,15 @@ final class AssistantService
         $path = (string) ($input['path'] ?? '');
         $r = $this->resolvePath($path, false, 'write');
         $this->files->writeText($r['mount'], $r['rel'], $r['abs'], (string) ($input['content'] ?? ''));
+
+        // KI-Bearbeitung vermerken (best effort — nie den Schreibvorgang kippen).
+        if ($this->onWrite !== null) {
+            try {
+                ($this->onWrite)($this->resolver->encodeId($r['mount']->name(), $r['rel']));
+            } catch (Throwable) {
+                // Vermerk ist optional; Fehler ignorieren.
+            }
+        }
 
         return 'Gespeichert: ' . $path;
     }

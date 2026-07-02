@@ -161,6 +161,18 @@ function openHelp(ruleId) {
             <template v-if="entry.model"> · {{ entry.model }}</template>
             <span v-if="entry.truncated"> · {{ $t('contentQuality.truncated') }}</span>
           </div>
+          <v-chip
+            v-if="entry.improvedAt"
+            color="success"
+            size="small"
+            variant="tonal"
+            label
+            class="mt-2"
+            prepend-icon="mdi-creation"
+          >
+            {{ $t('contentQuality.improvedAt', [formatDate(entry.improvedAt)]) }}
+            <template v-if="entry.improveModel"> · {{ entry.improveModel }}</template>
+          </v-chip>
 
           <!-- SEO-Funde derselben Datei aus dem jüngsten Audit-Lauf -->
           <template v-if="audit">
