@@ -3,7 +3,7 @@
 // Zeigt Bewertung, Prüfdatum und einen Veraltet-/Quelle-fehlt-Marker. Eine Zeile
 // öffnet das ausführliche Ergebnis im ContentQualityDialog; von hier lässt sich
 // auch erneut prüfen oder ein Eintrag löschen.
-import { onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuditContentStore } from '../stores/auditContent'
 import { useAssistantStore } from '../stores/assistant'
@@ -16,6 +16,16 @@ const store = useAuditContentStore()
 const assistant = useAssistantStore()
 const confirm = useConfirm()
 const error = useTransientError()
+
+// Filter über Datei- bzw. Verzeichnisname (rel enthält beides) und Titel.
+const search = ref('')
+const filtered = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  if (!q) return store.checked
+  return store.checked.filter(
+    (p) => (p.rel || '').toLowerCase().includes(q) || (p.title || '').toLowerCase().includes(q),
+  )
+})
 
 onMounted(load)
 
@@ -79,13 +89,31 @@ async function remove(page) {
       <p>{{ $t('contentQuality.empty') }}</p>
     </div>
 
-    <v-list v-else density="comfortable" class="cql-list py-0">
-      <v-list-item
-        v-for="page in store.checked"
-        :key="page.key"
-        class="cql-row"
-        @click="openDetail(page)"
-      >
+    <template v-else>
+      <div class="cql-search">
+        <v-text-field
+          v-model="search"
+          :placeholder="$t('contentQuality.searchPlaceholder')"
+          prepend-inner-icon="mdi-magnify"
+          density="compact"
+          variant="outlined"
+          hide-details
+          clearable
+        />
+      </div>
+
+      <div v-if="!filtered.length" class="nemo-empty">
+        <v-icon icon="mdi-file-search-outline" size="56" class="nemo-empty-icon" />
+        <p>{{ $t('contentQuality.noMatches') }}</p>
+      </div>
+
+      <v-list v-else density="comfortable" class="cql-list py-0">
+        <v-list-item
+          v-for="page in filtered"
+          :key="page.key"
+          class="cql-row"
+          @click="openDetail(page)"
+        >
         <template #prepend>
           <v-chip :color="scoreColor(page.score)" size="small" variant="flat" label class="mr-3">
             {{ page.score ?? '–' }}
@@ -147,12 +175,22 @@ async function remove(page) {
           />
         </template>
       </v-list-item>
-    </v-list>
+      </v-list>
+    </template>
   </div>
 </template>
 
 <style scoped>
 .cql-wrap { height: 100%; overflow: auto; }
+/* Suchfeld bleibt beim Scrollen der Liste oben stehen. */
+.cql-search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px 10px;
+  background: var(--mint-content);
+  border-bottom: 1px solid var(--mint-border);
+}
 .cql-list { background: transparent; }
 .cql-row { cursor: pointer; border-bottom: 1px solid var(--mint-border); }
 .nemo-empty {

@@ -13,22 +13,32 @@ const emit = defineEmits(['open-source', 'open-help'])
 
 const { t } = useI18n()
 
+function ruleMessage(issue) {
+  return t('audit.rules.' + issue.ruleId.replaceAll('.', '_'), issue.params || [])
+}
+
+// Filter ausschließlich über URL und Quelldatei.
+const search = ref('')
+const filtered = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  if (!q) return props.issues
+  return props.issues.filter((i) =>
+    [i.url, i.sourceFile].some((v) => String(v ?? '').toLowerCase().includes(q)),
+  )
+})
+
 // Nur einen Ausschnitt rendern: Tausende Zeilen auf einmal blockieren den
 // Hauptthread und lassen das Öffnen „lange dauern". Weitere kommen auf Klick.
 const STEP = 300
 const limit = ref(STEP)
-const visibleIssues = computed(() => props.issues.slice(0, limit.value))
-const hasMore = computed(() => props.issues.length > limit.value)
+const visibleIssues = computed(() => filtered.value.slice(0, limit.value))
+const hasMore = computed(() => filtered.value.length > limit.value)
 
-// Bei Filterwechsel (neue Fundmenge) wieder von vorn begrenzen.
-watch(() => props.issues, () => { limit.value = STEP })
+// Bei Filterwechsel (neue Fundmenge oder Suchbegriff) wieder von vorn begrenzen.
+watch([() => props.issues, search], () => { limit.value = STEP })
 
 function showMore() {
   limit.value += STEP
-}
-
-function ruleMessage(issue) {
-  return t('audit.rules.' + issue.ruleId.replaceAll('.', '_'), issue.params || [])
 }
 </script>
 
@@ -38,7 +48,25 @@ function ruleMessage(issue) {
     <p>{{ $t('audit.noIssues') }}</p>
   </div>
 
-  <table v-else class="nemo-list audit-list">
+  <template v-else>
+    <div class="audit-search">
+      <v-text-field
+        v-model="search"
+        :placeholder="$t('audit.searchPlaceholder')"
+        prepend-inner-icon="mdi-magnify"
+        density="compact"
+        variant="outlined"
+        hide-details
+        clearable
+      />
+    </div>
+
+    <div v-if="!filtered.length" class="nemo-empty">
+      <v-icon icon="mdi-file-search-outline" size="56" class="nemo-empty-icon" />
+      <p>{{ $t('audit.noMatches') }}</p>
+    </div>
+
+    <table v-else class="nemo-list audit-list">
     <thead>
       <tr>
         <th class="col-sev">{{ $t('audit.colSeverity') }}</th>
@@ -83,20 +111,30 @@ function ruleMessage(issue) {
         </td>
       </tr>
     </tbody>
-  </table>
+    </table>
 
-  <!-- Weitere Funde nachladen (Rendern bleibt so flüssig). -->
-  <div v-if="hasMore" class="audit-more nemo-noselect">
-    <span class="audit-more-count">{{ $t('audit.showingOf', [visibleIssues.length, issues.length]) }}</span>
-    <button class="audit-btn" @click="showMore">{{ $t('audit.showMore') }}</button>
-  </div>
+    <!-- Weitere Funde nachladen (Rendern bleibt so flüssig). -->
+    <div v-if="hasMore" class="audit-more nemo-noselect">
+      <span class="audit-more-count">{{ $t('audit.showingOf', [visibleIssues.length, filtered.length]) }}</span>
+      <button class="audit-btn" @click="showMore">{{ $t('audit.showMore') }}</button>
+    </div>
+  </template>
 </template>
 
 <style scoped>
+/* Klebriges Suchfeld über der Tabelle; der Tabellenkopf klebt darunter. */
+.audit-search {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 8px 10px;
+  background: var(--mint-panel);
+  border-bottom: 1px solid var(--mint-border);
+}
 .audit-list { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
 .audit-list thead th {
   position: sticky;
-  top: 0;
+  top: 56px;
   z-index: 1;
   text-align: left;
   font-weight: 600;
