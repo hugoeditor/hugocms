@@ -122,6 +122,13 @@ async function resolve(decision) {
   }
 }
 
+// Nach einem an der Schrittgrenze abgebrochenen Zug fortsetzen.
+async function continueRun() {
+  if (assistant.busy) return
+  const ok = await assistant.send(t('assistant.continueNudge'), locale.value, context())
+  if (ok) await reloadIfOpenChanged()
+}
+
 // Beim Eintreffen neuer Nachrichten ans Ende scrollen.
 watch(
   () => [assistant.bubbles.length, assistant.busy, assistant.pending],
@@ -218,6 +225,13 @@ watch(
             <v-btn color="primary" variant="flat" size="small" :loading="assistant.busy" @click="resolve('allow')">{{ $t('assistant.approve') }}</v-btn>
           </v-card-actions>
         </v-card>
+
+        <!-- Zug an der Schrittgrenze abgebrochen: Fortsetzen anbieten. -->
+        <div v-if="assistant.aborted && !assistant.busy && !assistant.pending" class="my-2">
+          <v-btn color="primary" variant="tonal" size="small" prepend-icon="mdi-play" @click="continueRun">
+            {{ $t('assistant.continueAction') }}
+          </v-btn>
+        </div>
 
         <div v-if="assistant.busy" class="d-flex align-center text-caption text-medium-emphasis my-2">
           <v-progress-circular indeterminate size="16" width="2" class="mr-2" />{{ $t('assistant.thinking') }}

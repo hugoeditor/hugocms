@@ -294,6 +294,7 @@ final class Connector
                 'emptytrash' => $this->cmdEmptyTrash($request),
                 'build' => $this->cmdBuild(),
                 'assistant' => $this->cmdAssistant($request),
+                'assistantimprove' => $this->cmdAssistantImprove($request),
                 'config' => $this->cmdConfig(),
                 'reconfigure' => $this->cmdReconfigure($request),
                 'account' => $this->cmdAccount($request),
@@ -887,15 +888,103 @@ final class Connector
         // Der Werkzeug-Loop kann mehrere API-Aufrufe nacheinander machen.
         @set_time_limit(180);
 
-        $service = new AssistantService(
-            new AnthropicClient($this->ai['apiKey']),
+        return $this->assistantService()->run(
+            $messages,
+            $confirm === null ? null : (string) $confirm,
+            $locale,
+            $openFilePath,
+            $openDirPath,
+        );
+    }
+
+    /**
+     * Baut den KI-Assistenten mit der aktuellen [ai]-Konfiguration. Nur bei
+     * vorhandenem API-Schlüssel aufrufen (der Client verlangt einen). Das
+     * Werkzeug get_file_report wird nur eingehängt, wenn Pro-Lizenz und
+     * Hugo-Projekt vorliegen (sonst gibt es keinen Audit-/Content-Bericht).
+     */
+    private function assistantService(): AssistantService
+    {
+        $fileReport = ($this->hugo !== null && $this->license()->isPro())
+            ? fn (string $fileId): array => $this->buildFileReportById($fileId)
+            : null;
+
+        return new AssistantService(
+            new AnthropicClient((string) $this->ai['apiKey']),
             $this->ai['model'],
             $this->ai['writeMode'],
             $this->resolver,
             $this->files,
+            $fileReport,
         );
+    }
 
-        return $service->run($messages, $confirm === null ? null : (string) $confirm, $locale, $openFilePath, $openDirPath);
+    /**
+     * Startet einen Assistenten-Zug, der eine einzelne Content-Datei anhand
+     * ihres Gesamt-Berichts verbessert. Auslösung durch den Benutzer (beliebige
+     * Datei); der spätere Cron nutzt denselben Weg (erste Datei der Liste). Der
+     * Schreibmodus ist der konfigurierte — bei "confirm" pausiert der Lauf vor
+     * dem Schreiben und der Client lässt bestätigen (wie beim normalen Assistenten).
+     */
+    private function cmdAssistantImprove(array $request): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+        $this->requirePro();
+        if ($this->hugo === null) {
+            throw new ApiException('ECONFIG', 409, 'AUDIT-NO-PROJECT');
+        }
+        if ($this->ai['apiKey'] === null) {
+            throw new ApiException('ECONFIG', 409, 'AI-NOT-CONFIGURED');
+        }
+        $id = $this->requireParam($request, 'id');
+        $locale = (string) ($request['locale'] ?? 'de');
+        $r = $this->resolver->resolve($id, true);
+        $path = $r['mount']->name() . '/' . $r['rel'];
+
+        @set_time_limit(180);
+
+        return $this->assistantService()->run(
+            [['role' => 'user', 'content' => $this->improveInstruction($path, $locale)]],
+            null,
+            $locale,
+            $path,
+        );
+    }
+
+    /** Startanweisung für den Verbesserungslauf (in der Sprache des Benutzers). */
+    private function improveInstruction(string $path, string $locale): string
+    {
+        if (str_starts_with(strtolower($locale), 'en')) {
+            return "Improve the existing content file `{$path}`. Work efficiently: (1) call get_file_report for this path, (2) read the file, (3) write the improved version in a SINGLE write_file call. The file already exists — adopt its existing front-matter format; do NOT browse other files, archetypes or templates for conventions unless you add a genuinely new front-matter field. Change ONLY this file. Keep the front matter valid and preserve the author's meaning; address the reported issues (readability, thin content, and missing meta/SEO fields where appropriate).";
+        }
+
+        return "Verbessere die bestehende Content-Datei `{$path}`. Arbeite zügig: (1) rufe get_file_report für diesen Pfad auf, (2) lies die Datei, (3) schreibe die verbesserte Fassung in EINEM write_file-Aufruf. Die Datei existiert bereits — übernimm ihr vorhandenes Front-Matter-Format; durchsuche NICHT andere Dateien, Archetypes oder Templates nach Konventionen, außer du führst ein wirklich neues Front-Matter-Feld ein. Ändere AUSSCHLIESSLICH diese Datei. Halte das Front-Matter gültig und bewahre die Aussage des Autors; behebe die gemeldeten Probleme (Lesbarkeit, Dünn-Content und fehlende Meta-/SEO-Felder, soweit sinnvoll).";
+    }
+
+    /**
+     * Gesamt-Bericht einer Datei anhand ihrer Dateimanager-ID (für das
+     * Assistenten-Werkzeug get_file_report). Qualitätsurteil optional (null,
+     * wenn die Datei nie geprüft wurde), SEO-Funde aus dem jüngsten Lauf.
+     *
+     * @return array<string, mixed>
+     */
+    private function buildFileReportById(string $fileId): array
+    {
+        $r = $this->resolver->resolve($fileId, true);
+        $mount = $r['mount']->name();
+        $entry = $this->contentQuality()->forFile($fileId); // null, falls nie geprüft
+        $base = is_array($entry) ? $entry : ['mount' => $mount, 'rel' => $r['rel'], 'title' => basename($r['rel'])];
+
+        return [
+            'file' => $this->withContentFileId([
+                'mount' => $mount,
+                'rel' => $r['rel'],
+                'title' => $base['title'] ?? basename($r['rel']),
+            ]),
+            'contentQuality' => $entry,
+            'audit' => $this->auditIssuesForEntry($base),
+        ];
     }
 
     /** Erlaubte Log-Stufen — gemeinsam für Lesen (config) und Schreiben. */

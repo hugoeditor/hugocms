@@ -136,6 +136,21 @@ final class ContentQualityService
     }
 
     /**
+     * Gespeicherter Eintrag zur Datei hinter einer Dateimanager-ID oder null,
+     * falls die Datei noch nie geprüft wurde. Löst die ID über den Resolver auf
+     * (Mount-Einsperrung greift) und bildet daraus denselben Schlüssel wie beim
+     * Prüfen.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function forFile(string $fileId): ?array
+    {
+        $r = $this->resolver->resolve($fileId, true);
+
+        return $this->read($this->pathFor(sha1($r['mount']->name() . ':' . $r['rel'])));
+    }
+
+    /**
      * Löscht einen Eintrag.
      *
      * @return array{deleted: string}

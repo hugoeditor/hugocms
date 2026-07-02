@@ -23,7 +23,7 @@ use Throwable;
 final class AssistantService
 {
     /** Obergrenze für Werkzeug-Runden je Zug (Schutz vor Endlosschleifen). */
-    private const MAX_STEPS = 12;
+    private const MAX_STEPS = 16;
     private const MAX_TOKENS = 16000;
 
     /** Werkzeuge, die schreiben (im Modus confirm bestätigungspflichtig). */
@@ -33,12 +33,19 @@ final class AssistantService
     private const INSTRUCTION_FILE = '.hugocms-assistant.md';
     private const MAX_INSTRUCTION_BYTES = 8192;
 
+    /**
+     * @param ?\Closure(string): array<string, mixed> $fileReport Liefert zu einer
+     *        Dateimanager-ID den Gesamt-Bericht (Qualität + SEO) einer Content-
+     *        Datei. null → das Werkzeug get_file_report wird nicht angeboten
+     *        (kein Pro-Audit verfügbar).
+     */
     public function __construct(
         private readonly AnthropicClient $client,
         private readonly string $model,
         private readonly string $writeMode, // readonly | confirm | auto
         private readonly MountResolver $resolver,
         private readonly FileService $files,
+        private readonly ?\Closure $fileReport = null,
     ) {
     }
 
@@ -111,7 +118,21 @@ final class AssistantService
             ]];
         }
 
-        return $this->result($messages, '', $actions, null, true);
+        // Schrittgrenze erreicht: als sichtbare Assistenten-Nachricht in den
+        // Verlauf schreiben (sonst bliebe der Zug ohne Rückmeldung stehen) und
+        // den Client über das aborted-Flag einen „Weiter"-Knopf anbieten lassen.
+        $note = $this->abortNote($locale);
+        $messages[] = ['role' => 'assistant', 'content' => [['type' => 'text', 'text' => $note]]];
+
+        return $this->result($messages, $note, $actions, null, true);
+    }
+
+    /** Hinweistext, wenn die Schrittgrenze eines Zugs erreicht wurde. */
+    private function abortNote(string $locale): string
+    {
+        return str_starts_with(strtolower($locale), 'en')
+            ? 'I reached this turn\'s step limit before finishing. Send “continue” and I will carry on.'
+            : 'Ich habe die Schrittgrenze dieses Zugs erreicht, bevor ich fertig war. Sende „weiter“, dann mache ich weiter.';
     }
 
     /** Führt die zuletzt angeforderte (pausierte) Schreibaktion aus oder lehnt sie ab. */
@@ -157,6 +178,7 @@ final class AssistantService
             $text = match ($name) {
                 'list_dir' => $this->toolListDir($input),
                 'read_file' => $this->toolReadFile($input),
+                'get_file_report' => $this->toolGetFileReport($input),
                 'write_file' => $this->toolWriteFile($input),
                 'create_dir' => $this->toolCreateDir($input),
                 'rename' => $this->toolRename($input),
@@ -194,6 +216,24 @@ final class AssistantService
         $r = $this->resolvePath((string) ($input['path'] ?? ''), true, 'read');
 
         return (string) $this->files->readText($r['mount'], $r['abs'])['content'];
+    }
+
+    /**
+     * Liefert den Gesamt-Bericht (LLM-Qualitätsurteil + zugehörige SEO-Funde aus
+     * dem jüngsten Audit-Lauf) der Datei als JSON. Nur-Lesen; setzt das
+     * Leserecht des Mounts voraus.
+     */
+    private function toolGetFileReport(array $input): string
+    {
+        if ($this->fileReport === null) {
+            throw ApiException::badRequest('AI-UNKNOWN-TOOL', ['get_file_report']);
+        }
+        $r = $this->resolvePath((string) ($input['path'] ?? ''), true, 'read');
+        $id = $this->resolver->encodeId($r['mount']->name(), $r['rel']);
+        $report = ($this->fileReport)($id);
+        $json = json_encode($report, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+
+        return $json === false ? '{}' : $json;
     }
 
     private function toolWriteFile(array $input): string
@@ -349,9 +389,10 @@ final class AssistantService
     {
         return [
             'messages' => $messages,
-            'reply' => $aborted ? 'Abgebrochen: zu viele Werkzeugschritte.' : $reply,
+            'reply' => $reply,
             'actions' => $actions,
             'pending' => $pending,
+            'aborted' => $aborted,
         ];
     }
 
@@ -370,6 +411,15 @@ final class AssistantService
                 'input_schema' => ['type' => 'object', 'properties' => ['path' => ['type' => 'string']], 'required' => ['path']],
             ],
         ];
+        // Gesamt-Bericht einer Content-Datei (Qualität + SEO) — nur, wenn eine
+        // Bericht-Quelle injiziert wurde (Pro-Audit verfügbar).
+        if ($this->fileReport !== null) {
+            $tools[] = [
+                'name' => 'get_file_report',
+                'description' => 'Get the combined quality/SEO report for a content file: the AI content-quality verdict (score, readability, findings, suggestions) and the SEO audit findings for that file from the latest audit run. "path" is "<mount>/<relative path>". Use this before improving a page to know what to fix.',
+                'input_schema' => ['type' => 'object', 'properties' => ['path' => ['type' => 'string']], 'required' => ['path']],
+            ];
+        }
         if ($this->writeMode === 'readonly') {
             return $tools;
         }

@@ -180,46 +180,46 @@ Assistenten-/Cron-Verbesserung.
   Hilfe-/Quelllinks). Hinweis, wenn kein Audit-Lauf vorliegt.
 - i18n `contentQuality.{seoIssues,seoNoIssues,noAuditRun}`.
 
-## Phase 4 — KI-Verbesserung einer Datei (geplant, noch nicht gebaut)
+## Phase 4 — KI-Verbesserung einer Datei (manuell umgesetzt; Cron offen)
 
-Ziel: Der KI-Assistent verbessert eine einzelne Datei anhand ihres
-Gesamt-Berichts. Auslösung manuell (Benutzer, beliebige Datei) — Cron
-(zukünftig, erste Datei der AuditContent-Liste).
+Der KI-Assistent verbessert eine einzelne Datei anhand ihres Gesamt-Berichts.
+Manuelle Auslösung ist gebaut; der Cron bleibt zukünftig.
 
-Entschieden:
-- **Berichtszugang:** eigenes Assistenten-Werkzeug `get_file_report` — der
-  Assistent ruft es im Tool-Loop selbst auf (für beliebige Dateien
-  wiederverwendbar, passt zum bestehenden dünnen Tool-Muster).
-- **Schreibmodus (manuell):** den in der `hugocms.ini` konfigurierten
-  `write_mode` respektieren (Standard `confirm` → Benutzer bestätigt jede
-  Änderung). Der spätere Cron nutzt separat `auto`.
-- **Beschränkung:** Der Verbesserungslauf arbeitet ausschließlich an der
-  Zieldatei.
+### Backend ✓
 
-Bauplan (bei Freigabe):
+- **Assistenten-Werkzeug `get_file_report`** (`AssistantService`): dünne Hülle,
+  liefert zu einem Pfad (`<mount>/<rel>` → fileId) den Gesamt-Bericht als JSON.
+  Nur-Lesen (Leserecht des Mounts). Wird nur angeboten, wenn eine Bericht-Quelle
+  injiziert ist — der Connector setzt sie nur bei Pro-Lizenz + Hugo-Projekt.
+- **`ContentQualityService::forFile(fileId)`** — Qualitätseintrag zur Datei (oder
+  null).
+- **Connector:** `assistantService()` bündelt den Assistenten-Aufbau (inkl.
+  `get_file_report`-Closure via `buildFileReportById`), von `cmdAssistant` und
+  `cmdAssistantImprove` genutzt. Neuer Befehl `assistantimprove` (param `id`):
+  seedet die Verbesserungsanweisung (`improveInstruction`, de/en) und führt den
+  ersten Zug aus. Schreibmodus = konfigurierter Modus; bei `confirm` pausiert der
+  Lauf vor dem Schreiben (pending), der Client bestätigt wie beim normalen
+  Assistenten. Gate: Pro + KI-Schlüssel + Hugo-Projekt.
 
-1. **Bericht-Erzeugung ausfaktorisieren.** Die Zusammenstellung aus
-   `cmdAuditContentReport` (Qualitätsurteil + SEO-Funde je Datei) in einen
-   wiederverwendbaren Baustein ziehen, den sowohl der Connector-Befehl als auch
-   das Assistenten-Werkzeug nutzen. Braucht Zugriff auf `ContentQualityService`,
-   `AuditService::latest()`, Resolver und Hugo-Quellpfad.
-2. **Assistenten-Werkzeug `get_file_report`.** Dünne Hülle in `AssistantService`,
-   die zu einer Datei (Pfad → fileId) den Gesamt-Bericht als Text/JSON liefert.
-   `AssistantService` muss dafür die Bericht-Erzeugung erreichen (zusätzliche
-   Abhängigkeit im Konstruktor, vom Connector injiziert — nur wenn Pro + Audit
-   vorhanden, sonst Werkzeug weglassen).
-3. **Auslöser-Befehl** `assistantimprove` (o. Ä.): nimmt eine `fileId`, baut eine
-   Startnachricht („Verbessere diese Datei anhand ihres Qualitäts-/SEO-Berichts;
-   ändere ausschließlich diese Datei"), startet den Assistenten mit dem
-   konfigurierten Schreibmodus. Gate: Pro + KI-Schlüssel.
-4. **Frontend:** Button „Mit KI verbessern" im `ContentQualityDialog` und je Zeile
-   in `AuditContentList`; führt in den bestehenden Bestätigungs-/Assistenten-Fluss
-   (bei `confirm` bestätigt der Benutzer die Schreibvorgänge wie gewohnt).
-5. **Cron (zukünftig):** eigener CLI-Einstieg, wählt die erste Datei der
-   AuditContent-Liste, Schreibmodus `auto`, kein interaktives Bestätigen.
+### Frontend ✓
 
-Verifikation: `php -l`; Wegwerf-Test der Bericht-Erzeugung mit Fake-Client;
-`npm run build`; manueller Durchlauf mit Pro-Lizenz + KI-Schlüssel.
+- Store `assistant.improve(fileId, locale)`: ruft `assistantimprove`, öffnet das
+  Panel, übernimmt den Verlauf. Folgezüge/Bestätigung laufen über den normalen
+  `assistant`-Weg (behält das Werkzeug).
+- Button „Mit KI verbessern" im `ContentQualityDialog` und je Zeile in
+  `AuditContentList`. i18n `contentQuality.improve`.
+
+### Verifikation ✓
+
+`php -l` fehlerfrei; Wegwerf-Test der Werkzeug-Verdrahtung (7/7, echter Mount +
+Testdatei, kein Netz); `npm run build` grün. Offen: manueller End-zu-Ende-Lauf
+gegen eine Instanz mit Pro-Lizenz + KI-Schlüssel.
+
+### Cron (zukünftig, nicht gebaut)
+
+Eigener CLI-Einstieg: wählt die erste Datei der AuditContent-Liste, Schreibmodus
+`auto`, kein interaktives Bestätigen. Nutzt denselben `assistantService()` +
+`improveInstruction`.
 
 ## Offene Punkte / Phase 2
 

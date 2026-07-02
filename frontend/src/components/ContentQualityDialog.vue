@@ -7,6 +7,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuditContentStore } from '../stores/auditContent'
+import { useAssistantStore } from '../stores/assistant'
 import { useFilesStore } from '../stores/files'
 import { useHelpStore } from '../stores/help'
 import { errorText } from '../i18n/apiMessage'
@@ -15,6 +16,7 @@ import AuditIssueTable from './AuditIssueTable.vue'
 
 const { t, locale } = useI18n()
 const store = useAuditContentStore()
+const assistant = useAssistantStore()
 const files = useFilesStore()
 const help = useHelpStore()
 
@@ -43,11 +45,24 @@ function recheck() {
   if (fileId.value) store.recheck(fileId.value, store.current?.file?.title, locale.value)
 }
 
-// Zur Quelldatei springen: Editor öffnen, Dialog schließen.
+// Zur Quelldatei springen: Editor öffnen, Dialog schließen. Die ID VOR dem
+// Schließen festhalten — closeDialog() leert store.current, wovon das
+// fileId-Computed abhängt.
 async function toSource() {
-  if (!fileId.value) return
+  const id = fileId.value
+  if (!id) return
   store.closeDialog()
-  await files.openFileById(fileId.value)
+  await files.openFileById(id)
+}
+
+// Von der KI verbessern lassen: Dialog schließen, Assistenten-Panel öffnen und
+// den Verbesserungslauf starten (Bericht → Bearbeitung, im confirm-Modus mit
+// Bestätigung). Die ID ebenfalls vor dem Schließen festhalten.
+function improve() {
+  const id = fileId.value
+  if (!id) return
+  store.closeDialog()
+  assistant.improve(id, locale.value)
 }
 
 // SEO-Fund: zur Quelle springen bzw. ausführliche Regel-Hilfe öffnen.
@@ -192,6 +207,15 @@ function openHelp(ruleId) {
           @click="toSource"
         >
           {{ $t('contentQuality.toSource') }}
+        </v-btn>
+        <v-btn
+          v-if="fileId"
+          prepend-icon="mdi-robot-outline"
+          variant="text"
+          color="primary"
+          @click="improve"
+        >
+          {{ $t('contentQuality.improve') }}
         </v-btn>
         <v-spacer />
         <v-btn

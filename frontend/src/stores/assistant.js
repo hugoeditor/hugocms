@@ -10,6 +10,7 @@ export const useAssistantStore = defineStore('assistant', {
     history: [], // rohe Anthropic-messages (inkl. tool_use/tool_result/thinking)
     pending: null, // { tool, input, oldContent? } — ausstehende Schreibaktion (confirm-Modus)
     actions: [], // im letzten Zug ausgeführte Schreibaktionen
+    aborted: false, // letzter Zug an der Schrittgrenze abgebrochen → „Weiter" anbieten
     busy: false,
     error: null, // ApiError oder null
   }),
@@ -64,6 +65,26 @@ export const useAssistantStore = defineStore('assistant', {
       }
     },
 
+    // Startet einen Verbesserungslauf für eine einzelne Datei: das Backend
+    // seedet die Anweisung und führt den ersten Zug aus (liest den Bericht,
+    // pausiert im confirm-Modus vor dem Schreiben). Öffnet das Panel und
+    // übernimmt den Verlauf; der Benutzer bestätigt bzw. plaudert weiter.
+    async improve(fileId, locale) {
+      this.reset()
+      this.open = true
+      this.busy = true
+      try {
+        const data = await api.post('assistantimprove', { id: fileId, locale })
+        this.apply(data)
+        return true
+      } catch (e) {
+        this.error = e
+        return false
+      } finally {
+        this.busy = false
+      }
+    },
+
     // Beantwortet eine ausstehende Schreibaktion (confirm-Modus).
     async resolve(decision, locale, ctx = {}) {
       this.error = null
@@ -90,12 +111,14 @@ export const useAssistantStore = defineStore('assistant', {
       this.history = Array.isArray(data.messages) ? data.messages : this.history
       this.pending = data.pending ?? null
       this.actions = Array.isArray(data.actions) ? data.actions : []
+      this.aborted = data.aborted ?? false
     },
 
     reset() {
       this.history = []
       this.pending = null
       this.actions = []
+      this.aborted = false
       this.error = null
     },
   },

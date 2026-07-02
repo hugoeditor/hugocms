@@ -6,12 +6,14 @@
 import { onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuditContentStore } from '../stores/auditContent'
+import { useAssistantStore } from '../stores/assistant'
 import { useConfirm } from '../util/confirm'
 import { errorText } from '../i18n/apiMessage'
 import { useTransientError } from '../util/transientError'
 
 const { t, locale } = useI18n()
 const store = useAuditContentStore()
+const assistant = useAssistantStore()
 const confirm = useConfirm()
 const error = useTransientError()
 
@@ -45,6 +47,10 @@ function openDetail(page) {
 
 function recheck(page) {
   if (page.fileId) store.check(page.fileId, page.title || page.rel, locale.value)
+}
+
+function improve(page) {
+  if (page.fileId) assistant.improve(page.fileId, locale.value)
 }
 
 async function remove(page) {
@@ -112,6 +118,16 @@ async function remove(page) {
         <v-list-item-subtitle>{{ page.rel }} · {{ formatDate(page.checkedAt) }}</v-list-item-subtitle>
 
         <template #append>
+          <v-btn
+            :disabled="!page.fileId"
+            icon="mdi-creation"
+            size="small"
+            variant="text"
+            density="comfortable"
+            color="primary"
+            :title="$t('contentQuality.improve')"
+            @click.stop="improve(page)"
+          />
           <v-btn
             :disabled="!page.fileId || store.busy"
             icon="mdi-refresh"
