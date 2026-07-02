@@ -395,7 +395,10 @@ function runLabel(run) {
 .audit-meta { font-size: 0.82rem; color: var(--mint-text-muted); }
 .audit-trunc { color: #b03a2e; }
 .audit-sevfilters { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-left: auto; }
-.audit-chip-wrap { background: none; border: 0; padding: 0; cursor: pointer; }
+/* Nicht schrumpfen: sonst quetscht der Flex-Container den Chip zusammen und
+   dessen interner overflow:hidden schneidet den Text ab ("Hin" statt "Hinweis").
+   Bei Platzmangel soll die Zeile stattdessen umbrechen (flex-wrap greift). */
+.audit-chip-wrap { background: none; border: 0; padding: 0; cursor: pointer; flex: 0 0 auto; }
 .audit-chip-wrap.dim { opacity: 0.4; }
 
 .audit-cats {

@@ -15,8 +15,22 @@ const ICON = {
 </script>
 
 <template>
-  <v-chip :color="COLOR[severity] || 'default'" :size="size" variant="flat" label>
+  <v-chip class="audit-sev-chip" :color="COLOR[severity] || 'default'" :size="size" variant="flat" label>
     <v-icon :icon="ICON[severity]" size="14" start />
     {{ $t('audit.severity.' + severity) }}<template v-if="count !== null"> · {{ count }}</template>
   </v-chip>
 </template>
+
+<style scoped>
+/* Der Chip darf nicht schmaler als sein Inhalt werden: In Flex-Zeilen quetscht
+   ihn der Container sonst zusammen, und Vuetifys interner overflow:hidden
+   schneidet den Beschriftungstext ab ("Hin" statt "Hinweis"). */
+.audit-sev-chip {
+  flex: 0 0 auto;
+  max-width: none;
+}
+.audit-sev-chip :deep(.v-chip__content) {
+  overflow: visible;
+  white-space: nowrap;
+}
+</style>

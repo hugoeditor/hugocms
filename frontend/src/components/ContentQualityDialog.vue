@@ -5,6 +5,7 @@
 // Kontextmenü der Dateiliste und dem Content-Reiter der AuditView geöffnet. Kein
 // eigener Modus/Overlay — bewusst als überlagernder Dialog.
 import { computed } from 'vue'
+import { useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
 import { useAuditContentStore } from '../stores/auditContent'
 import { useAssistantStore } from '../stores/assistant'
@@ -15,6 +16,9 @@ import AuditSeverityChip from './AuditSeverityChip.vue'
 import AuditIssueTable from './AuditIssueTable.vue'
 
 const { t, locale } = useI18n()
+// Auf schmalen Schirmen (Smartphone) als Vollbild-Dialog: der 720px-Dialog
+// würde sonst über den Rand laufen und die Aktions-Buttons abschneiden.
+const { smAndDown } = useDisplay()
 const store = useAuditContentStore()
 const assistant = useAssistantStore()
 const files = useFilesStore()
@@ -82,6 +86,7 @@ function openHelp(ruleId) {
     :model-value="store.dialogOpen"
     width="720"
     scrollable
+    :fullscreen="smAndDown"
     @update:model-value="(v) => !v && store.closeDialog()"
   >
     <v-card>
@@ -94,7 +99,9 @@ function openHelp(ruleId) {
 
       <v-divider />
 
-      <v-card-text style="max-height: 70vh">
+      <!-- Feste Höhe nur im Fenstermodus; im Vollbild (Smartphone) füllt der
+           scrollbare Textbereich den verfügbaren Platz. -->
+      <v-card-text :style="smAndDown ? null : { maxHeight: '70vh' }">
         <!-- Prüflauf läuft -->
         <div v-if="store.busy" class="d-flex flex-column align-center py-8 text-medium-emphasis">
           <v-progress-circular indeterminate color="primary" class="mb-3" />
@@ -211,35 +218,75 @@ function openHelp(ruleId) {
 
       <v-divider />
 
-      <v-card-actions>
-        <v-btn
-          v-if="fileId"
-          prepend-icon="mdi-file-document-edit-outline"
-          variant="text"
-          @click="toSource"
-        >
-          {{ $t('contentQuality.toSource') }}
-        </v-btn>
-        <v-btn
-          v-if="fileId"
-          prepend-icon="mdi-robot-outline"
-          variant="text"
-          color="primary"
-          @click="improve"
-        >
-          {{ $t('contentQuality.improve') }}
-        </v-btn>
+      <!-- Auf schmalen Schirmen (Vollbild) reine Icon-Buttons, damit alle
+           Aktionen in eine Zeile passen; sonst Icon + Beschriftung wie gewohnt.
+           Icon- und Text-Variante sind getrennte Buttons: ein (auch leerer)
+           Default-Slot verdrängt in Vuetify sonst das icon-Prop, der Button
+           bliebe leer. Das title-Attribut trägt im Icon-Modus die Bedeutung. -->
+      <v-card-actions class="cq-actions">
+        <template v-if="fileId">
+          <v-btn
+            v-if="smAndDown"
+            icon="mdi-file-document-edit-outline"
+            :title="$t('contentQuality.toSource')"
+            variant="text"
+            @click="toSource"
+          />
+          <v-btn
+            v-else
+            prepend-icon="mdi-file-document-edit-outline"
+            variant="text"
+            @click="toSource"
+          >
+            {{ $t('contentQuality.toSource') }}
+          </v-btn>
+
+          <v-btn
+            v-if="smAndDown"
+            icon="mdi-creation"
+            :title="$t('contentQuality.improve')"
+            variant="text"
+            color="primary"
+            @click="improve"
+          />
+          <v-btn
+            v-else
+            prepend-icon="mdi-robot-outline"
+            variant="text"
+            color="primary"
+            @click="improve"
+          >
+            {{ $t('contentQuality.improve') }}
+          </v-btn>
+        </template>
         <v-spacer />
+        <template v-if="fileId">
+          <v-btn
+            v-if="smAndDown"
+            icon="mdi-refresh"
+            :title="$t('contentQuality.recheck')"
+            variant="text"
+            :disabled="store.busy"
+            @click="recheck"
+          />
+          <v-btn
+            v-else
+            prepend-icon="mdi-refresh"
+            variant="text"
+            :disabled="store.busy"
+            @click="recheck"
+          >
+            {{ $t('contentQuality.recheck') }}
+          </v-btn>
+        </template>
         <v-btn
-          v-if="fileId"
-          prepend-icon="mdi-refresh"
+          v-if="smAndDown"
+          icon="mdi-close"
+          :title="$t('common.close')"
           variant="text"
-          :disabled="store.busy"
-          @click="recheck"
-        >
-          {{ $t('contentQuality.recheck') }}
-        </v-btn>
-        <v-btn variant="text" @click="store.closeDialog()">{{ $t('common.close') }}</v-btn>
+          @click="store.closeDialog()"
+        />
+        <v-btn v-else variant="text" @click="store.closeDialog()">{{ $t('common.close') }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -256,5 +303,13 @@ function openHelp(ruleId) {
 }
 .cq-suggestions li {
   margin-bottom: 0.25rem;
+}
+/* Aktionsleiste darf umbrechen: auf schmalen Schirmen passen die vier Buttons
+   (Quelle, Verbessern, Erneut prüfen, Schließen) nicht in eine Zeile — ohne
+   Umbruch liefen die linken aus dem Bild. Der Umschlag greift den Spacer als
+   Trenner: linke Aktionen oben, rechte in der Folgezeile. */
+.cq-actions {
+  flex-wrap: wrap;
+  row-gap: 4px;
 }
 </style>
