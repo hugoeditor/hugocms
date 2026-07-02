@@ -201,9 +201,15 @@ function openTrashView() {
   leaveEditorThen(() => files.openTrash())
 }
 function openAuditView() {
+  // Liegt die Hilfe über einem bereits offenen Bericht, nur die Hilfe schließen
+  // und den SEO-Bericht wieder freigeben — nicht als Umschalter wirken (der
+  // Bericht ist ja gerade das gewünschte Ziel).
+  if (help.topic && files.auditMode) {
+    help.close()
+    return
+  }
   // Schaltfläche wirkt als Umschalter: bei offenem Bericht wieder schließen.
   if (files.auditMode) {
-    help.close()
     files.leaveAudit()
     return
   }
