@@ -33,6 +33,19 @@ export default defineConfig(({ command }) => {
       vue(),
       vuetify({ autoImport: true }),
     ],
+    resolve: {
+      // filerobot-image-editor bringt React (18) über mehrere Pakete herein.
+      // Ohne dedupe kann Vite mehrere React-Kopien laden → 'Invalid hook call'.
+      // Eine einzige Instanz erzwingen.
+      dedupe: ['react', 'react-dom'],
+    },
+    optimizeDeps: {
+      // filerobot-image-editor wird nur per dynamischem import() geladen; Vites
+      // Scanner findet es beim Start daher nicht und würde es erst beim ersten
+      // Öffnen des Editors nachbündeln — der Import scheitert dann einmalig
+      // (NS_ERROR_CORRUPTED_CONTENT). Vorab-Bündeln beim Serverstart erzwingen.
+      include: ['filerobot-image-editor'],
+    },
     server: {
       port: 5173,
       proxy: {

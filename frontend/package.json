@@ -23,6 +23,7 @@
     "@tiptap/starter-kit": "^2.27.2",
     "@tiptap/vue-3": "^2.27.2",
     "codemirror": "^6.0.1",
+    "filerobot-image-editor": "^4.8.1",
     "marked": "^18.0.5",
     "pinia": "^2.2.6",
     "tiptap-markdown": "^0.8.10",
@@ -37,5 +38,14 @@
     "vite": "^6.0.5",
     "vite-plugin-vue-devtools": "^8.1.3",
     "vite-plugin-vuetify": "^2.0.4"
+  },
+  "comment_overrides": "filerobot-image-editor@4.8.1 zielt auf React 18, zieht als Peer aber react-filerobot-image-editor@4.9.1 (React 19). npm installiert dann beide React-Majors nebeneinander → 'Invalid hook call'. Diese Overrides erzwingen einen kohärenten React-18-Stack.",
+  "overrides": {
+    "react-filerobot-image-editor": "4.8.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-konva": "18.2.16",
+    "react-reconciler": "0.29.2",
+    "its-fine": "1.2.5"
   }
 }

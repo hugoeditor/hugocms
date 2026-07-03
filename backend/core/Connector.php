@@ -285,6 +285,7 @@ final class Connector
                 'copy' => $this->cmdCopy($request),
                 'move' => $this->cmdMove($request),
                 'upload' => $this->cmdUpload($request),
+                'writeimage' => $this->cmdWriteImage($request),
                 'download' => $this->cmdDownload($request),
                 'raw' => $this->cmdRaw($request),
                 'thumb' => $this->cmdThumb($request),
@@ -648,6 +649,44 @@ final class Connector
         }
 
         return ['count' => count($entries), 'entries' => $entries];
+    }
+
+    /**
+     * Speichert ein im Bild-Editor bearbeitetes Rasterbild zurück. Nimmt die
+     * Bilddaten als base64 (optional mit data-URL-Präfix) entgegen; $mode
+     * entscheidet über Überschreiben der Quelldatei oder Anlegen einer Kopie.
+     */
+    private function cmdWriteImage(array $request): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+        $target = $this->resolver->resolve($this->requireParam($request, 'target'));
+        $this->requirePermission($target['mount'], 'write');
+
+        $data = $request['data'] ?? null;
+        if (!is_string($data) || $data === '') {
+            throw ApiException::badRequest('PARAM-MISSING', ['data']);
+        }
+        // data-URL-Präfix (data:image/png;base64,…) abtrennen, falls vorhanden.
+        if (str_starts_with($data, 'data:') && ($comma = strpos($data, ',')) !== false) {
+            $data = substr($data, $comma + 1);
+        }
+        $binary = base64_decode($data, true);
+        if ($binary === false || $binary === '') {
+            throw ApiException::badRequest('PARAM-INVALID', ['data']);
+        }
+
+        $mode = (string) ($request['mode'] ?? 'overwrite');
+        $copyName = isset($request['name']) ? (string) $request['name'] : null;
+
+        return $this->files->writeImage(
+            $target['mount'],
+            $target['rel'],
+            $target['abs'],
+            $binary,
+            $mode,
+            $copyName,
+        );
     }
 
     /** Liefert eine Datei als Download (attachment) aus. */

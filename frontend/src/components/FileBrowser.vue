@@ -8,6 +8,7 @@ import { useAssistantStore } from '../stores/assistant'
 import { formatSize, formatDate, iconFor } from '../util/format'
 import { errorText } from '../i18n/apiMessage'
 import ImageViewer from './ImageViewer.vue'
+import ImageEditor from './ImageEditor.vue'
 import { useTransientError } from '../util/transientError'
 
 const { t, locale } = useI18n()
@@ -70,6 +71,11 @@ function buildItems(entry) {
       // Bearbeiten führt in den Texteditor.
       if (entry.image && entry.editable) {
         items.push({ icon: 'mdi-pencil-outline', label: t('ctx.edit'), action: () => run(() => files.openTextFile(entry)) })
+      }
+      // Rasterbilder (png/jpg/…): im Bild-Editor bearbeiten. SVG bleibt außen
+      // vor (image && editable) — es läuft über den Texteditor.
+      if (entry.image && !entry.editable && sel === 1 && files.can('write')) {
+        items.push({ icon: 'mdi-image-edit-outline', label: t('ctx.editImage'), action: () => files.openImageEditor(entry) })
       }
     }
     if (entry.type === 'file' && sel === 1) {
@@ -497,6 +503,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 
     <!-- Bildbetrachter -->
     <ImageViewer />
+
+    <!-- Bild-Editor -->
+    <ImageEditor />
   </section>
 </template>
 

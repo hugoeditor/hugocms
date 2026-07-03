@@ -425,6 +425,79 @@ final class FileService
         return $this->detectMime($abs);
     }
 
+    /**
+     * Erlaubte Rasterbild-Typen für den Bild-Editor. SVG bleibt bewusst außen
+     * vor — es wird als Text über read/write bearbeitet, nicht neu kodiert.
+     *
+     * @var list<string>
+     */
+    private const IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+
+    /**
+     * Speichert im Bild-Editor bearbeitete Rasterbild-Rohdaten. Bewusst getrennt
+     * von writeText(): keine isEditable-Prüfung (Bilder sind keine Editortypen),
+     * dafür eine MIME-Whitelist auf den TATSÄCHLICHEN Bytes und die Upload-
+     * Größengrenze. Geschrieben wird atomar (tempnam + rename).
+     *
+     * @param string $mode 'overwrite' ersetzt die Zieldatei; 'copy' legt im
+     *                      selben Verzeichnis eine neue Datei an (Kollision wird
+     *                      nummeriert). Bei 'copy' bestimmt $copyName den Namen.
+     * @return array Metadaten der gespeicherten Datei
+     */
+    public function writeImage(
+        Mount $mount,
+        string $rel,
+        string $abs,
+        string $binary,
+        string $mode = 'overwrite',
+        ?string $copyName = null,
+    ): array {
+        if (!is_file($abs)) {
+            throw ApiException::notFound('FILE-NOT-FOUND');
+        }
+        if (strlen($binary) > $this->maxUploadBytes) {
+            throw ApiException::denied('CONTENT-TOO-LARGE');
+        }
+        // MIME aus den Rohdaten prüfen (nicht aus der Endung) — so lässt sich
+        // kein beliebiger Inhalt unter einer Bildendung einschleusen.
+        $mime = $this->detectMimeString($binary);
+        if (!in_array($mime, self::IMAGE_MIME, true)) {
+            throw ApiException::denied('FILETYPE-NOT-IMAGE');
+        }
+
+        if ($mode === 'copy') {
+            $parentAbs = dirname($abs);
+            $name = $copyName !== null && $copyName !== '' ? basename($copyName) : basename($abs);
+            self::assertValidName($name);
+            if (!$mount->accepts($name)) {
+                throw ApiException::denied('FILETYPE-NOT-ALLOWED-MOUNT');
+            }
+            $destAbs = $this->uniqueTarget($parentAbs, $name, numbered: true);
+            $destRel = self::childRel(self::parentRel($rel), basename($destAbs));
+        } elseif ($mode === 'overwrite') {
+            if (!$mount->accepts(basename($abs))) {
+                throw ApiException::denied('FILETYPE-NOT-ALLOWED-MOUNT');
+            }
+            $destAbs = $abs;
+            $destRel = $rel;
+        } else {
+            throw ApiException::badRequest('PARAM-INVALID', ['mode']);
+        }
+
+        $tmp = @tempnam(dirname($destAbs), '.hugofm');
+        if ($tmp === false) {
+            throw new ApiException('EIO', 500, 'TEMPFILE-FAILED');
+        }
+        if (@file_put_contents($tmp, $binary) === false || !@rename($tmp, $destAbs)) {
+            @unlink($tmp);
+            throw new ApiException('EIO', 500, 'FILE-SAVE-FAILED');
+        }
+        @chmod($destAbs, 0644);
+        clearstatcache(true, $destAbs);
+
+        return $this->entryInfo($mount, $destRel, $destAbs);
+    }
+
     // --- Stufe 4: Suche ------------------------------------------------------
 
     /**
@@ -610,6 +683,19 @@ final class FileService
             return 'application/octet-stream';
         }
         $mime = finfo_file($finfo, $abs);
+        finfo_close($finfo);
+
+        return $mime ?: 'application/octet-stream';
+    }
+
+    /** Wie detectMime(), aber auf einem Bytepuffer (Bild-Rohdaten im Speicher). */
+    private function detectMimeString(string $data): string
+    {
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        if ($finfo === false) {
+            return 'application/octet-stream';
+        }
+        $mime = finfo_buffer($finfo, $data);
         finfo_close($finfo);
 
         return $mime ?: 'application/octet-stream';

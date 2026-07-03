@@ -42,6 +42,7 @@ export const useFilesStore = defineStore('files', {
     newRequest: null, // 'folder' | 'file' | 'upload' — von der Toolbar gesetzt, vom Browser konsumiert
     uploading: false, // läuft gerade ein Upload? (Fortschrittsanzeige)
     viewerId: null, // im Bildbetrachter geöffneter Eintrag (oder null)
+    editImageId: null, // im Bild-Editor geöffneter Eintrag (oder null)
 
     // Serverseitige Suche (Stufe 4): aktiv, solange searchQuery gesetzt ist.
     searchQuery: '',
@@ -87,6 +88,8 @@ export const useFilesStore = defineStore('files', {
     viewerIndex(state) {
       return state.viewerId ? this.imageEntries.findIndex((e) => e.id === state.viewerId) : -1
     },
+    // Im Bild-Editor geöffneter Eintrag (aus dem aktuellen Verzeichnis).
+    editImageEntry: (s) => (s.editImageId ? s.entries.find((e) => e.id === s.editImageId) ?? null : null),
     // Rechte des aktiven Mounts (für Menü-/Toolbar-Aktivierung).
     can: (s) => (perm) => {
       const m = s.mounts.find((mm) => mm.name === s.activeMount)
@@ -406,6 +409,27 @@ export const useFilesStore = defineStore('files', {
       if (!list.length || this.viewerIndex < 0) return
       const next = (this.viewerIndex + delta + list.length) % list.length
       this.viewerId = list[next].id
+    },
+
+    // --- Bild-Editor (filerobot) ----------------------------------------
+
+    openImageEditor(entry) {
+      this.editImageId = entry.id
+    },
+
+    closeImageEditor() {
+      this.editImageId = null
+    },
+
+    // Speichert ein bearbeitetes Rasterbild zurück. dataUrl ist die base64-
+    // Ausgabe des Editors (data:image/…;base64,…). mode: 'overwrite' ersetzt
+    // die Quelldatei, 'copy' legt unter name eine neue Datei an.
+    async saveEditedImage(id, dataUrl, { mode = 'overwrite', name = null } = {}) {
+      const body = { target: id, data: dataUrl, mode }
+      if (mode === 'copy' && name) body.name = name
+      const meta = await api.post('writeimage', body)
+      await this.refresh()
+      return meta
     },
 
     // --- Editor (Stufe 1) ------------------------------------------------

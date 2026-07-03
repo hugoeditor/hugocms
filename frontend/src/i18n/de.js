@@ -106,6 +106,7 @@ export default {
     download: 'Herunterladen',
     upload: 'Dateien hochladen …',
     contentQuality: 'Content-Qualität prüfen',
+    editImage: 'Bild bearbeiten',
   },
 
   dnd: {
@@ -393,6 +394,13 @@ export default {
     next: 'Nächstes Bild',
     close: 'Schließen',
     download: 'Herunterladen',
+  },
+
+  imageEditor: {
+    saveTitle: 'Bild speichern',
+    overwrite: 'Original überschreiben ({0})',
+    saveCopy: 'Als neue Kopie speichern',
+    copyName: 'Dateiname der Kopie',
   },
 
   dialog: {
@@ -708,6 +716,7 @@ export default {
     'UPLOAD-FAILED': 'Hochladen von „{0}“ fehlgeschlagen.',
     'UPLOAD-TOO-LARGE': '„{0}“ ist zu groß (höchstens {1}).',
     'NOT-AN-IMAGE': 'Keine Bilddatei.',
+    'FILETYPE-NOT-IMAGE': 'Die bearbeiteten Daten sind kein unterstütztes Bildformat (JPEG, PNG, WebP, GIF).',
 
     ECSRF: 'Sicherheits-Token ungültig — bitte die Seite neu laden.',
     'TRASH-NOT-FOUND': 'Papierkorb-Eintrag nicht gefunden.',

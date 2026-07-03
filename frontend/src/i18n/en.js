@@ -106,6 +106,7 @@ export default {
     download: 'Download',
     upload: 'Upload files …',
     contentQuality: 'Check content quality',
+    editImage: 'Edit image',
   },
 
   dnd: {
@@ -393,6 +394,13 @@ export default {
     next: 'Next image',
     close: 'Close',
     download: 'Download',
+  },
+
+  imageEditor: {
+    saveTitle: 'Save image',
+    overwrite: 'Overwrite original ({0})',
+    saveCopy: 'Save as a new copy',
+    copyName: 'Copy file name',
   },
 
   dialog: {
@@ -706,6 +714,7 @@ export default {
     'UPLOAD-FAILED': 'Upload of “{0}” failed.',
     'UPLOAD-TOO-LARGE': '“{0}” is too large (at most {1}).',
     'NOT-AN-IMAGE': 'Not an image file.',
+    'FILETYPE-NOT-IMAGE': 'The edited data is not a supported image format (JPEG, PNG, WebP, GIF).',
 
     ECSRF: 'Security token invalid — please reload the page.',
     'TRASH-NOT-FOUND': 'Trash entry not found.',
