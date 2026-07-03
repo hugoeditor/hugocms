@@ -12,7 +12,7 @@ import NemoToolbar from './components/NemoToolbar.vue'
 import FileBrowser from './components/FileBrowser.vue'
 import TrashView from './components/TrashView.vue'
 import AuditView from './components/AuditView.vue'
-import ContentQualityDialog from './components/ContentQualityDialog.vue'
+import ContentQualityView from './components/ContentQualityView.vue'
 import EditorPanel from './components/EditorPanel.vue'
 import ReconfigureDialog from './components/ReconfigureDialog.vue'
 import AccountDialog from './components/AccountDialog.vue'
@@ -592,9 +592,12 @@ async function build() {
                  zusätzlich darüber. -->
             <AuditView v-if="files.auditMode" />
             <EditorPanel ref="editorPanelRef" />
-            <!-- LLM-Content-Qualität: überlagernder Dialog, geöffnet aus dem
-                 Editor und dem Kontextmenü der Dateiliste. -->
-            <ContentQualityDialog />
+            <!-- LLM-Content-Qualität: Overlay-Ansicht (z-index zwischen Editor
+                 und Hilfe), geöffnet aus dem Editor, dem Kontextmenü der
+                 Dateiliste und dem Content-Reiter des SEO-Audits. Liegt unter der
+                 HelpView, damit sich aus einem SEO-Fund die Regel-Hilfe darüber
+                 legen kann. -->
+            <ContentQualityView />
             <!-- Hilfe-/Wissensdatenbank: Überlagerung mit Zurück-Button, öffnet
                  z. B. aus einem SEO-Audit-Fund die ausführliche Erklärung. -->
             <HelpView />

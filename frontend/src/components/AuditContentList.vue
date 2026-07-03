@@ -1,7 +1,7 @@
 <script setup>
 // Liste der bereits per LLM geprüften Content-Seiten (Reiter der AuditView).
 // Zeigt Bewertung, Prüfdatum und einen Veraltet-/Quelle-fehlt-Marker. Eine Zeile
-// öffnet das ausführliche Ergebnis im ContentQualityDialog; von hier lässt sich
+// öffnet das ausführliche Ergebnis in der ContentQualityView; von hier lässt sich
 // auch erneut prüfen oder ein Eintrag löschen.
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
