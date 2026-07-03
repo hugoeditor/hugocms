@@ -4,9 +4,10 @@ import { useI18n } from 'vue-i18n'
 import { useFilesStore } from '../stores/files'
 import { useAuthStore } from '../stores/auth'
 import { useAuditContentStore } from '../stores/auditContent'
+import { useAssistantStore } from '../stores/assistant'
 import { errorText } from '../i18n/apiMessage'
 import CodeMirrorEditor from './CodeMirrorEditor.vue'
-import { setEditorSaver } from '../util/editorBridge'
+import { setEditorSaver, flushEditor } from '../util/editorBridge'
 import WysiwygEditor from './WysiwygEditor.vue'
 import FrontMatterPanel from './FrontMatterPanel.vue'
 import HugoConfigEditor from './settings/HugoConfigEditor.vue'
@@ -17,6 +18,7 @@ const { t, locale } = useI18n()
 const files = useFilesStore()
 const auth = useAuthStore()
 const auditContent = useAuditContentStore()
+const assistant = useAssistantStore()
 const confirm = useConfirm()
 
 // LLM-Content-Qualität der offenen Markdown-Datei prüfen (Pro + KI-Schlüssel).
@@ -24,6 +26,19 @@ function checkContentQuality() {
   if (files.openFile) {
     auditContent.check(files.openFile.id, files.openFile.name, locale.value)
   }
+}
+
+// Schnellweg: die offene Markdown-Datei direkt von der KI verbessern lassen
+// (ohne vorher einen Qualitätsbericht zu erstellen). Ungespeicherte Änderungen
+// zuvor sichern, damit die KI den aktuellen Stand verbessert und nicht
+// überschreibt.
+async function improveContent() {
+  if (!files.openFile) return
+  if (files.dirty) {
+    const saved = await flushEditor()
+    if (!saved) return
+  }
+  assistant.improve(files.openFile.id, locale.value)
 }
 
 const draft = ref('')
@@ -333,18 +348,32 @@ onBeforeUnmount(() => {
         </v-tooltip>
 
         <!-- LLM-Content-Qualität: nur für Markdown-Dateien und wenn freigeschaltet
-             (Pro-Lizenz + KI-Schlüssel). -->
-        <v-tooltip v-if="isMarkdown && auth.auditContent" :text="$t('contentQuality.check')" location="bottom">
-          <template #activator="{ props: tip }">
-            <v-btn
-              v-bind="tip"
-              icon="mdi-text-search"
-              variant="text"
-              :loading="auditContent.busy"
-              @click="checkContentQuality"
-            />
-          </template>
-        </v-tooltip>
+             (Pro-Lizenz + KI-Schlüssel). Prüfen erzeugt einen Bericht; Verbessern
+             ist der Schnellweg direkt in den Assistenten (ohne vorherigen Bericht). -->
+        <template v-if="isMarkdown && auth.auditContent">
+          <v-tooltip :text="$t('contentQuality.check')" location="bottom">
+            <template #activator="{ props: tip }">
+              <v-btn
+                v-bind="tip"
+                icon="mdi-text-search"
+                variant="text"
+                :loading="auditContent.busy"
+                @click="checkContentQuality"
+              />
+            </template>
+          </v-tooltip>
+          <v-tooltip :text="$t('contentQuality.improve')" location="bottom">
+            <template #activator="{ props: tip }">
+              <v-btn
+                v-bind="tip"
+                icon="mdi-creation"
+                variant="text"
+                color="primary"
+                @click="improveContent"
+              />
+            </template>
+          </v-tooltip>
+        </template>
 
         <v-btn icon="mdi-close" variant="text" @click="close" />
       </v-toolbar>

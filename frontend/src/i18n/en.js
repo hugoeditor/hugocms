@@ -158,6 +158,8 @@ export default {
     notActivatable: 'No license can be activated for this website (no mount configuration file loaded).',
     keyHint: 'Paste the license key in the format HUGOCMS-…-….',
     key: 'License key',
+    keyPlaceholder: 'Enter license key …',
+    keyPlaceholderConfigured: 'A license key is already stored',
     activate: 'Activate',
     activated: 'License saved.',
     activatedPro: 'Pro edition activated.',

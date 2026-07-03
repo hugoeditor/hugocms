@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useFilesStore } from '../stores/files'
 import { useAuthStore } from '../stores/auth'
 import { useAuditContentStore } from '../stores/auditContent'
+import { useAssistantStore } from '../stores/assistant'
 import { formatSize, formatDate, iconFor } from '../util/format'
 import { errorText } from '../i18n/apiMessage'
 import ImageViewer from './ImageViewer.vue'
@@ -13,6 +14,7 @@ const { t, locale } = useI18n()
 const files = useFilesStore()
 const auth = useAuthStore()
 const auditContent = useAuditContentStore()
+const assistant = useAssistantStore()
 const error = useTransientError() // blendet sich nach kurzer Zeit selbst aus
 
 // Markdown-Content-Datei (für die LLM-Content-Prüfung im Kontextmenü).
@@ -79,6 +81,12 @@ function buildItems(entry) {
         icon: 'mdi-text-search',
         label: t('ctx.contentQuality'),
         action: () => auditContent.check(entry.id, entry.name, locale.value),
+      })
+      // Schnellweg: direkt von der KI verbessern lassen (ohne vorherigen Bericht).
+      items.push({
+        icon: 'mdi-creation',
+        label: t('contentQuality.improve'),
+        action: () => assistant.improve(entry.id, locale.value),
       })
     }
     if (items.length) items.push({ divider: true })

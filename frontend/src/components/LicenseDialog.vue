@@ -90,6 +90,8 @@ async function submit() {
         <v-textarea
           v-model="key"
           :label="$t('license.key')"
+          :placeholder="auth.license.configured ? $t('license.keyPlaceholderConfigured') : $t('license.keyPlaceholder')"
+          persistent-placeholder
           prepend-inner-icon="mdi-key-variant"
           variant="outlined"
           density="comfortable"

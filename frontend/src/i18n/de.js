@@ -158,6 +158,8 @@ export default {
     notActivatable: 'Für diese Webseite lässt sich keine Lizenz aktivieren (keine Mount-Konfigurationsdatei geladen).',
     keyHint: 'Lizenzschlüssel im Format HUGOCMS-…-… einfügen.',
     key: 'Lizenzschlüssel',
+    keyPlaceholder: 'Lizenzschlüssel eingeben …',
+    keyPlaceholderConfigured: 'Lizenzschlüssel wurde schon hinterlegt',
     activate: 'Aktivieren',
     activated: 'Lizenz gespeichert.',
     activatedPro: 'Pro-Edition aktiviert.',
