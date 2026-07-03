@@ -22,6 +22,7 @@ import HelpView from './components/HelpView.vue'
 import AssistantPanel from './components/AssistantPanel.vue'
 import { useAssistantStore } from './stores/assistant'
 import { useHelpStore } from './stores/help'
+import { useAuditContentStore } from './stores/auditContent'
 import LanguageSwitcher from './components/LanguageSwitcher.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import { useConfirm } from './util/confirm'
@@ -51,6 +52,7 @@ const auth = useAuthStore()
 const files = useFilesStore()
 const assistant = useAssistantStore()
 const help = useHelpStore()
+const auditContent = useAuditContentStore()
 const error = ref(null)
 const fatalError = ref(null)
 const warningsVisible = ref(false)
@@ -188,9 +190,12 @@ async function logout() {
 // (wie beim Schließen-Knopf des Editors).
 async function leaveEditorThen(action) {
   if (files.dirty && !(await confirmDiscard())) return
-  // Eine geöffnete Hilfe-Überlagerung schließen, sonst bliebe sie über der neu
-  // gewählten Ansicht (Dateimanager, Papierkorb, SEO-Audit) liegen.
+  // Offene Überlagerungen schließen, sonst blieben sie über der neu gewählten
+  // Ansicht (Dateimanager, Papierkorb, SEO-Audit) liegen: die Hilfe und der
+  // Qualitätsbericht (ContentQualityView) — beide haben einen höheren z-index
+  // als die Dateiliste und würden sie sonst verdecken.
   help.close()
+  auditContent.closeDialog()
   if (files.openFile) files.closeFile()
   action()
 }
@@ -201,11 +206,12 @@ function openTrashView() {
   leaveEditorThen(() => files.openTrash())
 }
 function openAuditView() {
-  // Liegt die Hilfe über einem bereits offenen Bericht, nur die Hilfe schließen
-  // und den SEO-Bericht wieder freigeben — nicht als Umschalter wirken (der
-  // Bericht ist ja gerade das gewünschte Ziel).
-  if (help.topic && files.auditMode) {
+  // Liegt eine Überlagerung (Hilfe oder Qualitätsbericht) über dem bereits
+  // offenen SEO-Audit, nur diese schließen und die Audit-Liste wieder freigeben
+  // — nicht als Umschalter wirken (das Audit ist ja gerade das gewünschte Ziel).
+  if (files.auditMode && (help.topic || auditContent.dialogOpen)) {
     help.close()
+    auditContent.closeDialog()
     return
   }
   // Schaltfläche wirkt als Umschalter: bei offenem Bericht wieder schließen.
