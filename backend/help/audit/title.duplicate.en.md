@@ -21,8 +21,8 @@ to tell the pages apart and cannot decide which one to show for a query.
 Give every page a **unique** title that fits its content. For list/overview
 pages it helps to include the area or distinguishing feature:
 
-    title: "Wheel alignment BMW 3 Series – prices & process | Autoprofis"
-    title: "Wheel alignment Audi A4 – prices & process | Autoprofis"
+    title: "Wheel alignment BMW 3 Series – prices & process | Autofit"
+    title: "Wheel alignment Audi A4 – prices & process | Autofit"
 
 When pages are generated from data, put the distinguishing value (model,
 location) into the title.

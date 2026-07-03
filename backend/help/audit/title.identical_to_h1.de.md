@@ -24,7 +24,7 @@ Titel und Überschrift erreichen den Leser in unterschiedlichen Zusammenhängen.
 
 Formuliere Titel und H1 bewusst unterschiedlich. Beispiel:
 
-    title: "Achsvermessung BMW 3er – Preise & Ablauf | Autoprofis"
+    title: "Achsvermessung BMW 3er – Preise & Ablauf | Autofit"
     # H1:  "Achsvermessung für Ihren BMW 3er"
 
 In Hugo steht der Titel im Front Matter; die H1 kommt meist aus der Überschrift

@@ -21,7 +21,7 @@ important addition – is no longer visible.
 Shorten the title to **30–60 characters**. Put the main topic at the front and
 drop filler words:
 
-    ❌ "Professional wheel alignment for your BMW 3 Series at low prices at Autoprofis in the region"
-    ✅ "Wheel alignment BMW 3 Series – prices & process | Autoprofis"
+    ❌ "Professional wheel alignment for your BMW 3 Series at low prices at Autofit in the region"
+    ✅ "Wheel alignment BMW 3 Series – prices & process | Autofit"
 
 Account for an automatically appended `| {{ .Site.Title }}` when shortening.

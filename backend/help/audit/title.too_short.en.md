@@ -27,7 +27,7 @@ topic and, where useful, the brand or location. In Hugo the title lives in the
 content file's front matter:
 
     ---
-    title: "Wheel alignment BMW 3 Series – prices & process | Autoprofis"
+    title: "Wheel alignment BMW 3 Series – prices & process | Autofit"
     ---
 
 Avoid bare keyword lists; write a readable title a human wants to click.

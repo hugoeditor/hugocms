@@ -21,7 +21,7 @@ wichtigste Zusatz – nicht mehr sichtbar ist.
 Kürze den Titel auf **30–60 Zeichen**. Stelle das Hauptthema an den Anfang und
 verzichte auf Füllwörter:
 
-    ❌ "Professionelle Achsvermessung für Ihren BMW 3er zu günstigen Preisen bei Autoprofis in der Region"
-    ✅ "Achsvermessung BMW 3er – Preise & Ablauf | Autoprofis"
+    ❌ "Professionelle Achsvermessung für Ihren BMW 3er zu günstigen Preisen bei Autofit in der Region"
+    ✅ "Achsvermessung BMW 3er – Preise & Ablauf | Autofit"
 
 Ein automatisch angehängtes `| {{ .Site.Title }}` beim Kürzen mitrechnen.

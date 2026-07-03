@@ -23,8 +23,8 @@ Suchanfrage anzeigen sollen.
 Gib jeder Seite einen **eindeutigen**, zum Inhalt passenden Titel. Bei
 Listen-/Übersichtsseiten hilft es, den Bereich oder das Merkmal aufzunehmen:
 
-    title: "Achsvermessung BMW 3er – Preise & Ablauf | Autoprofis"
-    title: "Achsvermessung Audi A4 – Preise & Ablauf | Autoprofis"
+    title: "Achsvermessung BMW 3er – Preise & Ablauf | Autofit"
+    title: "Achsvermessung Audi A4 – Preise & Ablauf | Autofit"
 
 Werden Seiten aus Daten generiert, das Unterscheidungsmerkmal (Modell, Ort) in
 den Titel einbauen.

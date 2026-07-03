@@ -23,7 +23,7 @@ heading reach the reader in different contexts.
 
 Phrase the title and the H1 deliberately differently. Example:
 
-    title: "Wheel alignment BMW 3 Series – prices & process | Autoprofis"
+    title: "Wheel alignment BMW 3 Series – prices & process | Autofit"
     # H1:  "Wheel alignment for your BMW 3 Series"
 
 In Hugo the title lives in the front matter; the H1 usually comes from the

@@ -27,7 +27,7 @@ der Seite und – wo sinnvoll – Marke oder Ort enthält. In Hugo steht der Tit
 im Front Matter der Inhaltsdatei:
 
     ---
-    title: "Achsvermessung BMW 3er – Preise & Ablauf | Autoprofis"
+    title: "Achsvermessung BMW 3er – Preise & Ablauf | Autofit"
     ---
 
 Vermeide reine Stichwörter; schreibe einen lesbaren Titel, den ein Mensch gern
