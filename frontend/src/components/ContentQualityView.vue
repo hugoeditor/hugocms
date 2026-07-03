@@ -1,9 +1,13 @@
 <script setup>
-// Dialog des Gesamt-Berichts einer Content-Datei (Pro-Funktion): das
-// LLM-Qualitätsurteil (Score, Lesbarkeit, Befunde, Vorschläge) UND die SEO-Funde
-// derselben Datei aus dem jüngsten Audit-Lauf. Wird aus dem Editor, dem
-// Kontextmenü der Dateiliste und dem Content-Reiter der AuditView geöffnet. Kein
-// eigener Modus/Overlay — bewusst als überlagernder Dialog.
+// Gesamt-Bericht einer Content-Datei (Pro-Funktion): das LLM-Qualitätsurteil
+// (Score, Lesbarkeit, Befunde, Vorschläge) UND die SEO-Funde derselben Datei aus
+// dem jüngsten Audit-Lauf. Wird aus dem Editor, dem Kontextmenü der Dateiliste
+// und dem Content-Reiter der AuditView geöffnet.
+//
+// Als Overlay-Ansicht umgesetzt (wie Editor/Audit/Hilfe), NICHT als v-dialog:
+// So kann sich die Hilfe-Ansicht (höherer z-index) über den Bericht legen, wenn
+// man aus einem SEO-Fund die Regel-Hilfe öffnet — ihr Zurück-Button bringt den
+// Bericht wieder zum Vorschein. Ein v-dialog läge über der Hilfe und verdeckte sie.
 import { computed } from 'vue'
 import { useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
@@ -16,8 +20,8 @@ import AuditSeverityChip from './AuditSeverityChip.vue'
 import AuditIssueTable from './AuditIssueTable.vue'
 
 const { t, locale } = useI18n()
-// Auf schmalen Schirmen (Smartphone) als Vollbild-Dialog: der 720px-Dialog
-// würde sonst über den Rand laufen und die Aktions-Buttons abschneiden.
+// Auf schmalen Schirmen (Smartphone) verkleinern sich die Aktions-Buttons unten
+// zu reinen Icons, damit alle in eine Zeile passen.
 const { smAndDown } = useDisplay()
 const store = useAuditContentStore()
 const assistant = useAssistantStore()
@@ -82,26 +86,19 @@ function openHelp(ruleId) {
 </script>
 
 <template>
-  <v-dialog
-    :model-value="store.dialogOpen"
-    width="720"
-    scrollable
-    :fullscreen="smAndDown"
-    @update:model-value="(v) => !v && store.closeDialog()"
-  >
-    <v-card>
-      <v-card-title class="d-flex align-center text-subtitle-1">
-        <v-icon icon="mdi-text-search" class="mr-2" />
-        <span class="text-truncate">{{ store.fileName || $t('contentQuality.title') }}</span>
-        <v-spacer />
-        <v-btn icon="mdi-close" variant="text" density="comfortable" @click="store.closeDialog()" />
-      </v-card-title>
+  <div v-if="store.dialogOpen" class="cq-overlay">
+    <!-- Kopfzeile: Zurück + Titel (wie Hilfe/Editor). Der Pfeil schließt den
+         Bericht und gibt die darunterliegende Ansicht wieder frei. -->
+    <header class="cq-head nemo-noselect">
+      <button class="cq-back" :title="$t('common.close')" @click="store.closeDialog()">
+        <v-icon icon="mdi-arrow-left" size="20" />
+      </button>
+      <v-icon icon="mdi-text-search" size="18" class="cq-head-icon" />
+      <span class="cq-head-title text-truncate">{{ store.fileName || $t('contentQuality.title') }}</span>
+    </header>
 
-      <v-divider />
-
-      <!-- Feste Höhe nur im Fenstermodus; im Vollbild (Smartphone) füllt der
-           scrollbare Textbereich den verfügbaren Platz. -->
-      <v-card-text :style="smAndDown ? null : { maxHeight: '70vh' }">
+    <div class="cq-content nemo-scroll">
+      <div class="cq-inner">
         <!-- Prüflauf läuft -->
         <div v-if="store.busy" class="d-flex flex-column align-center py-8 text-medium-emphasis">
           <v-progress-circular indeterminate color="primary" class="mb-3" />
@@ -214,16 +211,15 @@ function openHelp(ruleId) {
         <div v-else class="text-medium-emphasis text-center py-6">
           {{ $t('contentQuality.empty') }}
         </div>
-      </v-card-text>
+      </div>
+    </div>
 
-      <v-divider />
-
-      <!-- Auf schmalen Schirmen (Vollbild) reine Icon-Buttons, damit alle
-           Aktionen in eine Zeile passen; sonst Icon + Beschriftung wie gewohnt.
-           Icon- und Text-Variante sind getrennte Buttons: ein (auch leerer)
-           Default-Slot verdrängt in Vuetify sonst das icon-Prop, der Button
-           bliebe leer. Das title-Attribut trägt im Icon-Modus die Bedeutung. -->
-      <v-card-actions class="cq-actions">
+    <!-- Aktionsleiste am unteren Rand. Auf schmalen Schirmen reine Icon-Buttons,
+         damit alle Aktionen in eine Zeile passen; sonst Icon + Beschriftung wie
+         gewohnt. Icon- und Text-Variante sind getrennte Buttons: ein (auch
+         leerer) Default-Slot verdrängt in Vuetify sonst das icon-Prop, der Button
+         bliebe leer. Das title-Attribut trägt im Icon-Modus die Bedeutung. -->
+    <footer class="cq-actions nemo-noselect">
         <template v-if="fileId">
           <v-btn
             v-if="smAndDown"
@@ -287,12 +283,56 @@ function openHelp(ruleId) {
           @click="store.closeDialog()"
         />
         <v-btn v-else variant="text" @click="store.closeDialog()">{{ $t('common.close') }}</v-btn>
-      </v-card-actions>
-    </v-card>
-  </v-dialog>
+      </footer>
+  </div>
 </template>
 
 <style scoped>
+/* Overlay-Ansicht über dem Arbeitsbereich (wie Editor/Audit/Hilfe). Der z-index
+   liegt zwischen Editor (10) und Hilfe (15): So legt sich die Hilfe zu einem
+   SEO-Fund darüber; ihr Zurück-Button bringt den Bericht wieder zum Vorschein. */
+.cq-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  background: var(--mint-content);
+}
+
+.cq-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 46px;
+  padding: 0 10px;
+  background: var(--mint-panel);
+  border-bottom: 1px solid var(--mint-border);
+  color: var(--mint-text);
+}
+.cq-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--mint-border);
+  border-radius: var(--mint-radius);
+  background: #fff;
+  padding: 3px 6px;
+  color: var(--mint-text);
+  cursor: pointer;
+}
+.cq-back:hover { background: var(--mint-panel-hover); }
+.cq-head-icon { color: var(--mint-green); }
+.cq-head-title { font-weight: 600; font-size: 0.95rem; min-width: 0; }
+
+/* Scrollender Inhalt; der Bericht sitzt zentriert in angenehmer Lesebreite. */
+.cq-content { flex: 1 1 auto; overflow: auto; }
+.cq-inner {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 16px 20px 32px;
+}
+
 .cq-finding {
   display: flex;
   align-items: flex-start;
@@ -304,12 +344,20 @@ function openHelp(ruleId) {
 .cq-suggestions li {
   margin-bottom: 0.25rem;
 }
-/* Aktionsleiste darf umbrechen: auf schmalen Schirmen passen die vier Buttons
-   (Quelle, Verbessern, Erneut prüfen, Schließen) nicht in eine Zeile — ohne
-   Umbruch liefen die linken aus dem Bild. Der Umschlag greift den Spacer als
-   Trenner: linke Aktionen oben, rechte in der Folgezeile. */
+
+/* Aktionsleiste am unteren Rand. Darf umbrechen: auf schmalen Schirmen passen
+   die vier Buttons (Quelle, Verbessern, Erneut prüfen, Schließen) nicht in eine
+   Zeile — ohne Umbruch liefen die linken aus dem Bild. Der Umschlag greift den
+   Spacer als Trenner: linke Aktionen oben, rechte in der Folgezeile. */
 .cq-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
   flex-wrap: wrap;
+  gap: 8px;
   row-gap: 4px;
+  padding: 8px 12px;
+  background: var(--mint-panel);
+  border-top: 1px solid var(--mint-border);
 }
 </style>
