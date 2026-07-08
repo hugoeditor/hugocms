@@ -315,6 +315,7 @@ export default {
     open: 'KI-Assistent',
     title: 'KI-Assistent',
     clear: 'Verlauf löschen',
+    openLimits: 'Limits in der Claude Console öffnen',
     empty: 'Wie kann ich helfen? Ich kann Dateien lesen, anlegen und bearbeiten — bei Konfiguration (hugo.toml/config), Layouts und Partials.',
     thinking: 'Assistent arbeitet …',
     continueAction: 'Weiter',
@@ -751,6 +752,8 @@ export default {
     'AI-NOT-CONFIGURED': 'Der KI-Assistent ist nicht konfiguriert ([ai] api_key in der hugocms.ini).',
     'AI-REQUEST-FAILED': 'Anfrage an die KI fehlgeschlagen: {0}',
     'AI-AUTH-FAILED': 'Authentifizierung bei der KI fehlgeschlagen — API-Schlüssel prüfen: {0}',
+    'AI-USAGE-LIMIT': 'Nutzungslimit des KI-Kontos erreicht. Zugriff wieder ab {0}, {1} UTC.',
+    'AI-USAGE-LIMIT-UNKNOWN': 'Nutzungslimit des KI-Kontos erreicht.',
     'AI-NO-PENDING': 'Keine ausstehende Aktion zum Bestätigen.',
 
     'MOUNT-NAME-INVALID': 'Ungültiger Mount-Name: {0}',

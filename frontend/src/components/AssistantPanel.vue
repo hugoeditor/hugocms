@@ -60,6 +60,11 @@ const writeModeLabel = computed(() => {
   return t(`assistant.mode.${m}`)
 })
 
+// Nutzungslimit-Fehler des KI-Kontos: blendet zusätzlich den Console-Link ein.
+const isUsageLimitError = computed(() =>
+  ['AI-USAGE-LIMIT', 'AI-USAGE-LIMIT-UNKNOWN'].includes(assistant.error?.key),
+)
+
 // Inline-Diff für eine ausstehende write_file-Aktion auf einer BESTEHENDEN
 // Datei. null bei neuer Datei oder zu großem Inhalt → Panel zeigt dann die
 // einfache Inhalts-Vorschau.
@@ -236,7 +241,12 @@ watch(
         <div v-if="assistant.busy" class="d-flex align-center text-caption text-medium-emphasis my-2">
           <v-progress-circular indeterminate size="16" width="2" class="mr-2" />{{ $t('assistant.thinking') }}
         </div>
-        <v-alert v-if="assistant.error" type="error" density="compact" class="my-2">{{ errorText(t, assistant.error) }}</v-alert>
+        <v-alert v-if="assistant.error" type="error" density="compact" class="my-2">
+          {{ errorText(t, assistant.error) }}
+          <div v-if="isUsageLimitError" class="mt-1">
+            <a href="https://platform.claude.com/settings/limits" target="_blank" rel="noopener noreferrer">{{ $t('assistant.openLimits') }}</a>
+          </div>
+        </v-alert>
       </div>
 
       <!-- Eingabe -->

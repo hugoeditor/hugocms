@@ -66,6 +66,24 @@ final class AnthropicClient
         }
         if ($status < 200 || $status >= 300) {
             $message = (string) ($data['error']['message'] ?? ('HTTP ' . $status));
+
+            // Monatliches Nutzungslimit des Kontos: verständliche Meldung samt
+            // Freigabezeitpunkt statt der rohen englischen API-Meldung. Vor der
+            // Statusprüfung, da Anthropic dies je nach Fall mit 400/403/429
+            // zurückgibt und die Meldung das verlässliche Merkmal ist.
+            if (stripos($message, 'usage limit') !== false) {
+                if (preg_match(
+                    '/regain access on\s+(\d{4}-\d{2}-\d{2})\s+at\s+(\d{1,2}:\d{2})/i',
+                    $message,
+                    $m,
+                ) === 1) {
+                    // Datum als {d:…}-Objekt: der Client formatiert es
+                    // sprachabhängig (siehe i18n/apiMessage.js).
+                    throw new ApiException('EAI', 502, 'AI-USAGE-LIMIT', [['d' => $m[1]], $m[2]]);
+                }
+                throw new ApiException('EAI', 502, 'AI-USAGE-LIMIT-UNKNOWN');
+            }
+
             // 401/403 → Schlüsselproblem getrennt melden, sonst generisch.
             if ($status === 401 || $status === 403) {
                 throw new ApiException('EAI', 502, 'AI-AUTH-FAILED', [$message]);

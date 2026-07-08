@@ -315,6 +315,7 @@ export default {
     open: 'AI assistant',
     title: 'AI assistant',
     clear: 'Clear conversation',
+    openLimits: 'Open limits in the Claude Console',
     empty: 'How can I help? I can read, create and edit files — configuration (hugo.toml/config), layouts and partials.',
     thinking: 'Assistant is working …',
     continueAction: 'Continue',
@@ -749,6 +750,8 @@ export default {
     'AI-NOT-CONFIGURED': 'The AI assistant is not configured ([ai] api_key in hugocms.ini).',
     'AI-REQUEST-FAILED': 'AI request failed: {0}',
     'AI-AUTH-FAILED': 'AI authentication failed — check the API key: {0}',
+    'AI-USAGE-LIMIT': 'Usage limit of the AI account reached. Access resumes on {0} at {1} UTC.',
+    'AI-USAGE-LIMIT-UNKNOWN': 'Usage limit of the AI account reached.',
     'AI-NO-PENDING': 'No pending action to confirm.',
 
     'MOUNT-NAME-INVALID': 'Invalid mount name: {0}',
