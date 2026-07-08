@@ -61,6 +61,15 @@ final class Connector
      */
     private array $ai = ['apiKey' => null, 'model' => 'claude-opus-4-8', 'writeMode' => 'confirm'];
 
+    /**
+     * Externe Pro-Dienste aus der [services]-Sektion der hugocms.ini. Derzeit
+     * der Transkriptionsdienst (seo-success) für die Spracheingabe.
+     * speechKey/speechUrl = null → Spracheingabe aus.
+     *
+     * @var array{speechKey: ?string, speechUrl: ?string}
+     */
+    private array $services = ['speechKey' => null, 'speechUrl' => null];
+
     /** Globale [user]-Einstellungen (Sitzungsdauer, Inhaltsbreite). */
     private array $user = ['sessionLifetime' => 28800, 'contentWidth' => 1200];
 
@@ -119,6 +128,7 @@ final class Connector
             $options['logLevel'] ??= $cfg['log']['level'] ?? 'error';
             $options['hugoBin'] ??= $cfg['hugoBin'];
             $this->ai = $cfg['ai'];
+            $this->services = $cfg['services'];
             $this->user = $cfg['user'];
             $authConfig = $cfg['auth'];
             // Globale [user]-Einstellungen an den Auth-Treiber durchreichen
@@ -296,6 +306,7 @@ final class Connector
                 'build' => $this->cmdBuild(),
                 'assistant' => $this->cmdAssistant($request),
                 'assistantimprove' => $this->cmdAssistantImprove($request),
+                'speech' => $this->cmdSpeech($request),
                 'config' => $this->cmdConfig(),
                 'reconfigure' => $this->cmdReconfigure($request),
                 'account' => $this->cmdAccount($request),
@@ -427,6 +438,12 @@ final class Connector
             // Die LLM-Content-Prüfung braucht zusätzlich einen konfigurierten
             // KI-Schlüssel ([ai] api_key).
             'auditContent' => $this->hugo !== null && $this->license()->isPro() && $this->ai['apiKey'] !== null,
+            // Spracheingabe (Pro): der externe Transkriptionsdienst muss
+            // konfiguriert sein ([services] speech_key/speech_url) UND eine
+            // gültige Pro-Lizenz vorliegen. Unabhängig vom Hugo-Projekt.
+            'speech' => $this->license()->isPro()
+                && $this->services['speechKey'] !== null
+                && $this->services['speechUrl'] !== null,
         ];
     }
 
@@ -965,6 +982,63 @@ final class Connector
             $fileReport,
             $onWrite,
         );
+    }
+
+    /**
+     * speech — Spracheingabe (Pro). Nimmt eine hochgeladene Audiodatei (Feld
+     * „audio") entgegen und reicht sie an den externen Transkriptionsdienst
+     * (seo-success) weiter; liefert den erkannten Text. Der Dienst-Schlüssel
+     * bleibt serverseitig und wird nie an den Client gegeben.
+     *
+     * @return array{text: string, duration: float}
+     */
+    private function cmdSpeech(array $request): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+        $this->requirePro();
+        if ($this->services['speechKey'] === null || $this->services['speechUrl'] === null) {
+            throw new ApiException('ECONFIG', 409, 'SPEECH-NOT-CONFIGURED');
+        }
+
+        // Genau eine Audiodatei erwartet (kein files[]-Array wie beim Upload).
+        $file = $_FILES['audio'] ?? null;
+        if (!is_array($file) || is_array($file['name'] ?? null)) {
+            throw ApiException::badRequest('PARAM-MISSING', ['audio']);
+        }
+        if ((int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            throw ApiException::badRequest('UPLOAD-FAILED', ['audio']);
+        }
+        $tmp = (string) ($file['tmp_name'] ?? '');
+        if ($tmp === '' || !is_uploaded_file($tmp)) {
+            throw ApiException::badRequest('PARAM-MISSING', ['audio']);
+        }
+        // Diktate sind klein; Obergrenze (25 MB) schützt vor Missbrauch.
+        if ((int) ($file['size'] ?? 0) > 26214400) {
+            throw new ApiException('EINVAL', 413, 'AUDIO-TOO-LARGE');
+        }
+
+        // Sprache aus dem Locale (de/en) als Hinweis an die Erkennung.
+        $locale = strtolower(trim((string) ($request['locale'] ?? '')));
+        $lang = preg_match('/^[a-z]{2}$/', $locale) === 1 ? $locale : null;
+
+        @set_time_limit(180);
+
+        $client = new SpeechClient(
+            (string) $this->services['speechUrl'],
+            (string) $this->services['speechKey'],
+        );
+        $result = $client->transcribe(
+            $tmp,
+            (string) ($file['name'] ?? 'audio'),
+            (string) ($file['type'] ?? 'application/octet-stream'),
+            $lang,
+        );
+
+        return [
+            'text' => (string) ($result['text'] ?? ''),
+            'duration' => (float) ($result['duration'] ?? 0.0),
+        ];
     }
 
     /**

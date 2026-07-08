@@ -316,6 +316,8 @@ export default {
     open: 'KI-Assistent',
     title: 'KI-Assistent',
     clear: 'Verlauf löschen',
+    voiceRecord: 'Sprachaufnahme starten',
+    voiceStop: 'Aufnahme beenden und übertragen',
     openLimits: 'Limits in der Claude Console öffnen',
     empty: 'Wie kann ich helfen? Ich kann Dateien lesen, anlegen und bearbeiten — bei Konfiguration (hugo.toml/config), Layouts und Partials.',
     thinking: 'Assistent arbeitet …',
@@ -727,6 +729,12 @@ export default {
 
     'UPLOAD-FAILED': 'Hochladen von „{0}“ fehlgeschlagen.',
     'UPLOAD-TOO-LARGE': '„{0}“ ist zu groß (höchstens {1}).',
+    'AUDIO-TOO-LARGE': 'Die Audioaufnahme ist zu groß.',
+    'SPEECH-NOT-CONFIGURED': 'Die Spracheingabe ist nicht konfiguriert.',
+    'SPEECH-REQUEST-FAILED': 'Die Transkription ist fehlgeschlagen.',
+    'SPEECH-QUOTA-EXCEEDED': 'Das Kontingent der Spracheingabe ist erschöpft.',
+    'SPEECH-AUTH-FAILED': 'Der Transkriptionsdienst hat die Anmeldung abgelehnt.',
+    'SPEECH-MIC-DENIED': 'Kein Zugriff auf das Mikrofon. Bitte die Berechtigung erlauben.',
     'NOT-AN-IMAGE': 'Keine Bilddatei.',
     'FILETYPE-NOT-IMAGE': 'Die bearbeiteten Daten sind kein unterstütztes Bildformat (JPEG, PNG, WebP, GIF).',
 

@@ -114,6 +114,19 @@ export const useAssistantStore = defineStore('assistant', {
       this.aborted = data.aborted ?? false
     },
 
+    // Spracheingabe (Pro): nimmt ein aufgenommenes Audio-Blob, schickt es als
+    // multipart an den Proxy-Befehl `speech` (der es an den externen Dienst
+    // weiterreicht) und liefert den erkannten Text. Reiner API-Aufruf ohne
+    // Nebenwirkung auf den Gesprächsverlauf; Fehler werden geworfen.
+    async transcribe(blob, locale) {
+      const form = new FormData()
+      form.append('cmd', 'speech')
+      form.append('locale', locale ?? 'de')
+      form.append('audio', blob, 'aufnahme.webm')
+      const data = await api.postForm(form)
+      return typeof data.text === 'string' ? data.text : ''
+    },
+
     reset() {
       this.history = []
       this.pending = null

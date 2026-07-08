@@ -70,6 +70,16 @@ bin = ../bin/hugo/hugo
 ;model = claude-opus-4-8
 ;write_mode = confirm
 
+;[services]
+; Externe Pro-Dienste (optional). Derzeit die Spracheingabe des KI-Assistenten
+; über den Transkriptionsdienst (Projekt seo-success). Nur wirksam mit gültiger
+; Pro-Lizenz. Der Schlüssel bleibt serverseitig und wird nie an den Client
+; gegeben.
+;   speech_key  API-Schlüssel des Dienstes (Geheimnis; Datei mit 0640 schützen).
+;   speech_url  Voller Endpunkt, z. B. https://dein-dienst.example.com/v1/transcribe.
+;speech_key = "seosk_live_..."
+;speech_url = "https://dein-dienst.example.com/v1/transcribe"
+
 ; Hinweis: Die Pro-Lizenz steht NICHT hier, sondern PRO WEBSEITE in der
 ; jeweiligen Mount-Konfiguration (mounts/<hash>.ini, [license]-Sektion) —
 ; HugoCMS verwaltet mehrere Webseiten, jede mit eigener, domain-gebundener

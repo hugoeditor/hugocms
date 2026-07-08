@@ -8,6 +8,7 @@ import { useFilesStore } from '../stores/files'
 import { errorText } from '../i18n/apiMessage'
 import { lineDiff } from '../util/lineDiff'
 import { flushEditor } from '../util/editorBridge'
+import { useVoiceInput } from '../util/voiceInput'
 
 const { t, locale } = useI18n()
 const auth = useAuthStore()
@@ -16,6 +17,38 @@ const files = useFilesStore()
 
 const input = ref('')
 const scroller = ref(null)
+
+// Spracheingabe (Pro-Feature). Der Button erscheint nur, wenn der Dienst
+// freigeschaltet ist (auth.speech) UND der Browser Aufnahme unterstützt.
+const { supported: voiceSupported, recording: voiceRecording, start: startVoice, stop: stopVoice } = useVoiceInput()
+const transcribing = ref(false)
+
+// Sprachaufnahme umschalten: erster Klick startet, zweiter beendet und
+// transkribiert. Der erkannte Text wird an die aktuelle Eingabe angehängt,
+// damit der Nutzer ihn vor dem Senden noch prüfen und ändern kann.
+async function toggleVoice() {
+  if (assistant.busy || transcribing.value) return
+  if (voiceRecording.value) {
+    const blob = await stopVoice()
+    if (!blob) return
+    transcribing.value = true
+    try {
+      const text = (await assistant.transcribe(blob, locale.value)).trim()
+      if (text) input.value = input.value.trim() ? `${input.value.trimEnd()} ${text}` : text
+    } catch (e) {
+      assistant.error = e
+    } finally {
+      transcribing.value = false
+    }
+  } else {
+    try {
+      await startVoice()
+    } catch {
+      // Mikrofon-Zugriff abgelehnt oder kein Gerät.
+      assistant.error = { code: 'ESPEECH', key: 'SPEECH-MIC-DENIED' }
+    }
+  }
+}
 
 // Auf schmalen Schirmen (< 960 px, smAndDown — dieselbe Schwelle wie das übrige
 // responsive Layout) den Assistenten über die volle Bildschirmbreite zeigen;
@@ -264,6 +297,17 @@ watch(
           @keydown.enter.exact.prevent="submit"
         >
           <template #append-inner>
+            <v-btn
+              v-if="voiceSupported && auth.speech"
+              :icon="voiceRecording ? 'mdi-stop' : 'mdi-microphone'"
+              :color="voiceRecording ? 'error' : undefined"
+              variant="text"
+              size="small"
+              :loading="transcribing"
+              :disabled="assistant.busy"
+              :title="voiceRecording ? $t('assistant.voiceStop') : $t('assistant.voiceRecord')"
+              @click="toggleVoice"
+            />
             <v-btn icon="mdi-send" variant="text" size="small" :disabled="assistant.busy || !input.trim()" @click="submit" />
           </template>
         </v-textarea>

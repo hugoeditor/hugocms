@@ -106,6 +106,7 @@ final class Config
             ],
             'hugoBin' => $hugoBin === '' ? null : self::resolvePath($hugoBin, $baseDir),
             'ai' => self::aiSection($raw['ai'] ?? null),
+            'services' => self::servicesSection($raw['services'] ?? null),
         ];
     }
 
@@ -159,6 +160,27 @@ final class Config
             'apiKey' => $apiKey === '' ? null : $apiKey,
             'model' => $model,
             'writeMode' => $writeMode,
+        ];
+    }
+
+    /**
+     * Externe Pro-Dienste (optional) aus der [services]-Sektion. Derzeit der
+     * Transkriptionsdienst (seo-success) für die Spracheingabe:
+     *   speech_key  API-Schlüssel des Dienstes (Geheimnis).
+     *   speech_url  Voller Endpunkt, z. B. https://…/v1/transcribe.
+     * Fehlt eines von beiden, ist die Spracheingabe aus.
+     *
+     * @return array{speechKey: ?string, speechUrl: ?string}
+     */
+    private static function servicesSection(mixed $section): array
+    {
+        $section = is_array($section) ? $section : [];
+        $speechKey = trim((string) ($section['speech_key'] ?? ''));
+        $speechUrl = trim((string) ($section['speech_url'] ?? ''));
+
+        return [
+            'speechKey' => $speechKey === '' ? null : $speechKey,
+            'speechUrl' => $speechUrl === '' ? null : $speechUrl,
         ];
     }
 
