@@ -317,6 +317,7 @@ final class Connector
                 'auditcontentget' => $this->cmdAuditContentGet($request),
                 'auditcontentreport' => $this->cmdAuditContentReport($request),
                 'auditcontentrequeue' => $this->cmdAuditContentRequeue($request),
+                'auditcontentupdate' => $this->cmdAuditContentUpdate($request),
                 'auditcontentdelete' => $this->cmdAuditContentDelete($request),
                 default => throw ApiException::badRequest('UNKNOWN-COMMAND', [$cmd]),
             };
@@ -1126,10 +1127,10 @@ final class Connector
     private function improveInstruction(string $path, string $locale): string
     {
         if (str_starts_with(strtolower($locale), 'en')) {
-            return "Improve the existing content file `{$path}`. Steps: (1) call get_file_report for this path and act on BOTH parts — the content-quality verdict AND the SEO findings; (2) read the file; (3) fix the reported issues and write the improved version in a SINGLE write_file call. Adopt the file's existing front-matter format. Address the SEO findings as far as this file allows (e.g. title/H1 duplication, missing meta description, Open Graph / Twitter fields). If a SEO finding depends on which front-matter field the theme reads (e.g. og:image), you MAY READ the relevant layout/partial to find the correct field — but WRITE only this content file. Keep the front matter valid and preserve the author's meaning.";
+            return "Improve the existing content file `{$path}`. Steps: (1) call get_file_report for this path and act on BOTH parts — the content-quality verdict AND the SEO findings; (2) read the file; (3) fix the reported issues and write the improved version in a SINGLE write_file call. If the report contains a non-empty `userInstruction` field, it is an explicit instruction from the site owner and OVERRIDES conflicting findings or suggestions — follow it exactly. Adopt the file's existing front-matter format. Address the SEO findings as far as this file allows (e.g. title/H1 duplication, missing meta description, Open Graph / Twitter fields). If a SEO finding depends on which front-matter field the theme reads (e.g. og:image), you MAY READ the relevant layout/partial to find the correct field — but WRITE only this content file. Keep the front matter valid and preserve the author's meaning.";
         }
 
-        return "Verbessere die bestehende Content-Datei `{$path}`. Vorgehen: (1) rufe get_file_report für diesen Pfad auf und beachte BEIDE Teile — das Qualitätsurteil UND die SEO-Funde; (2) lies die Datei; (3) behebe die gemeldeten Probleme und schreibe die verbesserte Fassung in EINEM write_file-Aufruf. Übernimm das vorhandene Front-Matter-Format der Datei. Behebe die SEO-Funde, soweit über diese Datei möglich (z. B. Titel/H1-Dopplung, fehlende Meta-Description, Open-Graph-/Twitter-Felder). Hängt ein SEO-Fund davon ab, welches Front-Matter-Feld das Theme auswertet (etwa og:image), darfst du das betreffende Layout/Partial NUR LESEN, um das richtige Feld zu finden — GESCHRIEBEN wird ausschließlich diese Content-Datei. Halte das Front-Matter gültig und bewahre die Aussage des Autors.";
+        return "Verbessere die bestehende Content-Datei `{$path}`. Vorgehen: (1) rufe get_file_report für diesen Pfad auf und beachte BEIDE Teile — das Qualitätsurteil UND die SEO-Funde; (2) lies die Datei; (3) behebe die gemeldeten Probleme und schreibe die verbesserte Fassung in EINEM write_file-Aufruf. Enthält der Bericht ein nicht leeres Feld `userInstruction`, ist das eine ausdrückliche Anweisung des Betreibers und hat VORRANG vor widersprechenden Funden oder Vorschlägen — befolge sie genau. Übernimm das vorhandene Front-Matter-Format der Datei. Behebe die SEO-Funde, soweit über diese Datei möglich (z. B. Titel/H1-Dopplung, fehlende Meta-Description, Open-Graph-/Twitter-Felder). Hängt ein SEO-Fund davon ab, welches Front-Matter-Feld das Theme auswertet (etwa og:image), darfst du das betreffende Layout/Partial NUR LESEN, um das richtige Feld zu finden — GESCHRIEBEN wird ausschließlich diese Content-Datei. Halte das Front-Matter gültig und bewahre die Aussage des Autors.";
     }
 
     /**
@@ -1628,6 +1629,36 @@ final class Connector
         $service = $this->contentQuality();
         $key = $this->requireParam($request, 'key');
         $entry = $service->get($key); // wirft AUDIT-CONTENT-NOT-FOUND, falls unbekannt
+
+        return [
+            'file' => $this->withContentFileId([
+                'mount' => $entry['mount'] ?? null,
+                'rel' => $entry['rel'] ?? null,
+                'title' => $entry['title'] ?? null,
+            ]),
+            'contentQuality' => $entry,
+            'audit' => $this->auditIssuesForEntry($entry),
+        ];
+    }
+
+    /**
+     * Speichert die vom Benutzer bearbeiteten Teile eines Berichts: die
+     * Vorschlagsliste und ein optionales Freitext-Feld (Anweisung an die KI).
+     * Die KI-Befunde bleiben unverändert. Liefert denselben Gesamt-Bericht wie
+     * {@see cmdAuditContentReport} zurück, damit die Ansicht direkt aktualisiert.
+     */
+    private function cmdAuditContentUpdate(array $request): array
+    {
+        $service = $this->contentQuality();
+        $this->requireMethod('POST');
+        $key = $this->requireParam($request, 'key');
+
+        $suggestions = $request['suggestions'] ?? [];
+        $suggestions = is_array($suggestions) ? array_values($suggestions) : [];
+        $instruction = $request['instruction'] ?? null;
+        $instruction = is_string($instruction) ? $instruction : null;
+
+        $entry = $service->updateEditable($key, $suggestions, $instruction);
 
         return [
             'file' => $this->withContentFileId([

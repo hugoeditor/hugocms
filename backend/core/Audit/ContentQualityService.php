@@ -200,6 +200,55 @@ final class ContentQualityService
     }
 
     /**
+     * Überschreibt die vom Benutzer editierbaren Teile eines Eintrags: die
+     * Vorschlagsliste ({@see verdict.suggestions}) sowie ein optionales Freitext-
+     * Feld {@see userInstruction}, das der KI-Verbesserung zusätzlich mitgegeben
+     * wird. Die KI-Befunde ({@see verdict.findings}) und die Bewertung bleiben
+     * unangetastet. Setzt einen {@see editedAt}-Vermerk. Eine spätere Neuprüfung
+     * baut den Eintrag frisch auf und verwirft damit diese Bearbeitungen.
+     *
+     * @param list<mixed> $suggestions
+     * @return array<string, mixed> aktualisierter Eintrag
+     */
+    public function updateEditable(string $key, array $suggestions, ?string $userInstruction): array
+    {
+        $path = $this->pathFor($key);
+        $entry = $this->read($path);
+        if ($entry === null) {
+            throw ApiException::notFound('AUDIT-CONTENT-NOT-FOUND', [$key]);
+        }
+
+        // Vorschläge säubern: nur Strings, getrimmt, Leereinträge verwerfen,
+        // Anzahl und Länge begrenzen (defensiv gegen fehlerhafte Eingaben).
+        $clean = [];
+        foreach ($suggestions as $s) {
+            if (!is_string($s)) {
+                continue;
+            }
+            $s = trim($s);
+            if ($s !== '') {
+                $clean[] = mb_substr($s, 0, 1000);
+            }
+            if (count($clean) >= 50) {
+                break;
+            }
+        }
+
+        $instruction = $userInstruction !== null ? trim($userInstruction) : '';
+        $instruction = $instruction === '' ? null : mb_substr($instruction, 0, 4000);
+
+        if (!isset($entry['verdict']) || !is_array($entry['verdict'])) {
+            $entry['verdict'] = [];
+        }
+        $entry['verdict']['suggestions'] = $clean;
+        $entry['userInstruction'] = $instruction;
+        $entry['editedAt'] = gmdate('c');
+        $this->persist($key, $entry);
+
+        return $entry;
+    }
+
+    /**
      * Löscht einen Eintrag.
      *
      * @return array{deleted: string}

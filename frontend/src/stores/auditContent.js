@@ -72,6 +72,24 @@ export const useAuditContentStore = defineStore('auditContent', {
       await this.check(fileId, fileName, locale)
     },
 
+    // Speichert die vom Benutzer bearbeiteten Teile des Berichts (Vorschläge
+    // und Freitext-Anweisung an die KI). Der Server liefert den aktualisierten
+    // Gesamt-Bericht zurück, der direkt in den Dialog übernommen wird.
+    async saveEdits(key, suggestions, instruction) {
+      this.error = null
+      try {
+        this.current = await api.post('auditcontentupdate', {
+          key,
+          suggestions,
+          instruction,
+        })
+        return true
+      } catch (e) {
+        this.error = e
+        return false
+      }
+    },
+
     // Nimmt eine bereits verbesserte Seite wieder in die Arbeitsliste auf
     // (löscht den Verbesserungs-Vermerk, ohne neu zu prüfen).
     async requeue(key) {

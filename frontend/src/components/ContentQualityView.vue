@@ -8,7 +8,7 @@
 // So kann sich die Hilfe-Ansicht (höherer z-index) über den Bericht legen, wenn
 // man aus einem SEO-Fund die Regel-Hilfe öffnet — ihr Zurück-Button bringt den
 // Bericht wieder zum Vorschein. Ein v-dialog läge über der Hilfe und verdeckte sie.
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
 import { useAuditContentStore } from '../stores/auditContent'
@@ -32,6 +32,48 @@ const entry = computed(() => store.current?.contentQuality ?? null)
 const verdict = computed(() => entry.value?.verdict ?? null)
 const audit = computed(() => store.current?.audit ?? null)
 const fileId = computed(() => store.current?.file?.fileId ?? null)
+// Schlüssel (sha1) des Berichts — Adresse für Speicher-/Verwaltungsbefehle.
+const reportKey = computed(() => entry.value?.key ?? null)
+
+// --- Bearbeiten: Benutzer korrigiert Vorschläge + Freitext-Anweisung, bevor
+// die KI den Bericht abruft. Die KI-Befunde bleiben schreibgeschützt.
+const editing = ref(false)
+const saving = ref(false)
+const editSuggestions = ref([])
+const editInstruction = ref('')
+
+function startEdit() {
+  editSuggestions.value = [...(verdict.value?.suggestions ?? [])]
+  editInstruction.value = entry.value?.userInstruction ?? ''
+  editing.value = true
+}
+
+function cancelEdit() {
+  editing.value = false
+}
+
+function addSuggestion() {
+  editSuggestions.value.push('')
+}
+
+function removeSuggestion(i) {
+  editSuggestions.value.splice(i, 1)
+}
+
+async function saveEdit() {
+  if (!reportKey.value || saving.value) return
+  saving.value = true
+  try {
+    const ok = await store.saveEdits(
+      reportKey.value,
+      editSuggestions.value,
+      editInstruction.value,
+    )
+    if (ok) editing.value = false
+  } finally {
+    saving.value = false
+  }
+}
 
 function scoreColor(score) {
   if (score == null) return 'grey'
@@ -48,9 +90,23 @@ function formatDate(iso) {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString(locale.value)
 }
 
-// Erneut prüfen: nutzt die fileId der aktuellen Datei.
+// Erneut prüfen: nutzt die fileId der aktuellen Datei. Eine frische KI-Prüfung
+// baut den Bericht neu auf und verwirft dabei manuelle Bearbeitungen — deshalb
+// vorher nachfragen, sobald ein editedAt-Vermerk vorliegt.
+const recheckDialog = ref(false)
+
 function recheck() {
-  if (fileId.value) store.recheck(fileId.value, store.current?.file?.title, locale.value)
+  if (!fileId.value) return
+  if (entry.value?.editedAt) {
+    recheckDialog.value = true
+    return
+  }
+  doRecheck()
+}
+
+function doRecheck() {
+  recheckDialog.value = false
+  store.recheck(fileId.value, store.current?.file?.title, locale.value)
 }
 
 // Zur Quelldatei springen: Editor öffnen, Dialog schließen. Die ID VOR dem
@@ -152,12 +208,94 @@ function openHelp(ruleId) {
             </div>
           </template>
 
-          <!-- Vorschläge -->
-          <template v-if="verdict.suggestions?.length">
-            <div class="text-subtitle-2 mt-4 mb-1">{{ $t('contentQuality.suggestions') }}</div>
-            <ul class="cq-suggestions">
+          <!-- Vorschläge (vom Benutzer editierbar) -->
+          <div class="d-flex align-center mt-4 mb-1">
+            <div class="text-subtitle-2">{{ $t('contentQuality.suggestions') }}</div>
+            <v-spacer />
+            <template v-if="!editing">
+              <v-btn
+                size="small"
+                variant="text"
+                prepend-icon="mdi-pencil-outline"
+                :disabled="store.busy"
+                @click="startEdit"
+              >
+                {{ $t('contentQuality.edit') }}
+              </v-btn>
+            </template>
+            <template v-else>
+              <v-btn size="small" variant="text" :disabled="saving" @click="cancelEdit">
+                {{ $t('common.cancel') }}
+              </v-btn>
+              <v-btn
+                size="small"
+                variant="flat"
+                color="primary"
+                :loading="saving"
+                @click="saveEdit"
+              >
+                {{ $t('common.save') }}
+              </v-btn>
+            </template>
+          </div>
+
+          <!-- Anzeige -->
+          <template v-if="!editing">
+            <ul v-if="verdict.suggestions?.length" class="cq-suggestions">
               <li v-for="(s, i) in verdict.suggestions" :key="'s' + i">{{ s }}</li>
             </ul>
+            <p v-else class="text-body-2 text-medium-emphasis">
+              {{ $t('contentQuality.noSuggestions') }}
+            </p>
+            <div v-if="entry.userInstruction" class="cq-instruction mt-3">
+              <div class="text-subtitle-2 mb-1">{{ $t('contentQuality.instruction') }}</div>
+              <p class="text-body-2">{{ entry.userInstruction }}</p>
+            </div>
+          </template>
+
+          <!-- Bearbeiten -->
+          <template v-else>
+            <div
+              v-for="(s, i) in editSuggestions"
+              :key="'es' + i"
+              class="d-flex align-start mb-2"
+            >
+              <v-textarea
+                v-model="editSuggestions[i]"
+                :rows="1"
+                auto-grow
+                density="compact"
+                hide-details
+                variant="outlined"
+              />
+              <v-btn
+                icon="mdi-close"
+                size="small"
+                variant="text"
+                class="ml-1 mt-1"
+                :title="$t('contentQuality.removeSuggestion')"
+                @click="removeSuggestion(i)"
+              />
+            </div>
+            <v-btn
+              size="small"
+              variant="text"
+              prepend-icon="mdi-plus"
+              @click="addSuggestion"
+            >
+              {{ $t('contentQuality.addSuggestion') }}
+            </v-btn>
+
+            <div class="text-subtitle-2 mt-4 mb-1">{{ $t('contentQuality.instruction') }}</div>
+            <v-textarea
+              v-model="editInstruction"
+              :rows="2"
+              auto-grow
+              density="compact"
+              hide-details
+              variant="outlined"
+              :placeholder="$t('contentQuality.instructionHint')"
+            />
           </template>
 
           <div class="text-caption text-medium-emphasis mt-4">
@@ -176,6 +314,17 @@ function openHelp(ruleId) {
           >
             {{ $t('contentQuality.improvedAt', [formatDate(entry.improvedAt)]) }}
             <template v-if="entry.improveModel"> · {{ entry.improveModel }}</template>
+          </v-chip>
+          <v-chip
+            v-if="entry.editedAt"
+            color="info"
+            size="small"
+            variant="tonal"
+            label
+            class="mt-2 ml-2"
+            prepend-icon="mdi-account-edit-outline"
+          >
+            {{ $t('contentQuality.editedAt', [formatDate(entry.editedAt)]) }}
           </v-chip>
 
           <!-- SEO-Funde derselben Datei aus dem jüngsten Audit-Lauf -->
@@ -226,12 +375,14 @@ function openHelp(ruleId) {
             icon="mdi-file-document-edit-outline"
             :title="$t('contentQuality.toSource')"
             variant="text"
+            :disabled="editing"
             @click="toSource"
           />
           <v-btn
             v-else
             prepend-icon="mdi-file-document-edit-outline"
             variant="text"
+            :disabled="editing"
             @click="toSource"
           >
             {{ $t('contentQuality.toSource') }}
@@ -243,6 +394,7 @@ function openHelp(ruleId) {
             :title="$t('contentQuality.improve')"
             variant="text"
             color="primary"
+            :disabled="editing"
             @click="improve"
           />
           <v-btn
@@ -250,6 +402,7 @@ function openHelp(ruleId) {
             prepend-icon="mdi-creation"
             variant="text"
             color="primary"
+            :disabled="editing"
             @click="improve"
           >
             {{ $t('contentQuality.improve') }}
@@ -262,14 +415,14 @@ function openHelp(ruleId) {
             icon="mdi-refresh"
             :title="$t('contentQuality.recheck')"
             variant="text"
-            :disabled="store.busy"
+            :disabled="store.busy || editing"
             @click="recheck"
           />
           <v-btn
             v-else
             prepend-icon="mdi-refresh"
             variant="text"
-            :disabled="store.busy"
+            :disabled="store.busy || editing"
             @click="recheck"
           >
             {{ $t('contentQuality.recheck') }}
@@ -284,6 +437,22 @@ function openHelp(ruleId) {
         />
         <v-btn v-else variant="text" @click="store.closeDialog()">{{ $t('common.close') }}</v-btn>
       </footer>
+
+    <!-- Warnung vor dem Neu-Prüfen, wenn manuelle Bearbeitungen vorliegen:
+         die frische KI-Prüfung überschreibt Vorschläge und Anweisung. -->
+    <v-dialog v-model="recheckDialog" max-width="440">
+      <v-card>
+        <v-card-title class="text-subtitle-1">{{ $t('contentQuality.recheckTitle') }}</v-card-title>
+        <v-card-text>{{ $t('contentQuality.recheckWarn') }}</v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="recheckDialog = false">{{ $t('common.cancel') }}</v-btn>
+          <v-btn color="warning" variant="flat" @click="doRecheck">
+            {{ $t('contentQuality.recheckAction') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
