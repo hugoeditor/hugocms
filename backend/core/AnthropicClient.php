@@ -17,6 +17,7 @@ use HugoCMS\FileManager\Exception\ApiException;
 final class AnthropicClient
 {
     private const ENDPOINT = 'https://api.anthropic.com/v1/messages';
+    private const MODELS_ENDPOINT = 'https://api.anthropic.com/v1/models?limit=1';
     private const VERSION = '2023-06-01';
 
     public function __construct(
@@ -92,5 +93,50 @@ final class AnthropicClient
         }
 
         return $data;
+    }
+
+    /**
+     * Erreichbarkeits- und Schlüsselprüfung ohne Token-Verbrauch: ein GET auf
+     * /v1/models. Verifiziert Netzwerk-Erreichbarkeit UND gültigen API-Schlüssel,
+     * ohne die Messages-API (und damit Kosten) zu bemühen. Wirft dieselben
+     * Fehler wie createMessage; bei Erfolg kehrt die Methode ohne Rückgabe zurück.
+     */
+    public function ping(): void
+    {
+        // Kurzer Timeout: die Prüfung soll das Öffnen des Assistenten nicht
+        // spürbar verzögern.
+        $ch = curl_init(self::MODELS_ENDPOINT);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => min($this->timeout, 15),
+            CURLOPT_HTTPHEADER => [
+                'x-api-key: ' . $this->apiKey,
+                'anthropic-version: ' . self::VERSION,
+            ],
+        ]);
+
+        $raw = curl_exec($ch);
+        if ($raw === false) {
+            $err = curl_error($ch);
+            curl_close($ch);
+            throw new ApiException('EAI', 502, 'AI-REQUEST-FAILED', [$err]);
+        }
+        $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        curl_close($ch);
+
+        if ($status >= 200 && $status < 300) {
+            return;
+        }
+
+        $data = json_decode((string) $raw, true);
+        $message = is_array($data)
+            ? (string) ($data['error']['message'] ?? ('HTTP ' . $status))
+            : ('HTTP ' . $status);
+
+        // 401/403 → Schlüsselproblem getrennt melden, sonst generisch.
+        if ($status === 401 || $status === 403) {
+            throw new ApiException('EAI', 502, 'AI-AUTH-FAILED', [$message]);
+        }
+        throw new ApiException('EAI', 502, 'AI-REQUEST-FAILED', [$message]);
     }
 }

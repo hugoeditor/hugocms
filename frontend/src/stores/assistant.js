@@ -12,6 +12,9 @@ export const useAssistantStore = defineStore('assistant', {
     actions: [], // im letzten Zug ausgeführte Schreibaktionen
     aborted: false, // letzter Zug an der Schrittgrenze abgebrochen → „Weiter" anbieten
     busy: false,
+    checking: false, // Bereitschaftsprüfung (assistantping) läuft
+    ready: false, // Claude-API zuletzt erfolgreich erreicht
+    readyChecked: false, // Prüfung in dieser Sitzung bereits durchgeführt
     error: null, // ApiError oder null
   }),
 
@@ -62,6 +65,28 @@ export const useAssistantStore = defineStore('assistant', {
         return false
       } finally {
         this.busy = false
+      }
+    },
+
+    // Bereitschaftsprüfung: fragt das Backend, ob die Claude-API erreichbar und
+    // der Schlüssel gültig ist (GET /v1/models, ohne Token-Verbrauch). Der Merker
+    // `readyChecked` wird NUR bei Erfolg gesetzt, damit die Prüfung pro Sitzung
+    // einmal gelingt, aber nach einem Fehler beim nächsten Öffnen erneut läuft.
+    // Setzt `ready` bzw. legt bei Fehlern den ApiError in `error` ab.
+    async checkReady() {
+      this.error = null
+      this.ready = false
+      this.checking = true
+      try {
+        const data = await api.post('assistantping')
+        this.ready = data.ready === true
+        this.readyChecked = this.ready
+        return this.ready
+      } catch (e) {
+        this.error = e
+        return false
+      } finally {
+        this.checking = false
       }
     },
 
@@ -133,6 +158,7 @@ export const useAssistantStore = defineStore('assistant', {
       this.actions = []
       this.aborted = false
       this.error = null
+      // `ready`/`readyChecked` bleiben erhalten: die Prüfung gilt sitzungsweit.
     },
   },
 })

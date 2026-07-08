@@ -305,6 +305,7 @@ final class Connector
                 'emptytrash' => $this->cmdEmptyTrash($request),
                 'build' => $this->cmdBuild(),
                 'assistant' => $this->cmdAssistant($request),
+                'assistantping' => $this->cmdAssistantPing(),
                 'assistantimprove' => $this->cmdAssistantImprove($request),
                 'speech' => $this->cmdSpeech($request),
                 'config' => $this->cmdConfig(),
@@ -953,6 +954,26 @@ final class Connector
             $openFilePath,
             $openDirPath,
         );
+    }
+
+    /**
+     * assistantping — Bereitschaftsprüfung des KI-Assistenten. Ein GET auf
+     * /v1/models (ohne Token-Verbrauch) verifiziert, dass die Claude-API
+     * erreichbar und der hinterlegte Schlüssel gültig ist. Erfolg → ready:true;
+     * bei Problemen wirft ping() den passenden Fehler (Erreichbarkeit/Schlüssel).
+     *
+     * @return array{ready: bool}
+     */
+    private function cmdAssistantPing(): array
+    {
+        $this->requireAuth();
+        if ($this->ai['apiKey'] === null) {
+            throw new ApiException('ECONFIG', 409, 'AI-NOT-CONFIGURED');
+        }
+
+        (new AnthropicClient((string) $this->ai['apiKey']))->ping();
+
+        return ['ready' => true];
     }
 
     /**

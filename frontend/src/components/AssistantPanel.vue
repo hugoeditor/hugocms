@@ -167,6 +167,20 @@ async function continueRun() {
   if (ok) await reloadIfOpenChanged()
 }
 
+// Bereitschaftsprüfung beim ersten Öffnen des Panels in einer Sitzung: prüft
+// ohne Token-Verbrauch, ob die Claude-API erreichbar ist, und zeigt „Ich bin
+// bereit" bzw. den Fehler. Der Merker `readyChecked` verhindert eine erneute
+// Prüfung bei jedem weiteren Öffnen (nur einmal pro Sitzung).
+watch(
+  () => assistant.open,
+  (open) => {
+    if (open && !assistant.readyChecked && !assistant.checking && !assistant.busy) {
+      assistant.checkReady()
+    }
+  },
+  { immediate: true },
+)
+
 // Beim Eintreffen neuer Nachrichten ans Ende scrollen.
 watch(
   () => [assistant.bubbles.length, assistant.busy, assistant.pending],
@@ -205,8 +219,12 @@ watch(
 
       <!-- Verlauf -->
       <div ref="scroller" class="flex-grow-1 pa-3 assistant-scroll">
-        <div v-if="!assistant.bubbles.length" class="text-medium-emphasis text-body-2">
-          {{ $t('assistant.empty') }}
+        <!-- Bereitschaftsprüfung: solange kein Gespräch läuft. -->
+        <div v-if="!assistant.bubbles.length && assistant.checking" class="d-flex align-center text-caption text-medium-emphasis my-2">
+          <v-progress-circular indeterminate size="16" width="2" class="mr-2" />{{ $t('assistant.checking') }}
+        </div>
+        <div v-else-if="!assistant.bubbles.length && assistant.ready" class="d-flex align-center text-body-2 text-medium-emphasis my-2">
+          <v-icon icon="mdi-check-circle-outline" size="small" color="success" class="mr-2" />{{ $t('assistant.ready') }}
         </div>
 
         <template v-for="(b, i) in assistant.bubbles" :key="i">
