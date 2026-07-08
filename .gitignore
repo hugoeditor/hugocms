@@ -35,6 +35,9 @@ site/
 # Auslieferungs-Repo mit dem fertigen Produkt (eigenes Repo: hugocms-release)
 hugocms-release/
 
+# SEO-Erfolgsmessung (in echten Installationen nicht versionieren eignes Backend)
+seo-success/
+
 # Installationsspezifische Konfigurationsdateien (Vorlagen *.ini.beispiel
 # bleiben versioniert, da sie nicht auf .ini enden).
 *.ini

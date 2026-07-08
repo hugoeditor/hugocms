@@ -541,6 +541,8 @@ final class AssistantService
 
         Match the project's existing conventions — never introduce a format or style the project does not already use. Hugo has no global front-matter format; it is per file, recognizable only by the delimiters (`---` = YAML, `+++` = TOML, `{ }` = JSON). So BEFORE creating content or front matter, inspect what the project already does: read an existing file in the same section, or check the `archetypes/` templates and the Hugo config (hugo.toml / hugo.yaml / config.*). Adopt the same front-matter format, date format, and field names. The same applies to config edits (match the existing config language) and to layouts/partials (match the templating style and naming already in use). If existing files disagree or none exist, ask the user which convention to follow rather than guessing.
 
+        When you write or edit prose content, it must NOT read as AI-generated. Use a natural, human voice; be specific and concrete; vary sentence length. Avoid generic filler, empty superlatives, marketing clichés, and formulaic phrasing (e.g. "In today's fast-paced world", "it's important to note", "when it comes to"). Preserve the author's existing tone and vocabulary.
+
         Configured mounts:
         {$mounts}
 
