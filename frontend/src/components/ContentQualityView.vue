@@ -247,7 +247,7 @@ function openHelp(ruleId) {
           />
           <v-btn
             v-else
-            prepend-icon="mdi-robot-outline"
+            prepend-icon="mdi-creation"
             variant="text"
             color="primary"
             @click="improve"

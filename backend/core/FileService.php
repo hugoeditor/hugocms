@@ -663,6 +663,7 @@ final class FileService
             'type' => $isDir ? 'dir' : 'file',
             'size' => $isDir ? 0 : (int) (filesize($abs) ?: 0),
             'mtime' => (int) (filemtime($abs) ?: 0),
+            'ctime' => (int) (filectime($abs) ?: 0),
             'mime' => $mime,
             'editable' => !$isDir && $this->isEditable($name),
             'image' => !$isDir && str_starts_with($mime, 'image/'),

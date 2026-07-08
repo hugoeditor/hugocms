@@ -388,6 +388,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
               <th class="col-name">{{ $t('files.colName') }}</th>
               <th class="col-size">{{ $t('files.colSize') }}</th>
               <th class="col-type">{{ $t('files.colType') }}</th>
+              <th class="col-created">{{ $t('files.colCreated') }}</th>
               <th class="col-date">{{ $t('files.colModified') }}</th>
             </tr>
           </thead>
@@ -416,6 +417,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
               </td>
               <td class="col-size">{{ entry.type === 'dir' ? '' : formatSize(entry.size) }}</td>
               <td class="col-type">{{ typeLabel(entry) }}</td>
+              <td class="col-created">{{ formatDate(entry.ctime) }}</td>
               <td class="col-date">{{ formatDate(entry.mtime) }}</td>
             </tr>
           </tbody>
@@ -612,6 +614,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 }
 .col-size { width: 110px; text-align: right; }
 .col-type { width: 130px; }
+.col-created { width: 160px; }
 .col-date { width: 160px; }
 .nemo-list td.col-size { text-align: right; }
 
@@ -628,6 +631,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 .nemo-row.selected .nemo-row-icon,
 .nemo-row.selected .col-size,
 .nemo-row.selected .col-type,
+.nemo-row.selected .col-created,
 .nemo-row.selected .col-date { color: #fff; }
 .nemo-row.cut { opacity: 0.5; }
 /* Flex-Layout für Symbol + Name liegt auf einem inneren Wrapper, NICHT auf der
@@ -644,7 +648,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
   border-radius: 2px;
   flex: 0 0 auto;
 }
-.col-size, .col-type, .col-date { color: var(--mint-text-muted); }
+.col-size, .col-type, .col-created, .col-date { color: var(--mint-text-muted); }
 
 /* Schmale Schirme: platzraubende Spalten ausblenden und Zeilen für die
    Bedienung per Finger etwas höher machen. */
@@ -652,7 +656,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
   .nemo-row td { padding-top: 9px; padding-bottom: 9px; }
 }
 @media (max-width: 720px) {
-  .col-type, .col-path { display: none; }
+  .col-type, .col-created, .col-path { display: none; }
 }
 @media (max-width: 560px) {
   .col-date { display: none; }
