@@ -12,8 +12,10 @@ Mounts erreichbar sind, wird je Webseite über INI-Dateien festgelegt.
 > Markdown-Editor (TipTap), Papierkorb-Verwaltung (Wiederherstellen/Leeren),
 > CSRF-Schutz, rekursive Suche. Optionaler **KI-Assistent** (Claude) mit Zugriff
 > auf die Mounts, Editor-Anbindung und drei Schreibmodi. Optionale
-> **Pro-Version** mit Git-Versionierung, je Webseite über einen Lizenzschlüssel
-> freigeschaltet. Konfiguration und
+> **Pro-Version**, je Webseite über einen Lizenzschlüssel freigeschaltet:
+> Git-Versionierung, **SEO-Check** des gebauten Projekts und **Content-Qualität**
+> (KI-Prüfung einzelner Inhaltsdateien mit direkter **KI-Verbesserung**, auch per
+> Cron). Konfiguration und
 > Anmeldedaten lassen sich im laufenden Betrieb über die Oberfläche ändern.
 > Mehrbenutzer mit Rollen folgt (Stufe 5).
 > Mandantenfähigkeit und der Auslieferungsweg (`packaging.sh` / `install.sh`)
@@ -37,17 +39,27 @@ hugocms-2026/                     # Quell-Repo (Entwicklung)
 │   │   ├── FileService.php       # Dateioperationen (list, read, write, anlegen, …)
 │   │   ├── AssistantService.php  # KI-Assistent: Tool-Schleife über FileService
 │   │   ├── AnthropicClient.php   # Claude-API über cURL (ohne SDK)
+│   │   ├── License.php           # Pro-Lizenz prüfen (Ed25519, domaingebunden)
+│   │   ├── GitService.php        # Pro: Git-Versionierung
+│   │   ├── Audit/                # Pro: SEO-Check & Content-Qualität
+│   │   │   ├── AuditService.php      # SEO-Check-Läufe (Bericht je Webseite)
+│   │   │   ├── AuditRunner.php       # gebautes public/ parsen & Regeln prüfen
+│   │   │   ├── Checks.php / RuleCatalog.php / HtmlInspector.php / …
+│   │   │   └── ContentQualityService.php # LLM-Qualitätsprüfung je Inhaltsdatei
 │   │   ├── AuthFactory.php       # Auth-Treiber (singleuser)
 │   │   ├── Logger.php            # Datei-Logging mit Stufen
 │   │   ├── Response.php          # einheitliche JSON-Antworten
 │   │   ├── Auth/                 # AuthInterface + SingleUser
 │   │   └── Exception/            # ApiException
+│   ├── cli/                      # Kommandozeilen-Werkzeuge
+│   │   └── cron-improve.php      # Cron: nächste Dateien per KI verbessern (auto)
 │   ├── custom/                   # custom.php.beispiel (programmatischer Bootstrap)
 │   ├── mounts/                   # host-spezifische mounts/<hash>.ini (je Webseite)
+│   ├── help/                     # Wissensdatenbank (Markdown), u. a. SEO-Regel-Hilfen
 │   ├── hugocms.ini(.beispiel)    # Hauptkonfiguration: Anmeldung, Session, Log
 │   ├── mounts.ini(.beispiel)     # Rückfall-Mounts (greift ohne host-eigene Datei)
 │   ├── log/                      # Logdatei (.htaccess-geschützt)
-│   └── var/sessions/             # PHP-Sitzungsdateien
+│   └── var/                      # Sitzungen, SEO-Check- & Content-Qualitäts-Berichte
 ├── bin/
 │   ├── install.sh                # richtet eine Webseite ein (Produktivsystem)
 │   ├── get-hugo.sh               # lädt das Hugo-Binary nach bin/hugo/
@@ -360,6 +372,9 @@ Composer. Modell-Standard: `claude-opus-4-8`.
 **dieselben Grenzen** wie für die Oberfläche: Einsperrung pro Mount,
 `permissions`/`readonly` und erlaubte Endungen. Der API-Schlüssel verlässt das
 Backend nie (wie der Passwort-Hash); im Formular heißt „Feld leer = unverändert".
+Bei aktiver Pro-Lizenz kommt das Nur-Lese-Werkzeug **`get_file_report`** hinzu:
+Es liefert zu einer Datei den Gesamt-Bericht (Qualitätsurteil + SEO-Funde) —
+Grundlage der KI-Verbesserung (siehe „SEO-Check & Content-Qualität").
 
 **Schreibmodi** (`[ai] write_mode`):
 
@@ -388,15 +403,28 @@ Inhalt wird als vorrangige, projektweite Anweisung in den Systemkontext geladen
 (z. B. „Front Matter immer YAML", „Theme ananke", „Inhalte auf Deutsch"). Fehlt
 die Datei, greift die allgemeine Konventionserkennung.
 
-## Pro-Version: Git-Versionierung
+## Pro-Version
 
-Die **Pro-Version** schaltet zusätzliche Funktionen frei — derzeit die
-**Git-Versionierung** des Hugo-Projekts: Status (Branch, geänderte Dateien),
-Commit-Verlauf, Diff eines Commits, Commit, Push und Zurücksetzen des
-Arbeitsbaums. Ist eine Webseite freigeschaltet, erscheint in der Titelleiste ein
-**Repository-Knopf** (`mdi-source-branch`), der den Git-Dialog öffnet. Git
-arbeitet im **Hugo-Projektverzeichnis** der Webseite (`[hugo] source` der
-Mount-Konfiguration) — dort liegt das Repository.
+Die **Pro-Version** schaltet je Webseite über einen Lizenzschlüssel zusätzliche
+Funktionen frei:
+
+- **Git-Versionierung** des Hugo-Projekts,
+- **SEO-Check** des gebauten Projekts (Bericht mit Funden je Regel),
+- **Content-Qualität** — KI-Prüfung einzelner Inhaltsdateien samt direkter
+  **KI-Verbesserung** (auch per Cron).
+
+Voraussetzung für alle Pro-Funktionen ist eine gültige, domaingebundene Lizenz
+(siehe Lizenzmodell) und ein konfiguriertes **Hugo-Projekt** der Webseite
+(`[hugo] source` der Mount-Konfiguration). Die Content-Qualität und die
+KI-Verbesserung brauchen zusätzlich einen **KI-Schlüssel** (`[ai] api_key`).
+
+### Git-Versionierung
+
+Status (Branch, geänderte Dateien), Commit-Verlauf, Diff eines Commits, Commit,
+Push und Zurücksetzen des Arbeitsbaums. Ist eine Webseite freigeschaltet,
+erscheint in der Titelleiste ein **Repository-Knopf** (`mdi-source-branch`), der
+den Git-Dialog öffnet. Git arbeitet im **Hugo-Projektverzeichnis** der Webseite
+— dort liegt das Repository.
 
 Voraussetzungen: `git` ist auf dem Server installiert, das Projektverzeichnis
 ist ein Git-Repository, und für `push` sind die Zugangsdaten der Gegenstelle in
@@ -430,7 +458,7 @@ zugehörige private Schlüssel ist nicht Teil dieses Repos.
    Anfrage; der Repository-Knopf erscheint.
 
 Ein für eine andere Domain ausgestellter Schlüssel wird abgewiesen
-(`LICENSE-INVALID`); ohne gültige Lizenz sind die Git-Befehle gesperrt
+(`LICENSE-INVALID`); ohne gültige Lizenz sind die Pro-Befehle gesperrt
 (`PRO-REQUIRED`). Der Schlüssel lässt sich auch direkt in der
 `mounts/<hash>.ini` hinterlegen:
 
@@ -438,6 +466,63 @@ Ein für eine andere Domain ausgestellter Schlüssel wird abgewiesen
 [license]
 key = "HUGOCMS-...-..."
 ```
+
+### SEO-Check
+
+Analysiert das **gebaute** Projekt (`public/`) plus die Hugo-Quellen und meldet
+Funde je Regel — fehlende/duplizierte Titel und Meta-Descriptions,
+Überschriften-Hierarchie, Bilder ohne `alt`, Canonical, Open Graph/Twitter,
+HTML-Grundgerüst, defekte interne Links, URL-Struktur, `robots.txt`/Sitemap,
+Hugo-Front-Matter u. a. Der Check läuft rein aus Bordmitteln
+(`DOMDocument`/`DOMXPath`), ohne HTTP-Requests. Ein Bericht wird je Webseite als
+Verlauf vorgehalten (`backend/var/audit/<hash>/`, JSON — bewusst keine
+Datenbank). Jeder Fund trägt nur eine **Regel-ID** (kein übersetzter Text); der
+Client übersetzt und verlinkt eine ausführliche Hilfe (`backend/help/audit/`),
+und springt aus einem Fund direkt zur betroffenen Quelldatei.
+
+Geöffnet über den **SEO-Check-Knopf** in der Titelleiste; im Reiter
+„SEO-Bericht" lassen sich Läufe starten, filtern (Schweregrad/Kategorie, Suche
+nach URL/Quelle) und vergleichen.
+
+### Content-Qualität & KI-Verbesserung
+
+Ergänzend zum regelbasierten SEO-Check bewertet die **Content-Qualität** einzelne
+Inhaltsdateien per LLM (Lesbarkeit, Dünn-Content, Meta-/SEO-Felder) — je Datei
+ein einziger Modellaufruf mit erzwungener, strukturierter Ausgabe (Score 0–100,
+Befunde, Vorschläge). Ergebnisse liegen je Datei unter
+`backend/var/audit-content/<hash>/` und werden im Reiter „Content-Qualität"
+gelistet (Marker „veraltet", wenn die Quelle sich seit der Prüfung geändert hat).
+Ausgelöst wird die Prüfung aus dem Kontextmenü, dem Editor oder der Liste.
+
+Der **Gesamt-Bericht** einer Datei verbindet das Qualitätsurteil mit den
+SEO-Funden derselben Datei aus dem jüngsten SEO-Check. Auf dieser Grundlage
+verbessert der **KI-Assistent** eine Datei direkt: Über den Befehl
+`assistantimprove` (Knopf „Mit KI verbessern" in Editor, Kontextmenü und Liste)
+ruft er intern `get_file_report` auf und bearbeitet ausschließlich die Zieldatei;
+im `confirm`-Modus wird jede Änderung wie gewohnt bestätigt. Der Schnellweg
+funktioniert auch **ohne** vorher erstellten Qualitätsbericht.
+
+Jede vom Assistenten geschriebene Datei wird als „verbessert" vermerkt; die
+Arbeitsliste „Zu verbessern" (Score < 100 und noch nicht verbessert) leitet sich
+daraus ab. Ein Eintrag lässt sich über „Wieder aufnehmen" erneut aufnehmen.
+
+**Cron (automatische Verbesserung).** Das CLI-Werkzeug
+`backend/cli/cron-improve.php` verbessert die nächsten Dateien dieser
+Arbeitsliste automatisch — im Schreibmodus `auto`, ohne Bestätigung:
+
+```bash
+# Probelauf: nur zeigen, was verarbeitet würde (kein API-Aufruf, kein Schreiben)
+php backend/cli/cron-improve.php --dry-run --limit=5
+
+# Echter Lauf (schreibt wirklich); --host ist die lizenzierte Domain
+php backend/cli/cron-improve.php --host=example.com --limit=3
+```
+
+Optionen: `--host=<domain>` (Pflicht außer bei `--dry-run` — die Lizenz ist
+domaingebunden), `--mounts=<datei>` (Standard `backend/mounts.ini`),
+`--limit=<N>`, `--locale=<de|en>`, `--dry-run`. Exit-Codes: 0 Erfolg,
+1 Laufzeitfehler, 2 Aufruffehler. Der Cron **prüft** nicht selbst — er verbessert
+nur bereits geprüfte Dateien und stößt keine automatische Neuprüfung an.
 
 ## API-Befehle
 
@@ -477,6 +562,17 @@ key = "HUGOCMS-...-..."
 | `gitcommit`| POST    | `message`                            | **Pro:** alle Änderungen committen     |
 | `gitpush`  | POST    | –                                    | **Pro:** zum konfigurierten Remote pushen |
 | `gitreset` | POST    | `ref`?                               | **Pro:** Arbeitsbaum zurücksetzen (Standard: `HEAD`) |
+| `assistantimprove`| POST | `id` (Datei-ID), `locale`?         | **Pro:** KI-Verbesserung einer Datei starten (nutzt `get_file_report`) |
+| `audit`    | POST    | –                                    | **Pro:** SEO-Check-Lauf ausführen (Bericht)            |
+| `auditlist`| GET     | –                                    | **Pro:** gespeicherte Läufe auflisten                  |
+| `auditget` | GET     | `id`                                 | **Pro:** vollständiger Bericht eines Laufs             |
+| `auditdelete`| POST  | `id`                                 | **Pro:** einen Lauf löschen                            |
+| `auditcontent`| POST | `id` (Datei-ID), `locale`?           | **Pro:** Content-Qualität einer Datei prüfen (LLM)     |
+| `auditcontentlist`| GET | –                                  | **Pro:** geprüfte Dateien auflisten (Score, Marker)    |
+| `auditcontentget` | GET | `key`                               | **Pro:** gespeichertes Prüfergebnis einer Datei        |
+| `auditcontentreport`| GET | `key`                             | **Pro:** Gesamt-Bericht (Qualität + zugehörige SEO-Funde) |
+| `auditcontentrequeue`| POST | `key`                           | **Pro:** „Wieder aufnehmen" (Verbesserungs-Vermerk löschen) |
+| `auditcontentdelete`| POST | `key`                            | **Pro:** ein Prüfergebnis löschen                      |
 
 Alle POST-Befehle verlangen das **CSRF-Token** aus `whoami` (Feld `csrf`) im
 Header `X-CSRF-Token`; sonst antwortet das Backend mit `ECSRF` (403).
