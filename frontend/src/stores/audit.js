@@ -21,13 +21,19 @@ export const useAuditStore = defineStore('audit', {
     categories: (state) => (state.current ? Object.keys(state.current.byCategory || {}) : []),
 
     // Funde des aktuellen Berichts, gefiltert nach Schweregrad und Kategorie.
+    // Sortiert nach Schweregrad: zuerst Fehler, dann Warnungen, dann Hinweise.
+    // Die Sortierung ist stabil, daher bleibt innerhalb eines Schweregrads die
+    // ursprüngliche Berichtsreihenfolge erhalten.
     filteredIssues(state) {
       const issues = state.current?.issues ?? []
-      return issues.filter(
-        (i) =>
-          (state.severityFilter === 'all' || i.severity === state.severityFilter) &&
-          (state.categoryFilter === 'all' || i.category === state.categoryFilter),
-      )
+      const rank = { error: 0, warning: 1, hint: 2 }
+      return issues
+        .filter(
+          (i) =>
+            (state.severityFilter === 'all' || i.severity === state.severityFilter) &&
+            (state.categoryFilter === 'all' || i.category === state.categoryFilter),
+        )
+        .sort((a, b) => (rank[a.severity] ?? 99) - (rank[b.severity] ?? 99))
     },
   },
 

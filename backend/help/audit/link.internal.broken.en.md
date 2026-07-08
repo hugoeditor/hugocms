@@ -34,7 +34,7 @@ search engines treat broken links negatively.
 ## Note
 
 If the target is served by a **PHP handler** (e.g. `/anfrage/` via an
-`index.php`) rather than a Hugo page, the link is in fact valid. The audit treats
+`index.php`) rather than a Hugo page, the link is in fact valid. The check treats
 `index.php`/`index.htm` as a directory index, so such a finding should no longer
 occur.
 

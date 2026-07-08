@@ -115,13 +115,33 @@ vor „veraltet".
   Eintrag zeigt „verbessert", wandert in die „Verbessert"-Liste und aus „Zu
   verbessern" → „Wieder aufnehmen" bringt ihn zurück.
 
-## Cron (zukünftig, nicht Teil dieses Plans)
+## Cron (umgesetzt)
 
-CLI-Einstieg: leitet die Arbeitsliste ab (`score < 100 && !improvedAt`), nimmt
-die erste (oder N) Datei(en), Schreibmodus `auto`, führt `improveInstruction`
-über `assistantService()`. Der Schreibhaken (B2) setzt `improvedAt` → Datei
-fällt aus der Liste. Keine automatische Neuprüfung (Entscheidung 3). Prüfungen
-selbst bleiben manuell (der Cron verbessert nur bereits geprüfte Dateien).
+CLI-Einstieg `backend/cli/cron-improve.php` (nur über die Kommandozeile):
+`php backend/cli/cron-improve.php --host=<domain> [--mounts=<datei>] [--limit=N] [--locale=de] [--dry-run]`.
+
+`--dry-run` zeigt nur die Arbeitsliste (Pfad + Score) — ohne API-Aufruf, ohne
+Schreiben, ohne Pro-/KI-Voraussetzung (dann ist `--host` nicht nötig). Zum
+gefahrlosen Testen und zur Vorschau, was der Cron nehmen würde.
+
+- `Connector::improveNextContent(limit, locale)` leitet die Arbeitsliste ab
+  (`score < 100 && !improvedAt && !sourceMissing`), nimmt die ersten N Dateien
+  und verbessert sie über `assistantService('auto')` + `improveInstruction`
+  (Schreibmodus `auto`, kein Bestätigen). `runImprove` setzt bei erreichter
+  Schrittgrenze bis zu 4 Züge fort.
+- Der Schreibhaken (B2) setzt `improvedAt` → Datei fällt aus der Liste. Keine
+  automatische Neuprüfung (Entscheidung 3). Prüfungen bleiben manuell.
+- **Kein Web-Auth** (lokaler Aufruf), aber Pro-Lizenz/Hugo-Projekt/KI-Schlüssel
+  vorausgesetzt. Da die Pro-Lizenz domänengebunden ist und `license()` die
+  Domäne aus `$_SERVER['HTTP_HOST']` liest, setzt das Skript diese aus `--host`.
+- Dafür wurden `audit()`/`contentQuality()` in gegatete Web-Einstiege und
+  auth-freie Store-Builder (`auditStore()`/`contentQualityStore()`) getrennt;
+  `assistantService()` nimmt einen Schreibmodus-Override.
+- Exit-Codes: 0 Erfolg, 1 Laufzeitfehler (z. B. keine Pro-Lizenz), 2 Aufruffehler
+  (fehlende Datei/Option).
+
+Beispiel-Crontab (täglich 3 Uhr, 3 Dateien):
+`0 3 * * *  php /pfad/backend/cron-improve.php --host=example.com --limit=3`
 
 ## Offene Punkte / bewusst später
 

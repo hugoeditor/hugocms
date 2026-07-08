@@ -943,7 +943,7 @@ final class Connector
      * Werkzeug get_file_report wird nur eingehängt, wenn Pro-Lizenz und
      * Hugo-Projekt vorliegen (sonst gibt es keinen Audit-/Content-Bericht).
      */
-    private function assistantService(): AssistantService
+    private function assistantService(?string $writeModeOverride = null): AssistantService
     {
         // get_file_report und der Bearbeitungs-Vermerk brauchen beide das
         // Content-Qualitäts-Feature (Pro-Lizenz + Hugo-Projekt).
@@ -958,12 +958,121 @@ final class Connector
         return new AssistantService(
             new AnthropicClient((string) $this->ai['apiKey']),
             $this->ai['model'],
-            $this->ai['writeMode'],
+            $writeModeOverride ?? $this->ai['writeMode'],
             $this->resolver,
             $this->files,
             $fileReport,
             $onWrite,
         );
+    }
+
+    /**
+     * CLI-Einstieg (Cron): verbessert die nächsten bis zu $limit noch nicht
+     * verbesserten, geprüften Content-Dateien mit Score < 100 — im Schreibmodus
+     * "auto" (ohne Bestätigung). KEINE Web-Authentifizierung; der Aufruf erfolgt
+     * lokal auf dem Server. Voraussetzungen: Pro-Lizenz (die Domäne muss über
+     * $_SERVER['HTTP_HOST'] gesetzt sein), Hugo-Projekt und KI-Schlüssel.
+     *
+     * Mit $dryRun = true werden nur die Kandidaten ermittelt und zurückgegeben —
+     * ohne API-Aufruf, ohne Schreiben und ohne Pro-/KI-Voraussetzung (zum Testen).
+     *
+     * @return array<string, mixed> Zusammenfassung (Kandidatenzahl, verarbeitete Dateien)
+     */
+    public function improveNextContent(int $limit = 1, ?string $locale = null, bool $dryRun = false): array
+    {
+        if ($this->hugo === null) {
+            throw new ApiException('ECONFIG', 409, 'AUDIT-NO-PROJECT');
+        }
+        if (!$dryRun) {
+            if ($this->ai['apiKey'] === null) {
+                throw new ApiException('ECONFIG', 409, 'AI-NOT-CONFIGURED');
+            }
+            $this->requirePro();
+        }
+
+        $locale ??= 'de';
+        $limit = max(1, $limit);
+        $work = $this->pendingImproveList();
+
+        // Probelauf: nur zeigen, was verarbeitet würde.
+        if ($dryRun) {
+            $preview = array_map(
+                static fn (array $e): array => [
+                    'path' => (string) ($e['mount'] ?? '') . '/' . (string) ($e['rel'] ?? ''),
+                    'score' => $e['score'] ?? null,
+                    'written' => false,
+                ],
+                array_slice($work, 0, $limit),
+            );
+
+            return ['candidates' => count($work), 'dryRun' => true, 'processed' => $preview];
+        }
+
+        $service = $this->assistantService('auto');
+        $processed = [];
+        foreach (array_slice($work, 0, $limit) as $entry) {
+            $mount = (string) ($entry['mount'] ?? '');
+            $rel = (string) ($entry['rel'] ?? '');
+            if ($mount === '' || $rel === '' || !isset($this->resolver->all()[$mount])) {
+                continue;
+            }
+            $path = $mount . '/' . $rel;
+            $wrote = $this->runImprove($service, $path, $locale);
+            $this->logger->info(sprintf(
+                'Cron-Verbesserung: %s (%s)',
+                $path,
+                $wrote ? 'geschrieben' : 'keine Änderung',
+            ));
+            $processed[] = ['path' => $path, 'written' => $wrote];
+        }
+
+        return ['candidates' => count($work), 'processed' => $processed];
+    }
+
+    /**
+     * Abgeleitete Arbeitsliste für die KI-Verbesserung: geprüfte Content-Dateien
+     * mit Score < 100, die noch nicht verbessert wurden und deren Quelle
+     * vorhanden ist. Reihenfolge wie {@see ContentQualityService::list()}
+     * (neueste Prüfung zuerst).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function pendingImproveList(): array
+    {
+        return array_values(array_filter(
+            $this->contentQualityStore()->list(),
+            static fn (array $e): bool => empty($e['improvedAt'])
+                && is_numeric($e['score'] ?? null) && $e['score'] < 100
+                && ($e['sourceMissing'] ?? false) === false,
+        ));
+    }
+
+    /**
+     * Führt einen Verbesserungslauf (auto) für eine Datei aus, inkl. begrenztem
+     * Fortsetzen, falls die Schrittgrenze eines Zugs erreicht wird. Liefert true,
+     * wenn (mindestens) ein Schreibvorgang stattgefunden hat.
+     */
+    private function runImprove(AssistantService $service, string $path, string $locale): bool
+    {
+        $messages = [['role' => 'user', 'content' => $this->improveInstruction($path, $locale)]];
+        $wrote = false;
+        for ($turn = 0; $turn < 4; $turn++) {
+            @set_time_limit(300);
+            $run = $service->run($messages, null, $locale, $path);
+            $messages = is_array($run['messages'] ?? null) ? $run['messages'] : $messages;
+            if (!empty($run['actions'])) {
+                $wrote = true;
+            }
+            if (empty($run['aborted'])) {
+                break;
+            }
+            $messages[] = [
+                'role' => 'user',
+                'content' => str_starts_with(strtolower($locale), 'en') ? 'Continue.' : 'Mach weiter.',
+            ];
+        }
+
+        return $wrote;
     }
 
     /**
@@ -977,14 +1086,7 @@ final class Connector
         if ($this->hugo === null) {
             return;
         }
-        $storage = __DIR__ . '/../var/audit-content/' . sha1((string) $this->hugo['source']);
-        (new ContentQualityService(
-            new AnthropicClient((string) $this->ai['apiKey']),
-            $this->ai['model'],
-            $this->resolver,
-            $this->files,
-            $storage,
-        ))->markImproved($fileId, $this->ai['model']);
+        $this->contentQualityStore()->markImproved($fileId, $this->ai['model']);
     }
 
     /**
@@ -1041,7 +1143,7 @@ final class Connector
     {
         $r = $this->resolver->resolve($fileId, true);
         $mount = $r['mount']->name();
-        $entry = $this->contentQuality()->forFile($fileId); // null, falls nie geprüft
+        $entry = $this->contentQualityStore()->forFile($fileId); // null, falls nie geprüft
         $base = is_array($entry) ? $entry : ['mount' => $mount, 'rel' => $r['rel'], 'title' => basename($r['rel'])];
 
         return [
@@ -1347,6 +1449,17 @@ final class Connector
         if ($this->hugo === null) {
             throw new ApiException('ECONFIG', 409, 'AUDIT-NO-PROJECT');
         }
+
+        return $this->auditStore();
+    }
+
+    /**
+     * Baut den Audit-Dienst OHNE Freischalt-Prüfung (setzt ein Hugo-Projekt
+     * voraus). Für interne Aufrufe und den CLI-Einstieg, die eigene Vorbedingungen
+     * prüfen. Die Web-Befehle nutzen das gegatete {@see audit()}.
+     */
+    private function auditStore(): AuditService
+    {
         $source = (string) $this->hugo['source'];
         $public = (string) ($this->hugo['destination'] ?? $source . '/public');
         $storage = __DIR__ . '/../var/audit/' . sha1($source);
@@ -1419,11 +1532,22 @@ final class Connector
         if ($this->ai['apiKey'] === null) {
             throw new ApiException('ECONFIG', 409, 'AI-NOT-CONFIGURED');
         }
-        $source = (string) $this->hugo['source'];
-        $storage = __DIR__ . '/../var/audit-content/' . sha1($source);
+
+        return $this->contentQualityStore();
+    }
+
+    /**
+     * Baut den Content-Qualitäts-Dienst OHNE Freischalt-Prüfung (setzt Hugo-
+     * Projekt und KI-Schlüssel voraus). Für interne Aufrufe (Schreibhaken,
+     * Berichtsaufbau) und den CLI-Einstieg. Web-Befehle nutzen das gegatete
+     * {@see contentQuality()}.
+     */
+    private function contentQualityStore(): ContentQualityService
+    {
+        $storage = __DIR__ . '/../var/audit-content/' . sha1((string) $this->hugo['source']);
 
         return new ContentQualityService(
-            new AnthropicClient($this->ai['apiKey']),
+            new AnthropicClient((string) $this->ai['apiKey']),
             $this->ai['model'],
             $this->resolver,
             $this->files,
@@ -1526,7 +1650,10 @@ final class Connector
      */
     private function auditIssuesForEntry(array $entry): ?array
     {
-        $report = $this->audit()->latest();
+        if ($this->hugo === null) {
+            return null;
+        }
+        $report = $this->auditStore()->latest();
         if ($report === null) {
             return null;
         }

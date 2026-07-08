@@ -35,8 +35,8 @@ einer Fehlerseite (404), und Suchmaschinen werten tote Links negativ.
 ## Hinweis
 
 Wird das Ziel von einem **PHP-Handler** ausgeliefert (z. B. `/anfrage/` über eine
-`index.php`) statt von einer Hugo-Seite, ist der Link in Wahrheit gültig. Das
-Audit berücksichtigt `index.php`/`index.htm` als Verzeichnis-Standardseite; ein
+`index.php`) statt von einer Hugo-Seite, ist der Link in Wahrheit gültig. Der
+Check berücksichtigt `index.php`/`index.htm` als Verzeichnis-Standardseite; ein
 solcher Fund sollte daher nicht mehr auftreten.
 
 ## Siehe auch
