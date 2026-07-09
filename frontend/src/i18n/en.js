@@ -315,6 +315,9 @@ export default {
   assistant: {
     open: 'AI assistant',
     title: 'AI assistant',
+    unavailableTitle: 'AI feature not set up',
+    unavailableMessage: 'This feature uses the AI assistant and requires an AI API key. None is configured yet. Would you like to open the configuration now?',
+    unavailableConfirm: 'Open configuration',
     clear: 'Clear conversation',
     voiceRecord: 'Start voice recording',
     voiceStop: 'Stop recording and transcribe',

@@ -26,6 +26,7 @@ import { useAuditContentStore } from './stores/auditContent'
 import LanguageSwitcher from './components/LanguageSwitcher.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import { useConfirm } from './util/confirm'
+import { useAiGate, aiGateState } from './util/aiGate'
 import { buildNumber } from './util/version'
 
 // Ziel-URLs der Links im Versionsdialog (sprachunabhängig).
@@ -47,6 +48,16 @@ function confirmDiscard() {
     confirmText: t('editor.discardAction'),
     color: 'warning',
   })
+}
+// KI-Zugangsschranke: Elemente bleiben sichtbar; fehlt der KI-Schlüssel,
+// erscheint beim Anklicken ein Hinweis mit Sprung in die Konfiguration.
+const requireAi = useAiGate()
+
+// KI-Assistent öffnen/schließen. Ist keine KI konfiguriert, zeigt requireAi()
+// den Hinweisdialog und der Panel-Zustand bleibt unverändert.
+async function toggleAssistant() {
+  if (!(await requireAi())) return
+  assistant.open = !assistant.open
 }
 const auth = useAuthStore()
 const files = useFilesStore()
@@ -237,6 +248,17 @@ const editorPanelRef = ref(null)
 
 // --- Konfiguration im laufenden Betrieb ändern -----------------------------
 const reconfigureOpen = ref(false)
+
+// Eine KI-Funktion hat um das Öffnen der Konfiguration gebeten (Hinweisdialog
+// bestätigt). Flag wieder zurücksetzen und den ReconfigureDialog öffnen.
+watch(
+  () => aiGateState().reconfigureRequested,
+  (requested) => {
+    if (!requested) return
+    aiGateState().reconfigureRequested = false
+    reconfigureOpen.value = true
+  },
+)
 const accountOpen = ref(false)
 const versionOpen = ref(false)
 const licenseOpen = ref(false)
@@ -516,15 +538,16 @@ async function build() {
                 </template>
               </v-tooltip>
 
-              <!-- KI-Assistent (nur wenn ein API-Schlüssel konfiguriert ist) -->
-              <v-tooltip v-if="auth.ai.enabled" :text="$t('assistant.open')" location="right">
+              <!-- KI-Assistent: immer sichtbar. Fehlt der KI-Schlüssel, meldet
+                   sich der Klick mit einem Hinweis und bietet die Konfiguration an. -->
+              <v-tooltip :text="$t('assistant.open')" location="right">
                 <template #activator="{ props }">
                   <button
                     v-bind="props"
                     type="button"
                     class="nemo-tool-btn"
                     :class="{ active: assistant.open }"
-                    @click="assistant.open = !assistant.open"
+                    @click="toggleAssistant"
                   >
                     <v-icon icon="mdi-creation" size="20" />
                     <span class="nemo-tool-label">{{ $t('assistant.open') }}</span>

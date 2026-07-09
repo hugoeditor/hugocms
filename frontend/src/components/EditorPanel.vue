@@ -2,7 +2,6 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useFilesStore } from '../stores/files'
-import { useAuthStore } from '../stores/auth'
 import { useAuditContentStore } from '../stores/auditContent'
 import { useAssistantStore } from '../stores/assistant'
 import { errorText } from '../i18n/apiMessage'
@@ -13,19 +12,21 @@ import FrontMatterPanel from './FrontMatterPanel.vue'
 import HugoConfigEditor from './settings/HugoConfigEditor.vue'
 import { useTransientError } from '../util/transientError'
 import { useConfirm } from '../util/confirm'
+import { useAiGate } from '../util/aiGate'
 
 const { t, locale } = useI18n()
 const files = useFilesStore()
-const auth = useAuthStore()
 const auditContent = useAuditContentStore()
 const assistant = useAssistantStore()
 const confirm = useConfirm()
+const requireAi = useAiGate()
 
 // LLM-Content-Qualität der offenen Markdown-Datei prüfen (Pro + KI-Schlüssel).
-function checkContentQuality() {
-  if (files.openFile) {
-    auditContent.check(files.openFile.id, files.openFile.name, locale.value)
-  }
+// Fehlt der KI-Schlüssel, führt requireAi() zum Hinweis + Konfiguration.
+async function checkContentQuality() {
+  if (!files.openFile) return
+  if (!(await requireAi())) return
+  auditContent.check(files.openFile.id, files.openFile.name, locale.value)
 }
 
 // Schnellweg: die offene Markdown-Datei direkt von der KI verbessern lassen
@@ -34,6 +35,7 @@ function checkContentQuality() {
 // überschreibt.
 async function improveContent() {
   if (!files.openFile) return
+  if (!(await requireAi())) return
   if (files.dirty) {
     const saved = await flushEditor()
     if (!saved) return
@@ -347,10 +349,11 @@ onBeforeUnmount(() => {
           </template>
         </v-tooltip>
 
-        <!-- LLM-Content-Qualität: nur für Markdown-Dateien und wenn freigeschaltet
-             (Pro-Lizenz + KI-Schlüssel). Prüfen erzeugt einen Bericht; Verbessern
-             ist der Schnellweg direkt in den Assistenten (ohne vorherigen Bericht). -->
-        <template v-if="isMarkdown && auth.auditContent">
+        <!-- LLM-Content-Qualität: für Markdown-Dateien immer sichtbar, damit die
+             Funktion auffindbar ist. Fehlt der KI-Schlüssel, meldet sich der Klick
+             mit einem Hinweis. Prüfen erzeugt einen Bericht; Verbessern ist der
+             Schnellweg direkt in den Assistenten (ohne vorherigen Bericht). -->
+        <template v-if="isMarkdown">
           <v-tooltip :text="$t('contentQuality.check')" location="bottom">
             <template #activator="{ props: tip }">
               <v-btn

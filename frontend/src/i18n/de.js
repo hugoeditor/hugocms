@@ -315,6 +315,9 @@ export default {
   assistant: {
     open: 'KI-Assistent',
     title: 'KI-Assistent',
+    unavailableTitle: 'KI-Funktion nicht eingerichtet',
+    unavailableMessage: 'Diese Funktion nutzt den KI-Assistenten und benötigt einen KI-API-Schlüssel. Er ist derzeit nicht konfiguriert. Möchten Sie die Konfiguration jetzt öffnen?',
+    unavailableConfirm: 'Konfiguration öffnen',
     clear: 'Verlauf löschen',
     voiceRecord: 'Sprachaufnahme starten',
     voiceStop: 'Aufnahme beenden und übertragen',

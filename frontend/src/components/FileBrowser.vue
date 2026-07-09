@@ -2,7 +2,6 @@
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useFilesStore } from '../stores/files'
-import { useAuthStore } from '../stores/auth'
 import { useAuditContentStore } from '../stores/auditContent'
 import { useAssistantStore } from '../stores/assistant'
 import { formatSize, formatDate, iconFor } from '../util/format'
@@ -10,12 +9,13 @@ import { errorText } from '../i18n/apiMessage'
 import ImageViewer from './ImageViewer.vue'
 import ImageEditor from './ImageEditor.vue'
 import { useTransientError } from '../util/transientError'
+import { useAiGate } from '../util/aiGate'
 
 const { t, locale } = useI18n()
 const files = useFilesStore()
-const auth = useAuthStore()
 const auditContent = useAuditContentStore()
 const assistant = useAssistantStore()
+const requireAi = useAiGate() // KI-Zugangsschranke (Hinweis + Konfiguration)
 const error = useTransientError() // blendet sich nach kurzer Zeit selbst aus
 
 // Markdown-Content-Datei (für die LLM-Content-Prüfung im Kontextmenü).
@@ -81,18 +81,24 @@ function buildItems(entry) {
     if (entry.type === 'file' && sel === 1) {
       items.push({ icon: 'mdi-download', label: t('ctx.download'), action: () => files.download(entry) })
     }
-    // LLM-Content-Qualität (Pro + KI-Schlüssel), nur für einzelne Markdown-Dateien.
-    if (auth.auditContent && sel === 1 && isMarkdown(entry)) {
+    // LLM-Content-Qualität: für einzelne Markdown-Dateien immer angeboten, damit
+    // die Funktion auffindbar ist. Fehlt der KI-Schlüssel, meldet sich requireAi()
+    // mit einem Hinweis und bietet die Konfiguration an.
+    if (sel === 1 && isMarkdown(entry)) {
       items.push({
         icon: 'mdi-text-search',
         label: t('ctx.contentQuality'),
-        action: () => auditContent.check(entry.id, entry.name, locale.value),
+        action: async () => {
+          if (await requireAi()) auditContent.check(entry.id, entry.name, locale.value)
+        },
       })
       // Schnellweg: direkt von der KI verbessern lassen (ohne vorherigen Bericht).
       items.push({
         icon: 'mdi-creation',
         label: t('contentQuality.improve'),
-        action: () => assistant.improve(entry.id, locale.value),
+        action: async () => {
+          if (await requireAi()) assistant.improve(entry.id, locale.value)
+        },
       })
     }
     if (items.length) items.push({ divider: true })
