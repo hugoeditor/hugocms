@@ -46,13 +46,17 @@ hugocms-2026/                     # Quell-Repo (Entwicklung)
 │   │   │   ├── AuditRunner.php       # gebautes public/ parsen & Regeln prüfen
 │   │   │   ├── Checks.php / RuleCatalog.php / HtmlInspector.php / …
 │   │   │   └── ContentQualityService.php # LLM-Qualitätsprüfung je Inhaltsdatei
+│   │   ├── Review/               # gestaffelte Veröffentlichung (Rezension)
+│   │   │   ├── ReviewStore.php        # Entwurfsspeicher je Webseite (var/review/)
+│   │   │   └── FrontMatter.php        # draft/publishDate im Front Matter setzen
 │   │   ├── AuthFactory.php       # Auth-Treiber (singleuser)
 │   │   ├── Logger.php            # Datei-Logging mit Stufen
 │   │   ├── Response.php          # einheitliche JSON-Antworten
 │   │   ├── Auth/                 # AuthInterface + SingleUser
 │   │   └── Exception/            # ApiException
 │   ├── cli/                      # Kommandozeilen-Werkzeuge
-│   │   └── cron-improve.php      # Cron: nächste Dateien per KI verbessern (auto)
+│   │   ├── cron-improve.php      # Cron: nächste Dateien per KI verbessern (auto)
+│   │   └── cron-build.php        # Cron: Webseite bauen (veröffentlicht terminierte Seiten)
 │   ├── custom/                   # custom.php.beispiel (programmatischer Bootstrap)
 │   ├── mounts/                   # host-spezifische mounts/<hash>.ini (je Webseite)
 │   ├── help/                     # Wissensdatenbank (Markdown), u. a. SEO-Regel-Hilfen
@@ -524,6 +528,48 @@ domaingebunden), `--mounts=<datei>` (Standard `backend/mounts.ini`),
 1 Laufzeitfehler, 2 Aufruffehler. Der Cron **prüft** nicht selbst — er verbessert
 nur bereits geprüfte Dateien und stößt keine automatische Neuprüfung an.
 
+## Gestaffelte Veröffentlichung (Rezension)
+
+Damit nicht jede automatische oder ungeprüfte Änderung sofort online geht, gibt
+es eine **Rezensions-Warteschlange**. Entwürfe liegen serverseitig unter
+`var/review/` (Blob mit dem vollständigen Vorschlag) — die Live-Datei bleibt bis
+zur Freigabe unangetastet.
+
+- **Was landet als Entwurf?** Schreibvorgänge im KI-Schreibmodus `auto` (der
+  Cron-Verbesserer, oder ein so konfigurierter interaktiver Assistent) gehen bei
+  einem konfigurierten Hugo-Projekt nicht in die Datei, sondern als Entwurf in
+  die Warteschlange — die veröffentlichte Seite bleibt unangetastet. Zusätzlich
+  legt der **Entwurf-Knopf** neben „Speichern" den aktuellen Editor-Stand
+  manuell als Entwurf ab. `confirm`/`readonly` und normales Speichern sind nicht
+  betroffen. Nur Schreib-/Anlege-Vorgänge werden gestaffelt, keine Löschungen
+  oder Umbenennungen.
+- **Rezension.** Die Warteschlange (Werkzeugschiene) zeigt jeden Entwurf mit
+  einem Zeilen-Diff gegen den Live-Stand. Der Benutzer gibt frei — **sofort** oder
+  **terminiert** — oder verwirft.
+- **Sofortige Freigabe** schreibt den Vorschlag direkt in die Live-Datei
+  (`draft:false`) und entfernt den Entwurf.
+- **Terminierte Freigabe (verzögerter Austausch).** Der Entwurf bleibt mit einem
+  Feld `publishAt` im Speicher; die Live-Datei wird **nicht** angefasst. So bleibt
+  die **bestehende Fassung bis zum Termin unverändert veröffentlicht**. Ein Build
+  wendet fällige Austausche vorab an: Ist `publishAt` erreicht, wird der Vorschlag
+  jetzt in die Datei geschrieben und danach gebaut. Es wird **kein** `publishDate`
+  und **kein** `draft` als Zeitschalter benutzt — die alte Version geht also nie
+  offline, sie wird zum Zeitpunkt schlicht ersetzt.
+
+Damit terminierte Austausche auslösen, muss regelmäßig gebaut werden (der Web-
+„Veröffentlichen"-Knopf und der CLI-Build wenden fällige Austausche jeweils vorab
+an):
+
+```bash
+# wendet fällige Austausche an und baut dann (wie der „Veröffentlichen"-Knopf),
+# ohne Web-Anmeldung. Minify/Ziel/Clean stammen aus der [hugo]-Konfiguration.
+php backend/cli/cron-build.php --mounts=backend/mounts.ini --quiet
+```
+
+Die Auflösung der Staffelung entspricht dem Cron-Intervall (z. B. alle 15
+Minuten). Exit-Codes: 0 Erfolg, 1 Hugo-/Laufzeitfehler, 2 Aufruffehler. Keine
+Pro-Lizenz nötig.
+
 ## API-Befehle
 
 | Befehl     | Methode | Parameter                            | Zweck                                  |
@@ -573,6 +619,11 @@ nur bereits geprüfte Dateien und stößt keine automatische Neuprüfung an.
 | `auditcontentreport`| GET | `key`                             | **Pro:** Gesamt-Bericht (Qualität + zugehörige SEO-Funde) |
 | `auditcontentrequeue`| POST | `key`                           | **Pro:** „Wieder aufnehmen" (Verbesserungs-Vermerk löschen) |
 | `auditcontentdelete`| POST | `key`                            | **Pro:** ein Prüfergebnis löschen                      |
+| `reviewsave`| POST   | `target` (ID), `content`             | Inhalt als Rezensions-Entwurf ablegen (nicht live)     |
+| `reviewlist`| GET    | –                                    | offene Entwürfe der Warteschlange auflisten            |
+| `reviewget` | GET    | `key`                                | Entwurf samt aktuellem Live-Stand (für den Diff)       |
+| `reviewapprove`| POST | `key`, `publishDate`?, `force`?     | Freigeben: ohne Termin sofort live; mit künftigem `publishDate` terminiert (verzögerter Austausch) |
+| `reviewdiscard`| POST | `key`                               | Entwurf verwerfen (Live-Datei bleibt)                  |
 
 Alle POST-Befehle verlangen das **CSRF-Token** aus `whoami` (Feld `csrf`) im
 Header `X-CSRF-Token`; sonst antwortet das Backend mit `ECSRF` (403).

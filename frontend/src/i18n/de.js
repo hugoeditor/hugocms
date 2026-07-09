@@ -434,6 +434,11 @@ export default {
 
   editor: {
     save: 'Speichern (Strg+S)',
+    saveDraft: 'Als Entwurf zur Rezension',
+    savedAsDraft: 'Als Entwurf zur Rezension abgelegt.',
+    publishDraft: 'Entwurf — wird beim nächsten Build nicht veröffentlicht (draft).',
+    publishScheduled: 'Geplante Veröffentlichung: {0} (bis dahin nicht sichtbar).',
+    publishExpired: 'Abgelaufen seit {0} — wird nicht mehr veröffentlicht (expiryDate).',
     discardConfirm: 'Ungespeicherte Änderungen verwerfen?',
     discardTitle: 'Ungespeicherte Änderungen',
     discardAction: 'Verwerfen',
@@ -487,6 +492,34 @@ export default {
     other: 'Weitere Einstellungen',
     noData: 'Keine Einträge',
     close: 'Schließen',
+    back: 'Zurück',
+  },
+
+  // Gestaffelte Veröffentlichung: Rezensions-Warteschlange offener Entwürfe.
+  review: {
+    open: 'Rezension',
+    title: 'Rezensions-Warteschlange',
+    empty: 'Keine offenen Entwürfe.',
+    newPage: 'neue Seite',
+    toSource: 'Zur Quelldatei',
+    discard: 'Verwerfen',
+    schedule: 'Terminieren…',
+    reschedule: 'Umplanen…',
+    approveNow: 'Jetzt freigeben',
+    scheduledBanner: 'Geplanter Austausch am {0}. Bis dahin bleibt die aktuelle Fassung online.',
+    scheduleTitle: 'Terminiert freigeben',
+    scheduleIntro: 'Wähle den Zeitpunkt, zu dem diese Fassung die aktuelle ersetzt. Bis dahin bleibt die bestehende Fassung unverändert veröffentlicht; ein Build tauscht die Datei erst zum Termin.',
+    pickDate: 'Ersetzen am',
+    pickTime: 'Uhrzeit',
+    timeOptionalHint: 'Uhrzeit optional — leer bedeutet 00:00 Uhr (Tagesbeginn).',
+    scheduleConfirm: 'Terminiert freigeben',
+    scheduleLiveInfo: 'Die aktuell veröffentlichte Fassung bleibt bis zum Termin unverändert online und wird dann durch diese ersetzt — kein Offline-Zeitfenster.',
+    schedulePastHint: 'Der Termin liegt in der Vergangenheit — die Fassung wird sofort veröffentlicht.',
+    origin: {
+      ai: 'KI-Assistent',
+      cron: 'Cron (automatisch)',
+      user: 'Manuell',
+    },
   },
 
   // LLM-Content-Qualität (Pro-Funktion). Prüft eine Content-Datei per KI.

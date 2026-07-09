@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useFilesStore } from '../stores/files'
+import { useAuthStore } from '../stores/auth'
 import { useAuditContentStore } from '../stores/auditContent'
 import { useAssistantStore } from '../stores/assistant'
 import { errorText } from '../i18n/apiMessage'
@@ -13,9 +14,11 @@ import HugoConfigEditor from './settings/HugoConfigEditor.vue'
 import { useTransientError } from '../util/transientError'
 import { useConfirm } from '../util/confirm'
 import { useAiGate } from '../util/aiGate'
+import { frontMatterMeta } from '../util/frontMatterMeta'
 
 const { t, locale } = useI18n()
 const files = useFilesStore()
+const auth = useAuthStore()
 const auditContent = useAuditContentStore()
 const assistant = useAssistantStore()
 const confirm = useConfirm()
@@ -45,7 +48,9 @@ async function improveContent() {
 
 const draft = ref('')
 const saving = ref(false)
+const savingDraft = ref(false)
 const error = useTransientError() // blendet sich nach kurzer Zeit selbst aus
+const notice = useTransientError(4000) // kurzlebige Erfolgsmeldung (z. B. Entwurf abgelegt)
 
 // --- Visueller Markdown-Modus (Stufe 4) -----------------------------------
 // Nur für Markdown-Dateien. Das Front-Matter (--- … ---) wird VOR TipTap
@@ -55,6 +60,30 @@ const MD_MODE_KEY = 'hugocms_md_mode'
 const JSON_MODE_KEY = 'hugocms_json_mode'
 
 const isMarkdown = computed(() => /\.(md|markdown)$/i.test(files.openFile?.name ?? ''))
+
+// Veröffentlichungszustand aus dem Front Matter (Entwurf / geplant / abgelaufen)
+// — macht sichtbar, ob und wann eine Content-Datei live geht. Reaktiv auf den
+// Editorinhalt, aktualisiert sich also beim Tippen. Nur für Markdown-Content.
+const publishStatus = computed(() => {
+  if (!isMarkdown.value) return null
+  const meta = frontMatterMeta(draft.value)
+  if (meta.draft === true) return { kind: 'draft', date: null }
+  const now = Date.now()
+  if (meta.expiryDate) {
+    const t = new Date(meta.expiryDate).getTime()
+    if (!Number.isNaN(t) && t <= now) return { kind: 'expired', date: meta.expiryDate }
+  }
+  if (meta.publishDate) {
+    const t = new Date(meta.publishDate).getTime()
+    if (!Number.isNaN(t) && t > now) return { kind: 'scheduled', date: meta.publishDate }
+  }
+  return null
+})
+
+function formatDateTime(iso) {
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString(locale.value)
+}
 // Visuellen JSON-Editor gibt es nur für die Hugo-Konfigurationsdatei
 // (hugo.json/config.json) — andere JSON-Dateien bleiben im Quelltext.
 const isHugoConfig = computed(() => /^(hugo|config)\.json$/i.test(files.openFile?.name ?? ''))
@@ -165,6 +194,16 @@ const tools = computed(() => [
     color: 'primary',
     action: save,
   },
+  // Als Entwurf zur Rezension ablegen (gestaffelte Veröffentlichung) — nur, wenn
+  // die Webseite ein Hugo-Projekt ist (dort greifen draft/publishDate).
+  ...(auth.review ? [{
+    name: 'saveDraft',
+    icon: 'mdi-content-save-edit-outline',
+    label: t('editor.saveDraft'),
+    disabled: !files.dirty,
+    loading: savingDraft.value,
+    action: saveAsDraft,
+  }] : []),
   { divider: true },
   { name: 'undo', icon: 'mdi-undo', label: t('editor.undo'), disabled: !history.value.undo },
   { name: 'redo', icon: 'mdi-redo', label: t('editor.redo'), disabled: !history.value.redo },
@@ -249,6 +288,22 @@ async function save() {
     return false
   } finally {
     saving.value = false
+  }
+}
+
+// Legt den aktuellen Stand als Rezensions-Entwurf ab, statt live zu speichern.
+// Die Live-Datei bleibt unverändert; der Entwurf wartet in der Warteschlange.
+async function saveAsDraft() {
+  if (savingDraft.value || !files.openFile) return
+  savingDraft.value = true
+  error.value = null
+  try {
+    await files.saveAsDraft(draft.value)
+    notice.value = t('editor.savedAsDraft')
+  } catch (e) {
+    error.value = errorText(t, e)
+  } finally {
+    savingDraft.value = false
   }
 }
 
@@ -405,6 +460,19 @@ onBeforeUnmount(() => {
       </div>
 
       <v-alert v-if="error" type="error" density="compact" class="ma-0 nemo-alert" tile>{{ error }}</v-alert>
+      <v-alert v-if="notice" type="success" density="compact" class="ma-0 nemo-alert" tile>{{ notice }}</v-alert>
+      <!-- Veröffentlichungszustand aus dem Front Matter: Entwurf / geplant / abgelaufen. -->
+      <v-alert
+        v-if="publishStatus"
+        :type="publishStatus.kind === 'expired' ? 'warning' : 'info'"
+        density="compact"
+        class="ma-0 nemo-alert"
+        tile
+      >
+        <template v-if="publishStatus.kind === 'draft'">{{ $t('editor.publishDraft') }}</template>
+        <template v-else-if="publishStatus.kind === 'scheduled'">{{ $t('editor.publishScheduled', [formatDateTime(publishStatus.date)]) }}</template>
+        <template v-else>{{ $t('editor.publishExpired', [formatDateTime(publishStatus.date)]) }}</template>
+      </v-alert>
 
       <div class="flex-grow-1 d-flex flex-column" style="overflow: hidden">
         <!-- Visueller Markdown-Modus: Front-Matter separat, Body in TipTap -->
@@ -419,10 +487,12 @@ onBeforeUnmount(() => {
             :model-value="bodyDraft"
             :save-disabled="!files.dirty"
             :saving="saving"
+            :saving-draft="savingDraft"
             class="flex-grow-1"
             style="min-height: 0"
             @update:model-value="onWysiwygInput"
             @save="save"
+            @save-draft="saveAsDraft"
             @clipboard-denied="error = t('editor.clipboardDenied')"
           />
         </template>

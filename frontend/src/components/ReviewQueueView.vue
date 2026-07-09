@@ -1,0 +1,441 @@
+<script setup>
+// Rezensions-Warteschlange der gestaffelten Veröffentlichung: listet offene
+// Entwürfe (KI im Modus auto, Cron oder manuell über den Entwurf-Button) und
+// zeigt je Entwurf den zeilenweisen Diff gegen den aktuellen Live-Stand. Der
+// Benutzer gibt frei — optional mit Veröffentlichungsdatum (publishDate) — oder
+// verwirft. Erst die Freigabe schreibt die Live-Datei (draft:false); bis dahin
+// bleibt die veröffentlichte Seite unangetastet.
+//
+// Als Overlay-Ansicht wie ContentQualityView/AuditView (nicht als v-dialog), mit
+// zwei Zuständen: Liste und Diff-Detail (Zurück-Pfeil führt zur Liste).
+import { computed, ref, watch } from 'vue'
+import { useDisplay } from 'vuetify'
+import { useI18n } from 'vue-i18n'
+import { useReviewStore } from '../stores/review'
+import { useFilesStore } from '../stores/files'
+import { errorText } from '../i18n/apiMessage'
+import { lineDiff } from '../util/lineDiff'
+
+const { t, locale } = useI18n()
+const { smAndDown } = useDisplay()
+const store = useReviewStore()
+const files = useFilesStore()
+
+// Zeilenweiser Diff Original → Vorschlag. Bei neuen Seiten (kein Original) und
+// bei zu großen Eingaben fällt die Anzeige auf eine einfache Vorschau zurück.
+const diff = computed(() => {
+  const d = store.current
+  if (!d) return null
+  return lineDiff(d.original ?? '', d.proposedContent ?? '')
+})
+
+// Terminierte Freigabe läuft über einen Bestätigungsdialog. Datum ist Pflicht,
+// die Uhrzeit optional — leer bedeutet 00:00 Uhr (Tagesbeginn, lokale Zone).
+const publishDay = ref('') // YYYY-MM-DD
+const publishTime = ref('') // HH:MM oder leer
+const scheduleDialog = ref(false)
+
+watch(
+  () => store.current?.key,
+  () => {
+    publishDay.value = ''
+    publishTime.value = ''
+    scheduleDialog.value = false
+  },
+)
+
+// Lokaler Zeitstempel (ohne Zone) aus Datum + Uhrzeit; leere Uhrzeit → 00:00.
+const publishAtLocal = computed(() =>
+  publishDay.value ? `${publishDay.value}T${publishTime.value || '00:00'}` : '',
+)
+
+// Lokale Zeit in einen zonenbehafteten ISO-Zeitstempel für Hugo/publishDate wandeln.
+function toIso(local) {
+  if (!local) return ''
+  const d = new Date(local)
+  return Number.isNaN(d.getTime()) ? '' : d.toISOString()
+}
+
+// Liegt der gewählte Termin in der Zukunft? Nur dann hält Hugo die Seite zurück;
+// ein vergangener Termin veröffentlicht sofort.
+const scheduledInFuture = computed(() => {
+  const t = new Date(publishAtLocal.value).getTime()
+  return !Number.isNaN(t) && t > Date.now()
+})
+
+// Sofort freigeben (ohne Termin) — schreibt live, setzt draft:false.
+async function approveNow() {
+  if (!store.current) return
+  await store.approve(store.current.key, '')
+}
+
+// Terminiert freigeben — hinterlegt den Termin; die alte Fassung bleibt bis
+// dahin online, ein Build tauscht die Datei zum Zeitpunkt (verzögerter Austausch).
+async function approveScheduled() {
+  if (!store.current || !publishDay.value) return
+  const ok = await store.approve(store.current.key, toIso(publishAtLocal.value))
+  if (ok) scheduleDialog.value = false
+}
+
+// Termin-Dialog öffnen und, falls bereits terminiert, mit dem geplanten
+// Zeitpunkt vorbelegen (Umplanen).
+function openScheduleDialog() {
+  const iso = store.current?.publishAt
+  if (iso) {
+    const d = new Date(iso)
+    if (!Number.isNaN(d.getTime())) {
+      const p = (n) => String(n).padStart(2, '0')
+      publishDay.value = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+      publishTime.value = `${p(d.getHours())}:${p(d.getMinutes())}`
+    }
+  }
+  scheduleDialog.value = true
+}
+
+async function discard(key) {
+  await store.discard(key)
+}
+
+const ORIGIN_ICON = { ai: 'mdi-creation', cron: 'mdi-clock-outline', user: 'mdi-account-outline' }
+
+function formatDate(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString(locale.value)
+}
+
+// Zur Quelldatei springen (Live-Stand im Editor). Bei neuen Seiten fehlt sie ggf.
+async function toSource() {
+  const id = store.current?.fileId
+  if (!id) return
+  store.closeQueue()
+  try {
+    await files.openFileById(id)
+  } catch {
+    // Neue Seite: existiert live noch nicht — kein Sprungziel.
+  }
+}
+</script>
+
+<template>
+  <div v-if="store.queueOpen" class="rev-overlay">
+    <header class="rev-head nemo-noselect">
+      <button
+        class="rev-back"
+        :title="store.dialogOpen ? $t('common.back') : $t('common.close')"
+        @click="store.dialogOpen ? store.closeDialog() : store.closeQueue()"
+      >
+        <v-icon icon="mdi-arrow-left" size="20" />
+      </button>
+      <v-icon icon="mdi-clipboard-text-clock-outline" size="18" class="rev-head-icon" />
+      <span class="rev-head-title text-truncate">
+        {{ store.dialogOpen ? (store.current?.rel || $t('review.title')) : $t('review.title') }}
+      </span>
+      <v-spacer />
+      <v-chip v-if="!store.dialogOpen" size="small" variant="tonal" label>{{ store.count }}</v-chip>
+    </header>
+
+    <div class="rev-content nemo-scroll">
+      <div class="rev-inner">
+        <!-- Fehler -->
+        <v-alert v-if="store.error" type="error" density="comfortable" class="mb-3">
+          {{ errorText(t, store.error) }}
+        </v-alert>
+
+        <!-- Diff-Detail eines Entwurfs -->
+        <template v-if="store.dialogOpen">
+          <div v-if="store.loading" class="d-flex justify-center py-8">
+            <v-progress-circular indeterminate color="primary" />
+          </div>
+          <template v-else-if="store.current">
+            <div class="d-flex align-center mb-3 text-body-2 text-medium-emphasis">
+              <v-icon :icon="ORIGIN_ICON[store.current.origin] || 'mdi-file-outline'" size="16" class="mr-1" />
+              <span>{{ $t('review.origin.' + (store.current.origin || 'user')) }}</span>
+              <span v-if="store.current.isNew" class="ml-2">· {{ $t('review.newPage') }}</span>
+              <span v-if="store.current.createdAt" class="ml-2">· {{ formatDate(store.current.createdAt) }}</span>
+              <span v-if="store.current.model" class="ml-2">· {{ store.current.model }}</span>
+            </div>
+
+            <!-- Bereits terminiert: Hinweis, dass die alte Fassung bis dahin online bleibt. -->
+            <v-alert
+              v-if="store.current.publishAt"
+              type="info"
+              density="compact"
+              variant="tonal"
+              class="mb-3"
+              prepend-icon="mdi-calendar-clock"
+            >
+              {{ $t('review.scheduledBanner', [formatDate(store.current.publishAt)]) }}
+            </v-alert>
+
+            <!-- Zeilenweiser Diff (alt rot, neu grün, Kontext grau) -->
+            <div v-if="diff" class="rev-diff">
+              <div
+                v-for="(l, k) in diff"
+                :key="k"
+                class="rev-diff__line"
+                :class="`rev-diff__line--${l.t}`"
+              ><span class="rev-diff__sign">{{ l.t === 'add' ? '+' : l.t === 'del' ? '-' : ' ' }}</span>{{ l.text }}</div>
+            </div>
+            <!-- Neue Seite oder zu großer Diff: einfache Vorschau des Vorschlags. -->
+            <pre v-else class="rev-preview">{{ store.current.proposedContent }}</pre>
+          </template>
+        </template>
+
+        <!-- Warteschlangen-Liste -->
+        <template v-else>
+          <div v-if="store.listLoading" class="d-flex justify-center py-8">
+            <v-progress-circular indeterminate color="primary" />
+          </div>
+          <div v-else-if="!store.drafts.length" class="text-medium-emphasis text-center py-8">
+            {{ $t('review.empty') }}
+          </div>
+          <v-list v-else lines="two" density="comfortable" class="rev-list">
+            <v-list-item
+              v-for="d in store.drafts"
+              :key="d.key"
+              class="rev-item"
+              @click="store.open(d.key)"
+            >
+              <template #prepend>
+                <v-icon :icon="ORIGIN_ICON[d.origin] || 'mdi-file-outline'" />
+              </template>
+              <v-list-item-title>
+                {{ d.rel }}
+                <v-chip
+                  v-if="d.publishAt"
+                  size="x-small"
+                  color="info"
+                  variant="tonal"
+                  label
+                  class="ml-2"
+                  prepend-icon="mdi-calendar-clock"
+                >
+                  {{ formatDate(d.publishAt) }}
+                </v-chip>
+              </v-list-item-title>
+              <v-list-item-subtitle>
+                {{ $t('review.origin.' + (d.origin || 'user')) }}
+                <span v-if="d.isNew"> · {{ $t('review.newPage') }}</span>
+                <span v-if="d.createdAt"> · {{ formatDate(d.createdAt) }}</span>
+              </v-list-item-subtitle>
+              <template #append>
+                <v-btn
+                  icon="mdi-delete-outline"
+                  size="small"
+                  variant="text"
+                  :title="$t('review.discard')"
+                  :disabled="store.busy"
+                  @click.stop="discard(d.key)"
+                />
+              </template>
+            </v-list-item>
+          </v-list>
+        </template>
+      </div>
+    </div>
+
+    <!-- Aktionsleiste (nur im Diff-Detail): Freigeben mit/ohne Termin, Verwerfen. -->
+    <footer v-if="store.dialogOpen && store.current" class="rev-actions nemo-noselect">
+      <v-btn
+        v-if="!store.current.isNew"
+        :prepend-icon="smAndDown ? undefined : 'mdi-file-document-edit-outline'"
+        :icon="smAndDown ? 'mdi-file-document-edit-outline' : undefined"
+        :title="$t('review.toSource')"
+        variant="text"
+        :disabled="store.busy"
+        @click="toSource"
+      >
+        <template v-if="!smAndDown">{{ $t('review.toSource') }}</template>
+      </v-btn>
+      <v-btn
+        :prepend-icon="smAndDown ? undefined : 'mdi-delete-outline'"
+        :icon="smAndDown ? 'mdi-delete-outline' : undefined"
+        :title="$t('review.discard')"
+        variant="text"
+        color="error"
+        :disabled="store.busy"
+        @click="discard(store.current.key)"
+      >
+        <template v-if="!smAndDown">{{ $t('review.discard') }}</template>
+      </v-btn>
+
+      <v-spacer />
+
+      <!-- Terminierte Freigabe über einen eigenen Bestätigungsdialog. Bei einem
+           bereits terminierten Entwurf dient er zum Umplanen. -->
+      <v-btn
+        :title="store.current.publishAt ? $t('review.reschedule') : $t('review.schedule')"
+        variant="text"
+        :icon="smAndDown ? 'mdi-calendar-clock' : undefined"
+        :prepend-icon="smAndDown ? undefined : 'mdi-calendar-clock'"
+        :disabled="store.busy"
+        @click="openScheduleDialog"
+      >
+        <template v-if="!smAndDown">{{ store.current.publishAt ? $t('review.reschedule') : $t('review.schedule') }}</template>
+      </v-btn>
+      <v-btn
+        color="primary"
+        variant="flat"
+        prepend-icon="mdi-check"
+        :loading="store.busy"
+        @click="approveNow"
+      >
+        {{ $t('review.approveNow') }}
+      </v-btn>
+    </footer>
+
+    <!-- Termin-Dialog: Datum/Uhrzeit wählen. Bestätigen hinterlegt den Termin;
+         die aktuelle Fassung bleibt bis dahin online, ein Build tauscht sie zum
+         Zeitpunkt (verzögerter Austausch). Vergangener Termin = sofort. -->
+    <v-dialog v-model="scheduleDialog" max-width="480">
+      <v-card v-if="store.current">
+        <v-card-title class="text-subtitle-1">{{ $t('review.scheduleTitle') }}</v-card-title>
+        <v-card-text>
+          <p class="text-body-2 mb-3">{{ $t('review.scheduleIntro') }}</p>
+          <div class="d-flex ga-3">
+            <v-text-field
+              v-model="publishDay"
+              type="date"
+              :label="$t('review.pickDate')"
+              density="comfortable"
+              hide-details
+              variant="outlined"
+            />
+            <v-text-field
+              v-model="publishTime"
+              type="time"
+              :label="$t('review.pickTime')"
+              density="comfortable"
+              hide-details
+              variant="outlined"
+              style="max-width: 150px"
+            />
+          </div>
+          <p class="text-caption text-medium-emphasis mt-1">{{ $t('review.timeOptionalHint') }}</p>
+          <!-- Bei einer bereits veröffentlichten Seite: Zusicherung, dass sie
+               bis zum Termin online bleibt (kein Offline-Zeitfenster mehr). -->
+          <v-alert
+            v-if="!store.current.isNew && scheduledInFuture"
+            type="info"
+            density="compact"
+            variant="tonal"
+            class="mt-3"
+          >
+            {{ $t('review.scheduleLiveInfo') }}
+          </v-alert>
+          <p v-else-if="publishDay && !scheduledInFuture" class="text-caption text-medium-emphasis mt-2">
+            {{ $t('review.schedulePastHint') }}
+          </p>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" :disabled="store.busy" @click="scheduleDialog = false">
+            {{ $t('common.cancel') }}
+          </v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            :disabled="!publishDay || store.busy"
+            :loading="store.busy"
+            @click="approveScheduled"
+          >
+            {{ $t('review.scheduleConfirm') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+  </div>
+</template>
+
+<style scoped>
+/* Overlay über dem Arbeitsbereich, z-index wie das SEO-Audit (unter dem Editor). */
+.rev-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  background: var(--mint-content);
+}
+
+.rev-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 46px;
+  padding: 0 10px;
+  background: var(--mint-panel);
+  border-bottom: 1px solid var(--mint-border);
+  color: var(--mint-text);
+}
+.rev-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--mint-border);
+  border-radius: var(--mint-radius);
+  background: #fff;
+  padding: 3px 6px;
+  color: var(--mint-text);
+  cursor: pointer;
+}
+.rev-back:hover { background: var(--mint-panel-hover); }
+.rev-head-icon { color: var(--mint-green); }
+.rev-head-title { font-weight: 600; font-size: 0.95rem; min-width: 0; }
+
+.rev-content { flex: 1 1 auto; overflow: auto; }
+.rev-inner { max-width: 900px; margin: 0 auto; padding: 16px 20px 32px; }
+
+.rev-list { background: transparent; }
+.rev-item { cursor: pointer; border-bottom: 1px solid var(--mint-border); }
+
+/* Diff-Darstellung — übernommen vom Assistenten-Panel. */
+.rev-diff {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  border: 1px solid var(--mint-border);
+  border-radius: var(--mint-radius);
+  overflow: auto;
+}
+.rev-diff__line { padding: 0 8px; white-space: pre-wrap; word-break: break-word; }
+.rev-diff__sign {
+  display: inline-block;
+  width: 1ch;
+  margin-right: 4px;
+  opacity: 0.55;
+  user-select: none;
+}
+.rev-diff__line--add { background: rgba(60, 133, 39, 0.16); }
+.rev-diff__line--del {
+  background: rgba(192, 57, 43, 0.14);
+  text-decoration: line-through;
+  text-decoration-color: rgba(192, 57, 43, 0.5);
+}
+.rev-diff__line--ctx { color: var(--mint-text-muted, #666); }
+
+.rev-preview {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid var(--mint-border);
+  border-radius: var(--mint-radius);
+  padding: 8px;
+  margin: 0;
+}
+
+.rev-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  row-gap: 4px;
+  padding: 8px 12px;
+  background: var(--mint-panel);
+  border-top: 1px solid var(--mint-border);
+}
+</style>

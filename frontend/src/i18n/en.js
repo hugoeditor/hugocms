@@ -434,6 +434,11 @@ export default {
 
   editor: {
     save: 'Save (Ctrl+S)',
+    saveDraft: 'Save as draft for review',
+    savedAsDraft: 'Saved as a draft for review.',
+    publishDraft: 'Draft — will not be published on the next build (draft).',
+    publishScheduled: 'Scheduled to publish: {0} (hidden until then).',
+    publishExpired: 'Expired since {0} — will no longer be published (expiryDate).',
     discardConfirm: 'Discard unsaved changes?',
     discardTitle: 'Unsaved changes',
     discardAction: 'Discard',
@@ -487,6 +492,34 @@ export default {
     other: 'Other settings',
     noData: 'No entries',
     close: 'Close',
+    back: 'Back',
+  },
+
+  // Staged publishing: review queue of pending drafts.
+  review: {
+    open: 'Review',
+    title: 'Review queue',
+    empty: 'No pending drafts.',
+    newPage: 'new page',
+    toSource: 'Go to source file',
+    discard: 'Discard',
+    schedule: 'Schedule…',
+    reschedule: 'Reschedule…',
+    approveNow: 'Publish now',
+    scheduledBanner: 'Scheduled swap on {0}. The current version stays online until then.',
+    scheduleTitle: 'Publish scheduled',
+    scheduleIntro: 'Choose when this version replaces the current one. Until then the existing version stays published unchanged; a build swaps the file only at the scheduled time.',
+    pickDate: 'Replace on',
+    pickTime: 'Time',
+    timeOptionalHint: 'Time is optional — empty means 00:00 (start of day).',
+    scheduleConfirm: 'Publish scheduled',
+    scheduleLiveInfo: 'The currently published version stays online unchanged until the scheduled time, then gets replaced by this one — no offline window.',
+    schedulePastHint: 'The date is in the past — this version will be published immediately.',
+    origin: {
+      ai: 'AI assistant',
+      cron: 'Cron (automatic)',
+      user: 'Manual',
+    },
   },
 
   // LLM content quality (Pro feature). Checks a content file via AI.

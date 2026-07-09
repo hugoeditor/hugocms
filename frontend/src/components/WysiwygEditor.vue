@@ -7,14 +7,19 @@ import { useI18n } from 'vue-i18n'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import { Markdown } from 'tiptap-markdown'
+import { useAuthStore } from '../stores/auth'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
   // Zustand des Speichern-Knopfs in der Formatleiste (vom EditorPanel).
   saveDisabled: { type: Boolean, default: false },
   saving: { type: Boolean, default: false },
+  // Wird ein Entwurf gerade abgelegt? (Ladezustand des Entwurf-Knopfs.)
+  savingDraft: { type: Boolean, default: false },
 })
-const emit = defineEmits(['update:modelValue', 'clipboard-denied', 'save'])
+
+const authStore = useAuthStore()
+const emit = defineEmits(['update:modelValue', 'clipboard-denied', 'save', 'save-draft'])
 const { t } = useI18n()
 
 // Zwischenablage: writeText/readText verlangen einen sicheren Kontext;
@@ -87,6 +92,14 @@ const tools = computed(() => {
       disabled: props.saveDisabled || props.saving,
       run: () => emit('save'),
     },
+    // Als Entwurf zur Rezension ablegen (nur bei Hugo-Projekt).
+    ...(authStore.review ? [{
+      icon: 'mdi-content-save-edit-outline',
+      label: t('editor.saveDraft'),
+      active: false,
+      disabled: props.saveDisabled || props.savingDraft,
+      run: () => emit('save-draft'),
+    }] : []),
     { divider: true },
     { icon: 'mdi-undo', label: t('editor.undo'), active: false, disabled: !ed.can().undo(), run: () => ed.chain().focus().undo().run() },
     { icon: 'mdi-redo', label: t('editor.redo'), active: false, disabled: !ed.can().redo(), run: () => ed.chain().focus().redo().run() },

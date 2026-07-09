@@ -42,6 +42,11 @@ final class AssistantService
      *        write_file mit der fileId der Datei aufgerufen (z. B. um eine
      *        KI-Bearbeitung am Content-Qualitäts-Eintrag zu vermerken). Fehler
      *        dort dürfen den Schreibvorgang nicht kippen.
+     * @param ?\Closure(Mount, string, string, string): void $draftSink Ist er
+     *        gesetzt (gestaffelte Veröffentlichung im Modus auto), landet ein
+     *        write_file NICHT in der Datei, sondern als Entwurf zur Rezension;
+     *        die Live-Datei bleibt unangetastet. Aufruf mit
+     *        (Mount, rel, abs, content). onWrite entfällt dann.
      */
     public function __construct(
         private readonly AnthropicClient $client,
@@ -51,6 +56,7 @@ final class AssistantService
         private readonly FileService $files,
         private readonly ?\Closure $fileReport = null,
         private readonly ?\Closure $onWrite = null,
+        private readonly ?\Closure $draftSink = null,
     ) {
     }
 
@@ -245,7 +251,18 @@ final class AssistantService
     {
         $path = (string) ($input['path'] ?? '');
         $r = $this->resolvePath($path, false, 'write');
-        $this->files->writeText($r['mount'], $r['rel'], $r['abs'], (string) ($input['content'] ?? ''));
+        $content = (string) ($input['content'] ?? '');
+
+        // Gestaffelte Veröffentlichung: statt live zu schreiben, den Vorschlag als
+        // Entwurf zur Rezension ablegen. Die Live-Datei bleibt unangetastet, der
+        // Bearbeitungs-Vermerk (onWrite) entfällt — er greift erst bei Freigabe.
+        if ($this->draftSink !== null) {
+            ($this->draftSink)($r['mount'], $r['rel'], $r['abs'], $content);
+
+            return 'Als Entwurf zur Rezension vorgemerkt: ' . $path;
+        }
+
+        $this->files->writeText($r['mount'], $r['rel'], $r['abs'], $content);
 
         // KI-Bearbeitung vermerken (best effort — nie den Schreibvorgang kippen).
         if ($this->onWrite !== null) {

@@ -8,6 +8,8 @@ use HugoCMS\FileManager\Audit\AuditService;
 use HugoCMS\FileManager\Audit\ContentQualityService;
 use HugoCMS\FileManager\Auth\AuthInterface;
 use HugoCMS\FileManager\Exception\ApiException;
+use HugoCMS\FileManager\Review\FrontMatter;
+use HugoCMS\FileManager\Review\ReviewStore;
 use Throwable;
 
 /**
@@ -340,6 +342,11 @@ final class Connector
                 'auditcontentrequeue' => $this->cmdAuditContentRequeue($request),
                 'auditcontentupdate' => $this->cmdAuditContentUpdate($request),
                 'auditcontentdelete' => $this->cmdAuditContentDelete($request),
+                'reviewsave' => $this->cmdReviewSave($request),
+                'reviewlist' => $this->cmdReviewList(),
+                'reviewget' => $this->cmdReviewGet($request),
+                'reviewapprove' => $this->cmdReviewApprove($request),
+                'reviewdiscard' => $this->cmdReviewDiscard($request),
                 default => throw ApiException::badRequest('UNKNOWN-COMMAND', [$cmd]),
             };
 
@@ -455,6 +462,11 @@ final class Connector
             'speech' => $this->license()->isPro()
                 && $this->services['speechKey'] !== null
                 && $this->services['speechUrl'] !== null,
+            // Gestaffelte Veröffentlichung: Entwürfe zur Rezension setzen
+            // Hugos draft/publishDate voraus, also ein konfiguriertes Hugo-
+            // Projekt. Keine Pro-Bindung — der Entwurf-Modus ist eine allgemeine
+            // Sicherheitsfunktion (auch der Editor-Button nutzt ihn).
+            'review' => $this->hugo !== null,
         ];
     }
 
@@ -879,9 +891,47 @@ final class Connector
             throw ApiException::denied('OPERATION-NOT-ALLOWED', ['build']);
         }
 
+        return $this->runHugoBuild();
+    }
+
+    /**
+     * CLI-Einstieg (Cron): baut die Webseite ohne Web-Authentifizierung. Für die
+     * zeitgesteuerte Veröffentlichung der gestaffelten Freigabe — ein
+     * regelmäßiger Build macht freigegebene Seiten sichtbar, sobald ihr
+     * publishDate erreicht ist (Hugo wird ohne --buildFuture aufgerufen). Keine
+     * Pro-Lizenz nötig; setzt nur die Hugo-Konfiguration voraus.
+     *
+     * @return array{success: bool, exitCode: int, output: string, seconds: float}
+     */
+    public function buildSite(): array
+    {
+        return $this->runHugoBuild();
+    }
+
+    /**
+     * Führt den eigentlichen Hugo-Lauf aus ([hugo]-Sektion bzw. Option "hugo").
+     * Ein fehlgeschlagener Lauf ist KEIN API-Fehler: Die Antwort trägt
+     * success=false samt Hugo-Ausgabe, damit sie vollständig angezeigt werden
+     * kann. Nur die Vorbedingungen (fehlende Konfiguration/Programm/Quelle)
+     * werfen eine Ausnahme.
+     *
+     * @return array{success: bool, exitCode: int, output: string, seconds: float}
+     */
+    private function runHugoBuild(): array
+    {
         if ($this->hugo === null) {
             throw new ApiException('ECONFIG', 500, 'HUGO-NOT-CONFIGURED');
         }
+
+        // Fällige terminierte Austausche zuerst anwenden (verzögerter Austausch
+        // der gestaffelten Veröffentlichung), damit der Build die neuen Fassungen
+        // sieht. Ein Fehler hier darf den Build nicht verhindern.
+        try {
+            $this->applyDueDrafts();
+        } catch (Throwable $e) {
+            $this->logger->warning('Fällige Austausche nicht angewendet: ' . $e->getMessage());
+        }
+
         if ($this->hugoBin === null) {
             throw new ApiException('ECONFIG', 500, 'HUGO-BIN-NOT-CONFIGURED');
         }
@@ -898,6 +948,8 @@ final class Connector
         // --cleanDestinationDir nur auf Wunsch (clean = true): Es entfernt im
         // Ziel ALLES, was Hugo nicht selbst erzeugt — auch die im Publish-
         // Ordner liegende Installation (edit/, cms-api/). Standard: aus.
+        // Bewusst OHNE --buildFuture/--buildDrafts: künftige publishDate und
+        // draft:true bleiben so unveröffentlicht — genau die Staffelung.
         $cmd = escapeshellarg($bin)
             . (!empty($this->hugo['clean']) ? ' --cleanDestinationDir' : '')
             . ' -s ' . escapeshellarg($source)
@@ -1000,7 +1052,7 @@ final class Connector
      * Werkzeug get_file_report wird nur eingehängt, wenn Pro-Lizenz und
      * Hugo-Projekt vorliegen (sonst gibt es keinen Audit-/Content-Bericht).
      */
-    private function assistantService(?string $writeModeOverride = null, ?string $modelOverride = null): AssistantService
+    private function assistantService(?string $writeModeOverride = null, ?string $modelOverride = null, string $draftOrigin = 'ai'): AssistantService
     {
         // Interaktiver Assistent nutzt `model`; der Cron-Verbesserer reicht sein
         // eigenes Modell (`model_cron`) als Override durch.
@@ -1016,15 +1068,247 @@ final class Connector
             ? fn (string $fileId) => $this->markFileImproved($fileId, $model)
             : null;
 
+        // Gestaffelte Veröffentlichung: Im Modus auto (Cron oder so konfigurierter
+        // interaktiver Assistent) und mit Hugo-Projekt geht ein Schreibvorgang
+        // nicht live, sondern als Entwurf zur Rezension. Ohne Hugo-Projekt gibt es
+        // kein draft/publishDate — dann schreibt auto wie bisher direkt.
+        $mode = $writeModeOverride ?? $this->ai['writeMode'];
+        $draftSink = ($mode === 'auto' && $this->hugo !== null)
+            ? fn (Mount $m, string $rel, string $abs, string $content) => $this->stashDraft($m, $rel, $abs, $content, $draftOrigin, $model)
+            : null;
+
         return new AssistantService(
             new AnthropicClient((string) $this->ai['apiKey']),
             $model,
-            $writeModeOverride ?? $this->ai['writeMode'],
+            $mode,
             $this->resolver,
             $this->files,
             $fileReport,
             $onWrite,
+            $draftSink,
         );
+    }
+
+    /**
+     * Speicherverzeichnis der Rezensions-Entwürfe (je Webseite getrennt).
+     * Setzt ein Hugo-Projekt voraus (der Schlüssel leitet sich aus source ab).
+     */
+    private function reviewStore(): ReviewStore
+    {
+        if ($this->hugo === null) {
+            throw new ApiException('ECONFIG', 409, 'REVIEW-NO-PROJECT');
+        }
+
+        return new ReviewStore(__DIR__ . '/../var/review/' . sha1((string) $this->hugo['source']));
+    }
+
+    /**
+     * Legt einen Rezensions-Entwurf für die Datei (mount/rel) ab: hält den
+     * vollständigen Vorschlag fest, ohne die Live-Datei zu berühren. Ein bereits
+     * offener Entwurf derselben Datei wird ersetzt.
+     */
+    private function stashDraft(Mount $mount, string $rel, string $abs, string $content, string $origin, ?string $model = null): void
+    {
+        $exists = is_file($abs);
+        $this->reviewStore()->put([
+            'key' => ReviewStore::keyFor($mount->name(), $rel),
+            'mount' => $mount->name(),
+            'rel' => $rel,
+            'fileId' => $this->resolver->encodeId($mount->name(), $rel),
+            'origin' => $origin,
+            'isNew' => !$exists,
+            'proposedContent' => $content,
+            'baseMtime' => $exists ? (int) (filemtime($abs) ?: 0) : null,
+            'createdAt' => gmdate('c'),
+            'model' => $model,
+        ]);
+    }
+
+    /**
+     * reviewsave — legt den übergebenen Inhalt manuell als Rezensions-Entwurf ab
+     * (der Entwurf-Button neben „Speichern"). Schreibt NICHT in die Live-Datei.
+     */
+    private function cmdReviewSave(array $request): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+        $r = $this->resolver->resolve($this->requireParam($request, 'target'), false);
+        $this->requirePermission($r['mount'], 'write');
+
+        $content = $request['content'] ?? null;
+        if (!is_string($content)) {
+            throw ApiException::badRequest('PARAM-MISSING', ['content']);
+        }
+        $this->stashDraft($r['mount'], $r['rel'], $r['abs'], $content, 'user');
+
+        return ['saved' => true, 'key' => ReviewStore::keyFor($r['mount']->name(), $r['rel'])];
+    }
+
+    /** reviewlist — offene Entwürfe (ohne Inhalt) für die Rezensions-Warteschlange. */
+    private function cmdReviewList(): array
+    {
+        $this->requireAuth();
+
+        return ['drafts' => $this->reviewStore()->list()];
+    }
+
+    /**
+     * reviewget — vollständiger Entwurf samt aktuellem Live-Inhalt (für die
+     * Diff-Ansicht). Bei neuen Seiten fehlt das Original (original = null).
+     */
+    private function cmdReviewGet(array $request): array
+    {
+        $this->requireAuth();
+        $draft = $this->reviewStore()->get($this->requireParam($request, 'key'));
+
+        $original = null;
+        try {
+            $r = $this->resolver->resolve((string) ($draft['fileId'] ?? ''), true);
+            $original = (string) $this->files->readText($r['mount'], $r['abs'])['content'];
+        } catch (Throwable) {
+            $original = null; // Quelle fehlt/nicht lesbar (neue Seite o. Ä.)
+        }
+        $draft['original'] = $original;
+
+        return $draft;
+    }
+
+    /**
+     * reviewapprove — gibt einen Entwurf frei. Zwei Fälle:
+     *
+     *  - OHNE (bzw. mit vergangenem) `publishDate`: sofort — der Entwurf wird in
+     *    die Live-Datei geschrieben (draft:false) und entfernt.
+     *  - MIT künftigem `publishDate` (ISO 8601): terminiert — der Entwurf bleibt
+     *    mit dem Feld `publishAt` im Speicher, die Live-Datei bleibt UNVERÄNDERT.
+     *    Die alte Fassung bleibt so bis zum Termin veröffentlicht; ein Build
+     *    tauscht die Datei erst, wenn der Zeitpunkt erreicht ist (verzögerter
+     *    Austausch, {@see applyDueDrafts()}). Kein `publishDate` im Front Matter.
+     *
+     * Mit force=true entfällt die Konfliktprüfung gegen den Live-Stand (nur beim
+     * sofortigen Schreiben relevant).
+     */
+    private function cmdReviewApprove(array $request): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+        $draft = $this->reviewStore()->get($this->requireParam($request, 'key'));
+
+        $r = $this->resolver->resolve((string) ($draft['fileId'] ?? ''), false);
+        $this->requirePermission($r['mount'], 'write');
+
+        // Künftiger Termin? Dann nur vormerken (verzögerter Austausch), nicht schreiben.
+        $publishDate = $request['publishDate'] ?? null;
+        $swapTs = is_string($publishDate) && trim($publishDate) !== '' ? strtotime(trim($publishDate)) : false;
+        if ($swapTs !== false && $swapTs > time()) {
+            $draft['publishAt'] = gmdate('c', $swapTs);
+            $this->reviewStore()->put($draft);
+            $this->logger->info(sprintf(
+                'Rezension terminiert: %s/%s (Austausch %s)',
+                (string) ($draft['mount'] ?? ''),
+                (string) ($draft['rel'] ?? ''),
+                $draft['publishAt'],
+            ));
+
+            return ['scheduled' => true, 'key' => (string) $draft['key'], 'publishAt' => $draft['publishAt']];
+        }
+
+        // Sofort: Konfliktschutz gegen den zwischenzeitlichen Live-Stand.
+        $force = (bool) ($request['force'] ?? false);
+        $expected = (!$force && is_int($draft['baseMtime'] ?? null)) ? (int) $draft['baseMtime'] : null;
+        $meta = $this->applyDraftLive($draft, $r, $expected);
+
+        $this->logger->info(sprintf(
+            'Rezension freigegeben: %s/%s',
+            (string) ($draft['mount'] ?? ''),
+            (string) ($draft['rel'] ?? ''),
+        ));
+
+        return ['approved' => true, 'key' => (string) $draft['key'], 'file' => $meta];
+    }
+
+    /**
+     * Schreibt den Inhalt eines Entwurfs in seine Live-Datei (draft:false, KEIN
+     * publishDate), vermerkt KI-/Cron-Bearbeitungen und entfernt den Entwurf.
+     * Gemeinsame Logik der sofortigen Freigabe und des terminierten Austauschs.
+     *
+     * @param array<string, mixed>                       $draft
+     * @param array{mount: Mount, abs: string, rel: string} $r
+     */
+    private function applyDraftLive(array $draft, array $r, ?int $expectedMtime = null): array
+    {
+        $content = FrontMatter::setDraft((string) ($draft['proposedContent'] ?? ''), false);
+        $meta = $this->files->writeText($r['mount'], $r['rel'], $r['abs'], $content, $expectedMtime);
+
+        if (in_array((string) ($draft['origin'] ?? ''), ['ai', 'cron'], true)) {
+            $model = is_string($draft['model'] ?? null) ? (string) $draft['model'] : null;
+            $this->markFileImproved((string) ($draft['fileId'] ?? ''), $model);
+        }
+
+        $this->reviewStore()->delete((string) $draft['key']);
+
+        return $meta;
+    }
+
+    /**
+     * Verzögerter Austausch der gestaffelten Veröffentlichung: schreibt alle
+     * terminierten Entwürfe, deren `publishAt` erreicht ist, in ihre Live-Datei
+     * und entfernt sie. Bis dahin bleibt die alte Fassung unverändert und wird
+     * weiter gebaut. Wird vor jedem Build ausgeführt ({@see runHugoBuild()}), im
+     * Web wie im Cron. Ein Fehler an einer Datei bricht die übrigen nicht ab.
+     *
+     * @return array{applied: list<array{key: string, rel: string}>}
+     */
+    public function applyDueDrafts(): array
+    {
+        if ($this->hugo === null) {
+            return ['applied' => []];
+        }
+        $store = $this->reviewStore();
+        $now = time();
+        $applied = [];
+        foreach ($store->list() as $meta) {
+            $publishAt = $meta['publishAt'] ?? null;
+            if (!is_string($publishAt) || $publishAt === '') {
+                continue; // noch in Rezension (kein Termin)
+            }
+            $ts = strtotime($publishAt);
+            if ($ts === false || $ts > $now) {
+                continue; // Termin noch nicht erreicht
+            }
+            $key = (string) ($meta['key'] ?? '');
+            try {
+                $draft = $store->get($key); // vollständig inkl. proposedContent
+                $r = $this->resolver->resolve((string) ($draft['fileId'] ?? ''), false);
+                if (!$r['mount']->allows('write')) {
+                    $this->logger->warning("Terminierter Austausch übersprungen (Mount schreibgeschützt): {$key}");
+                    continue;
+                }
+                // Cron kann keine Konflikte bestätigen — der terminierte Stand
+                // gewinnt; eine zwischenzeitliche Live-Änderung wird nur vermerkt.
+                if (is_int($draft['baseMtime'] ?? null) && is_file($r['abs']) && (int) @filemtime($r['abs']) !== (int) $draft['baseMtime']) {
+                    $this->logger->warning(sprintf('Terminierter Austausch überschreibt zwischenzeitliche Änderung: %s/%s', (string) ($draft['mount'] ?? ''), (string) ($draft['rel'] ?? '')));
+                }
+                $this->applyDraftLive($draft, $r);
+                $applied[] = ['key' => $key, 'rel' => (string) ($draft['rel'] ?? '')];
+                $this->logger->info(sprintf('Terminierter Austausch: %s/%s', (string) ($draft['mount'] ?? ''), (string) ($draft['rel'] ?? '')));
+            } catch (Throwable $e) {
+                $this->logger->warning("Terminierter Austausch fehlgeschlagen ({$key}): " . $e->getMessage());
+            }
+        }
+
+        return ['applied' => $applied];
+    }
+
+    /** reviewdiscard — verwirft einen Entwurf; die Live-Datei bleibt unberührt. */
+    private function cmdReviewDiscard(array $request): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+        $key = $this->requireParam($request, 'key');
+        $this->reviewStore()->get($key); // 404, falls unbekannt
+        $this->reviewStore()->delete($key);
+
+        return ['discarded' => true, 'key' => $key];
     }
 
     /**
@@ -1126,7 +1410,7 @@ final class Connector
             return ['candidates' => count($work), 'dryRun' => true, 'processed' => $preview];
         }
 
-        $service = $this->assistantService('auto', $this->ai['modelCron']);
+        $service = $this->assistantService('auto', $this->ai['modelCron'], 'cron');
         $processed = [];
         foreach (array_slice($work, 0, $limit) as $entry) {
             $mount = (string) ($entry['mount'] ?? '');
@@ -1150,18 +1434,29 @@ final class Connector
     /**
      * Abgeleitete Arbeitsliste für die KI-Verbesserung: geprüfte Content-Dateien
      * mit Score < 100, die noch nicht verbessert wurden und deren Quelle
-     * vorhanden ist. Reihenfolge wie {@see ContentQualityService::list()}
-     * (neueste Prüfung zuerst).
+     * vorhanden ist. Dateien mit einem offenen Rezensions-Entwurf sind
+     * ausgeschlossen — sie warten auf Freigabe und werden nicht erneut bearbeitet
+     * (sonst überschriebe jeder Lauf den offenen Entwurf). Reihenfolge wie
+     * {@see ContentQualityService::list()} (neueste Prüfung zuerst).
      *
      * @return list<array<string, mixed>>
      */
     private function pendingImproveList(): array
     {
+        // Schlüssel aller offenen Entwürfe (sha1(mount:rel)) für den Ausschluss.
+        $pendingKeys = [];
+        foreach ($this->reviewStore()->list() as $draft) {
+            if (isset($draft['key'])) {
+                $pendingKeys[(string) $draft['key']] = true;
+            }
+        }
+
         return array_values(array_filter(
             $this->contentQualityStore()->list(),
             static fn (array $e): bool => empty($e['improvedAt'])
                 && is_numeric($e['score'] ?? null) && $e['score'] < 100
-                && ($e['sourceMissing'] ?? false) === false,
+                && ($e['sourceMissing'] ?? false) === false
+                && !isset($pendingKeys[ReviewStore::keyFor((string) ($e['mount'] ?? ''), (string) ($e['rel'] ?? ''))]),
         ));
     }
 

@@ -13,6 +13,7 @@ import FileBrowser from './components/FileBrowser.vue'
 import TrashView from './components/TrashView.vue'
 import AuditView from './components/AuditView.vue'
 import ContentQualityView from './components/ContentQualityView.vue'
+import ReviewQueueView from './components/ReviewQueueView.vue'
 import EditorPanel from './components/EditorPanel.vue'
 import ReconfigureDialog from './components/ReconfigureDialog.vue'
 import AccountDialog from './components/AccountDialog.vue'
@@ -23,6 +24,7 @@ import AssistantPanel from './components/AssistantPanel.vue'
 import { useAssistantStore } from './stores/assistant'
 import { useHelpStore } from './stores/help'
 import { useAuditContentStore } from './stores/auditContent'
+import { useReviewStore } from './stores/review'
 import LanguageSwitcher from './components/LanguageSwitcher.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import { useConfirm } from './util/confirm'
@@ -64,6 +66,7 @@ const files = useFilesStore()
 const assistant = useAssistantStore()
 const help = useHelpStore()
 const auditContent = useAuditContentStore()
+const review = useReviewStore()
 const error = ref(null)
 const fatalError = ref(null)
 const warningsVisible = ref(false)
@@ -159,6 +162,11 @@ async function loadMounts() {
   } finally {
     suspendAuthGuard(false)
   }
+  // Zahl offener Rezensions-Entwürfe für das Abzeichen der Werkzeugschiene
+  // vorab laden (best effort — ein Fehler darf den Start nicht stören).
+  if (auth.review) {
+    review.fetch().catch(() => {})
+  }
 }
 
 // Anfangsprüfung (whoami) — läuft vor dem Login. Schlägt sie fehl, ist es ein
@@ -207,6 +215,7 @@ async function leaveEditorThen(action) {
   // als die Dateiliste und würden sie sonst verdecken.
   help.close()
   auditContent.closeDialog()
+  review.closeQueue()
   if (files.openFile) files.closeFile()
   action()
 }
@@ -231,6 +240,16 @@ function openAuditView() {
     return
   }
   leaveEditorThen(() => files.openAudit())
+}
+
+// Rezensions-Warteschlange öffnen/schließen (gestaffelte Veröffentlichung).
+// Umschalter wie das SEO-Audit; öffnet als Overlay über dem Dateimanager.
+function openReviewQueue() {
+  if (review.queueOpen) {
+    review.closeQueue()
+    return
+  }
+  leaveEditorThen(() => review.openQueue())
 }
 
 // --- Hugo aufrufen (Veröffentlichen) ---------------------------------------
@@ -538,6 +557,24 @@ async function build() {
                 </template>
               </v-tooltip>
 
+              <!-- Rezensions-Warteschlange (gestaffelte Veröffentlichung) — nur
+                   bei konfiguriertem Hugo-Projekt (draft/publishDate). -->
+              <v-tooltip v-if="auth.review" :text="$t('review.open')" location="right">
+                <template #activator="{ props }">
+                  <button
+                    v-bind="props"
+                    type="button"
+                    class="nemo-tool-btn"
+                    :class="{ active: review.queueOpen }"
+                    @click="openReviewQueue"
+                  >
+                    <v-icon icon="mdi-clipboard-text-clock-outline" size="20" />
+                    <span v-if="review.count" class="nemo-tool-badge">{{ review.count }}</span>
+                    <span class="nemo-tool-label">{{ $t('review.open') }}</span>
+                  </button>
+                </template>
+              </v-tooltip>
+
               <!-- KI-Assistent: immer sichtbar. Fehlt der KI-Schlüssel, meldet
                    sich der Klick mit einem Hinweis und bietet die Konfiguration an. -->
               <v-tooltip :text="$t('assistant.open')" location="right">
@@ -627,6 +664,9 @@ async function build() {
                  HelpView, damit sich aus einem SEO-Fund die Regel-Hilfe darüber
                  legen kann. -->
             <ContentQualityView />
+            <!-- Rezensions-Warteschlange (gestaffelte Veröffentlichung): Overlay
+                 über dem Dateimanager, aus der Werkzeugschiene geöffnet. -->
+            <ReviewQueueView />
             <!-- Hilfe-/Wissensdatenbank: Überlagerung mit Zurück-Button, öffnet
                  z. B. aus einem SEO-Audit-Fund die ausführliche Erklärung. -->
             <HelpView />
@@ -901,6 +941,19 @@ async function build() {
   flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* Zähler offener Rezensions-Entwürfe am Werkzeug-Knopf. */
+.nemo-tool-badge {
+  flex: 0 0 auto;
+  order: 3; /* rechts, hinter der Beschriftung */
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--mint-green);
+  color: #fff;
+  font-size: 0.72rem;
+  line-height: 18px;
+  text-align: center;
 }
 .nemo-tool-btn:hover:not(:disabled) {
   background: var(--mint-panel-hover);

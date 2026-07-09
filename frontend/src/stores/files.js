@@ -481,6 +481,15 @@ export const useFilesStore = defineStore('files', {
       }
     },
 
+    // Legt den aktuellen Editor-Inhalt als Rezensions-Entwurf ab, statt ihn live
+    // zu speichern (gestaffelte Veröffentlichung). Die Live-Datei bleibt
+    // unverändert; der Entwurf wartet in der Warteschlange auf Freigabe.
+    async saveAsDraft(content) {
+      if (!this.openFile) return
+      await api.post('reviewsave', { target: this.openFile.id, content })
+      this.dirty = false
+    },
+
     closeFile() {
       this.openFile = null
       this.dirty = false
