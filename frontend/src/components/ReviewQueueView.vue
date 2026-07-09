@@ -251,29 +251,49 @@ async function toSource() {
       </div>
     </div>
 
-    <!-- Aktionsleiste (nur im Diff-Detail): Freigeben mit/ohne Termin, Verwerfen. -->
+    <!-- Aktionsleiste (nur im Diff-Detail): Freigeben mit/ohne Termin, Verwerfen.
+         Icon- und Text-Variante sind getrennte Buttons: ein (auch leerer)
+         Default-Slot verdrängt in Vuetify sonst das icon-Prop, der Button bliebe
+         leer. Auf schmalen Schirmen reine Icon-Buttons (Bedeutung im title). -->
     <footer v-if="store.dialogOpen && store.current" class="rev-actions nemo-noselect">
+      <template v-if="!store.current.isNew">
+        <v-btn
+          v-if="smAndDown"
+          icon="mdi-file-document-edit-outline"
+          :title="$t('review.toSource')"
+          variant="text"
+          :disabled="store.busy"
+          @click="toSource"
+        />
+        <v-btn
+          v-else
+          prepend-icon="mdi-file-document-edit-outline"
+          variant="text"
+          :disabled="store.busy"
+          @click="toSource"
+        >
+          {{ $t('review.toSource') }}
+        </v-btn>
+      </template>
+
       <v-btn
-        v-if="!store.current.isNew"
-        :prepend-icon="smAndDown ? undefined : 'mdi-file-document-edit-outline'"
-        :icon="smAndDown ? 'mdi-file-document-edit-outline' : undefined"
-        :title="$t('review.toSource')"
-        variant="text"
-        :disabled="store.busy"
-        @click="toSource"
-      >
-        <template v-if="!smAndDown">{{ $t('review.toSource') }}</template>
-      </v-btn>
-      <v-btn
-        :prepend-icon="smAndDown ? undefined : 'mdi-delete-outline'"
-        :icon="smAndDown ? 'mdi-delete-outline' : undefined"
+        v-if="smAndDown"
+        icon="mdi-delete-outline"
         :title="$t('review.discard')"
         variant="text"
         color="error"
         :disabled="store.busy"
         @click="discard(store.current.key)"
+      />
+      <v-btn
+        v-else
+        prepend-icon="mdi-delete-outline"
+        variant="text"
+        color="error"
+        :disabled="store.busy"
+        @click="discard(store.current.key)"
       >
-        <template v-if="!smAndDown">{{ $t('review.discard') }}</template>
+        {{ $t('review.discard') }}
       </v-btn>
 
       <v-spacer />
@@ -281,16 +301,33 @@ async function toSource() {
       <!-- Terminierte Freigabe über einen eigenen Bestätigungsdialog. Bei einem
            bereits terminierten Entwurf dient er zum Umplanen. -->
       <v-btn
+        v-if="smAndDown"
+        icon="mdi-calendar-clock"
         :title="store.current.publishAt ? $t('review.reschedule') : $t('review.schedule')"
         variant="text"
-        :icon="smAndDown ? 'mdi-calendar-clock' : undefined"
-        :prepend-icon="smAndDown ? undefined : 'mdi-calendar-clock'"
+        :disabled="store.busy"
+        @click="openScheduleDialog"
+      />
+      <v-btn
+        v-else
+        prepend-icon="mdi-calendar-clock"
+        variant="text"
         :disabled="store.busy"
         @click="openScheduleDialog"
       >
-        <template v-if="!smAndDown">{{ store.current.publishAt ? $t('review.reschedule') : $t('review.schedule') }}</template>
+        {{ store.current.publishAt ? $t('review.reschedule') : $t('review.schedule') }}
       </v-btn>
       <v-btn
+        v-if="smAndDown"
+        icon="mdi-check"
+        :title="$t('review.approveNow')"
+        color="primary"
+        variant="flat"
+        :loading="store.busy"
+        @click="approveNow"
+      />
+      <v-btn
+        v-else
         color="primary"
         variant="flat"
         prepend-icon="mdi-check"
@@ -401,7 +438,7 @@ async function toSource() {
 .rev-head-title { font-weight: 600; font-size: 0.95rem; min-width: 0; }
 
 .rev-content { flex: 1 1 auto; overflow: auto; }
-.rev-inner { max-width: 900px; margin: 0 auto; padding: 16px 20px 32px; }
+.rev-inner { max-width: none; margin: 0; padding: 16px 20px 32px; }
 
 .rev-list { background: transparent; }
 .rev-item { cursor: pointer; border-bottom: 1px solid var(--mint-border); }

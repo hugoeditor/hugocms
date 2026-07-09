@@ -1,0 +1,20 @@
+{
+  "name": "hugocms-2026",
+  "version": "1.0.0",
+  "description": "Ein webbasierter Dateimanager zum Pflegen von Hugo-Webseiten. Backend in PHP (ohne Composer), Frontend mit Vue 3, Vuetify 3 und Vite. Eine Installation verwaltet **mehrere Webseiten** (Mandantenfähigkeit); welche Verzeichnisse als Mounts erreichbar sind, wird je Webseite über INI-Dateien festgelegt.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com-hugoeditor:hugoeditor/hugocms-2026.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "jsdom": "^29.1.1"
+  }
+}

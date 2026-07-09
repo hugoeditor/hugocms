@@ -546,7 +546,7 @@ async function build() {
                   <button
                     v-bind="props"
                     type="button"
-                    class="nemo-tool-btn nemo-tool-btn--primary"
+                    class="nemo-tool-btn"
                     :disabled="building"
                     @click="build"
                   >
@@ -996,6 +996,7 @@ async function build() {
 
 /* Werkzeug-Schaltfläche: Icon links, Name rechts (GTK-artig flach). */
 .nemo-tool-btn {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1032,6 +1033,19 @@ async function build() {
   line-height: 18px;
   text-align: center;
 }
+/* Icon-Schiene (eingeklappt/schmal): Zähler als kleines Eck-Abzeichen über dem
+   Icon. Im Textfluss würde er den zentrierten Inhalt über die schmale Schiene
+   hinaus verbreitern — Icon und Zähler würden beidseitig abgeschnitten. */
+.nemo-toolrail.collapsed .nemo-tool-badge {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  min-width: 16px;
+  padding: 0 4px;
+  line-height: 16px;
+  font-size: 0.66rem;
+  pointer-events: none;
+}
 .nemo-tool-btn:hover:not(:disabled) {
   background: var(--mint-panel-hover);
   border-color: var(--mint-border);
@@ -1048,15 +1062,6 @@ async function build() {
   background: var(--mint-green-soft);
   border-color: #cfe0c5;
   color: var(--mint-green-soft-text);
-}
-/* Veröffentlichen: hervorgehobene Hauptaktion. */
-.nemo-tool-btn--primary {
-  background: var(--mint-green);
-  color: #fff;
-}
-.nemo-tool-btn--primary:hover:not(:disabled) {
-  background: var(--mint-green-dark);
-  border-color: var(--mint-green-dark);
 }
 /* Pro-Lizenz aktiv: grün eingefärbtes Symbol. */
 .nemo-tool-btn--pro { color: var(--mint-green-soft-text); }
@@ -1121,6 +1126,17 @@ async function build() {
   }
   .nemo-toolrail .nemo-tool-label { display: none; }
   .nemo-toolrail .nemo-tool-btn { justify-content: center; padding: 0; }
+  /* Zähler als Eck-Abzeichen (wie im eingeklappten Desktop-Zustand). */
+  .nemo-toolrail .nemo-tool-badge {
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    min-width: 16px;
+    padding: 0 4px;
+    line-height: 16px;
+    font-size: 0.66rem;
+    pointer-events: none;
+  }
   .nemo-toolrail.collapsed {
     width: 0;
     padding: 0;

@@ -545,6 +545,9 @@ final class Connector
         $data['path'] = $target['rel'] === ''
             ? $target['mount']->name()
             : $target['mount']->name() . '/' . $target['rel'];
+        // Liegt die Datei im Hugo-Content-Ordner? Dann ergänzt der Editor beim
+        // Öffnen fehlendes Front Matter.
+        $data['contentFile'] = $this->isHugoContentPath($target['abs']);
 
         return $data;
     }
@@ -593,12 +596,17 @@ final class Connector
         $parent = $this->resolver->resolve($this->requireParam($request, 'target'));
         $this->requirePermission($parent['mount'], 'write');
 
-        return $this->files->makeFile(
+        $info = $this->files->makeFile(
             $parent['mount'],
             $parent['rel'],
             $parent['abs'],
             $this->requireParam($request, 'name'),
         );
+        // Entsteht die Datei im Hugo-Content-Ordner? Dann schreibt der Client
+        // ihr das Front-Matter-Template (der Zielordner entscheidet).
+        $info['contentFile'] = $this->isHugoContentPath($parent['abs']);
+
+        return $info;
     }
 
     private function cmdRename(array $request): array
@@ -2171,6 +2179,49 @@ final class Connector
         }
 
         return str_starts_with($abs, $sourceReal . '/') ? substr($abs, strlen($sourceReal) + 1) : null;
+    }
+
+    /** Realpfad des Hugo-Content-Ordners, einmal je Request aufgelöst. */
+    private ?string $contentDirReal = null;
+    private bool $contentDirResolved = false;
+
+    /**
+     * Realpfad des Hugo-Content-Ordners (source/<contentDir>) oder null, wenn
+     * diese Webseite kein Hugo-Projekt ist bzw. der Ordner (noch) nicht
+     * existiert. Der contentDir-Name kommt aus der Hugo-Konfiguration
+     * ({@see AuditService::detectContentDir}), Standard "content".
+     */
+    private function hugoContentDirReal(): ?string
+    {
+        if ($this->contentDirResolved) {
+            return $this->contentDirReal;
+        }
+        $this->contentDirResolved = true;
+        if ($this->hugo === null) {
+            return $this->contentDirReal = null;
+        }
+        $source = realpath((string) $this->hugo['source']);
+        if ($source === false) {
+            return $this->contentDirReal = null;
+        }
+        $real = realpath($source . '/' . AuditService::detectContentDir($source));
+
+        return $this->contentDirReal = ($real === false ? null : $real);
+    }
+
+    /**
+     * Liegt der absolute Pfad im Hugo-Content-Ordner (der Ordner selbst oder
+     * darunter)? Grundlage dafür, dass der Editor nur echten Content-Dateien
+     * das Front-Matter-Template voranstellt bzw. ergänzt.
+     */
+    private function isHugoContentPath(string $abs): bool
+    {
+        $content = $this->hugoContentDirReal();
+        if ($content === null) {
+            return false;
+        }
+
+        return $abs === $content || str_starts_with($abs, $content . '/');
     }
 
     /**

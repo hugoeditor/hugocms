@@ -1,5 +1,8 @@
 import { defineStore } from 'pinia'
 import { api } from '../api/client'
+import { ensureFrontMatter } from '../util/frontMatterTemplate'
+
+const MARKDOWN_RE = /\.(md|markdown)$/i
 
 const VIEW_KEY = 'hugocms_view'
 
@@ -247,7 +250,14 @@ export const useFilesStore = defineStore('files', {
     },
 
     async createFile(name) {
-      await api.post('newfile', { target: this.cwd.id, name })
+      const meta = await api.post('newfile', { target: this.cwd.id, name })
+      // Neue Markdown-Datei im Hugo-Content-Ordner (vom Backend als contentFile
+      // gemeldet): das Front-Matter-Template gleich hineinschreiben, damit die
+      // Datei schon angelegt die Metadaten trägt.
+      if (meta?.contentFile && MARKDOWN_RE.test(name)) {
+        const { content } = ensureFrontMatter('', name)
+        await api.post('write', { target: meta.id, content })
+      }
       await this.refresh()
     },
 
@@ -312,7 +322,7 @@ export const useFilesStore = defineStore('files', {
     // beim Schließen der Bericht wieder erscheint (siehe AuditView.openSource).
     async openFileById(id) {
       const data = await api.get('read', { target: id })
-      this.openFile = { id, name: data.name, content: data.content, mtime: data.mtime, path: data.path }
+      this.openFile = { id, name: data.name, content: data.content, mtime: data.mtime, path: data.path, contentFile: !!data.contentFile }
       this.dirty = false
     },
 
@@ -427,7 +437,7 @@ export const useFilesStore = defineStore('files', {
 
     async openTextFile(entry) {
       const data = await api.get('read', { target: entry.id })
-      this.openFile = { id: entry.id, name: data.name, content: data.content, mtime: data.mtime, path: data.path }
+      this.openFile = { id: entry.id, name: data.name, content: data.content, mtime: data.mtime, path: data.path, contentFile: !!data.contentFile }
       this.dirty = false
     },
 

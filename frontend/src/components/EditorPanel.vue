@@ -10,11 +10,13 @@ import CodeMirrorEditor from './CodeMirrorEditor.vue'
 import { setEditorSaver, flushEditor } from '../util/editorBridge'
 import WysiwygEditor from './WysiwygEditor.vue'
 import FrontMatterPanel from './FrontMatterPanel.vue'
+import FrontMatterDialog from './FrontMatterDialog.vue'
 import HugoConfigEditor from './settings/HugoConfigEditor.vue'
 import { useTransientError } from '../util/transientError'
 import { useConfirm } from '../util/confirm'
 import { useAiGate } from '../util/aiGate'
 import { frontMatterMeta } from '../util/frontMatterMeta'
+import { missingFrontMatterFields, applyFrontMatterFields } from '../util/frontMatterTemplate'
 
 const { t, locale } = useI18n()
 const files = useFilesStore()
@@ -223,6 +225,41 @@ const tools = computed(() => [
   { name: 'unfoldAll', icon: 'mdi-unfold-more-horizontal', label: t('editor.unfoldAll') },
 ])
 
+// --- Front-Matter-Ergänzung beim Öffnen -----------------------------------
+// Fehlen einer Hugo-Content-Datei empfohlene Front-Matter-Felder, wird beim
+// Öffnen ein Dialog mit den fehlenden Feldern (Vorschlagswerte) angeboten —
+// statt sie still zu ergänzen. So bleibt „draft: true" sichtbar und wird bewusst
+// übernommen. date/lastmod richten sich nach der mtime der Datei.
+const fmDialog = ref(false)
+const fmFields = ref([])
+
+function maybePromptFrontMatter(raw) {
+  fmDialog.value = false
+  fmFields.value = []
+  if (!files.openFile?.contentFile || !isMarkdown.value) return
+  const when = files.openFile.mtime ? new Date(files.openFile.mtime * 1000) : new Date()
+  const { skip, fields } = missingFrontMatterFields(raw, files.openFile.name, when)
+  if (skip || fields.length === 0) return
+  fmFields.value = fields
+  fmDialog.value = true
+}
+
+// Übernimmt die im Dialog bestätigten Felder ins Front Matter. Im Quelltext-
+// Modus über eine CodeMirror-Transaktion, damit „Rückgängig" den Schritt
+// zurücknehmen kann; im visuellen Modus direkt in den Entwurf (der strukturierte
+// Front-Matter-Editor führt keine eigene Historie). Die Datei gilt danach als
+// ungespeichert.
+function applyFrontMatter(fields) {
+  const merged = applyFrontMatterFields(draft.value, files.openFile?.name ?? '', fields)
+  if (merged === draft.value) return
+  if (mode.value === 'source' && editorRef.value?.replaceAll) {
+    editorRef.value.replaceAll(merged) // löst update:modelValue -> onInput aus
+    return
+  }
+  onInput(merged)
+  if (isMarkdown.value && mode.value === 'wysiwyg') syncFromDraft()
+}
+
 // Bei jedem neu geöffneten File den Entwurf übernehmen.
 watch(
   () => files.openFile?.id,
@@ -231,6 +268,7 @@ watch(
     files.dirty = false
     error.value = null
     if (isMarkdown.value && mode.value === 'wysiwyg') syncFromDraft()
+    maybePromptFrontMatter(draft.value)
   },
 )
 
@@ -532,6 +570,9 @@ onBeforeUnmount(() => {
         <span>{{ language ?? $t('editor.plainText') }}</span>
       </div>
     </v-card>
+
+    <!-- Fehlendes Front Matter beim Öffnen ergänzen (Content-Dateien). -->
+    <FrontMatterDialog v-model="fmDialog" :fields="fmFields" @apply="applyFrontMatter" />
   </div>
 </template>
 

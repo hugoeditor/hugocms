@@ -88,7 +88,16 @@ function exec(name) {
   Promise.resolve(cmd(view)).catch(() => emit('clipboard-denied'))
   if (!panelCommands.has(name)) view.focus()
 }
-defineExpose({ exec })
+
+// Ersetzt den gesamten Inhalt über eine reguläre Transaktion — im Gegensatz zu
+// einem Remount bleibt der Verlauf erhalten, der Schritt ist also per
+// „Rückgängig" (Strg+Z) zurücknehmbar. Der updateListener meldet den neuen Wert
+// von selbst über update:modelValue.
+function replaceAll(text) {
+  if (!view) return
+  view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } })
+}
+defineExpose({ exec, replaceAll })
 
 // Prüft YAML beim Tippen mit dem yaml-Parser; Fehler und Warnungen tragen
 // Byte-Bereiche (pos), die direkt als Diagnose-Spannen dienen.

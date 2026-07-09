@@ -22,6 +22,27 @@ const authStore = useAuthStore()
 const emit = defineEmits(['update:modelValue', 'clipboard-denied', 'save', 'save-draft'])
 const { t } = useI18n()
 
+// tiptap-markdown maskiert beim Serialisieren jedes < und > eines Text-Knotens
+// zu &lt;/&gt;. Das zerstört Hugo-Shortcodes der Winkelklammer-Form
+// ({{< … >}}), deren Delimiter genau diese Zeichen tragen. In manchen Fällen
+// geht beim DOM-Round-Trip sogar die Richtung des Zeichens verloren (> wird zu
+// <). Da die Winkelklammer-Delimiter IMMER {{< und >}} lauten, normalisieren
+// wir sie direkt an den {{ / }}-Grenzen wieder auf die kanonische Form — das
+// stellt auch ein verlorengegangenes > wieder her. Einzelne <, > in normaler
+// Prosa bleiben unberührt; die Prozentform ({{% … %}}) ebenfalls.
+function restoreHugoShortcodes(md) {
+  return md
+    .replace(/\{\{(?:&lt;|&gt;|<|>)/g, '{{<')
+    .replace(/(?:&lt;|&gt;|<|>)\}\}/g, '>}}')
+}
+
+// Serialisierter Markdown-Body inklusive Shortcode-Wiederherstellung. In
+// onUpdate UND im modelValue-watch dieselbe Quelle nutzen, sonst löst der
+// Vergleich ein überflüssiges setContent aus (Cursor-Sprung bei jeder Eingabe).
+function currentMarkdown(ed) {
+  return restoreHugoShortcodes(ed.storage.markdown.getMarkdown())
+}
+
 // Zwischenablage: writeText/readText verlangen einen sicheren Kontext;
 // beim Scheitern meldet clipboard-denied einen Hinweis auf Strg+X/C/V.
 function selectionText(ed) {
@@ -65,7 +86,7 @@ const editor = useEditor({
     // als Text erhalten; Hugo-Markdown bleibt so unangetastet wie möglich.
     Markdown.configure({ html: false, breaks: false }),
   ],
-  onUpdate: ({ editor: ed }) => emit('update:modelValue', ed.storage.markdown.getMarkdown()),
+  onUpdate: ({ editor: ed }) => emit('update:modelValue', currentMarkdown(ed)),
 })
 
 // Externe Änderungen (Moduswechsel) übernehmen, ohne Cursor-Schleifen.
@@ -73,7 +94,7 @@ watch(
   () => props.modelValue,
   (value) => {
     const ed = editor.value
-    if (ed && value !== ed.storage.markdown.getMarkdown()) {
+    if (ed && value !== currentMarkdown(ed)) {
       ed.commands.setContent(value, false)
     }
   },

@@ -693,6 +693,13 @@ export default {
     },
   },
 
+  frontMatterDialog: {
+    title: 'Complete metadata',
+    hint: 'This page is missing recommended front matter fields. Review and apply them. Note: while “draft” is true, the page is not published on build.',
+    apply: 'Apply',
+    ignore: 'Ignore',
+  },
+
   wysiwyg: {
     bold: 'Bold',
     italic: 'Italic',

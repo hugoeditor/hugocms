@@ -693,6 +693,13 @@ export default {
     },
   },
 
+  frontMatterDialog: {
+    title: 'Metadaten ergänzen',
+    hint: 'Diesem Beitrag fehlen empfohlene Front-Matter-Felder. Prüfen und übernehmen. Hinweis: Solange „draft“ auf true steht, wird der Beitrag beim Build nicht veröffentlicht.',
+    apply: 'Übernehmen',
+    ignore: 'Ignorieren',
+  },
+
   wysiwyg: {
     bold: 'Fett',
     italic: 'Kursiv',
