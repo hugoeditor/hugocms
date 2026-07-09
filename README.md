@@ -570,6 +570,22 @@ Die Auflösung der Staffelung entspricht dem Cron-Intervall (z. B. alle 15
 Minuten). Exit-Codes: 0 Erfolg, 1 Hugo-/Laufzeitfehler, 2 Aufruffehler. Keine
 Pro-Lizenz nötig.
 
+**Zuordnung zur Webseite (Mandantenfähigkeit).** Entwürfe liegen — wie das
+Audit — je Webseite getrennt unter `var/review/<hash(source)>/`, gehasht aus dem
+Hugo-Quellverzeichnis. Ein Web-Request lädt über den Host die passende
+`mounts/<hash>.ini` (siehe [Mandantenfähigkeit](#mandantenfähigkeit-mehrere-webseiten)),
+deren `[hugo] source` den Store-Ordner bestimmt — ein Entwurf gehört damit
+eindeutig zu genau einer Webpräsenz. Zwei Folgen für den Mehrfach-Betrieb:
+
+- **CLI je Domain aufrufen.** `cron-build.php`/`cron-improve.php` müssen mit der
+  host-eigenen Mount-Datei laufen (`--mounts=backend/mounts/<hash>.ini`), sonst
+  gilt der Standard `backend/mounts.ini` und der Lauf — inklusive der fälligen
+  Austausche — bezöge sich auf die falsche Webseite.
+- **Fehlt die host-eigene `mounts/<hash>.ini`**, greift der Rückfall auf
+  `mounts.ini` (mit Hinweis, siehe Mandantenfähigkeit). Teilen sich mehrere Hosts
+  so dieselbe Quelle, teilen sie sich auch den Review-Ordner. Im sauber
+  eingerichteten Mehrfach-Betrieb hat jede Domain ihre eigene Mount-Datei.
+
 ## API-Befehle
 
 | Befehl     | Methode | Parameter                            | Zweck                                  |
