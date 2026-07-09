@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 import { errorText } from '../i18n/apiMessage'
+import { AI_MODELS } from '../util/aiModels'
 
 const { t } = useI18n()
 const auth = useAuthStore()
@@ -21,9 +22,17 @@ const hugoBin = ref('')
 // ihn unverändert. aiConfigured zeigt nur an, ob bereits einer gesetzt ist.
 const aiApiKey = ref('')
 const aiModel = ref('claude-opus-4-8')
+// Cron-Verbesserer und Content-Qualität: leerer Wert = „wie Assistenten-Modell“.
+const aiModelCron = ref('')
+const aiModelAudit = ref('')
 const aiWriteMode = ref('confirm')
 const aiConfigured = ref(false)
-const aiModels = ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5']
+const aiModels = AI_MODELS
+// Auswahl für Cron/Audit: zusätzlich die Option „wie Assistenten-Modell“ (leer).
+const aiSubModels = computed(() => [
+  { value: '', title: t('aiConfig.modelSame') },
+  ...aiModels.map((m) => ({ value: m, title: m })),
+])
 const writeModeItems = computed(() =>
   ['readonly', 'confirm', 'auto'].map((v) => ({ value: v, title: t(`assistant.mode.${v}`) })),
 )
@@ -46,6 +55,8 @@ watch(model, async (open) => {
     hugoBin.value = cfg.hugoBin ?? ''
     aiApiKey.value = ''
     aiModel.value = cfg.aiModel || 'claude-opus-4-8'
+    aiModelCron.value = cfg.aiModelCron || ''
+    aiModelAudit.value = cfg.aiModelAudit || ''
     aiWriteMode.value = cfg.aiWriteMode || 'confirm'
     aiConfigured.value = !!cfg.aiConfigured
   } catch (e) {
@@ -66,6 +77,8 @@ async function submit() {
       hugoBin: hugoBin.value,
       aiApiKey: aiApiKey.value, // leer = unverändert
       aiModel: aiModel.value,
+      aiModelCron: aiModelCron.value, // leer = wie Assistenten-Modell
+      aiModelAudit: aiModelAudit.value,
       aiWriteMode: aiWriteMode.value,
     })
     emit('saved')
@@ -139,11 +152,32 @@ async function submit() {
             density="comfortable"
             class="mb-2"
           />
+          <div class="text-caption text-medium-emphasis mb-1">{{ $t('aiConfig.modelHint') }}</div>
           <v-select
             v-model="aiModel"
             :items="aiModels"
             :label="$t('aiConfig.model')"
             prepend-inner-icon="mdi-brain"
+            variant="outlined"
+            density="comfortable"
+            class="mb-2"
+          />
+          <div class="text-caption text-medium-emphasis mb-1">{{ $t('aiConfig.modelCronHint') }}</div>
+          <v-select
+            v-model="aiModelCron"
+            :items="aiSubModels"
+            :label="$t('aiConfig.modelCron')"
+            prepend-inner-icon="mdi-robot-outline"
+            variant="outlined"
+            density="comfortable"
+            class="mb-2"
+          />
+          <div class="text-caption text-medium-emphasis mb-1">{{ $t('aiConfig.modelAuditHint') }}</div>
+          <v-select
+            v-model="aiModelAudit"
+            :items="aiSubModels"
+            :label="$t('aiConfig.modelAudit')"
+            prepend-inner-icon="mdi-text-search"
             variant="outlined"
             density="comfortable"
             class="mb-2"

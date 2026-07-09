@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 import { errorText } from '../i18n/apiMessage'
+import { AI_MODELS } from '../util/aiModels'
 import LanguageSwitcher from './LanguageSwitcher.vue'
 
 const { t } = useI18n()
@@ -23,8 +24,13 @@ const hugoBin = ref(defaults.hugoBin ?? '../bin/hugo/hugo')
 // KI-Assistent (optional). Ohne API-Schlüssel bleibt er deaktiviert.
 const aiApiKey = ref('')
 const aiModel = ref(defaults.aiModel ?? 'claude-opus-4-8')
+// Cron-Verbesserer und Content-Qualität: leerer Wert = „wie Assistenten-Modell“.
+const aiModelCron = ref(defaults.aiModelCron ?? '')
+const aiModelAudit = ref(defaults.aiModelAudit ?? '')
 const aiWriteMode = ref(defaults.aiWriteMode ?? 'confirm')
-const aiModels = ['claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5']
+const aiModels = AI_MODELS
+// Auswahl für Cron/Audit: zusätzlich die Option „wie Assistenten-Modell“ (leer).
+const aiSubModels = [{ value: '', title: t('aiConfig.modelSame') }, ...aiModels.map((m) => ({ value: m, title: m }))]
 const writeModeItems = ['readonly', 'confirm', 'auto'].map((v) => ({ value: v, title: t(`assistant.mode.${v}`) }))
 
 // Der Verzeichnis-/Logging-Abschnitt ist standardmäßig eingeklappt; die
@@ -59,6 +65,8 @@ async function submit() {
       hugoBin: hugoBin.value,
       aiApiKey: aiApiKey.value,
       aiModel: aiModel.value,
+      aiModelCron: aiModelCron.value, // leer = wie Assistenten-Modell
+      aiModelAudit: aiModelAudit.value,
       aiWriteMode: aiWriteMode.value,
     })
   } catch (e) {
@@ -174,11 +182,32 @@ async function submit() {
                 density="comfortable"
                 class="mb-2"
               />
+              <div class="text-caption text-medium-emphasis mb-1">{{ $t('aiConfig.modelHint') }}</div>
               <v-select
                 v-model="aiModel"
                 :items="aiModels"
                 :label="$t('aiConfig.model')"
                 prepend-inner-icon="mdi-brain"
+                variant="outlined"
+                density="comfortable"
+                class="mb-2"
+              />
+              <div class="text-caption text-medium-emphasis mb-1">{{ $t('aiConfig.modelCronHint') }}</div>
+              <v-select
+                v-model="aiModelCron"
+                :items="aiSubModels"
+                :label="$t('aiConfig.modelCron')"
+                prepend-inner-icon="mdi-robot-outline"
+                variant="outlined"
+                density="comfortable"
+                class="mb-2"
+              />
+              <div class="text-caption text-medium-emphasis mb-1">{{ $t('aiConfig.modelAuditHint') }}</div>
+              <v-select
+                v-model="aiModelAudit"
+                :items="aiSubModels"
+                :label="$t('aiConfig.modelAudit')"
+                prepend-inner-icon="mdi-text-search"
                 variant="outlined"
                 density="comfortable"
                 class="mb-2"

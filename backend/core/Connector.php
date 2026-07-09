@@ -57,9 +57,18 @@ final class Connector
      * KI-Assistent-Konfiguration aus der [ai]-Sektion der hugocms.ini.
      * apiKey=null → Assistent deaktiviert. writeMode: readonly|confirm|auto.
      *
-     * @var array{apiKey: ?string, model: string, writeMode: string}
+     * modelCron/modelAudit: getrennte Modelle für Cron-Verbesserer bzw.
+     * Content-Qualitätsprüfung (fallen ohne Angabe auf `model` zurück).
+     *
+     * @var array{apiKey: ?string, model: string, modelCron: string, modelAudit: string, writeMode: string}
      */
-    private array $ai = ['apiKey' => null, 'model' => 'claude-opus-4-8', 'writeMode' => 'confirm'];
+    private array $ai = [
+        'apiKey' => null,
+        'model' => 'claude-opus-4-8',
+        'modelCron' => 'claude-opus-4-8',
+        'modelAudit' => 'claude-opus-4-8',
+        'writeMode' => 'confirm',
+    ];
 
     /**
      * Externe Pro-Dienste aus der [services]-Sektion der hugocms.ini. Derzeit
@@ -415,6 +424,7 @@ final class Connector
             // KI-Assistent: aktiv, wenn ein API-Schlüssel konfiguriert ist.
             'ai' => [
                 'enabled' => $this->ai['apiKey'] !== null,
+                'model' => $this->ai['model'],
                 'writeMode' => $this->ai['writeMode'],
             ],
             // Globale UI-Vorgaben aus [user]. contentWidth ist im Einzelbenutzer-
@@ -944,10 +954,18 @@ final class Connector
         $openFilePath = trim((string) ($request['openFilePath'] ?? '')) ?: null;
         $openDirPath = trim((string) ($request['openDirPath'] ?? '')) ?: null;
 
+        // Sitzungsbezogene Auswahl aus dem Panel: übersteuert Modell und
+        // Schreibmodus nur für diesen Lauf (die INI bleibt unberührt). Ein
+        // ungültiger Schreibmodus fällt auf den konfigurierten zurück; ein
+        // leeres Modell ebenso.
+        $writeModeReq = strtolower(trim((string) ($request['writeMode'] ?? '')));
+        $writeModeOverride = in_array($writeModeReq, self::AI_WRITE_MODES, true) ? $writeModeReq : null;
+        $modelOverride = trim((string) ($request['model'] ?? '')) ?: null;
+
         // Der Werkzeug-Loop kann mehrere API-Aufrufe nacheinander machen.
         @set_time_limit(180);
 
-        return $this->assistantService()->run(
+        return $this->assistantService($writeModeOverride, $modelOverride)->run(
             $messages,
             $confirm === null ? null : (string) $confirm,
             $locale,
@@ -982,21 +1000,25 @@ final class Connector
      * Werkzeug get_file_report wird nur eingehängt, wenn Pro-Lizenz und
      * Hugo-Projekt vorliegen (sonst gibt es keinen Audit-/Content-Bericht).
      */
-    private function assistantService(?string $writeModeOverride = null): AssistantService
+    private function assistantService(?string $writeModeOverride = null, ?string $modelOverride = null): AssistantService
     {
+        // Interaktiver Assistent nutzt `model`; der Cron-Verbesserer reicht sein
+        // eigenes Modell (`model_cron`) als Override durch.
+        $model = $modelOverride ?? $this->ai['model'];
         // get_file_report und der Bearbeitungs-Vermerk brauchen beide das
         // Content-Qualitäts-Feature (Pro-Lizenz + Hugo-Projekt).
         $contentAware = $this->hugo !== null && $this->license()->isPro();
         $fileReport = $contentAware
             ? fn (string $fileId): array => $this->buildFileReportById($fileId)
             : null;
+        // Der Vermerk hält fest, welches Modell die Verbesserung geschrieben hat.
         $onWrite = $contentAware
-            ? fn (string $fileId) => $this->markFileImproved($fileId)
+            ? fn (string $fileId) => $this->markFileImproved($fileId, $model)
             : null;
 
         return new AssistantService(
             new AnthropicClient((string) $this->ai['apiKey']),
-            $this->ai['model'],
+            $model,
             $writeModeOverride ?? $this->ai['writeMode'],
             $this->resolver,
             $this->files,
@@ -1104,7 +1126,7 @@ final class Connector
             return ['candidates' => count($work), 'dryRun' => true, 'processed' => $preview];
         }
 
-        $service = $this->assistantService('auto');
+        $service = $this->assistantService('auto', $this->ai['modelCron']);
         $processed = [];
         foreach (array_slice($work, 0, $limit) as $entry) {
             $mount = (string) ($entry['mount'] ?? '');
@@ -1175,14 +1197,15 @@ final class Connector
      * Vermerkt eine KI-Bearbeitung am Content-Qualitäts-Eintrag der Datei (jede
      * vom Assistenten geschriebene Datei gilt als „verbessert"). Ohne
      * Hugo-Projekt oder ohne vorhandenen Eintrag ein No-op. Das Modell ist das
-     * konfigurierte Assistenten-Modell.
+     * des schreibenden Assistenten (interaktiv `model`, Cron `model_cron`);
+     * ohne Angabe der interaktive Standard.
      */
-    private function markFileImproved(string $fileId): void
+    private function markFileImproved(string $fileId, ?string $model = null): void
     {
         if ($this->hugo === null) {
             return;
         }
-        $this->contentQualityStore()->markImproved($fileId, $this->ai['model']);
+        $this->contentQualityStore()->markImproved($fileId, $model ?? $this->ai['model']);
     }
 
     /**
@@ -1281,9 +1304,12 @@ final class Connector
             'logLevel'    => $raw['log']['level'] ?? 'warning',
             'hugoBin'     => $raw['hugo']['bin'] ?? '',
             'logLevels'   => self::LOG_LEVELS,
-            // KI-Assistent: Status + Modus/Modell, aber NIE der API-Schlüssel.
+            // KI-Assistent: Status + Modus/Modelle, aber NIE der API-Schlüssel.
+            // Cron-/Audit-Modell leer = „wie Assistenten-Modell" (Fallback).
             'aiConfigured' => trim((string) ($raw['ai']['api_key'] ?? '')) !== '',
             'aiModel'      => $raw['ai']['model'] ?? '',
+            'aiModelCron'  => $raw['ai']['model_cron'] ?? '',
+            'aiModelAudit' => $raw['ai']['model_audit'] ?? '',
             'aiWriteMode'  => $raw['ai']['write_mode'] ?? 'confirm',
             'aiWriteModes' => self::AI_WRITE_MODES,
         ];
@@ -1318,10 +1344,24 @@ final class Connector
             $aiWriteMode = 'confirm';
         }
         $aiModel = self::cleanConfigValue($request['aiModel'] ?? '', 'aiModel', false);
+        $aiModelCron = self::cleanConfigValue($request['aiModelCron'] ?? '', 'aiModelCron', false);
+        $aiModelAudit = self::cleanConfigValue($request['aiModelAudit'] ?? '', 'aiModelAudit', false);
         $aiKeyNew = self::cleanConfigValue($request['aiApiKey'] ?? '', 'aiApiKey', false);
         $existingAi = Config::raw($this->configPath)['ai'] ?? [];
         $apiKey = $aiKeyNew !== '' ? $aiKeyNew : trim((string) ($existingAi['api_key'] ?? ''));
         $model = $aiModel !== '' ? $aiModel : (trim((string) ($existingAi['model'] ?? '')) ?: 'claude-opus-4-8');
+
+        // Cron-/Audit-Modell nur schreiben, wenn ausdrücklich gewählt; leer
+        // bedeutet „wie Assistenten-Modell" — dann bleibt der Schlüssel weg und
+        // Config::aiSection() fällt auf `model` zurück.
+        $aiSection = ['api_key' => $apiKey, 'model' => $model];
+        if ($aiModelCron !== '') {
+            $aiSection['model_cron'] = $aiModelCron;
+        }
+        if ($aiModelAudit !== '') {
+            $aiSection['model_audit'] = $aiModelAudit;
+        }
+        $aiSection['write_mode'] = $aiWriteMode;
 
         Config::updateSections($this->configPath, [
             'session' => ['path' => $sessionPath],
@@ -1329,9 +1369,7 @@ final class Connector
             // Leeres Hugo-Programm entfernt die Sektion (kein Build).
             'hugo'    => $hugoBin === '' ? null : ['bin' => $hugoBin],
             // Ohne API-Schlüssel keine [ai]-Sektion (Assistent aus).
-            'ai'      => $apiKey === ''
-                ? null
-                : ['api_key' => $apiKey, 'model' => $model, 'write_mode' => $aiWriteMode],
+            'ai'      => $apiKey === '' ? null : $aiSection,
         ]);
         $this->logger->info('Konfiguration aktualisiert (reconfigure).');
 
@@ -1644,7 +1682,7 @@ final class Connector
 
         return new ContentQualityService(
             new AnthropicClient((string) $this->ai['apiKey']),
-            $this->ai['model'],
+            $this->ai['modelAudit'],
             $this->resolver,
             $this->files,
             $storage,

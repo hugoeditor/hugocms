@@ -11,7 +11,7 @@ export const useAuthStore = defineStore('auth', {
     setupDefaults: null, // Vorgaben des Servers für das Setup-Formular
     buildable: false, // true, wenn für diese Webseite ein Hugo-Aufruf konfiguriert ist
     reconfigurable: false, // true, wenn die hugocms.ini im Betrieb änderbar ist
-    ai: { enabled: false, writeMode: 'confirm' }, // KI-Assistent (aus whoami)
+    ai: { enabled: false, model: '', writeMode: 'confirm' }, // KI-Assistent (aus whoami)
     ui: { contentWidth: 1200 }, // globale UI-Vorgaben aus [user] (Fensterbreite)
     // Pro-Lizenz (aus whoami). configured = ein Schlüssel ist hinterlegt (ggf.
     // ungültig/falsche Domain). git = Git-Funktion nutzbar (Pro + Hugo-Projekt).
@@ -39,7 +39,7 @@ export const useAuthStore = defineStore('auth', {
       this.setupDefaults = data.defaults ?? null
       this.buildable = data.buildable ?? false
       this.reconfigurable = data.reconfigurable ?? false
-      this.ai = data.ai ?? { enabled: false, writeMode: 'confirm' }
+      this.ai = data.ai ?? { enabled: false, model: '', writeMode: 'confirm' }
       this.ui = data.ui ?? { contentWidth: 1200 }
       this.license = data.license ?? { edition: 'community', licensee: null, domain: '', configured: false }
       this.licensable = data.licensable ?? false

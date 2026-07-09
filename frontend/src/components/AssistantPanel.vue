@@ -9,11 +9,30 @@ import { errorText } from '../i18n/apiMessage'
 import { lineDiff } from '../util/lineDiff'
 import { flushEditor } from '../util/editorBridge'
 import { useVoiceInput } from '../util/voiceInput'
+import { AI_MODELS } from '../util/aiModels'
 
 const { t, locale } = useI18n()
 const auth = useAuthStore()
 const assistant = useAssistantStore()
 const files = useFilesStore()
+
+// Modell und Schreibmodus für diese Sitzung. Beim ersten Rendern mit dem
+// konfigurierten Standard (auth.ai) belegen; die Auswahl im Panel gilt danach
+// nur zur Laufzeit (siehe assistant-Store). Ein Neuladen setzt zurück.
+if (assistant.model === null) assistant.model = auth.ai?.model || AI_MODELS[0]
+if (assistant.writeMode === null) assistant.writeMode = auth.ai?.writeMode || 'confirm'
+
+const writeModes = ['readonly', 'confirm', 'auto']
+
+// Auswählbare Modelle: die zentrale Liste plus ein evtl. abweichend in der INI
+// konfiguriertes Modell (damit es nicht aus der Auswahl fällt).
+const modelItems = computed(() => {
+  const list = [...AI_MODELS]
+  for (const m of [auth.ai?.model, assistant.model]) {
+    if (m && !list.includes(m)) list.unshift(m)
+  }
+  return list
+})
 
 const input = ref('')
 const scroller = ref(null)
@@ -88,10 +107,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', updateViewportHeight)
 })
 
-const writeModeLabel = computed(() => {
-  const m = auth.ai?.writeMode ?? 'confirm'
-  return t(`assistant.mode.${m}`)
-})
+const writeModeLabel = computed(() => t(`assistant.mode.${assistant.writeMode ?? 'confirm'}`))
 
 // Nutzungslimit-Fehler des KI-Kontos: blendet zusätzlich den Console-Link ein.
 const isUsageLimitError = computed(() =>
@@ -207,7 +223,6 @@ watch(
       <div class="d-flex align-center px-3 py-2 border-b">
         <v-icon icon="mdi-creation" class="mr-2" />
         <span class="text-subtitle-1">{{ $t('assistant.title') }}</span>
-        <v-chip size="x-small" class="ml-2" variant="tonal">{{ writeModeLabel }}</v-chip>
         <v-spacer />
         <v-tooltip :text="$t('assistant.clear')" location="bottom">
           <template #activator="{ props }">
@@ -215,6 +230,63 @@ watch(
           </template>
         </v-tooltip>
         <v-btn icon="mdi-close" variant="text" size="small" @click="assistant.open = false" />
+      </div>
+
+      <!-- Modell und Schreibmodus (nur diese Sitzung; ändert die Konfiguration
+           nicht). Während ein Zug läuft, gesperrt. -->
+      <div class="d-flex align-center px-3 py-1 border-b assistant-config">
+        <v-menu location="bottom start">
+          <template #activator="{ props }">
+            <v-chip
+              v-bind="props"
+              size="small"
+              variant="tonal"
+              :disabled="assistant.busy"
+              :title="$t('assistant.model')"
+            >
+              <v-icon icon="mdi-brain" size="x-small" start />
+              {{ assistant.model }}
+              <v-icon icon="mdi-menu-down" size="x-small" end />
+            </v-chip>
+          </template>
+          <v-list density="compact" min-width="180">
+            <v-list-item
+              v-for="m in modelItems"
+              :key="m"
+              :active="assistant.model === m"
+              @click="assistant.model = m"
+            >
+              <v-list-item-title>{{ m }}</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-menu>
+
+        <v-menu location="bottom start">
+          <template #activator="{ props }">
+            <v-chip
+              v-bind="props"
+              size="small"
+              variant="tonal"
+              class="ml-2"
+              :disabled="assistant.busy"
+              :title="$t('assistant.writeMode')"
+            >
+              <v-icon icon="mdi-shield-edit-outline" size="x-small" start />
+              {{ writeModeLabel }}
+              <v-icon icon="mdi-menu-down" size="x-small" end />
+            </v-chip>
+          </template>
+          <v-list density="compact" min-width="180">
+            <v-list-item
+              v-for="m in writeModes"
+              :key="m"
+              :active="assistant.writeMode === m"
+              @click="assistant.writeMode = m"
+            >
+              <v-list-item-title>{{ $t('assistant.mode.' + m) }}</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-menu>
       </div>
 
       <!-- Verlauf -->

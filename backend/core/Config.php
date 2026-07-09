@@ -144,13 +144,21 @@ final class Config
      * writeMode: 'readonly' (nur lesen) | 'confirm' (vor dem Schreiben
      * bestätigen) | 'auto' (Schreibaktionen direkt ausführen).
      *
-     * @return array{apiKey: ?string, model: string, writeMode: string}
+     * Drei Aufgaben können getrennte Modelle nutzen: der interaktive Assistent
+     * (`model`), der Cron-Verbesserer (`model_cron`) und die
+     * Content-Qualitätsprüfung (`model_audit`). `model_cron`/`model_audit`
+     * fallen bei leerem Wert auf `model` zurück, `model` auf claude-opus-4-8 —
+     * so laufen bestehende Installationen mit nur `model` unverändert weiter.
+     *
+     * @return array{apiKey: ?string, model: string, modelCron: string, modelAudit: string, writeMode: string}
      */
     private static function aiSection(mixed $section): array
     {
         $section = is_array($section) ? $section : [];
         $apiKey = trim((string) ($section['api_key'] ?? ''));
         $model = trim((string) ($section['model'] ?? '')) ?: 'claude-opus-4-8';
+        $modelCron = trim((string) ($section['model_cron'] ?? '')) ?: $model;
+        $modelAudit = trim((string) ($section['model_audit'] ?? '')) ?: $model;
         $writeMode = strtolower(trim((string) ($section['write_mode'] ?? 'confirm')));
         if (!in_array($writeMode, ['readonly', 'confirm', 'auto'], true)) {
             $writeMode = 'confirm';
@@ -159,6 +167,8 @@ final class Config
         return [
             'apiKey' => $apiKey === '' ? null : $apiKey,
             'model' => $model,
+            'modelCron' => $modelCron,
+            'modelAudit' => $modelAudit,
             'writeMode' => $writeMode,
         ];
     }

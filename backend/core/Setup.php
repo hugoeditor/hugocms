@@ -67,6 +67,8 @@ final class Setup
                 'logLevels'   => self::LOG_LEVELS,
                 'hugoBin'     => self::DEFAULT_HUGO_BIN,
                 'aiModel'     => 'claude-opus-4-8',
+                'aiModelCron' => '',
+                'aiModelAudit' => '',
                 'aiWriteMode' => 'confirm',
                 'aiWriteModes' => self::AI_WRITE_MODES,
             ],
@@ -98,6 +100,8 @@ final class Setup
         $hugoBin     = self::optionalField($request, 'hugoBin');
         $aiApiKey    = self::optionalField($request, 'aiApiKey');
         $aiModel     = self::optionalField($request, 'aiModel');
+        $aiModelCron  = self::optionalField($request, 'aiModelCron');
+        $aiModelAudit = self::optionalField($request, 'aiModelAudit');
         $aiWriteMode = strtolower(trim((string) ($request['aiWriteMode'] ?? 'confirm')));
         if (!in_array($aiWriteMode, self::AI_WRITE_MODES, true)) {
             $aiWriteMode = 'confirm';
@@ -118,11 +122,20 @@ final class Setup
             $sections['hugo'] = ['bin' => $hugoBin];
         }
         if ($aiApiKey !== '') {
-            $sections['ai'] = [
+            // Cron-/Audit-Modell nur ablegen, wenn abweichend gewählt; leer
+            // bedeutet „wie Assistenten-Modell" (Fallback in Config::aiSection).
+            $ai = [
                 'api_key' => $aiApiKey,
                 'model' => $aiModel !== '' ? $aiModel : 'claude-opus-4-8',
-                'write_mode' => $aiWriteMode,
             ];
+            if ($aiModelCron !== '') {
+                $ai['model_cron'] = $aiModelCron;
+            }
+            if ($aiModelAudit !== '') {
+                $ai['model_audit'] = $aiModelAudit;
+            }
+            $ai['write_mode'] = $aiWriteMode;
+            $sections['ai'] = $ai;
         }
         Config::updateSections(
             $configFile,

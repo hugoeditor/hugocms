@@ -16,6 +16,12 @@ export const useAssistantStore = defineStore('assistant', {
     ready: false, // Claude-API zuletzt erfolgreich erreicht
     readyChecked: false, // Prüfung in dieser Sitzung bereits durchgeführt
     error: null, // ApiError oder null
+    // Sitzungsbezogene Auswahl aus dem Panel. null = noch nicht gesetzt; das
+    // Panel belegt beide beim Öffnen mit dem konfigurierten Standard (auth.ai).
+    // Werden bei jedem Zug mitgeschickt und übersteuern die INI nur zur Laufzeit
+    // (nach einem Neuladen gilt wieder der Standard). reset() lässt sie stehen.
+    model: null,
+    writeMode: null,
   }),
 
   getters: {
@@ -54,6 +60,8 @@ export const useAssistantStore = defineStore('assistant', {
         const data = await api.post('assistant', {
           messages: this.history,
           locale,
+          model: this.model ?? undefined, // leer/undefined = konfiguriertes Modell
+          writeMode: this.writeMode ?? undefined,
           openFilePath: ctx.openFilePath ?? null,
           openDirPath: ctx.openDirPath ?? null,
         })
@@ -119,6 +127,8 @@ export const useAssistantStore = defineStore('assistant', {
           messages: this.history,
           locale,
           confirm: decision,
+          model: this.model ?? undefined, // leer/undefined = konfiguriertes Modell
+          writeMode: this.writeMode ?? undefined,
           openFilePath: ctx.openFilePath ?? null,
           openDirPath: ctx.openDirPath ?? null,
         })

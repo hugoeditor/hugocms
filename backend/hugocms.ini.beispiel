@@ -62,12 +62,20 @@ bin = ../bin/hugo/hugo
 ;[ai]
 ; KI-Assistent (Claude). Optional — ohne API-Schlüssel ist der Assistent aus.
 ; Lässt sich auch über das Einrichtungs-/Konfigurationsformular setzen.
-;   api_key    Anthropic API-Schlüssel (Geheimnis; Datei mit 0640 schützen).
-;   model      Claude-Modell. Standard: claude-opus-4-8.
-;   write_mode readonly = nur lesen | confirm = vor dem Schreiben bestätigen
-;              | auto = Schreibaktionen direkt ausführen. Standard: confirm.
+;   api_key     Anthropic API-Schlüssel (Geheimnis; Datei mit 0640 schützen).
+;   model       Claude-Modell des interaktiven Assistenten. Standard:
+;               claude-opus-4-8. Dient zugleich als Rückfall für die beiden
+;               folgenden Modelle.
+;   model_cron  Modell des CLI-/Cron-Verbesserers (cron-improve.php). Optional;
+;               ohne Angabe wie `model`.
+;   model_audit Modell der Content-Qualitätsprüfung. Optional; ohne Angabe wie
+;               `model`.
+;   write_mode  readonly = nur lesen | confirm = vor dem Schreiben bestätigen
+;               | auto = Schreibaktionen direkt ausführen. Standard: confirm.
 ;api_key = "sk-ant-..."
 ;model = claude-opus-4-8
+;model_cron = claude-sonnet-4-6
+;model_audit = claude-haiku-4-5
 ;write_mode = confirm
 
 ;[services]
