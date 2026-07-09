@@ -15,11 +15,13 @@ import { useReviewStore } from '../stores/review'
 import { useFilesStore } from '../stores/files'
 import { errorText } from '../i18n/apiMessage'
 import { lineDiff } from '../util/lineDiff'
+import { useConfirm } from '../util/confirm'
 
 const { t, locale } = useI18n()
 const { smAndDown } = useDisplay()
 const store = useReviewStore()
 const files = useFilesStore()
+const confirm = useConfirm()
 
 // Zeilenweiser Diff Original → Vorschlag. Bei neuen Seiten (kein Original) und
 // bei zu großen Eingaben fällt die Anzeige auf eine einfache Vorschau zurück.
@@ -63,10 +65,24 @@ const scheduledInFuture = computed(() => {
   return !Number.isNaN(t) && t > Date.now()
 })
 
-// Sofort freigeben (ohne Termin) — schreibt live, setzt draft:false.
+// Sofort freigeben (ohne Termin) — schreibt live, setzt draft:false. Hat sich die
+// Live-Datei seit dem Entwurf geändert (ECONFLICT), nachfragen und auf Wunsch mit
+// force überschreiben.
 async function approveNow() {
   if (!store.current) return
-  await store.approve(store.current.key, '')
+  const key = store.current.key
+  const ok = await store.approve(key, '')
+  if (ok || store.error?.code !== 'ECONFLICT') return
+
+  store.error = null // die Rückfrage ersetzt die Fehlermeldung
+  if (await confirm({
+    title: t('review.conflictTitle'),
+    message: t('review.conflictMessage'),
+    confirmText: t('review.conflictConfirm'),
+    color: 'warning',
+  })) {
+    await store.approve(key, '', true)
+  }
 }
 
 // Terminiert freigeben — hinterlegt den Termin; die alte Fassung bleibt bis

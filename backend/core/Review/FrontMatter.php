@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace HugoCMS\FileManager\Review;
 
 /**
- * Setzt EINZELNE Front-Matter-Schlüssel (draft, publishDate) in einer Hugo-
- * Content-Datei, ohne einen vollwertigen YAML/TOML/JSON-Parser einzuführen
+ * Setzt einen booleschen Front-Matter-Schlüssel (aktuell `draft`) in einer
+ * Hugo-Content-Datei, ohne einen vollwertigen YAML/TOML/JSON-Parser einzuführen
  * (das Backend arbeitet bewusst ohne Composer). Das Format wird an den
  * Begrenzern erkannt — `---` YAML, `+++` TOML, führendes `{ }` JSON — und der
  * vorhandene Stil beibehalten:
@@ -17,32 +17,19 @@ namespace HugoCMS\FileManager\Review;
  *
  * Fehlt ein Front-Matter-Block ganz, wird ein minimaler YAML-Block vorangestellt
  * (der Regelfall für Hugo-Content).
- *
- * Datumswerte werden in YAML/TOML als nativer Zeitstempel (ohne Anführungs-
- * zeichen), in JSON als String geschrieben — so, wie Hugo sie je Format erwartet.
  */
 final class FrontMatter
 {
     /** Setzt `draft` auf true/false. */
     public static function setDraft(string $raw, bool $value): string
     {
-        return self::set($raw, 'draft', $value, false);
+        return self::set($raw, 'draft', $value);
     }
 
-    /** Setzt `publishDate` auf einen ISO-8601-Zeitpunkt (z. B. 2026-07-09T10:00:00+00:00). */
-    public static function setPublishDate(string $raw, string $iso): string
+    /** Setzt einen booleschen Schlüssel im führenden Front-Matter-Block. */
+    public static function set(string $raw, string $key, bool $value): string
     {
-        return self::set($raw, 'publishDate', $iso, true);
-    }
-
-    /**
-     * Setzt einen Schlüssel im führenden Front-Matter-Block. $isDate steuert die
-     * Werteschreibung (nativer Zeitstempel vs. gequoteter String).
-     *
-     * @param bool|string $value
-     */
-    public static function set(string $raw, string $key, bool|string $value, bool $isDate): string
-    {
+        $rendered = $value ? 'true' : 'false';
         $bom = '';
         if (str_starts_with($raw, "\xEF\xBB\xBF")) {
             $bom = "\xEF\xBB\xBF";
@@ -53,7 +40,7 @@ final class FrontMatter
         if (preg_match('/^(---|\+\+\+)\R(.*?)\R(\1)[ \t]*(?:\R(.*))?$/s', $raw, $m) === 1) {
             $delim = $m[1];
             $format = $delim === '---' ? 'yaml' : 'toml';
-            $inner = self::upsertLine($m[2], $key, self::renderValue($format, $value, $isDate), $format);
+            $inner = self::upsertLine($m[2], $key, $rendered, $format);
             $body = $m[4] ?? '';
 
             return $bom . $delim . "\n" . $inner . "\n" . $delim . "\n" . $body;
@@ -65,7 +52,7 @@ final class FrontMatter
             [$object, $rest] = $json;
             $data = json_decode($object, true);
             if (is_array($data)) {
-                $data[$key] = $value; // echter bool/String — Hugo liest JSON-Daten strukturiert
+                $data[$key] = $value; // echter bool — Hugo liest JSON-Daten strukturiert
                 $encoded = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
                 if ($encoded !== false) {
                     return $bom . $encoded . "\n" . $rest;
@@ -74,7 +61,7 @@ final class FrontMatter
         }
 
         // Kein Front Matter: minimalen YAML-Block voranstellen.
-        $line = self::upsertLine('', $key, self::renderValue('yaml', $value, $isDate), 'yaml');
+        $line = self::upsertLine('', $key, $rendered, 'yaml');
 
         return $bom . "---\n" . $line . "\n---\n" . $raw;
     }
@@ -102,20 +89,6 @@ final class FrontMatter
         }
 
         return rtrim($inner, "\r\n") . "\n" . $replacement;
-    }
-
-    /** Rendert einen Wert je Format (bool literal, Datum nativ, sonst gequotet). */
-    private static function renderValue(string $format, bool|string $value, bool $isDate): string
-    {
-        if (is_bool($value)) {
-            return $value ? 'true' : 'false';
-        }
-        if ($isDate) {
-            // YAML-Zeitstempel und TOML-Datetime sind ohne Anführungszeichen nativ.
-            return $value;
-        }
-
-        return '"' . str_replace('"', '\"', $value) . '"';
     }
 
     /**

@@ -515,6 +515,9 @@ export default {
     scheduleConfirm: 'Publish scheduled',
     scheduleLiveInfo: 'The currently published version stays online unchanged until the scheduled time, then gets replaced by this one — no offline window.',
     schedulePastHint: 'The date is in the past — this version will be published immediately.',
+    conflictTitle: 'File changed meanwhile',
+    conflictMessage: 'The live file has changed since this draft was created. Overwrite it with the draft?',
+    conflictConfirm: 'Overwrite',
     origin: {
       ai: 'AI assistant',
       cron: 'Cron (automatic)',

@@ -515,6 +515,9 @@ export default {
     scheduleConfirm: 'Terminiert freigeben',
     scheduleLiveInfo: 'Die aktuell veröffentlichte Fassung bleibt bis zum Termin unverändert online und wird dann durch diese ersetzt — kein Offline-Zeitfenster.',
     schedulePastHint: 'Der Termin liegt in der Vergangenheit — die Fassung wird sofort veröffentlicht.',
+    conflictTitle: 'Datei zwischenzeitlich geändert',
+    conflictMessage: 'Die Live-Datei wurde seit dem Erstellen des Entwurfs verändert. Mit dem Entwurf überschreiben?',
+    conflictConfirm: 'Überschreiben',
     origin: {
       ai: 'KI-Assistent',
       cron: 'Cron (automatisch)',
