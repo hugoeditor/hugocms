@@ -1,5 +1,6 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from './stores/auth'
 import { useFilesStore } from './stores/files'
@@ -7,7 +8,7 @@ import { api, setUnauthorizedHandler, suspendAuthGuard } from './api/client'
 import { errorText, warningText } from './i18n/apiMessage'
 import LoginView from './components/LoginView.vue'
 import SetupView from './components/SetupView.vue'
-import MountSidebar from './components/MountSidebar.vue'
+import PlacesList from './components/PlacesList.vue'
 import NemoToolbar from './components/NemoToolbar.vue'
 import FileBrowser from './components/FileBrowser.vue'
 import TrashView from './components/TrashView.vue'
@@ -291,6 +292,35 @@ const notice = ref(null) // kurze Erfolgsmeldung (Snackbar)
 //   Schmal  ausgeklappt → nur Icon-Schiene (Tooltip) · Schmal eingeklappt → ganz aus
 const toolbarCollapsed = ref(false)
 
+// Orte in der Werkzeugschiene: Nur auf Desktop-Breite UND bei ausgeklappter
+// Schiene sind die Namen sichtbar — dann werden die Orte direkt aufgelistet.
+// Sonst (Icon-Schiene: eingeklappt oder Smartphone) zeigt die Schiene nur einen
+// Orte-Knopf, der die eingeschobene Seitenleiste öffnet.
+const { mdAndUp } = useDisplay()
+const railExpanded = computed(() => mdAndUp.value && !toolbarCollapsed.value)
+
+// Eingeschobene Orte-Seitenleiste (überdeckt die Dateiliste, verschiebt sie
+// nicht). Nur im Icon-Schienen-Zustand über den Orte-Knopf erreichbar.
+const placesOpen = ref(false)
+
+// Sobald die Schiene wieder die volle Orte-Liste zeigt, die eingeschobene
+// Seitenleiste schließen — sie wäre dann überflüssig.
+watch(railExpanded, (expanded) => {
+  if (expanded) placesOpen.value = false
+})
+
+// Klick auf einen Ort/Papierkorb — verhält sich wie das frühere Orte-Menü
+// (leaveEditorThen schließt Editor/Überlagerungen und fragt bei ungespeicherten
+// Änderungen nach) und schließt anschließend die eingeschobene Seitenleiste.
+function selectPlace(mount) {
+  placesOpen.value = false
+  openPlace(mount)
+}
+function selectTrash() {
+  placesOpen.value = false
+  openTrashView()
+}
+
 function onLicenseActivated() {
   notice.value = auth.isPro ? t('license.activatedPro') : t('license.activated')
 }
@@ -491,6 +521,9 @@ async function build() {
                 </template>
               </v-tooltip>
 
+              <!-- Scrollbarer Mittelteil: Werkzeuge und darunter die Orte. Hält
+                   Konto/Konfiguration (unten) auch bei vielen Orten sichtbar. -->
+              <div class="nemo-tool-scroll nemo-scroll">
               <!-- Veröffentlichte Webseite ansehen (Domain-Wurzel, neuer Tab) -->
               <v-tooltip v-if="auth.buildable" :text="$t('site.open')" location="right">
                 <template #activator="{ props }">
@@ -609,9 +642,32 @@ async function build() {
                 </template>
               </v-tooltip>
 
-              <!-- Spacer schiebt Konto und Konfiguration nach unten (VS-Code). -->
-              <div class="nemo-tool-spacer" />
+              <!-- Orte (Mount-Points): direkt unter den Werkzeugen. Bei voller
+                   Breite als Liste (wie die frühere Seitenleiste), sonst als
+                   einzelner Knopf, der die eingeschobene Seitenleiste öffnet. -->
+              <div class="nemo-tool-sep" />
+              <template v-if="railExpanded">
+                <div class="nemo-tool-section">{{ $t('files.places') }}</div>
+                <PlacesList @select="selectPlace" @trash="selectTrash" />
+              </template>
+              <v-tooltip v-else :text="$t('files.places')" location="right">
+                <template #activator="{ props }">
+                  <button
+                    v-bind="props"
+                    type="button"
+                    class="nemo-tool-btn"
+                    :class="{ active: placesOpen }"
+                    @click="placesOpen = !placesOpen"
+                  >
+                    <v-icon icon="mdi-folder-multiple-outline" size="20" />
+                    <span class="nemo-tool-label">{{ $t('files.places') }}</span>
+                  </button>
+                </template>
+              </v-tooltip>
+              </div>
 
+              <!-- Untere, fest verankerte Werkzeuge (Konto, Konfiguration). -->
+              <div class="nemo-tool-bottom">
               <!-- Konto/Anmeldedaten (unten) -->
               <v-tooltip :text="$t('account.open')" location="right">
                 <template #activator="{ props }">
@@ -641,16 +697,37 @@ async function build() {
                   </button>
                 </template>
               </v-tooltip>
+              </div>
           </nav>
 
           <div class="nemo-workspace">
             <NemoToolbar />
             <div class="nemo-body">
-              <aside class="nemo-aside d-none d-md-block" :class="{ collapsed: files.sidebarCollapsed }"><MountSidebar /></aside>
               <main class="nemo-mainarea">
                 <TrashView v-if="files.trashMode" />
                 <FileBrowser v-else />
               </main>
+            </div>
+
+            <!-- Eingeschobene Orte-Seitenleiste (Icon-Schiene: eingeklappt oder
+                 Smartphone). Überdeckt die Dateiliste, verschiebt sie nicht; ein
+                 Klick auf den Schleier oder einen Ort schließt sie wieder. -->
+            <div v-if="placesOpen" class="nemo-places-scrim" @click="placesOpen = false" />
+            <!-- Clip-Ebene: schneidet den Ein-/Ausschub an der linken Kante des
+                 Arbeitsbereichs ab, damit die Leiste nicht über die Werkzeug-
+                 schiene hinausragt. -->
+            <div class="nemo-places-clip">
+              <transition name="nemo-places-slide">
+                <nav v-if="placesOpen" class="nemo-places-drawer">
+                  <div class="nemo-places-drawer-header">
+                    <span>{{ $t('files.places') }}</span>
+                    <button type="button" class="nemo-iconbtn" @click="placesOpen = false">
+                      <v-icon icon="mdi-close" size="20" />
+                    </button>
+                  </div>
+                  <PlacesList spread @select="selectPlace" @trash="selectTrash" />
+                </nav>
+              </transition>
             </div>
             <!-- SEO-Audit als eigenständige Überlagerung über den gesamten
                  Arbeitsbereich (wie der Editor). Klare Trennung vom
@@ -991,8 +1068,44 @@ async function build() {
   color: var(--mint-text-muted);
 }
 
-/* Schiebt die unteren Werkzeuge (Konto, Konfiguration) ans Leistenende. */
-.nemo-tool-spacer { flex: 1 1 auto; }
+/* Scrollbarer Mittelteil (Werkzeuge + Orte). Nimmt den freien Raum ein und
+   scrollt bei Bedarf, sodass die unteren Werkzeuge fest verankert bleiben. */
+.nemo-tool-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+/* Fest verankerte untere Werkzeuge (Konto, Konfiguration). */
+.nemo-tool-bottom {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Abschnittsüberschrift „Orte" in der ausgeklappten Schiene. */
+.nemo-tool-section {
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mint-text-muted);
+  padding: 6px 8px 2px;
+}
+/* Trennlinie zwischen Werkzeugen und Orten. */
+.nemo-tool-sep {
+  height: 1px;
+  margin: 6px 4px 2px;
+  background: var(--mint-border);
+}
+/* Icon-Schiene (eingeklappt/schmal): Trennlinie schmaler ausrichten. */
+.nemo-toolrail.collapsed .nemo-tool-sep { margin: 6px 8px 2px; }
+@media (max-width: 959.98px) {
+  .nemo-toolrail .nemo-tool-sep { margin: 6px 8px 2px; }
+}
 
 /* Eingeklappt (Desktop): nur Icons, zentriert; Namen ausblenden. */
 .nemo-toolrail.collapsed .nemo-tool-label { display: none; }
@@ -1015,21 +1128,68 @@ async function build() {
   }
 }
 
-.nemo-aside {
-  flex: 0 0 210px;
-  min-height: 0;
-  min-width: 0;
-  overflow: hidden;
-  transition: flex-basis 0.18s ease;
-}
-/* Eingeklappt: Breite auf 0 zusammenfahren (Inhalt wird abgeschnitten). */
-.nemo-aside.collapsed {
-  flex-basis: 0;
-}
 .nemo-mainarea {
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
+}
+
+/* --- Eingeschobene Orte-Seitenleiste (überdeckt die Dateiliste) ------------ */
+/* Schleier über dem restlichen Arbeitsbereich; fängt Klicks zum Schließen ab.
+   Liegt über Editor/Audit (z-index 9–10), da die Schiene immer erreichbar ist. */
+.nemo-places-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 14;
+  background: rgba(0, 0, 0, 0.28);
+}
+/* Clip-Ebene über dem Arbeitsbereich: begrenzt den Ein-/Ausschub auf die
+   sichtbare Fläche. Selbst durchlässig für Klicks (der Schleier darunter fängt
+   sie), nur die Leiste ist bedienbar. */
+.nemo-places-clip {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  overflow: hidden;
+  pointer-events: none;
+}
+/* Die Seitenleiste selbst: schiebt sich vom linken Rand über den Inhalt. */
+.nemo-places-drawer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 230px;
+  max-width: 82%;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 6px;
+  background: var(--mint-panel);
+  border-right: 1px solid var(--mint-border);
+  box-shadow: 2px 0 14px rgba(0, 0, 0, 0.16);
+  overflow-y: auto;
+}
+.nemo-places-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mint-text-muted);
+  padding: 0 4px 0 8px;
+}
+/* Einschub-Animation (von links). */
+.nemo-places-slide-enter-active,
+.nemo-places-slide-leave-active {
+  transition: transform 0.2s ease;
+}
+.nemo-places-slide-enter-from,
+.nemo-places-slide-leave-to {
+  transform: translateX(-100%);
 }
 
 /* Dauerhafter Fehler-Block (Setup-/Pre-Login-Fehler): zentriert, begrenzt. */

@@ -72,8 +72,6 @@ export default {
     forward: 'Vor',
     up: 'Übergeordneter Ordner',
     refresh: 'Aktualisieren',
-    showSidebar: 'Orte-Seitenleiste einblenden',
-    hideSidebar: 'Orte-Seitenleiste ausblenden',
     tools: 'Werkzeuge',
     expandTools: 'Werkzeugleiste ausklappen',
     collapseTools: 'Werkzeugleiste einklappen',

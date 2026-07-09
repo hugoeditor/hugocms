@@ -18,20 +18,6 @@ function onSearch() {
 
 <template>
   <div class="nemo-toolbar nemo-noselect">
-    <!-- Orte-Seitenleiste ein-/ausklappen -->
-    <v-tooltip :text="files.sidebarCollapsed ? t('nav.showSidebar') : t('nav.hideSidebar')" location="bottom">
-      <template #activator="{ props }">
-        <button
-          v-bind="props"
-          class="nemo-iconbtn d-none d-md-inline-flex"
-          :class="{ active: !files.sidebarCollapsed }"
-          @click="files.toggleSidebar()"
-        >
-          <v-icon icon="mdi-dock-left" size="20" />
-        </button>
-      </template>
-    </v-tooltip>
-
     <!-- Navigationsschaltflächen -->
     <div class="nemo-navgroup">
       <v-tooltip :text="t('nav.back')" location="bottom">
