@@ -22,7 +22,7 @@ export const useAuthStore = defineStore('auth', {
     audit: false, // SEO-Audit nutzbar (Pro + Hugo-Projekt) — wie git
     auditContent: false, // LLM-Content-Prüfung (Audit-Voraussetzung + KI-Schlüssel)
     speech: false, // Spracheingabe des Assistenten (Pro + [services] konfiguriert)
-    review: false, // gestaffelte Veröffentlichung: Entwürfe zur Rezension (Hugo-Projekt)
+    review: false, // gestaffelte Veröffentlichung: Entwürfe zur Freigabe (Hugo-Projekt)
   }),
 
   getters: {

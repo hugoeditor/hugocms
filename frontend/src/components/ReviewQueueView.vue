@@ -1,5 +1,5 @@
 <script setup>
-// Rezensions-Warteschlange der gestaffelten Veröffentlichung: listet offene
+// Freigabe-Warteschlange der gestaffelten Veröffentlichung: listet offene
 // Entwürfe (KI im Modus auto, Cron oder manuell über den Entwurf-Button) und
 // zeigt je Entwurf den zeilenweisen Diff gegen den aktuellen Live-Stand. Der
 // Benutzer gibt frei — optional mit Veröffentlichungsdatum (publishDate) — oder

@@ -26,6 +26,7 @@ backend/log/*.log
 backend/var/sessions/
 backend/var/audit/
 backend/var/audit-content/
+backend/var/review/
 .DS_Store
 
 # Beispiel-Datenverzeichnis (in echten Installationen nicht versionieren)

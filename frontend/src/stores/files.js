@@ -462,7 +462,7 @@ export const useFilesStore = defineStore('files', {
       }
     },
 
-    // Legt den aktuellen Editor-Inhalt als Rezensions-Entwurf ab, statt ihn live
+    // Legt den aktuellen Editor-Inhalt als Freigabe-Entwurf ab, statt ihn live
     // zu speichern (gestaffelte Veröffentlichung). Die Live-Datei bleibt
     // unverändert; der Entwurf wartet in der Warteschlange auf Freigabe.
     async saveAsDraft(content) {

@@ -462,7 +462,7 @@ final class Connector
             'speech' => $this->license()->isPro()
                 && $this->services['speechKey'] !== null
                 && $this->services['speechUrl'] !== null,
-            // Gestaffelte Veröffentlichung: Entwürfe zur Rezension setzen
+            // Gestaffelte Veröffentlichung: Entwürfe zur Freigabe setzen
             // Hugos draft/publishDate voraus, also ein konfiguriertes Hugo-
             // Projekt. Keine Pro-Bindung — der Entwurf-Modus ist eine allgemeine
             // Sicherheitsfunktion (auch der Editor-Button nutzt ihn).
@@ -1070,7 +1070,7 @@ final class Connector
 
         // Gestaffelte Veröffentlichung: Im Modus auto (Cron oder so konfigurierter
         // interaktiver Assistent) und mit Hugo-Projekt geht ein Schreibvorgang
-        // nicht live, sondern als Entwurf zur Rezension. Ohne Hugo-Projekt gibt es
+        // nicht live, sondern als Entwurf zur Freigabe. Ohne Hugo-Projekt gibt es
         // kein draft/publishDate — dann schreibt auto wie bisher direkt.
         $mode = $writeModeOverride ?? $this->ai['writeMode'];
         $draftSink = ($mode === 'auto' && $this->hugo !== null)
@@ -1090,7 +1090,7 @@ final class Connector
     }
 
     /**
-     * Speicherverzeichnis der Rezensions-Entwürfe (je Webseite getrennt).
+     * Speicherverzeichnis der Freigabe-Entwürfe (je Webseite getrennt).
      * Setzt ein Hugo-Projekt voraus (der Schlüssel leitet sich aus source ab).
      */
     private function reviewStore(): ReviewStore
@@ -1103,7 +1103,7 @@ final class Connector
     }
 
     /**
-     * Legt einen Rezensions-Entwurf für die Datei (mount/rel) ab: hält den
+     * Legt einen Freigabe-Entwurf für die Datei (mount/rel) ab: hält den
      * vollständigen Vorschlag fest, ohne die Live-Datei zu berühren. Ein bereits
      * offener Entwurf derselben Datei wird ersetzt.
      */
@@ -1125,7 +1125,7 @@ final class Connector
     }
 
     /**
-     * reviewsave — legt den übergebenen Inhalt manuell als Rezensions-Entwurf ab
+     * reviewsave — legt den übergebenen Inhalt manuell als Freigabe-Entwurf ab
      * (der Entwurf-Button neben „Speichern"). Schreibt NICHT in die Live-Datei.
      */
     private function cmdReviewSave(array $request): array
@@ -1144,7 +1144,7 @@ final class Connector
         return ['saved' => true, 'key' => ReviewStore::keyFor($r['mount']->name(), $r['rel'])];
     }
 
-    /** reviewlist — offene Entwürfe (ohne Inhalt) für die Rezensions-Warteschlange. */
+    /** reviewlist — offene Entwürfe (ohne Inhalt) für die Freigabe-Warteschlange. */
     private function cmdReviewList(): array
     {
         $this->requireAuth();
@@ -1203,7 +1203,7 @@ final class Connector
             $draft['publishAt'] = gmdate('c', $swapTs);
             $this->reviewStore()->put($draft);
             $this->logger->info(sprintf(
-                'Rezension terminiert: %s/%s (Austausch %s)',
+                'Freigabe terminiert: %s/%s (Austausch %s)',
                 (string) ($draft['mount'] ?? ''),
                 (string) ($draft['rel'] ?? ''),
                 $draft['publishAt'],
@@ -1218,7 +1218,7 @@ final class Connector
         $meta = $this->applyDraftLive($draft, $r, $expected);
 
         $this->logger->info(sprintf(
-            'Rezension freigegeben: %s/%s',
+            'Entwurf freigegeben: %s/%s',
             (string) ($draft['mount'] ?? ''),
             (string) ($draft['rel'] ?? ''),
         ));
@@ -1269,7 +1269,7 @@ final class Connector
         foreach ($store->list() as $meta) {
             $publishAt = $meta['publishAt'] ?? null;
             if (!is_string($publishAt) || $publishAt === '') {
-                continue; // noch in Rezension (kein Termin)
+                continue; // noch offen zur Freigabe (kein Termin)
             }
             $ts = strtotime($publishAt);
             if ($ts === false || $ts > $now) {
@@ -1434,7 +1434,7 @@ final class Connector
     /**
      * Abgeleitete Arbeitsliste für die KI-Verbesserung: geprüfte Content-Dateien
      * mit Score < 100, die noch nicht verbessert wurden und deren Quelle
-     * vorhanden ist. Dateien mit einem offenen Rezensions-Entwurf sind
+     * vorhanden ist. Dateien mit einem offenen Freigabe-Entwurf sind
      * ausgeschlossen — sie warten auf Freigabe und werden nicht erneut bearbeitet
      * (sonst überschriebe jeder Lauf den offenen Entwurf). Reihenfolge wie
      * {@see ContentQualityService::list()} (neueste Prüfung zuerst).

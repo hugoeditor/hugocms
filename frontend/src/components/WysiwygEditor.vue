@@ -92,7 +92,7 @@ const tools = computed(() => {
       disabled: props.saveDisabled || props.saving,
       run: () => emit('save'),
     },
-    // Als Entwurf zur Rezension ablegen (nur bei Hugo-Projekt).
+    // Als Entwurf zur Freigabe ablegen (nur bei Hugo-Projekt).
     ...(authStore.review ? [{
       icon: 'mdi-content-save-edit-outline',
       label: t('editor.saveDraft'),

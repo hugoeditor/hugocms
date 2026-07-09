@@ -194,7 +194,7 @@ const tools = computed(() => [
     color: 'primary',
     action: save,
   },
-  // Als Entwurf zur Rezension ablegen (gestaffelte Veröffentlichung) — nur, wenn
+  // Als Entwurf zur Freigabe ablegen (gestaffelte Veröffentlichung) — nur, wenn
   // die Webseite ein Hugo-Projekt ist (dort greifen draft/publishDate).
   ...(auth.review ? [{
     name: 'saveDraft',
@@ -291,7 +291,7 @@ async function save() {
   }
 }
 
-// Legt den aktuellen Stand als Rezensions-Entwurf ab, statt live zu speichern.
+// Legt den aktuellen Stand als Freigabe-Entwurf ab, statt live zu speichern.
 // Die Live-Datei bleibt unverändert; der Entwurf wartet in der Warteschlange.
 async function saveAsDraft() {
   if (savingDraft.value || !files.openFile) return

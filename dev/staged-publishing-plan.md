@@ -1,4 +1,4 @@
-# Umsetzungsplan: Gestaffelte Veröffentlichung (Draft → Rezension → publishDate)
+# Umsetzungsplan: Gestaffelte Veröffentlichung (Draft → Freigabe → publishDate)
 
 Status: Backend + Frontend + O1 umgesetzt und geprüft (php -l, Round-Trip-Tests
 für FrontMatter/ReviewStore, `npm run build` grün, CLI-Aufrufpfad geprüft).
@@ -10,7 +10,7 @@ echtem Hugo-Projekt + KI-Schlüssel.
 
 Automatisierte oder ungeprüfte Änderungen an Hugo-Content sollen nicht sofort
 live gehen, sondern zunächst als **Entwurf** festgehalten werden. Erst nach
-einer Rezension durch einen Benutzer wird die Seite freigegeben — optional mit
+einer Freigabe durch einen Benutzer wird die Seite freigegeben — optional mit
 einem **Veröffentlichungsdatum**, ab dem Hugo sie beim nächsten Build sichtbar
 macht. So werden nicht alle geänderten Seiten auf einmal veröffentlicht.
 
@@ -32,9 +32,9 @@ zustandslosen Backend-Architektur.
 3. **Draft-Pflicht nur für auto/Cron** (`improveNextContent` bzw. Assistent im
    Schreibmodus `auto`). Interaktive Bearbeitung wird nicht erzwungen.
 4. **Editoren erhalten einen zusätzlichen Button** (`mdi-file-draft-outline`)
-   neben „Speichern" — manuelles Ablegen in die Rezensions-Warteschlange statt
+   neben „Speichern" — manuelles Ablegen in die Freigabe-Warteschlange statt
    direkt live.
-5. **Dashboard: Rezensions-Warteschlange** — Liste offener Entwürfe, Diff
+5. **Dashboard: Freigabe-Warteschlange** — Liste offener Entwürfe, Diff
    Original↔Entwurf, „Freigeben mit Datum" / „Verwerfen".
 6. **Nur Schreib- und Anlege-Vorgänge werden gestaffelt.** Löschungen und
    Umbenennungen gehen weiterhin direkt.
@@ -79,7 +79,7 @@ Wegwerf-Round-Trip-Test gegen den Autoloader.
 ### B3 — Schreib-Interzeption für auto/Cron
 Im Schreibmodus `auto` (`AssistantService`) geht `write_file` nicht mehr direkt
 in die Datei, sondern legt den Inhalt als Entwurf im `ReviewStore` ab; die
-Live-Datei bleibt stehen. Rückmeldung an das Modell: „als Entwurf zur Rezension
+Live-Datei bleibt stehen. Rückmeldung an das Modell: „als Entwurf zur Freigabe
 vorgemerkt". Interaktive Modi (`confirm`) unverändert. `improveNextContent`/
 `runImprove` erben das Verhalten automatisch (laufen im `auto`-Modus).
 
@@ -93,7 +93,7 @@ vorgemerkt". Interaktive Modi (`confirm`) unverändert. `improveNextContent`/
 - `reviewdiscard` — Entwurf verwerfen.
 
 Alle Befehle laufen über `FileService`/`MountResolver` (Einsperrung,
-`permissions`/`readonly`, Endungen). Rezension ist Pro-gebunden wie Audit
+`permissions`/`readonly`, Endungen). Freigabe ist Pro-gebunden wie Audit
 (`requirePro`), sofern kein Grund dagegen spricht — beim Umsetzen prüfen.
 
 ## Frontend
@@ -103,7 +103,7 @@ Zweiter Button `mdi-file-draft-outline` neben „Speichern" in der `tools`-Liste
 neue Aktion `saveAsDraft()` → `files`-Store → `reviewsave`. Über die vorhandenen
 `@save`-Slots auch in `FrontMatterPanel`/`WysiwygEditor` durchreichen.
 
-### F2 — Rezensions-Warteschlange
+### F2 — Freigabe-Warteschlange
 Neue `frontend/src/components/ReviewQueueView.vue` + `stores/review.js`. Liste
 offener Entwürfe, Diff Original↔Entwurf über vorhandenes `util/lineDiff.js`,
 Aktionen „Freigeben mit Datum" (Datumsauswahl → `publishDate`, leer = sofort) und

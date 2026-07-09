@@ -432,8 +432,8 @@ export default {
 
   editor: {
     save: 'Speichern (Strg+S)',
-    saveDraft: 'Als Entwurf zur Rezension',
-    savedAsDraft: 'Als Entwurf zur Rezension abgelegt.',
+    saveDraft: 'Als Entwurf zur Freigabe',
+    savedAsDraft: 'Als Entwurf zur Freigabe abgelegt.',
     publishDraft: 'Entwurf — wird beim nächsten Build nicht veröffentlicht (draft).',
     publishScheduled: 'Geplante Veröffentlichung: {0} (bis dahin nicht sichtbar).',
     publishExpired: 'Abgelaufen seit {0} — wird nicht mehr veröffentlicht (expiryDate).',
@@ -493,10 +493,10 @@ export default {
     back: 'Zurück',
   },
 
-  // Gestaffelte Veröffentlichung: Rezensions-Warteschlange offener Entwürfe.
+  // Gestaffelte Veröffentlichung: Freigabe-Warteschlange offener Entwürfe.
   review: {
-    open: 'Rezension',
-    title: 'Rezensions-Warteschlange',
+    open: 'Freigabe',
+    title: 'Freigabe-Warteschlange',
     empty: 'Keine offenen Entwürfe.',
     newPage: 'neue Seite',
     toSource: 'Zur Quelldatei',

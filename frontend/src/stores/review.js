@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { api } from '../api/client'
 
-// Rezensions-Warteschlange der gestaffelten Veröffentlichung. Offene Entwürfe
+// Freigabe-Warteschlange der gestaffelten Veröffentlichung. Offene Entwürfe
 // (von der KI im Modus auto, vom Cron oder manuell über den Entwurf-Button
 // abgelegt) werden hier gelistet, im Diff gegen den Live-Stand geprüft und dann
 // freigegeben (optional mit Veröffentlichungsdatum) oder verworfen. Serverseitig

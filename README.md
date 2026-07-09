@@ -46,7 +46,7 @@ hugocms-2026/                     # Quell-Repo (Entwicklung)
 │   │   │   ├── AuditRunner.php       # gebautes public/ parsen & Regeln prüfen
 │   │   │   ├── Checks.php / RuleCatalog.php / HtmlInspector.php / …
 │   │   │   └── ContentQualityService.php # LLM-Qualitätsprüfung je Inhaltsdatei
-│   │   ├── Review/               # gestaffelte Veröffentlichung (Rezension)
+│   │   ├── Review/               # gestaffelte Veröffentlichung (Freigabe)
 │   │   │   ├── ReviewStore.php        # Entwurfsspeicher je Webseite (var/review/)
 │   │   │   └── FrontMatter.php        # draft/publishDate im Front Matter setzen
 │   │   ├── AuthFactory.php       # Auth-Treiber (singleuser)
@@ -528,10 +528,10 @@ domaingebunden), `--mounts=<datei>` (Standard `backend/mounts.ini`),
 1 Laufzeitfehler, 2 Aufruffehler. Der Cron **prüft** nicht selbst — er verbessert
 nur bereits geprüfte Dateien und stößt keine automatische Neuprüfung an.
 
-## Gestaffelte Veröffentlichung (Rezension)
+## Gestaffelte Veröffentlichung (Freigabe)
 
 Damit nicht jede automatische oder ungeprüfte Änderung sofort online geht, gibt
-es eine **Rezensions-Warteschlange**. Entwürfe liegen serverseitig unter
+es eine **Freigabe-Warteschlange**. Entwürfe liegen serverseitig unter
 `var/review/` (Blob mit dem vollständigen Vorschlag) — die Live-Datei bleibt bis
 zur Freigabe unangetastet.
 
@@ -543,7 +543,7 @@ zur Freigabe unangetastet.
   manuell als Entwurf ab. `confirm`/`readonly` und normales Speichern sind nicht
   betroffen. Nur Schreib-/Anlege-Vorgänge werden gestaffelt, keine Löschungen
   oder Umbenennungen.
-- **Rezension.** Die Warteschlange (Werkzeugschiene) zeigt jeden Entwurf mit
+- **Freigabe.** Die Warteschlange (Werkzeugschiene) zeigt jeden Entwurf mit
   einem Zeilen-Diff gegen den Live-Stand. Der Benutzer gibt frei — **sofort** oder
   **terminiert** — oder verwirft.
 - **Sofortige Freigabe** schreibt den Vorschlag direkt in die Live-Datei
@@ -635,7 +635,7 @@ eindeutig zu genau einer Webpräsenz. Zwei Folgen für den Mehrfach-Betrieb:
 | `auditcontentreport`| GET | `key`                             | **Pro:** Gesamt-Bericht (Qualität + zugehörige SEO-Funde) |
 | `auditcontentrequeue`| POST | `key`                           | **Pro:** „Wieder aufnehmen" (Verbesserungs-Vermerk löschen) |
 | `auditcontentdelete`| POST | `key`                            | **Pro:** ein Prüfergebnis löschen                      |
-| `reviewsave`| POST   | `target` (ID), `content`             | Inhalt als Rezensions-Entwurf ablegen (nicht live)     |
+| `reviewsave`| POST   | `target` (ID), `content`             | Inhalt als Freigabe-Entwurf ablegen (nicht live)     |
 | `reviewlist`| GET    | –                                    | offene Entwürfe der Warteschlange auflisten            |
 | `reviewget` | GET    | `key`                                | Entwurf samt aktuellem Live-Stand (für den Diff)       |
 | `reviewapprove`| POST | `key`, `publishDate`?, `force`?     | Freigeben: ohne Termin sofort live; mit künftigem `publishDate` terminiert (verzögerter Austausch) |

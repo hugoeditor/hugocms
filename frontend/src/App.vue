@@ -163,7 +163,7 @@ async function loadMounts() {
   } finally {
     suspendAuthGuard(false)
   }
-  // Zahl offener Rezensions-Entwürfe für das Abzeichen der Werkzeugschiene
+  // Zahl offener Freigabe-Entwürfe für das Abzeichen der Werkzeugschiene
   // vorab laden (best effort — ein Fehler darf den Start nicht stören).
   if (auth.review) {
     review.fetch().catch(() => {})
@@ -243,7 +243,7 @@ function openAuditView() {
   leaveEditorThen(() => files.openAudit())
 }
 
-// Rezensions-Warteschlange öffnen/schließen (gestaffelte Veröffentlichung).
+// Freigabe-Warteschlange öffnen/schließen (gestaffelte Veröffentlichung).
 // Umschalter wie das SEO-Audit; öffnet als Overlay über dem Dateimanager.
 function openReviewQueue() {
   if (review.queueOpen) {
@@ -590,7 +590,7 @@ async function build() {
                 </template>
               </v-tooltip>
 
-              <!-- Rezensions-Warteschlange (gestaffelte Veröffentlichung) — nur
+              <!-- Freigabe-Warteschlange (gestaffelte Veröffentlichung) — nur
                    bei konfiguriertem Hugo-Projekt (draft/publishDate). -->
               <v-tooltip v-if="auth.review" :text="$t('review.open')" location="right">
                 <template #activator="{ props }">
@@ -741,7 +741,7 @@ async function build() {
                  HelpView, damit sich aus einem SEO-Fund die Regel-Hilfe darüber
                  legen kann. -->
             <ContentQualityView />
-            <!-- Rezensions-Warteschlange (gestaffelte Veröffentlichung): Overlay
+            <!-- Freigabe-Warteschlange (gestaffelte Veröffentlichung): Overlay
                  über dem Dateimanager, aus der Werkzeugschiene geöffnet. -->
             <ReviewQueueView />
             <!-- Hilfe-/Wissensdatenbank: Überlagerung mit Zurück-Button, öffnet
@@ -1019,7 +1019,7 @@ async function build() {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Zähler offener Rezensions-Entwürfe am Werkzeug-Knopf. */
+/* Zähler offener Freigabe-Entwürfe am Werkzeug-Knopf. */
 .nemo-tool-badge {
   flex: 0 0 auto;
   order: 3; /* rechts, hinter der Beschriftung */
