@@ -257,13 +257,20 @@ function addField(key = '', type = 'text') {
   open.value = true
   commit()
   // Neue Zeile sichtbar machen: bei vielen Feldern liegt sie sonst außerhalb
-  // des scrollbaren Bereichs. Nach dem Rendern ans Ende scrollen und das
-  // Schlüsselfeld fokussieren.
+  // des scrollbaren Bereichs. Nach dem Rendern ans Ende scrollen und passend
+  // fokussieren: bei vorbelegtem Namen (gängiges Feld) direkt ins Wertfeld,
+  // sofern der Typ ein Textfeld hat; sonst ins Schlüsselfeld (eigene Variable).
   nextTick(() => {
     const el = bodyRef.value
     if (!el) return
     el.scrollTop = el.scrollHeight
-    el.querySelector('.fm-row:last-child .fm-key input')?.focus()
+    const row = el.querySelector('.fm-row:last-child')
+    if (!row) return
+    const target =
+      key !== '' && ['text', 'multiline', 'number', 'date'].includes(type)
+        ? row.querySelector('.fm-value input, .fm-value textarea')
+        : row.querySelector('.fm-key input')
+    target?.focus()
   })
 }
 
