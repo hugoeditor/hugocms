@@ -453,7 +453,7 @@ onBeforeUnmount(() => {
         <v-icon class="mx-3" icon="mdi-file-document-edit" />
         <v-toolbar-title>
           {{ files.openFile.name }}
-          <span v-if="files.dirty" class="text-warning">•</span>
+          <span v-if="files.dirty" class="text-warning dirty-dot">•</span>
         </v-toolbar-title>
         <v-spacer />
 
@@ -662,5 +662,14 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   background: var(--mint-content);
+}
+
+/* Indikator für ungespeicherte Änderungen: deutlich größer als der Titel, damit
+   er nicht übersehen wird. */
+.dirty-dot {
+  font-size: 2.4em;
+  line-height: 0;
+  vertical-align: middle;
+  margin-left: 2px;
 }
 </style>
