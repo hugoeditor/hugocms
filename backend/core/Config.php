@@ -51,7 +51,7 @@ final class Config
      *   auth: array<string, mixed>,
      *   user: array{sessionLifetime: int, contentWidth: int, updateLastmod: ?bool},
      *   session: array{path: string},
-     *   log: array{file: string, level: string},
+     *   log: array{file: string, level: string, maxBytes: int, keep: int},
      *   hugoBin: ?string
      * }
      */
@@ -105,6 +105,13 @@ final class Config
             'log' => [
                 'file' => self::resolvePath($raw['log']['file'], $baseDir),
                 'level' => trim((string) $raw['log']['level']),
+                // Rotation ist optional; leer/fehlend → Vorgabewerte (1 MB, 3 Stände).
+                'maxBytes' => self::isBlank($raw['log']['max_bytes'] ?? null)
+                    ? 1048576
+                    : max(0, (int) $raw['log']['max_bytes']),
+                'keep' => self::isBlank($raw['log']['keep'] ?? null)
+                    ? 3
+                    : max(1, (int) $raw['log']['keep']),
             ],
             'hugoBin' => $hugoBin === '' ? null : self::resolvePath($hugoBin, $baseDir),
             'ai' => self::aiSection($raw['ai'] ?? null),

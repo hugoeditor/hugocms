@@ -67,9 +67,11 @@ if (is_file($configFile)) {
     if (is_file($hostMounts)) {
         $connector->mountsFromFile($hostMounts);
     } elseif (is_file($mountsFile)) {
-        // Kurzer Hinweis an den Client (übersetzbar), ausführlicher Kontext ins Log.
+        // Kurzer Hinweis an den Client (übersetzbar), ausführlicher Kontext ins
+        // Log — nur auf Stufe „debug", da der Rückfall pro Request anfällt und
+        // betrieblich unkritisch ist (sonst flutet er das Log).
         $connector->addSetupWarning('MOUNT-CONFIG-MISSING', [$siteKey]);
-        $connector->logWarning(sprintf(
+        $connector->logDebug(sprintf(
             'Keine eigene Mount-Konfiguration für „%s" (erwartet: mounts/%s.ini). '
             . 'Es gilt der Rückfall mounts.ini.',
             $siteKey,

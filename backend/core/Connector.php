@@ -137,6 +137,8 @@ final class Connector
             // Log nur aus der Datei übernehmen, wenn nicht explizit gesetzt.
             $options['log'] ??= $cfg['log']['file'];
             $options['logLevel'] ??= $cfg['log']['level'] ?? 'error';
+            $options['logMaxBytes'] ??= $cfg['log']['maxBytes'] ?? 1_048_576;
+            $options['logKeep'] ??= $cfg['log']['keep'] ?? 3;
             $options['hugoBin'] ??= $cfg['hugoBin'];
             $this->ai = $cfg['ai'];
             $this->services = $cfg['services'];
@@ -150,7 +152,12 @@ final class Connector
 
         // Logger und Fehler-Handler: danach werden auch Fehler in der Auth-
         // Erzeugung, in mount() und im weiteren Konstruktor erfasst.
-        $this->logger = new Logger($options['log'] ?? null, $options['logLevel'] ?? 'error');
+        $this->logger = new Logger(
+            $options['log'] ?? null,
+            $options['logLevel'] ?? 'error',
+            (int) ($options['logMaxBytes'] ?? 1_048_576),
+            (int) ($options['logKeep'] ?? 3),
+        );
         $this->registerErrorHandlers();
 
         // Fehlt das Log-Verzeichnis, schreibt der Logger ins Server-Log — Hinweis.
@@ -276,6 +283,18 @@ final class Connector
     public function logWarning(string $message): self
     {
         $this->logger->warning($message);
+
+        return $this;
+    }
+
+    /**
+     * Schreibt eine Meldung auf Stufe „debug" ins Log — für erwartbare,
+     * betrieblich unkritische Vorgänge (z. B. Rückfall auf die Standard-
+     * mounts.ini), die pro Request anfallen und das Log sonst zumüllen.
+     */
+    public function logDebug(string $message): self
+    {
+        $this->logger->debug($message);
 
         return $this;
     }

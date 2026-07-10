@@ -53,6 +53,13 @@ path = var/sessions
 ; Beide Felder sind Pflicht und dürfen nicht leer sein.
 file = log/hugocms.log
 level = warning
+; Größenbasierte Rotation ohne externe Werkzeuge (kein logrotate/Cron nötig):
+; Erreicht die Datei max_bytes, wird sie durchrotiert (hugocms.log -> .1 -> .2
+; … bis .keep, ältester Stand fällt weg). Plattenverbrauch ~ max_bytes * (keep+1).
+; Beide Felder optional; leer/fehlend gilt der Standard. max_bytes = 0 schaltet
+; die Rotation ab.
+max_bytes = 1048576
+keep = 3
 
 [hugo]
 ; Zentraler Pfad zum Hugo-PROGRAMM für den Veröffentlichen-Knopf (Befehl

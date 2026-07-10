@@ -13,18 +13,30 @@ use Throwable;
  *
  *   $log = new Logger(__DIR__ . '/log/hugocms.log', 'error');
  *   $log->error('Etwas ging schief', ['target' => $id]);
+ *
+ * Größenbasierte Rotation ohne externe Werkzeuge (logrotate/Cron): Überschreitet
+ * die Datei $maxBytes, wird sie beim nächsten Schreiben durchrotiert
+ * (hugocms.log → .1 → .2 … bis .$keep, ältester Stand fällt weg). So bleibt der
+ * Plattenverbrauch bei ~ $maxBytes × ($keep + 1) gedeckelt. $maxBytes = 0 schaltet
+ * die Rotation ab.
  */
 final class Logger
 {
     private const LEVELS = ['debug' => 0, 'info' => 1, 'warning' => 2, 'error' => 3];
 
     private readonly int $threshold;
+    private readonly int $maxBytes;
+    private readonly int $keep;
 
     public function __construct(
         private readonly ?string $file = null,
         string $level = 'error',
+        int $maxBytes = 1_048_576,
+        int $keep = 3,
     ) {
         $this->threshold = self::LEVELS[$level] ?? self::LEVELS['error'];
+        $this->maxBytes = max(0, $maxBytes);
+        $this->keep = max(1, $keep);
     }
 
     public function error(string $message, array $context = []): void
@@ -79,12 +91,42 @@ final class Logger
             $dir = dirname($this->file);
             $writable = (is_file($this->file) && is_writable($this->file))
                 || (!file_exists($this->file) && is_dir($dir) && is_writable($dir));
-            if ($writable && @file_put_contents($this->file, $line . PHP_EOL, FILE_APPEND | LOCK_EX) !== false) {
-                return;
+            if ($writable) {
+                $this->maybeRotate();
+                if (@file_put_contents($this->file, $line . PHP_EOL, FILE_APPEND | LOCK_EX) !== false) {
+                    return;
+                }
             }
         }
 
         // Fallback: PHP-eigenes Fehlerlog (Server-Log).
         error_log('[hugocms] ' . $line);
+    }
+
+    /**
+     * Rotiert die Logdatei, sobald sie $maxBytes erreicht: ältesten Stand
+     * löschen, übrige um eins hochschieben, aktuelles Log zur .1 machen. Danach
+     * legt der Schreibvorgang eine frische Datei an. rename() ist atomar — ein
+     * seltener paralleler Doppelaufruf verliert höchstens einen Altstand, nie
+     * den laufenden Eintrag oder die Datei-Integrität.
+     */
+    private function maybeRotate(): void
+    {
+        if ($this->maxBytes <= 0 || $this->file === null) {
+            return;
+        }
+        clearstatcache(false, $this->file);
+        $size = @filesize($this->file);
+        if ($size === false || $size < $this->maxBytes) {
+            return;
+        }
+
+        @unlink($this->file . '.' . $this->keep);
+        for ($i = $this->keep - 1; $i >= 1; $i--) {
+            if (is_file($this->file . '.' . $i)) {
+                @rename($this->file . '.' . $i, $this->file . '.' . ($i + 1));
+            }
+        }
+        @rename($this->file, $this->file . '.1');
     }
 }
