@@ -101,6 +101,36 @@ export function applyFrontMatterFields(content, name, fields) {
   return block + body
 }
 
+// --- lastmod aktualisieren -------------------------------------------------
+// Front-Matter-Block (nur die verbreiteten YAML- und TOML-Formen) mit
+// Erfassungsgruppen: [0]=ganz, [1]=öffnender Delimiter+NL, [2]=Innentext,
+// [3]=schließender Delimiter.
+const YAML_BLOCK = /^(---\r?\n)([\s\S]*?)(\r?\n---(?:\r?\n|$))/
+const TOML_BLOCK = /^(\+\+\+\r?\n)([\s\S]*?)(\r?\n\+\+\+(?:\r?\n|$))/
+
+function blockMatch(text) {
+  return text.match(YAML_BLOCK) || text.match(TOML_BLOCK)
+}
+
+// Hat der Content ein Top-Level-Feld `lastmod` im Front Matter?
+export function hasLastmod(content) {
+  const m = blockMatch(content ?? '')
+  return m ? /^lastmod\s*[:=]/m.test(m[2]) : false
+}
+
+// Setzt ein vorhandenes `lastmod`-Feld auf die aktuelle Zeit (lokale ISO-8601).
+// Fehlt das Feld, bleibt der Content unverändert. Rückgabe: { content, changed }.
+export function withUpdatedLastmod(content, when = new Date()) {
+  const text = content ?? ''
+  const m = blockMatch(text)
+  if (!m) return { content: text, changed: false }
+  const line = /^(lastmod\s*[:=]\s*).*$/m
+  if (!line.test(m[2])) return { content: text, changed: false }
+  const newInner = m[2].replace(line, `$1${localIso(when)}`)
+  if (newInner === m[2]) return { content: text, changed: false }
+  return { content: m[1] + newInner + m[3] + text.slice(m[0].length), changed: true }
+}
+
 // Bequemlichkeit fürs Anlegen: fehlende Felder mit Vorschlagswerten ergänzen.
 // Rückgabe: { content, changed }.
 export function ensureFrontMatter(content, name, when = new Date()) {

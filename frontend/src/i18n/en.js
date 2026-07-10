@@ -700,6 +700,14 @@ export default {
     ignore: 'Ignore',
   },
 
+  lastmod: {
+    title: 'Update lastmod?',
+    hint: 'This file has a “lastmod” field. Should it be set to the current date and time when saving?',
+    remember: 'Remember this choice and don’t ask again',
+    update: 'Update',
+    skip: 'Leave unchanged',
+  },
+
   wysiwyg: {
     bold: 'Bold',
     italic: 'Italic',

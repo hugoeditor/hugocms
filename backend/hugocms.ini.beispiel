@@ -37,6 +37,11 @@ password_hash = "HIER-PASSWORT-HASH-EINTRAGEN"
 ; Einzelbenutzer-Modus ist dies der Startwert nach jedem Neuladen (per Maus
 ; ziehbare Änderungen werden derzeit nicht gespeichert).
 ;content_width = 1200
+; update_lastmod: legt fest, ob beim Speichern ein vorhandenes Front-Matter-Feld
+; „lastmod“ auf die aktuelle Zeit gesetzt wird. Fehlt der Schlüssel, fragt der
+; Editor beim Speichern nach (mit Option, die Wahl hier dauerhaft zu merken).
+; true = immer aktualisieren, false = nie.
+;update_lastmod = false
 
 [session]
 ; Verzeichnis für die PHP-Sitzungsdateien (muss für den Webserver-Benutzer

@@ -18,6 +18,8 @@ use HugoCMS\FileManager\Exception\ApiException;
  *
  *   [user]
  *   session_lifetime = 8   ; Sitzungsdauer in Stunden (optional; Standard 8)
+ *   update_lastmod = false ; lastmod beim Speichern setzen (optional; fehlt =
+ *                          ; im Editor nachfragen)
  *
  *   [session]
  *   path = var/sessions
@@ -47,7 +49,7 @@ final class Config
     /**
      * @return array{
      *   auth: array<string, mixed>,
-     *   user: array{sessionLifetime: int, contentWidth: int},
+     *   user: array{sessionLifetime: int, contentWidth: int, updateLastmod: ?bool},
      *   session: array{path: string},
      *   log: array{file: string, level: string},
      *   hugoBin: ?string
@@ -123,7 +125,7 @@ final class Config
      * Bildschirmen. Fehlt der Wert oder ist er zu klein, gilt der Standard 1200.
      * Im Einzelbenutzer-Modus ist dies der Startwert nach jedem Neuladen.
      *
-     * @return array{sessionLifetime: int, contentWidth: int}  sessionLifetime in Sekunden
+     * @return array{sessionLifetime: int, contentWidth: int, updateLastmod: ?bool}  sessionLifetime in Sekunden
      */
     private static function userSection(mixed $section): array
     {
@@ -136,7 +138,13 @@ final class Config
             $width = self::DEFAULT_CONTENT_WIDTH;
         }
 
-        return ['sessionLifetime' => $seconds, 'contentWidth' => $width];
+        // update_lastmod ist dreiwertig: fehlt der Schlüssel (null), fragt der
+        // Editor beim Speichern nach; true/false wenden das ohne Nachfrage an.
+        $updateLastmod = isset($section['update_lastmod'])
+            ? filter_var($section['update_lastmod'], FILTER_VALIDATE_BOOLEAN)
+            : null;
+
+        return ['sessionLifetime' => $seconds, 'contentWidth' => $width, 'updateLastmod' => $updateLastmod];
     }
 
     /**

@@ -16,7 +16,7 @@ import { useTransientError } from '../util/transientError'
 import { useConfirm } from '../util/confirm'
 import { useAiGate } from '../util/aiGate'
 import { frontMatterMeta } from '../util/frontMatterMeta'
-import { missingFrontMatterFields, applyFrontMatterFields } from '../util/frontMatterTemplate'
+import { missingFrontMatterFields, applyFrontMatterFields, hasLastmod, withUpdatedLastmod } from '../util/frontMatterTemplate'
 
 const { t, locale } = useI18n()
 const files = useFilesStore()
@@ -244,20 +244,67 @@ function maybePromptFrontMatter(raw) {
   fmDialog.value = true
 }
 
-// Übernimmt die im Dialog bestätigten Felder ins Front Matter. Im Quelltext-
-// Modus über eine CodeMirror-Transaktion, damit „Rückgängig" den Schritt
-// zurücknehmen kann; im visuellen Modus direkt in den Entwurf (der strukturierte
-// Front-Matter-Editor führt keine eigene Historie). Die Datei gilt danach als
+// Ersetzt den Entwurfsinhalt modusgerecht: im Quelltext-Modus über eine
+// CodeMirror-Transaktion (damit „Rückgängig" den Schritt zurücknehmen kann und
+// der Editor synchron bleibt), sonst direkt in den Entwurf (der strukturierte
+// Front-Matter-Editor führt keine eigene Historie). Datei gilt danach als
 // ungespeichert.
-function applyFrontMatter(fields) {
-  const merged = applyFrontMatterFields(draft.value, files.openFile?.name ?? '', fields)
-  if (merged === draft.value) return
+function setDraftContent(next) {
+  if (next === draft.value) return
   if (mode.value === 'source' && editorRef.value?.replaceAll) {
-    editorRef.value.replaceAll(merged) // löst update:modelValue -> onInput aus
+    editorRef.value.replaceAll(next) // löst update:modelValue -> onInput aus
     return
   }
-  onInput(merged)
+  onInput(next)
   if (isMarkdown.value && mode.value === 'wysiwyg') syncFromDraft()
+}
+
+// Übernimmt die im Dialog bestätigten Felder ins Front Matter.
+function applyFrontMatter(fields) {
+  setDraftContent(applyFrontMatterFields(draft.value, files.openFile?.name ?? '', fields))
+}
+
+// --- lastmod beim Speichern aktualisieren ----------------------------------
+// Fehlt [user] update_lastmod (auth.ui.updateLastmod === null), wird vor dem
+// Speichern gefragt, ob ein vorhandenes lastmod-Feld auf jetzt gesetzt werden
+// soll — mit Option, die Wahl dauerhaft in der hugocms.ini zu merken.
+const lastmodDialog = ref(false)
+const lastmodRemember = ref(false)
+let lastmodResolver = null
+
+function askLastmod() {
+  lastmodRemember.value = false
+  lastmodDialog.value = true
+  return new Promise((resolve) => {
+    lastmodResolver = resolve
+  })
+}
+
+function resolveLastmod(update) {
+  lastmodDialog.value = false
+  const resolve = lastmodResolver
+  lastmodResolver = null
+  if (resolve) resolve({ update, remember: lastmodRemember.value })
+}
+
+// Vor dem eigentlichen Speichern aufrufen (normal wie „als Entwurf"). Ändert bei
+// Bedarf den Entwurf (lastmod = jetzt). Kein lastmod-Feld -> nichts zu tun.
+async function maybeUpdateLastmod() {
+  if (!isMarkdown.value || !hasLastmod(draft.value)) return
+  const pref = auth.ui?.updateLastmod
+  let update = pref
+  if (pref !== true && pref !== false) {
+    const res = await askLastmod()
+    update = res.update
+    if (res.remember) {
+      try {
+        await auth.setUpdateLastmod(res.update)
+      } catch {
+        // Persistenz-Fehler soll das Speichern nicht blockieren.
+      }
+    }
+  }
+  if (update) setDraftContent(withUpdatedLastmod(draft.value).content)
 }
 
 // Bei jedem neu geöffneten File den Entwurf übernehmen.
@@ -303,6 +350,8 @@ async function save() {
   saving.value = true
   error.value = null
   try {
+    // Vor dem Schreiben ggf. lastmod aktualisieren (Dialog, falls Wahl fehlt).
+    await maybeUpdateLastmod()
     await files.saveOpenFile(draft.value)
     return true
   } catch (e) {
@@ -336,6 +385,7 @@ async function saveAsDraft() {
   savingDraft.value = true
   error.value = null
   try {
+    await maybeUpdateLastmod()
     await files.saveAsDraft(draft.value)
     notice.value = t('editor.savedAsDraft')
   } catch (e) {
@@ -573,6 +623,32 @@ onBeforeUnmount(() => {
 
     <!-- Fehlendes Front Matter beim Öffnen ergänzen (Content-Dateien). -->
     <FrontMatterDialog v-model="fmDialog" :fields="fmFields" @apply="applyFrontMatter" />
+
+    <!-- Beim Speichern fragen, ob lastmod aktualisiert werden soll (nur, solange
+         [user] update_lastmod nicht gesetzt ist). -->
+    <v-dialog
+      :model-value="lastmodDialog"
+      max-width="480"
+      @update:model-value="(v) => { if (!v) resolveLastmod(false) }"
+    >
+      <v-card>
+        <v-card-title class="text-h6">{{ $t('lastmod.title') }}</v-card-title>
+        <v-card-text>
+          <p class="text-body-2 mb-3">{{ $t('lastmod.hint') }}</p>
+          <v-checkbox
+            v-model="lastmodRemember"
+            :label="$t('lastmod.remember')"
+            density="compact"
+            hide-details
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="resolveLastmod(false)">{{ $t('lastmod.skip') }}</v-btn>
+          <v-btn color="primary" variant="flat" @click="resolveLastmod(true)">{{ $t('lastmod.update') }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 

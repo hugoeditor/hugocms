@@ -700,6 +700,14 @@ export default {
     ignore: 'Ignorieren',
   },
 
+  lastmod: {
+    title: 'lastmod aktualisieren?',
+    hint: 'Diese Datei hat ein „lastmod“-Feld. Soll es beim Speichern auf das aktuelle Datum und die Uhrzeit gesetzt werden?',
+    remember: 'Diese Entscheidung merken und künftig nicht mehr fragen',
+    update: 'Aktualisieren',
+    skip: 'Nicht aktualisieren',
+  },
+
   wysiwyg: {
     bold: 'Fett',
     italic: 'Kursiv',

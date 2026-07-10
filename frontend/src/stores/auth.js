@@ -12,7 +12,9 @@ export const useAuthStore = defineStore('auth', {
     buildable: false, // true, wenn für diese Webseite ein Hugo-Aufruf konfiguriert ist
     reconfigurable: false, // true, wenn die hugocms.ini im Betrieb änderbar ist
     ai: { enabled: false, model: '', writeMode: 'confirm' }, // KI-Assistent (aus whoami)
-    ui: { contentWidth: 1200 }, // globale UI-Vorgaben aus [user] (Fensterbreite)
+    // globale UI-Vorgaben aus [user]. updateLastmod ist dreiwertig:
+    // null = beim Speichern nachfragen, true/false = ohne Nachfrage anwenden.
+    ui: { contentWidth: 1200, updateLastmod: null },
     // Pro-Lizenz (aus whoami). configured = ein Schlüssel ist hinterlegt (ggf.
     // ungültig/falsche Domain). git = Git-Funktion nutzbar (Pro + Hugo-Projekt).
     // Die Lizenz gilt pro Webseite; licensable = aktivierbar (Mount-Datei vorhanden).
@@ -41,7 +43,7 @@ export const useAuthStore = defineStore('auth', {
       this.buildable = data.buildable ?? false
       this.reconfigurable = data.reconfigurable ?? false
       this.ai = data.ai ?? { enabled: false, model: '', writeMode: 'confirm' }
-      this.ui = data.ui ?? { contentWidth: 1200 }
+      this.ui = data.ui ?? { contentWidth: 1200, updateLastmod: null }
       this.license = data.license ?? { edition: 'community', licensee: null, domain: '', configured: false }
       this.licensable = data.licensable ?? false
       this.git = data.git ?? false
@@ -71,6 +73,12 @@ export const useAuthStore = defineStore('auth', {
     // Schreibt die hugocms.ini neu (Verzeichnisse, Log, Hugo-Programm).
     async reconfigure(payload) {
       await api.post('reconfigure', payload)
+    },
+
+    // Merkt die Benutzerwahl zum lastmod-Verhalten in [user] update_lastmod.
+    async setUpdateLastmod(value) {
+      await api.post('setupdatelastmod', { value })
+      this.ui = { ...this.ui, updateLastmod: value }
     },
 
     // Ändert die Anmeldedaten (Name/Passwort). Der Server beendet danach die
