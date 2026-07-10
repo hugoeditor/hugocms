@@ -525,7 +525,7 @@ async function build() {
                    Konto/Konfiguration (unten) auch bei vielen Orten sichtbar. -->
               <div class="nemo-tool-scroll nemo-scroll">
               <!-- Veröffentlichte Webseite ansehen (Domain-Wurzel, neuer Tab) -->
-              <v-tooltip v-if="auth.buildable" :text="$t('site.open')" location="right">
+              <v-tooltip v-if="auth.buildable" :text="$t('site.open')" location="right" :disabled="!toolbarCollapsed">
                 <template #activator="{ props }">
                   <a
                     v-bind="props"
@@ -541,7 +541,7 @@ async function build() {
               </v-tooltip>
 
               <!-- Hugo veröffentlichen (nur wenn für die Webseite konfiguriert) -->
-              <v-tooltip v-if="auth.buildable" :text="$t('build.publish')" location="right">
+              <v-tooltip v-if="auth.buildable" :text="$t('build.publish')" location="right" :disabled="!toolbarCollapsed">
                 <template #activator="{ props }">
                   <button
                     v-bind="props"
@@ -559,7 +559,7 @@ async function build() {
 
               <!-- Repository (Git) — Pro-Funktion, nur bei gültiger Lizenz und
                    konfiguriertem Hugo-Projekt (dort liegt das Repository). -->
-              <v-tooltip v-if="auth.git" :text="$t('repo.open')" location="right">
+              <v-tooltip v-if="auth.git" :text="$t('repo.open')" location="right" :disabled="!toolbarCollapsed">
                 <template #activator="{ props }">
                   <button
                     v-bind="props"
@@ -575,7 +575,7 @@ async function build() {
 
               <!-- SEO-Audit — Pro-Funktion, nur bei gültiger Lizenz und
                    konfiguriertem Hugo-Projekt (public/ und content/). -->
-              <v-tooltip v-if="auth.audit" :text="$t('audit.open')" location="right">
+              <v-tooltip v-if="auth.audit" :text="$t('audit.open')" location="right" :disabled="!toolbarCollapsed">
                 <template #activator="{ props }">
                   <button
                     v-bind="props"
@@ -592,7 +592,7 @@ async function build() {
 
               <!-- Freigabe-Warteschlange (gestaffelte Veröffentlichung) — nur
                    bei konfiguriertem Hugo-Projekt (draft/publishDate). -->
-              <v-tooltip v-if="auth.review" :text="$t('review.open')" location="right">
+              <v-tooltip v-if="auth.review" :text="$t('review.open')" location="right" :disabled="!toolbarCollapsed">
                 <template #activator="{ props }">
                   <button
                     v-bind="props"
@@ -610,7 +610,7 @@ async function build() {
 
               <!-- KI-Assistent: immer sichtbar. Fehlt der KI-Schlüssel, meldet
                    sich der Klick mit einem Hinweis und bietet die Konfiguration an. -->
-              <v-tooltip :text="$t('assistant.open')" location="right">
+              <v-tooltip :text="$t('assistant.open')" location="right" :disabled="!toolbarCollapsed">
                 <template #activator="{ props }">
                   <button
                     v-bind="props"
@@ -627,7 +627,7 @@ async function build() {
 
               <!-- Pro-Lizenz aktivieren/anzeigen (pro Webseite; sichtbar, sobald
                    eine Mount-Konfiguration geladen ist) -->
-              <v-tooltip v-if="auth.licensable" :text="$t('license.open')" location="right">
+              <v-tooltip v-if="auth.licensable" :text="$t('license.open')" location="right" :disabled="!toolbarCollapsed">
                 <template #activator="{ props }">
                   <button
                     v-bind="props"
@@ -650,7 +650,7 @@ async function build() {
                 <div class="nemo-tool-section">{{ $t('files.places') }}</div>
                 <PlacesList @select="selectPlace" @trash="selectTrash" />
               </template>
-              <v-tooltip v-else :text="$t('files.places')" location="right">
+              <v-tooltip v-else :text="$t('files.places')" location="right" :disabled="!toolbarCollapsed">
                 <template #activator="{ props }">
                   <button
                     v-bind="props"
@@ -669,7 +669,7 @@ async function build() {
               <!-- Untere, fest verankerte Werkzeuge (Konto, Konfiguration). -->
               <div class="nemo-tool-bottom">
               <!-- Konto/Anmeldedaten (unten) -->
-              <v-tooltip :text="$t('account.open')" location="right">
+              <v-tooltip :text="$t('account.open')" location="right" :disabled="!toolbarCollapsed">
                 <template #activator="{ props }">
                   <button
                     v-bind="props"
@@ -684,7 +684,7 @@ async function build() {
               </v-tooltip>
 
               <!-- Konfiguration ändern (nur bei INI-basierter Installation) -->
-              <v-tooltip v-if="auth.reconfigurable" :text="$t('reconfigure.open')" location="right">
+              <v-tooltip v-if="auth.reconfigurable" :text="$t('reconfigure.open')" location="right" :disabled="!toolbarCollapsed">
                 <template #activator="{ props }">
                   <button
                     v-bind="props"
