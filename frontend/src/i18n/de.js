@@ -389,6 +389,29 @@ export default {
     keyHintUnset: 'Noch kein Schlüssel hinterlegt. Ohne Schlüssel bleibt die Spracheingabe deaktiviert.',
   },
 
+  mailConfig: {
+    section: 'E-Mail-Versand',
+    intro: 'SMTP-Zugang für die Benachrichtigung des Gesundheitschecks (Cron). Erst mit Server, Absender und Empfänger ist der Versand aktiv.',
+    host: 'SMTP-Server',
+    port: 'Port',
+    portHint: 'Standard 587 / 465',
+    securityLabel: 'Verschlüsselung',
+    security: {
+      tls: 'STARTTLS (587)',
+      ssl: 'SSL (465)',
+      none: 'Keine',
+    },
+    user: 'Benutzername',
+    userHint: 'Leer lassen für Versand ohne Authentifizierung.',
+    pass: 'Passwort',
+    passHintSet: 'Ein Passwort ist hinterlegt. Leer lassen, um es beizubehalten; Eingabe ersetzt es.',
+    passHintUnset: 'Noch kein Passwort hinterlegt. Nur nötig, wenn der Server eine Anmeldung verlangt.',
+    from: 'Absender',
+    fromHint: 'z. B. HugoCMS <cms@example.com>',
+    to: 'Empfänger',
+    toHint: 'Adresse für die Gesundheitscheck-Berichte.',
+  },
+
   account: {
     open: 'Anmeldedaten ändern',
     title: 'Anmeldedaten ändern',
@@ -845,6 +868,13 @@ export default {
     'AUDIT-STORAGE-FAILED': 'Der Check-Bericht konnte nicht gespeichert werden.',
     'AUDIT-CONTENT-EMPTY': 'Die Datei enthält keinen prüfbaren Fließtext: {0}',
     'AUDIT-CONTENT-NOT-FOUND': 'Kein gespeichertes Prüfergebnis gefunden: {0}',
+
+    'MAIL-NOT-CONFIGURED': 'Es wurden Probleme gefunden, aber der E-Mail-Versand ist nicht eingerichtet ([mail] in der hugocms.ini).',
+    'MAIL-CONNECT-FAILED': 'Verbindung zum Mailserver {0}:{1} fehlgeschlagen.',
+    'MAIL-STARTTLS-FAILED': 'Die TLS-Verschlüsselung zum Mailserver konnte nicht aufgebaut werden.',
+    'MAIL-AUTH-FAILED': 'Anmeldung am Mailserver fehlgeschlagen — Zugangsdaten prüfen.',
+    'MAIL-SMTP-ERROR': 'Der Mailserver meldete einen Fehler ({0} {1}).',
+    'MAIL-TIMEOUT': 'Zeitüberschreitung bei der Verbindung zum Mailserver.',
 
     'AI-NOT-CONFIGURED': 'Der KI-Assistent ist nicht konfiguriert ([ai] api_key in der hugocms.ini).',
     'AI-REQUEST-FAILED': 'Anfrage an die KI fehlgeschlagen: {0}',

@@ -389,6 +389,29 @@ export default {
     keyHintUnset: 'No key stored yet. Without a key, voice input stays disabled.',
   },
 
+  mailConfig: {
+    section: 'Email delivery',
+    intro: 'SMTP access for health-check notifications (cron). Delivery is active only once server, sender and recipient are set.',
+    host: 'SMTP server',
+    port: 'Port',
+    portHint: 'Default 587 / 465',
+    securityLabel: 'Encryption',
+    security: {
+      tls: 'STARTTLS (587)',
+      ssl: 'SSL (465)',
+      none: 'None',
+    },
+    user: 'Username',
+    userHint: 'Leave empty for delivery without authentication.',
+    pass: 'Password',
+    passHintSet: 'A password is stored. Leave empty to keep it; entering one replaces it.',
+    passHintUnset: 'No password stored yet. Only needed if the server requires a login.',
+    from: 'Sender',
+    fromHint: 'e.g. HugoCMS <cms@example.com>',
+    to: 'Recipient',
+    toHint: 'Address for the health-check reports.',
+  },
+
   account: {
     open: 'Change credentials',
     title: 'Change credentials',
@@ -843,6 +866,13 @@ export default {
     'AUDIT-STORAGE-FAILED': 'The check report could not be saved.',
     'AUDIT-CONTENT-EMPTY': 'The file contains no checkable body text: {0}',
     'AUDIT-CONTENT-NOT-FOUND': 'No stored check result found: {0}',
+
+    'MAIL-NOT-CONFIGURED': 'Problems were found, but email delivery is not set up ([mail] in hugocms.ini).',
+    'MAIL-CONNECT-FAILED': 'Could not connect to the mail server {0}:{1}.',
+    'MAIL-STARTTLS-FAILED': 'Could not establish TLS encryption to the mail server.',
+    'MAIL-AUTH-FAILED': 'Mail server authentication failed — check the credentials.',
+    'MAIL-SMTP-ERROR': 'The mail server reported an error ({0} {1}).',
+    'MAIL-TIMEOUT': 'Timed out connecting to the mail server.',
 
     'AI-NOT-CONFIGURED': 'The AI assistant is not configured ([ai] api_key in hugocms.ini).',
     'AI-REQUEST-FAILED': 'AI request failed: {0}',

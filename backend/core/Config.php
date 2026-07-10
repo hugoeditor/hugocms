@@ -116,6 +116,58 @@ final class Config
             'hugoBin' => $hugoBin === '' ? null : self::resolvePath($hugoBin, $baseDir),
             'ai' => self::aiSection($raw['ai'] ?? null),
             'services' => self::servicesSection($raw['services'] ?? null),
+            'mail' => self::mailSection($raw['mail'] ?? null),
+        ];
+    }
+
+    /**
+     * E-Mail-Versand ([mail]-Sektion), genutzt vom Gesundheitscheck-Cron. Der
+     * Versand läuft über einen eigenen SMTP-Client ({@see \HugoCMS\FileManager\Mailer});
+     * ohne vollständige Angabe (host/from/to) ist er aus (configured=false).
+     * Das Passwort ist ein Geheimnis und bleibt serverseitig.
+     *
+     * security: 'tls' (STARTTLS) | 'ssl' (implizit) | 'none'. Der Port fällt bei
+     * fehlender Angabe je nach Sicherheit auf 465 (ssl) bzw. 587 (sonst) zurück.
+     *
+     * @return array{configured: bool, host: ?string, port: int, security: string, user: ?string, pass: ?string, from: ?string, to: ?string}
+     */
+    private static function mailSection(mixed $section): array
+    {
+        $section = is_array($section) ? $section : [];
+        $host = trim((string) ($section['smtp_host'] ?? ''));
+        // parse_ini_file(INI_SCANNER_TYPED) wandelt das INI-Schlüsselwort `none`
+        // (wie off/no/false) in bool(false) bzw. "" um. Ein solcher Wert meint
+        // ausdrücklich unverschlüsselten Versand — nicht den TLS-Standard, der
+        // nur bei ganz fehlendem Schlüssel greift.
+        if (!array_key_exists('smtp_security', $section)) {
+            $security = 'tls';
+        } else {
+            $value = $section['smtp_security'];
+            $security = ($value === false || $value === '' || $value === null)
+                ? 'none'
+                : strtolower(trim((string) $value));
+            if (!in_array($security, ['tls', 'ssl', 'none'], true)) {
+                $security = 'tls';
+            }
+        }
+        $port = (int) ($section['smtp_port'] ?? 0);
+        if ($port <= 0) {
+            $port = $security === 'ssl' ? 465 : 587;
+        }
+        $user = trim((string) ($section['smtp_user'] ?? ''));
+        $pass = (string) ($section['smtp_pass'] ?? '');
+        $from = trim((string) ($section['from'] ?? ''));
+        $to = trim((string) ($section['to'] ?? ''));
+
+        return [
+            'configured' => $host !== '' && $from !== '' && $to !== '',
+            'host' => $host === '' ? null : $host,
+            'port' => $port,
+            'security' => $security,
+            'user' => $user === '' ? null : $user,
+            'pass' => $pass === '' ? null : $pass,
+            'from' => $from === '' ? null : $from,
+            'to' => $to === '' ? null : $to,
         ];
     }
 

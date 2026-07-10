@@ -45,6 +45,22 @@ const speechUrl = ref(DEFAULT_SPEECH_URL)
 const speechKey = ref('')
 const speechConfigured = ref(false)
 
+// E-Mail-Versand (Gesundheitscheck). Das SMTP-Passwort wird nie geladen
+// (Geheimnis); leeres Feld lässt es unverändert. mailPassConfigured zeigt nur
+// an, ob bereits eines gesetzt ist.
+const mailHost = ref('')
+const mailPort = ref('')
+const mailSecurity = ref('tls')
+const mailUser = ref('')
+const mailPass = ref('')
+const mailFrom = ref('')
+const mailTo = ref('')
+const mailPassConfigured = ref(false)
+const mailSecurities = ref(['tls', 'ssl', 'none'])
+const mailSecurityItems = computed(() =>
+  mailSecurities.value.map((v) => ({ value: v, title: t(`mailConfig.security.${v}`) })),
+)
+
 const loading = ref(false) // Laden der aktuellen Werte beim Öffnen
 const saving = ref(false)
 const error = ref(null)
@@ -70,6 +86,15 @@ watch(model, async (open) => {
     speechUrl.value = cfg.speechUrl || DEFAULT_SPEECH_URL
     speechKey.value = ''
     speechConfigured.value = !!cfg.speechConfigured
+    mailHost.value = cfg.mailHost ?? ''
+    mailPort.value = cfg.mailPort ?? ''
+    mailSecurity.value = cfg.mailSecurity || 'tls'
+    mailSecurities.value = cfg.mailSecurities ?? ['tls', 'ssl', 'none']
+    mailUser.value = cfg.mailUser ?? ''
+    mailPass.value = ''
+    mailFrom.value = cfg.mailFrom ?? ''
+    mailTo.value = cfg.mailTo ?? ''
+    mailPassConfigured.value = !!cfg.mailPassConfigured
   } catch (e) {
     error.value = errorText(t, e)
   } finally {
@@ -93,6 +118,13 @@ async function submit() {
       aiWriteMode: aiWriteMode.value,
       speechKey: speechKey.value, // leer = unverändert
       speechUrl: speechUrl.value,
+      mailHost: mailHost.value,
+      mailPort: mailPort.value,
+      mailSecurity: mailSecurity.value,
+      mailUser: mailUser.value,
+      mailPass: mailPass.value, // leer = unverändert
+      mailFrom: mailFrom.value,
+      mailTo: mailTo.value,
     })
     emit('saved')
     model.value = false
@@ -225,6 +257,80 @@ async function submit() {
             type="password"
             prepend-inner-icon="mdi-key-variant"
             autocomplete="off"
+            variant="outlined"
+            density="comfortable"
+          />
+
+          <v-divider class="my-3" />
+          <div class="text-subtitle-2 mb-2">{{ $t('mailConfig.section') }}</div>
+          <div class="text-caption text-medium-emphasis mb-1">{{ $t('mailConfig.intro') }}</div>
+          <v-text-field
+            v-model="mailHost"
+            :label="$t('mailConfig.host')"
+            prepend-inner-icon="mdi-server-network"
+            variant="outlined"
+            density="comfortable"
+            class="mb-2"
+          />
+          <div class="d-flex ga-2">
+            <v-text-field
+              v-model="mailPort"
+              :label="$t('mailConfig.port')"
+              :placeholder="$t('mailConfig.portHint')"
+              type="number"
+              prepend-inner-icon="mdi-numeric"
+              variant="outlined"
+              density="comfortable"
+              class="mb-2"
+              style="max-width: 140px"
+            />
+            <v-select
+              v-model="mailSecurity"
+              :items="mailSecurityItems"
+              :label="$t('mailConfig.securityLabel')"
+              prepend-inner-icon="mdi-lock-outline"
+              variant="outlined"
+              density="comfortable"
+              class="mb-2"
+            />
+          </div>
+          <v-text-field
+            v-model="mailUser"
+            :label="$t('mailConfig.user')"
+            :hint="$t('mailConfig.userHint')"
+            prepend-inner-icon="mdi-account-outline"
+            autocomplete="off"
+            variant="outlined"
+            density="comfortable"
+            class="mb-2"
+          />
+          <div class="text-caption text-medium-emphasis mb-1">
+            {{ mailPassConfigured ? $t('mailConfig.passHintSet') : $t('mailConfig.passHintUnset') }}
+          </div>
+          <v-text-field
+            v-model="mailPass"
+            :label="$t('mailConfig.pass')"
+            type="password"
+            prepend-inner-icon="mdi-key-variant"
+            autocomplete="off"
+            variant="outlined"
+            density="comfortable"
+            class="mb-2"
+          />
+          <v-text-field
+            v-model="mailFrom"
+            :label="$t('mailConfig.from')"
+            :placeholder="$t('mailConfig.fromHint')"
+            prepend-inner-icon="mdi-email-arrow-right-outline"
+            variant="outlined"
+            density="comfortable"
+            class="mb-2"
+          />
+          <v-text-field
+            v-model="mailTo"
+            :label="$t('mailConfig.to')"
+            :hint="$t('mailConfig.toHint')"
+            prepend-inner-icon="mdi-email-outline"
             variant="outlined"
             density="comfortable"
           />
