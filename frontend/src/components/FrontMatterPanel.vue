@@ -10,7 +10,7 @@
 // Die Komponente erhält den rohen Front-Matter-Block samt --- Zeilen über
 // modelValue und meldet jede Änderung als neuen rohen Block zurück. Das
 // Zusammensetzen von Body und Block bleibt damit Sache des EditorPanels.
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { parse, stringify } from 'yaml'
 
@@ -62,6 +62,7 @@ let _uid = 0
 const uid = () => `fm${++_uid}`
 
 const fields = ref([])
+const bodyRef = ref(null) // Scroll-Container des Panel-Inhalts
 const rawMode = ref(false)
 const rawDraft = ref('') // innerer YAML-Text (ohne --- Zeilen)
 const rawError = ref(false)
@@ -255,6 +256,15 @@ function addField(key = '', type = 'text') {
   fields.value.push({ id: uid(), key, type, value: defaultValue(type) })
   open.value = true
   commit()
+  // Neue Zeile sichtbar machen: bei vielen Feldern liegt sie sonst außerhalb
+  // des scrollbaren Bereichs. Nach dem Rendern ans Ende scrollen und das
+  // Schlüsselfeld fokussieren.
+  nextTick(() => {
+    const el = bodyRef.value
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+    el.querySelector('.fm-row:last-child .fm-key input')?.focus()
+  })
 }
 
 function removeField(id) {
@@ -405,7 +415,7 @@ function onRawInput(text) {
       </v-menu>
     </header>
 
-    <div v-show="open" class="fm-body nemo-scroll">
+    <div v-show="open" ref="bodyRef" class="fm-body nemo-scroll">
       <!-- Roh-Modus: ganzer Block als YAML-Text (Notausgang / verschachtelte Daten) -->
       <template v-if="rawMode">
         <v-textarea
