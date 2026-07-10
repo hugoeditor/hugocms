@@ -25,6 +25,19 @@ final class Checks
     private const int WORDS_MIN = 200;
 
     /**
+     * Marker-Wörter, die auf eine versehentlich duplizierte Datei hindeuten,
+     * wenn der Rest-Slug als eigene Seite existiert (z. B. "impressum-kopie").
+     * Ganze Tokens, deutsch und englisch.
+     */
+    private const array COPY_MARKERS = [
+        'kopie', 'copy', 'duplikat', 'duplicate', 'neu', 'new', 'alt', 'old',
+        'final', 'entwurf', 'draft', 'test', 'temp', 'tmp', 'backup', 'sicherung',
+    ];
+
+    /** Bindewörter zwischen führendem Marker und Basis ("kopie-von-x"). */
+    private const array COPY_GLUE = ['von', 'of'];
+
+    /**
      * Prüfungen für EINE Seite.
      *
      * @return list<Issue>
@@ -250,6 +263,9 @@ final class Checks
             }
         }
 
+        // Zu ähnliche URL-Slugs (Kollision / Tippfehler / Wortumstellung).
+        $out = array_merge($out, self::similarSlugs($pages));
+
         return $out;
     }
 
@@ -329,7 +345,275 @@ final class Checks
         return $out;
     }
 
+    /**
+     * Erkennt zu ähnliche URL-Slugs (letztes Pfadsegment) über drei Verfahren:
+     *   A) Normalisierungs-Kollision — gleiche Zeichenfolge, nur Schreibweise,
+     *      Trennzeichen oder Diakritika weichen ab (Fehler, filename.near_duplicate).
+     *   B) kleine Editierdistanz — Tippfehler, Singular/Plural; abschließende
+     *      Zifferngruppen werden zuvor entfernt, damit nummerierte Serien
+     *      (post-1, post-2 …) nicht anschlagen (Warnung, filename.similar).
+     *   D) gleiche Wörter in anderer Reihenfolge, ab drei Tokens
+     *      (Warnung, filename.reordered).
+     * Startseite und segmentlose URLs bleiben außen vor. B läuft über
+     * Längen-Buckets, damit auch große Sites nicht in eine volle O(n²)-Prüfung
+     * laufen.
+     *
+     * @param list<PageRecord> $pages
+     * @return list<Issue>
+     */
+    private static function similarSlugs(array $pages): array
+    {
+        $items = [];
+        foreach ($pages as $p) {
+            $slug = self::slugOf($p->url);
+            if ($slug === null) {
+                continue;
+            }
+            $fold = self::fold($slug);
+            $norm = preg_replace('/[^a-z0-9]+/', '', $fold) ?? '';
+            if ($norm === '') {
+                continue;
+            }
+            $tokens = array_values(array_filter(
+                explode('-', trim(preg_replace('/[^a-z0-9]+/', '-', $fold) ?? '', '-')),
+                static fn (string $t): bool => $t !== '',
+            ));
+            // Vergleichsform für B: Trenner vereinheitlicht, Ziffern-Suffix entfernt.
+            $cmp = trim(preg_replace('/(-?\d+)+$/', '', implode('-', $tokens)) ?? '', '-');
+            $items[] = [
+                'page'   => $p,
+                'slug'   => $slug,
+                'norm'   => $norm,
+                'cmp'    => $cmp,
+                'tokens' => $tokens,
+            ];
+        }
+
+        $out = [];
+        /** @var array<int, array<int, true>> $aPair Paare, die A bereits meldet */
+        $aPair = [];
+        /** @var array<int, array<int, true>> $dPair Paare, die D bereits meldet */
+        $dPair = [];
+
+        // --- A) Normalisierungs-Kollision → Fehler -------------------------
+        $byNorm = [];
+        foreach ($items as $i => $it) {
+            $byNorm[$it['norm']][] = $i;
+        }
+        foreach ($byNorm as $group) {
+            if (count($group) < 2) {
+                continue;
+            }
+            foreach ($group as $i) {
+                $others = [];
+                foreach ($group as $j) {
+                    if ($j === $i) {
+                        continue;
+                    }
+                    $aPair[$i][$j] = true;
+                    if ($items[$j]['slug'] !== $items[$i]['slug']) {
+                        $others[$items[$j]['slug']] = true;
+                    }
+                }
+                if ($others === []) {
+                    continue; // nur identische Roh-Slugs (gleiche Adresse, kein Fall hier)
+                }
+                $p = $items[$i]['page'];
+                $out[] = Issue::of(
+                    'filename.near_duplicate',
+                    $p->url,
+                    $p->sourceFile,
+                    [count($others), implode(', ', array_keys($others))],
+                    ['slug' => $items[$i]['slug'], 'others' => array_keys($others)],
+                );
+            }
+        }
+
+        // --- D) gleiche Wörter, andere Reihenfolge → Warnung ----------------
+        $byTokens = [];
+        foreach ($items as $i => $it) {
+            if (count($it['tokens']) < 3) {
+                continue;
+            }
+            $sorted = $it['tokens'];
+            sort($sorted);
+            $byTokens[implode('|', $sorted)][] = $i;
+        }
+        foreach ($byTokens as $group) {
+            if (count($group) < 2) {
+                continue;
+            }
+            foreach ($group as $i) {
+                $others = [];
+                foreach ($group as $j) {
+                    if ($j === $i || $items[$j]['tokens'] === $items[$i]['tokens']) {
+                        continue; // gleiche Reihenfolge ist keine Umstellung
+                    }
+                    $dPair[$i][$j] = true;
+                    $others[$items[$j]['slug']] = true;
+                }
+                if ($others === []) {
+                    continue;
+                }
+                $p = $items[$i]['page'];
+                $out[] = Issue::of(
+                    'filename.reordered',
+                    $p->url,
+                    $p->sourceFile,
+                    [count($others), implode(', ', array_keys($others))],
+                    ['slug' => $items[$i]['slug'], 'others' => array_keys($others)],
+                );
+            }
+        }
+
+        // --- B) kleine Editierdistanz → Warnung ----------------------------
+        // Nur Slugs vergleichen, deren Vergleichsform sich in der Länge um ≤ 2
+        // unterscheidet (Voraussetzung für Distanz ≤ 2). Buckets nach Länge.
+        $byLen = [];
+        foreach ($items as $i => $it) {
+            $len = strlen($it['cmp']);
+            if ($len >= 5) {
+                $byLen[$len][] = $i;
+            }
+        }
+        foreach ($byLen as $len => $idxs) {
+            $candidates = array_merge($idxs, $byLen[$len + 1] ?? [], $byLen[$len + 2] ?? []);
+            foreach ($idxs as $i) {
+                foreach ($candidates as $j) {
+                    if ($j <= $i || isset($aPair[$i][$j]) || isset($dPair[$i][$j])) {
+                        continue;
+                    }
+                    $a = $items[$i]['cmp'];
+                    $b = $items[$j]['cmp'];
+                    if ($a === $b) {
+                        continue; // nach Normalisierung identisch → nicht „ähnlich"
+                    }
+                    $dist = levenshtein($a, $b);
+                    $limit = min(strlen($a), strlen($b)) >= 8 ? 2 : 1;
+                    if ($dist < 1 || $dist > $limit) {
+                        continue;
+                    }
+                    $pa = $items[$i]['page'];
+                    $pb = $items[$j]['page'];
+                    $out[] = Issue::of(
+                        'filename.similar',
+                        $pa->url,
+                        $pa->sourceFile,
+                        [$items[$j]['slug'], $dist],
+                        ['other' => $items[$j]['slug'], 'distance' => $dist],
+                    );
+                    $out[] = Issue::of(
+                        'filename.similar',
+                        $pb->url,
+                        $pb->sourceFile,
+                        [$items[$i]['slug'], $dist],
+                        ['other' => $items[$i]['slug'], 'distance' => $dist],
+                    );
+                }
+            }
+        }
+
+        // --- C) Kopie-Verdacht: Basis-Slug + Marker-Wort → Warnung ---------
+        // Ein Slug wirkt wie eine versehentliche Kopie, wenn er einen Marker
+        // ("…-kopie", "neu-…") trägt UND der verbleibende Rest-Slug als eigene
+        // Seite vorhanden ist.
+        $byKey = [];
+        foreach ($items as $i => $it) {
+            $byKey[implode('-', $it['tokens'])][] = $i;
+        }
+        foreach ($items as $i => $it) {
+            $base = self::stripCopyMarker($it['tokens']);
+            if ($base === null) {
+                continue;
+            }
+            foreach ($byKey[implode('-', $base)] ?? [] as $j) {
+                if ($j === $i) {
+                    continue;
+                }
+                $p = $items[$i]['page'];
+                $out[] = Issue::of(
+                    'filename.copy_suspect',
+                    $p->url,
+                    $p->sourceFile,
+                    [$items[$j]['slug']],
+                    ['slug' => $items[$i]['slug'], 'original' => $items[$j]['slug']],
+                );
+                break; // ein Treffer genügt
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Entfernt ein Kopie-Marker-Token am Anfang oder Ende der Token-Liste und
+     * liefert die verbleibende Basis — oder null, wenn kein Marker vorliegt.
+     *
+     * @param list<string> $tokens
+     * @return ?list<string>
+     */
+    private static function stripCopyMarker(array $tokens): ?array
+    {
+        if (count($tokens) < 2) {
+            return null;
+        }
+        // Marker am Ende: "impressum-kopie", "kontakt-neu".
+        if (in_array($tokens[count($tokens) - 1], self::COPY_MARKERS, true)) {
+            $base = array_slice($tokens, 0, -1);
+
+            return $base === [] ? null : $base;
+        }
+        // Marker am Anfang: "kopie-impressum", "kopie-von-impressum".
+        if (in_array($tokens[0], self::COPY_MARKERS, true)) {
+            $base = array_slice($tokens, 1);
+            if ($base !== [] && in_array($base[0], self::COPY_GLUE, true)) {
+                $base = array_slice($base, 1);
+            }
+
+            return $base === [] ? null : $base;
+        }
+
+        return null;
+    }
+
     // --- Hilfsfunktionen ---------------------------------------------------
+
+    /**
+     * Letztes Pfadsegment einer URL (der „Slug"), ohne etwaige Dateiendung.
+     * Startseite ("/") und segmentlose URLs liefern null.
+     */
+    private static function slugOf(string $url): ?string
+    {
+        $path = rtrim(preg_replace('/[#?].*$/', '', $url) ?? $url, '/');
+        if ($path === '') {
+            return null;
+        }
+        $parts = explode('/', $path);
+        $seg = (string) end($parts);
+        $seg = preg_replace('/\.[A-Za-z0-9]{1,8}$/', '', $seg) ?? $seg;
+        $seg = trim($seg);
+
+        return $seg === '' ? null : $seg;
+    }
+
+    /**
+     * Kleinschreibung plus Transliteration gängiger Diakritika (deutsche Umlaute
+     * ausgeschrieben), damit „Über-uns" und „ueber_uns" vergleichbar werden.
+     */
+    private static function fold(string $s): string
+    {
+        $s = mb_strtolower(trim($s));
+
+        return strtr($s, [
+            'ä' => 'ae', 'ö' => 'oe', 'ü' => 'ue', 'ß' => 'ss',
+            'á' => 'a', 'à' => 'a', 'â' => 'a', 'ã' => 'a', 'å' => 'a', 'ā' => 'a',
+            'é' => 'e', 'è' => 'e', 'ê' => 'e', 'ë' => 'e', 'ē' => 'e',
+            'í' => 'i', 'ì' => 'i', 'î' => 'i', 'ï' => 'i', 'ī' => 'i',
+            'ó' => 'o', 'ò' => 'o', 'ô' => 'o', 'õ' => 'o', 'ø' => 'o', 'ō' => 'o',
+            'ú' => 'u', 'ù' => 'u', 'û' => 'u', 'ū' => 'u',
+            'ç' => 'c', 'ñ' => 'n',
+        ]);
+    }
 
     public static function imageAltGeneric(string $alt): bool
     {

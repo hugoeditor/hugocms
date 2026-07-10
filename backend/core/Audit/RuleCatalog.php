@@ -85,6 +85,12 @@ final class RuleCatalog
         'url.too_long'             => ['url', self::HINT],
         'url.non_ascii'            => ['url', self::HINT],
 
+        // Ähnliche URL-Slugs (seitenübergreifend)
+        'filename.near_duplicate'  => ['filename', self::ERROR],
+        'filename.copy_suspect'    => ['filename', self::ERROR],
+        'filename.similar'         => ['filename', self::WARNING],
+        'filename.reordered'       => ['filename', self::WARNING],
+
         // Strukturierte Daten
         'structured_data.jsonld.invalid' => ['structured_data', self::WARNING],
 
