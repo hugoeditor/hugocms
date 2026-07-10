@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia'
 import { api } from '../api/client'
 
+// Fehlermeldungen des Assistenten blenden sich nach dieser Frist selbst aus
+// (analog zu util/transientError). Ein modul-weiter Timer genügt, da es je
+// Sitzung nur einen Assistenten gibt.
+const ERROR_TIMEOUT = 8000
+let errorTimer = null
+
 // KI-Assistent. Hält den Gesprächsverlauf im Anthropic-Nachrichtenformat
 // (role + content-Blöcke) und schickt ihn bei jedem Zug ans Backend. Das
 // Backend ist zustandslos und gibt den fortgeschriebenen Verlauf zurück.
@@ -48,12 +54,29 @@ export const useAssistantStore = defineStore('assistant', {
   },
 
   actions: {
+    // Setzt die Fehlermeldung und blendet sie nach ERROR_TIMEOUT selbst wieder
+    // aus; null löscht sie sofort. Zentral für alle Assistant-Fehler (Chat,
+    // Transkription, Mikrofon).
+    setError(err) {
+      this.error = err
+      if (errorTimer) {
+        clearTimeout(errorTimer)
+        errorTimer = null
+      }
+      if (err) {
+        errorTimer = setTimeout(() => {
+          this.error = null
+          errorTimer = null
+        }, ERROR_TIMEOUT)
+      }
+    },
+
     // Sendet eine neue Nutzernachricht. Rückgabe: true bei Erfolg. Bei Fehler
     // wird die gerade angehängte Nachricht zurückgerollt (alternierende
     // Rollen bleiben gültig) und der Aufrufer kann den Text erneut anbieten.
     // ctx: { openFilePath, openDirPath } — Kontext aus Editor und Dateimanager.
     async send(text, locale, ctx = {}) {
-      this.error = null
+      this.setError(null)
       this.history.push({ role: 'user', content: text })
       this.busy = true
       try {
@@ -69,7 +92,7 @@ export const useAssistantStore = defineStore('assistant', {
         return true
       } catch (e) {
         this.history.pop() // Rollback der unbeantworteten Nachricht
-        this.error = e
+        this.setError(e)
         return false
       } finally {
         this.busy = false
@@ -82,7 +105,7 @@ export const useAssistantStore = defineStore('assistant', {
     // einmal gelingt, aber nach einem Fehler beim nächsten Öffnen erneut läuft.
     // Setzt `ready` bzw. legt bei Fehlern den ApiError in `error` ab.
     async checkReady() {
-      this.error = null
+      this.setError(null)
       this.ready = false
       this.checking = true
       try {
@@ -91,7 +114,7 @@ export const useAssistantStore = defineStore('assistant', {
         this.readyChecked = this.ready
         return this.ready
       } catch (e) {
-        this.error = e
+        this.setError(e)
         return false
       } finally {
         this.checking = false
@@ -111,7 +134,7 @@ export const useAssistantStore = defineStore('assistant', {
         this.apply(data)
         return true
       } catch (e) {
-        this.error = e
+        this.setError(e)
         return false
       } finally {
         this.busy = false
@@ -120,7 +143,7 @@ export const useAssistantStore = defineStore('assistant', {
 
     // Beantwortet eine ausstehende Schreibaktion (confirm-Modus).
     async resolve(decision, locale, ctx = {}) {
-      this.error = null
+      this.setError(null)
       this.busy = true
       try {
         const data = await api.post('assistant', {
@@ -135,7 +158,7 @@ export const useAssistantStore = defineStore('assistant', {
         this.apply(data)
         return true
       } catch (e) {
-        this.error = e
+        this.setError(e)
         return false
       } finally {
         this.busy = false
@@ -167,7 +190,7 @@ export const useAssistantStore = defineStore('assistant', {
       this.pending = null
       this.actions = []
       this.aborted = false
-      this.error = null
+      this.setError(null)
       // `ready`/`readyChecked` bleiben erhalten: die Prüfung gilt sitzungsweit.
     },
   },

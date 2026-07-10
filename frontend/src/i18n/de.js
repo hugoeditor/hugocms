@@ -379,6 +379,16 @@ export default {
     writeModeHint: 'Wie der Assistent mit Datei-Änderungen umgeht.',
   },
 
+  // Spracheingabe (Pro-Dienst) im Konfigurationsformular.
+  speechConfig: {
+    section: 'Spracheingabe',
+    url: 'Dienst-URL',
+    urlHint: 'Basis-Adresse des Transkriptionsdienstes (Pro). Standard: https://api.hugocms.com/',
+    key: 'API-Schlüssel',
+    keyHintSet: 'Ein Schlüssel ist hinterlegt. Leer lassen, um ihn beizubehalten; Eingabe ersetzt ihn.',
+    keyHintUnset: 'Noch kein Schlüssel hinterlegt. Ohne Schlüssel bleibt die Spracheingabe deaktiviert.',
+  },
+
   account: {
     open: 'Anmeldedaten ändern',
     title: 'Anmeldedaten ändern',
@@ -797,10 +807,12 @@ export default {
     'UPLOAD-TOO-LARGE': '„{0}“ ist zu groß (höchstens {1}).',
     'AUDIO-TOO-LARGE': 'Die Audioaufnahme ist zu groß.',
     'SPEECH-NOT-CONFIGURED': 'Die Spracheingabe ist nicht konfiguriert.',
+    'SPEECH-UNREACHABLE': 'Der Transkriptionsdienst ist nicht erreichbar ({0}). Bitte die Dienst-URL in der Konfiguration prüfen.',
     'SPEECH-REQUEST-FAILED': 'Die Transkription ist fehlgeschlagen.',
     'SPEECH-QUOTA-EXCEEDED': 'Das Kontingent der Spracheingabe ist erschöpft.',
     'SPEECH-AUTH-FAILED': 'Der Transkriptionsdienst hat die Anmeldung abgelehnt.',
     'SPEECH-MIC-DENIED': 'Kein Zugriff auf das Mikrofon. Bitte die Berechtigung erlauben.',
+    'SPEECH-NO-RESULT': 'Es wurde keine Sprache erkannt.',
     'NOT-AN-IMAGE': 'Keine Bilddatei.',
     'FILETYPE-NOT-IMAGE': 'Die bearbeiteten Daten sind kein unterstütztes Bildformat (JPEG, PNG, WebP, GIF).',
 

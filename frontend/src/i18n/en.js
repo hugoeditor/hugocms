@@ -379,6 +379,16 @@ export default {
     writeModeHint: 'How the assistant handles file changes.',
   },
 
+  // Voice input (Pro service) in the configuration form.
+  speechConfig: {
+    section: 'Voice input',
+    url: 'Service URL',
+    urlHint: 'Base address of the transcription service (Pro). Default: https://api.hugocms.com/',
+    key: 'API key',
+    keyHintSet: 'A key is stored. Leave empty to keep it; entering one replaces it.',
+    keyHintUnset: 'No key stored yet. Without a key, voice input stays disabled.',
+  },
+
   account: {
     open: 'Change credentials',
     title: 'Change credentials',
@@ -794,10 +804,12 @@ export default {
     'UPLOAD-FAILED': 'Upload of “{0}” failed.',
     'AUDIO-TOO-LARGE': 'The audio recording is too large.',
     'SPEECH-NOT-CONFIGURED': 'Voice input is not configured.',
+    'SPEECH-UNREACHABLE': 'The transcription service is unreachable ({0}). Please check the service URL in the configuration.',
     'SPEECH-REQUEST-FAILED': 'Transcription failed.',
     'SPEECH-QUOTA-EXCEEDED': 'The voice input quota is exhausted.',
     'SPEECH-AUTH-FAILED': 'The transcription service rejected the credentials.',
     'SPEECH-MIC-DENIED': 'No access to the microphone. Please allow the permission.',
+    'SPEECH-NO-RESULT': 'No speech was recognized.',
     'UPLOAD-TOO-LARGE': '“{0}” is too large (at most {1}).',
     'NOT-AN-IMAGE': 'Not an image file.',
     'FILETYPE-NOT-IMAGE': 'The edited data is not a supported image format (JPEG, PNG, WebP, GIF).',

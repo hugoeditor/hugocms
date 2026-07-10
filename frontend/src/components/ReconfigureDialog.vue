@@ -37,6 +37,14 @@ const writeModeItems = computed(() =>
   ['readonly', 'confirm', 'auto'].map((v) => ({ value: v, title: t(`assistant.mode.${v}`) })),
 )
 
+// Spracheingabe (Pro-Dienst). Der Schlüssel wird nie geladen (Geheimnis); leeres
+// Feld lässt ihn unverändert. Die URL ist die Basis-Adresse des Dienstes; fehlt
+// ein Eintrag in der hugocms.ini, wird der Standard vorbefüllt.
+const DEFAULT_SPEECH_URL = 'https://api.hugocms.com/'
+const speechUrl = ref(DEFAULT_SPEECH_URL)
+const speechKey = ref('')
+const speechConfigured = ref(false)
+
 const loading = ref(false) // Laden der aktuellen Werte beim Öffnen
 const saving = ref(false)
 const error = ref(null)
@@ -59,6 +67,9 @@ watch(model, async (open) => {
     aiModelAudit.value = cfg.aiModelAudit || ''
     aiWriteMode.value = cfg.aiWriteMode || 'confirm'
     aiConfigured.value = !!cfg.aiConfigured
+    speechUrl.value = cfg.speechUrl || DEFAULT_SPEECH_URL
+    speechKey.value = ''
+    speechConfigured.value = !!cfg.speechConfigured
   } catch (e) {
     error.value = errorText(t, e)
   } finally {
@@ -80,6 +91,8 @@ async function submit() {
       aiModelCron: aiModelCron.value, // leer = wie Assistenten-Modell
       aiModelAudit: aiModelAudit.value,
       aiWriteMode: aiWriteMode.value,
+      speechKey: speechKey.value, // leer = unverändert
+      speechUrl: speechUrl.value,
     })
     emit('saved')
     model.value = false
@@ -188,6 +201,30 @@ async function submit() {
             :items="writeModeItems"
             :label="$t('aiConfig.writeMode')"
             prepend-inner-icon="mdi-shield-edit-outline"
+            variant="outlined"
+            density="comfortable"
+          />
+
+          <v-divider class="my-3" />
+          <div class="text-subtitle-2 mb-2">{{ $t('speechConfig.section') }}</div>
+          <div class="text-caption text-medium-emphasis mb-1">{{ $t('speechConfig.urlHint') }}</div>
+          <v-text-field
+            v-model="speechUrl"
+            :label="$t('speechConfig.url')"
+            prepend-inner-icon="mdi-web"
+            variant="outlined"
+            density="comfortable"
+            class="mb-2"
+          />
+          <div class="text-caption text-medium-emphasis mb-1">
+            {{ speechConfigured ? $t('speechConfig.keyHintSet') : $t('speechConfig.keyHintUnset') }}
+          </div>
+          <v-text-field
+            v-model="speechKey"
+            :label="$t('speechConfig.key')"
+            type="password"
+            prepend-inner-icon="mdi-key-variant"
+            autocomplete="off"
             variant="outlined"
             density="comfortable"
           />

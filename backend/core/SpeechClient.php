@@ -54,14 +54,23 @@ final class SpeechClient
         if ($raw === false) {
             $err = curl_error($ch);
             curl_close($ch);
-            throw new ApiException('ESPEECH', 502, 'SPEECH-REQUEST-FAILED', [$err]);
+            // Transportfehler (DNS, Verbindung, Timeout, TLS): der Dienst wurde
+            // gar nicht erreicht — fast immer ein URL-/Erreichbarkeitsproblem.
+            // Das cURL-Detail (z. B. „Could not resolve host") hilft beim Prüfen.
+            throw new ApiException('ESPEECH', 502, 'SPEECH-UNREACHABLE', [$err]);
         }
         $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         curl_close($ch);
 
         $data = json_decode((string) $raw, true);
         if (!is_array($data)) {
-            throw new ApiException('ESPEECH', 502, 'SPEECH-REQUEST-FAILED', ['ungültige Antwort']);
+            // Keine JSON-Antwort: meist ein Fatal-Error oder eine HTML-Fehlerseite
+            // vor der eigentlichen Ausgabe. Status + Ausschnitt ins Log, damit die
+            // Ursache erkennbar ist (statt nur „ungültige Antwort").
+            $snippet = trim(preg_replace('/\s+/', ' ', substr((string) $raw, 0, 200)) ?? '');
+            throw new ApiException('ESPEECH', 502, 'SPEECH-REQUEST-FAILED', [
+                'HTTP ' . $status . ': ' . ($snippet === '' ? '(leere Antwort)' : $snippet),
+            ]);
         }
 
         if ($status < 200 || $status >= 300) {

@@ -89,9 +89,11 @@ bin = ../bin/hugo/hugo
 ; Pro-Lizenz. Der Schlüssel bleibt serverseitig und wird nie an den Client
 ; gegeben.
 ;   speech_key  API-Schlüssel des Dienstes (Geheimnis; Datei mit 0640 schützen).
-;   speech_url  Voller Endpunkt, z. B. https://dein-dienst.example.com/v1/transcribe.
+;   speech_url  Basis-Adresse des Dienstes (der Endpunkt /v1/transcribe wird
+;               automatisch angehängt). Standard: https://api.hugocms.com/
+; Lässt sich auch über das Konfigurationsformular setzen.
 ;speech_key = "seosk_live_..."
-;speech_url = "https://dein-dienst.example.com/v1/transcribe"
+;speech_url = "https://api.hugocms.com/"
 
 ; Hinweis: Die Pro-Lizenz steht NICHT hier, sondern PRO WEBSEITE in der
 ; jeweiligen Mount-Konfiguration (mounts/<hash>.ini, [license]-Sektion) —

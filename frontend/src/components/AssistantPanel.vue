@@ -53,9 +53,14 @@ async function toggleVoice() {
     transcribing.value = true
     try {
       const text = (await assistant.transcribe(blob, locale.value)).trim()
-      if (text) input.value = input.value.trim() ? `${input.value.trimEnd()} ${text}` : text
+      if (text) {
+        input.value = input.value.trim() ? `${input.value.trimEnd()} ${text}` : text
+      } else {
+        // Antwort ohne Text (z. B. nichts erkannt) — nicht still übergehen.
+        assistant.setError({ code: 'ESPEECH', key: 'SPEECH-NO-RESULT' })
+      }
     } catch (e) {
-      assistant.error = e
+      assistant.setError(e)
     } finally {
       transcribing.value = false
     }
@@ -64,7 +69,7 @@ async function toggleVoice() {
       await startVoice()
     } catch {
       // Mikrofon-Zugriff abgelehnt oder kein Gerät.
-      assistant.error = { code: 'ESPEECH', key: 'SPEECH-MIC-DENIED' }
+      assistant.setError({ code: 'ESPEECH', key: 'SPEECH-MIC-DENIED' })
     }
   }
 }

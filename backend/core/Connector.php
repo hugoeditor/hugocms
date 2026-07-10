@@ -1382,10 +1382,12 @@ final class Connector
 
         @set_time_limit(180);
 
-        $client = new SpeechClient(
-            (string) $this->services['speechUrl'],
-            (string) $this->services['speechKey'],
-        );
+        // speech_url ist die Basis-Adresse; der Endpunkt wird angehängt (robust
+        // gegen fehlenden/vorhandenen Schrägstrich und bereits volle URLs).
+        $base = rtrim((string) $this->services['speechUrl'], '/');
+        $endpoint = str_ends_with($base, '/v1/transcribe') ? $base : $base . '/v1/transcribe';
+
+        $client = new SpeechClient($endpoint, (string) $this->services['speechKey']);
         $result = $client->transcribe(
             $tmp,
             (string) ($file['name'] ?? 'audio'),
@@ -1638,6 +1640,10 @@ final class Connector
             'aiModelAudit' => $raw['ai']['model_audit'] ?? '',
             'aiWriteMode'  => $raw['ai']['write_mode'] ?? 'confirm',
             'aiWriteModes' => self::AI_WRITE_MODES,
+            // Spracheingabe (Pro-Dienst): Status + Basis-URL, aber NIE der
+            // Schlüssel. Leere URL → der Client füllt den Standard vor.
+            'speechConfigured' => trim((string) ($raw['services']['speech_key'] ?? '')) !== '',
+            'speechUrl'        => $raw['services']['speech_url'] ?? '',
         ];
     }
 
@@ -1689,6 +1695,18 @@ final class Connector
         }
         $aiSection['write_mode'] = $aiWriteMode;
 
+        // Spracheingabe (Pro-Dienst). Der Schlüssel ist ein Geheimnis: ein leeres
+        // Feld lässt den bestehenden unverändert. Die URL ist die Basis-Adresse
+        // des Dienstes (der Endpunkt wird beim Aufruf angehängt); fehlt sie,
+        // gilt der Standard.
+        $speechUrl = self::cleanConfigValue($request['speechUrl'] ?? '', 'speechUrl', false);
+        if ($speechUrl === '') {
+            $speechUrl = 'https://api.hugocms.com/';
+        }
+        $speechKeyNew = self::cleanConfigValue($request['speechKey'] ?? '', 'speechKey', false);
+        $existingServices = Config::raw($this->configPath)['services'] ?? [];
+        $speechKey = $speechKeyNew !== '' ? $speechKeyNew : trim((string) ($existingServices['speech_key'] ?? ''));
+
         Config::updateSections($this->configPath, [
             'session' => ['path' => $sessionPath],
             'log'     => ['file' => $logFile, 'level' => $logLevel],
@@ -1696,6 +1714,8 @@ final class Connector
             'hugo'    => $hugoBin === '' ? null : ['bin' => $hugoBin],
             // Ohne API-Schlüssel keine [ai]-Sektion (Assistent aus).
             'ai'      => $apiKey === '' ? null : $aiSection,
+            // Ohne Schlüssel keine [services]-Sektion (Spracheingabe aus).
+            'services' => $speechKey === '' ? null : ['speech_key' => $speechKey, 'speech_url' => $speechUrl],
         ]);
         $this->logger->info('Konfiguration aktualisiert (reconfigure).');
 
