@@ -477,6 +477,7 @@ function onRawInput(text) {
               density="compact"
               inset
               hide-details
+              class="fm-switch"
               @update:model-value="(v) => { field.value = !!v; commit() }"
             />
 
@@ -694,5 +695,15 @@ function onRawInput(text) {
 .fm-mono :deep(input) {
   font-family: monospace;
   font-size: 0.82rem;
+}
+
+/* Die Spur des Switches auch im Aus-Zustand (false) sichtbar halten — sonst
+   nahezu weiß auf hellem Grund und damit unsichtbar. */
+.fm-switch :deep(.v-switch__track) {
+  opacity: 1;
+  background-color: rgba(var(--v-theme-on-surface), 0.5);
+}
+.fm-switch :deep(.v-selection-control--dirty .v-switch__track) {
+  background-color: rgb(var(--v-theme-primary));
 }
 </style>
