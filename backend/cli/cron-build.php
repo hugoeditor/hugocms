@@ -52,14 +52,22 @@ if (!is_file($mountsFile)) {
     exit(2);
 }
 
+// logLevel=info erzwingen (statt der Voreinstellung aus der hugocms.ini):
+// So landen auch erfolgreiche Läufe ("Hugo-Lauf erfolgreich") in hugocms.log,
+// nicht nur Fehlschläge — ein stiller Cron bleibt sonst im Log unsichtbar.
+$connector = null;
 try {
-    $connector = new Connector(['config' => $configFile]);
+    $connector = new Connector(['config' => $configFile, 'logLevel' => 'info']);
     $connector->mountsFromFile($mountsFile);
     $result = $connector->buildSite();
 } catch (ApiException $e) {
+    // Selbst abgefangene Ausnahmen lösen den globalen Exception-Handler nicht
+    // aus — daher hier ausdrücklich ins Log schreiben, nicht nur auf STDERR.
+    $connector?->logException($e);
     fwrite(STDERR, 'Fehler: ' . $e->errorCode() . ' – ' . $e->getMessage() . "\n");
     exit(1);
 } catch (\Throwable $e) {
+    $connector?->logException($e);
     fwrite(STDERR, 'Fehler: ' . $e->getMessage() . "\n");
     exit(1);
 }

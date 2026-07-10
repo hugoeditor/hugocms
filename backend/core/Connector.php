@@ -403,6 +403,25 @@ final class Connector
         });
     }
 
+    /**
+     * Protokolliert eine Ausnahme im Anwendungslog (immer auf Stufe „error",
+     * also unabhängig von der konfigurierten Log-Stufe sichtbar). Gedacht für
+     * CLI-Einstiegspunkte (Cron), die Ausnahmen selbst abfangen und dadurch den
+     * globalen set_exception_handler NICHT auslösen — ohne diesen Aufruf stünde
+     * der Fehler nur auf STDERR (Cron-Mail), nicht in hugocms.log.
+     */
+    public function logException(Throwable $e): void
+    {
+        if ($e instanceof ApiException) {
+            $this->logger->error('Cron abgebrochen: ' . $e->getMessage(), [
+                'code' => $e->errorCode(),
+                'at' => $e->getFile() . ':' . $e->getLine(),
+            ]);
+            return;
+        }
+        $this->logger->exception($e);
+    }
+
     // --- Befehle -----------------------------------------------------------
 
     private function cmdWhoami(): array

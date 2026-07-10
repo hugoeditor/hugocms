@@ -68,14 +68,22 @@ if ($host !== '') {
     $_SERVER['HTTP_HOST'] = $host;
 }
 
+// logLevel=info erzwingen (statt der Voreinstellung aus der hugocms.ini):
+// So landen auch erfolgreiche Verbesserungen ("Cron-Verbesserung: …") in
+// hugocms.log, nicht nur Fehlschläge — ein stiller Cron bleibt sonst unsichtbar.
+$connector = null;
 try {
-    $connector = new Connector(['config' => $configFile]);
+    $connector = new Connector(['config' => $configFile, 'logLevel' => 'info']);
     $connector->mountsFromFile($mountsFile);
     $result = $connector->improveNextContent($limit, $locale, $dryRun);
 } catch (ApiException $e) {
+    // Selbst abgefangene Ausnahmen lösen den globalen Exception-Handler nicht
+    // aus — daher hier ausdrücklich ins Log schreiben, nicht nur auf STDERR.
+    $connector?->logException($e);
     fwrite(STDERR, 'Fehler: ' . $e->errorCode() . ' – ' . $e->getMessage() . "\n");
     exit(1);
 } catch (\Throwable $e) {
+    $connector?->logException($e);
     fwrite(STDERR, 'Fehler: ' . $e->getMessage() . "\n");
     exit(1);
 }
