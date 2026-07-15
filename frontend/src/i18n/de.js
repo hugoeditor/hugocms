@@ -296,6 +296,7 @@ export default {
       link_internal_broken: 'Interner Link führt ins Leere: {0}',
       link_empty_href: 'Leeres oder reines Anker-Ziel (href="#").',
       link_orphan_page: 'Verwaiste Seite — keine eingehenden internen Links.',
+      page_unreferenced: 'Seite ist weder in der Sitemap verzeichnet noch intern verlinkt — für Suchmaschinen nicht auffindbar.',
       url_uppercase: 'URL enthält Großbuchstaben.',
       url_underscore: 'URL enthält Unterstriche (Bindestriche bevorzugen).',
       url_space: 'URL enthält Leerzeichen.',
@@ -411,6 +412,14 @@ export default {
     fromHint: "z. B. HugoCMS <cms{'@'}example.com>",
     to: 'Empfänger',
     toHint: 'Adresse für die Gesundheitscheck-Berichte.',
+  },
+
+  seoConfig: {
+    section: 'SEO-Bericht',
+    excludePrefixes: 'Ausgeschlossene Verzeichnisse',
+    excludePrefixesHint:
+      'Der Bericht prüft jede HTML-Datei im gebauten public/-Ordner, auch unverlinkte. Hier zusätzliche Verzeichnisse eintragen (eines je Zeile), die übersprungen werden sollen, z. B. Test- oder Fehlerseiten. Die HugoCMS-eigenen Verzeichnisse (edit/, cms-api/, cms-admin/) sind bereits fest ausgeschlossen.',
+    excludePrefixesPlaceholder: 'test/\nerror/\nentwurf/',
   },
 
   account: {

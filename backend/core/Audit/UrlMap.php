@@ -24,20 +24,32 @@ final class UrlMap
     private array $known = [];
 
     /**
+     * @var array<string, string> Bekannter Pfad → zugrunde liegende Datei
+     *      (relativ zu public/). Für die Rückabbildung Pfad → Datei im
+     *      Erreichbarkeitslauf ({@see fileFor}).
+     */
+    private array $fileByPath = [];
+
+    /**
      * @param list<string> $files Dateipfade relativ zu public/ (Schrägstriche).
      */
     public function __construct(array $files)
     {
         foreach ($files as $rel) {
-            $path = '/' . ltrim(str_replace('\\', '/', $rel), '/');
+            $rel = str_replace('\\', '/', $rel);
+            $path = '/' . ltrim($rel, '/');
             $this->known[$path] = true;
+            $this->fileByPath[$path] ??= $rel;
             // Verzeichnis-Index → das Verzeichnis selbst (Pretty-URL) mit und ohne /.
             foreach (self::INDEX_FILES as $index) {
                 if (str_ends_with($path, '/' . $index)) {
                     $dir = substr($path, 0, -strlen($index)); // endet mit /
                     $this->known[$dir] = true;
+                    $this->fileByPath[$dir] ??= $rel;
                     $trimmed = rtrim($dir, '/');
-                    $this->known[$trimmed === '' ? '/' : $trimmed] = true;
+                    $trimmed = $trimmed === '' ? '/' : $trimmed;
+                    $this->known[$trimmed] = true;
+                    $this->fileByPath[$trimmed] ??= $rel;
                     break;
                 }
             }
@@ -63,6 +75,33 @@ final class UrlMap
         }
 
         return false;
+    }
+
+    /**
+     * Bildet einen (normalisierten) Request-Pfad auf die zugrunde liegende
+     * Datei relativ zu public/ ab — die Umkehrung von {@see has}. Für den
+     * Erreichbarkeitslauf, der Sitemap- und Link-Ziele auf zu parsende Dateien
+     * zurückführt. Prüft dieselben Varianten wie {@see has}; null, wenn der Pfad
+     * unbekannt ist.
+     */
+    public function fileFor(string $path): ?string
+    {
+        if ($path === '') {
+            return null;
+        }
+        $candidates = [
+            $path,
+            rtrim($path, '/'),
+            rtrim($path, '/') . '/',
+            rtrim($path, '/') . '/index.html',
+        ];
+        foreach ($candidates as $c) {
+            if ($c !== '' && isset($this->fileByPath[$c])) {
+                return $this->fileByPath[$c];
+            }
+        }
+
+        return null;
     }
 
     /**

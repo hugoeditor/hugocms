@@ -117,7 +117,51 @@ final class Config
             'ai' => self::aiSection($raw['ai'] ?? null),
             'services' => self::servicesSection($raw['services'] ?? null),
             'mail' => self::mailSection($raw['mail'] ?? null),
+            'seoReport' => self::seoReportSection($raw['seo_report'] ?? null),
         ];
+    }
+
+    /**
+     * SEO-Bericht ([seo_report]-Sektion, optional). exclude_prefixes ergänzt die
+     * fest verdrahteten Ausschlüsse des Audits ({@see \HugoCMS\FileManager\Audit\AuditRunner})
+     * um WEITERE public-relative Pfad-Präfixe, die nicht geprüft werden sollen
+     * (z. B. "test/", "error/"). Kommagetrennt in der INI.
+     *
+     * @return array{excludePrefixes: list<string>}
+     */
+    private static function seoReportSection(mixed $section): array
+    {
+        $section = is_array($section) ? $section : [];
+
+        return ['excludePrefixes' => self::normalizeExcludePrefixes((string) ($section['exclude_prefixes'] ?? ''))];
+    }
+
+    /**
+     * Normalisiert eine kommagetrennte (oder zeilengetrennte) Liste von
+     * Ausschluss-Präfixen für den SEO-Bericht in public-relative Präfixe mit
+     * Schrägstrich am Ende: trimmt, entfernt führende Schrägstriche, verwirft
+     * leere Einträge und solche mit ".." und entdoppelt. Gemeinsam genutzt vom
+     * Einlesen (load) und vom Schreiben (Connector::cmdReconfigure), damit INI
+     * und Laufzeit dieselbe Form sehen.
+     *
+     * @return list<string>
+     */
+    public static function normalizeExcludePrefixes(string $raw): array
+    {
+        $out = [];
+        foreach (preg_split('/[,\r\n]+/', $raw) ?: [] as $entry) {
+            $prefix = trim((string) $entry);
+            $prefix = ltrim($prefix, '/');
+            if ($prefix === '' || str_contains($prefix, '..')) {
+                continue;
+            }
+            if (!str_ends_with($prefix, '/')) {
+                $prefix .= '/';
+            }
+            $out[$prefix] = true;
+        }
+
+        return array_keys($out);
     }
 
     /**

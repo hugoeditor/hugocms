@@ -94,6 +94,15 @@ final class Connector
     private array $mail = ['configured' => false, 'host' => null, 'port' => 587, 'security' => 'tls', 'user' => null, 'pass' => null, 'from' => null, 'to' => null];
 
     /**
+     * SEO-Bericht aus der [seo_report]-Sektion der hugocms.ini. excludePrefixes
+     * ergänzt die fest verdrahteten Ausschlüsse des Audits um weitere
+     * public-relative Pfad-Präfixe.
+     *
+     * @var array{excludePrefixes: list<string>}
+     */
+    private array $seoReport = ['excludePrefixes' => []];
+
+    /**
      * Roher Pro-Lizenzschlüssel dieser WEBSEITE (aus der [license]-Sektion der
      * Mount-Konfiguration) oder null. Schaltet die Pro-Funktionen frei (derzeit
      * Git). Da die Lizenz pro Webseite gilt, steht sie in mounts/<hash>.ini —
@@ -153,6 +162,7 @@ final class Connector
             $this->services = $cfg['services'];
             $this->user = $cfg['user'];
             $this->mail = $cfg['mail'];
+            $this->seoReport = $cfg['seoReport'];
             $authConfig = $cfg['auth'];
             // Globale [user]-Einstellungen an den Auth-Treiber durchreichen
             // (z. B. Sitzungsdauer für SingleUser).
@@ -1804,6 +1814,11 @@ final class Connector
             'mailFrom'           => $raw['mail']['from'] ?? '',
             'mailTo'             => $raw['mail']['to'] ?? '',
             'mailPassConfigured' => trim((string) ($raw['mail']['smtp_pass'] ?? '')) !== '',
+            // SEO-Bericht: zusätzliche Ausschluss-Präfixe (eine je Zeile fürs
+            // Formular). Die fest verdrahteten Ausschlüsse stehen NICHT darin.
+            'seoExcludePrefixes' => implode("\n", Config::normalizeExcludePrefixes(
+                (string) ($raw['seo_report']['exclude_prefixes'] ?? ''),
+            )),
         ];
     }
 
@@ -1904,6 +1919,11 @@ final class Connector
             }
         }
 
+        // SEO-Bericht: zusätzliche Ausschluss-Präfixe. Das Formular liefert sie
+        // frei (komma-/zeilengetrennt); normalisiert und kommagetrennt ablegen.
+        // Die fest verdrahteten Ausschlüsse bleiben im Code — hier nur die Extras.
+        $seoPrefixes = Config::normalizeExcludePrefixes((string) ($request['seoExcludePrefixes'] ?? ''));
+
         Config::updateSections($this->configPath, [
             'session' => ['path' => $sessionPath],
             'log'     => ['file' => $logFile, 'level' => $logLevel],
@@ -1915,6 +1935,8 @@ final class Connector
             'services' => $speechKey === '' ? null : ['speech_key' => $speechKey, 'speech_url' => $speechUrl],
             // Ohne Server/Absender/Empfänger keine [mail]-Sektion (Versand aus).
             'mail'    => $mailSection,
+            // Ohne zusätzliche Präfixe keine [seo_report]-Sektion.
+            'seo_report' => $seoPrefixes === [] ? null : ['exclude_prefixes' => implode(', ', $seoPrefixes)],
         ]);
         $this->logger->info('Konfiguration aktualisiert (reconfigure).');
 
@@ -2171,7 +2193,7 @@ final class Connector
         $public = (string) ($this->hugo['destination'] ?? $source . '/public');
         $storage = __DIR__ . '/../var/audit/' . sha1($source);
 
-        return new AuditService($public, $source, $storage);
+        return new AuditService($public, $source, $storage, $this->seoReport['excludePrefixes']);
     }
 
     /** Führt einen neuen Audit-Lauf aus (synchron) und liefert den Bericht. */

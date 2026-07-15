@@ -57,6 +57,11 @@ const mailFrom = ref('')
 const mailTo = ref('')
 const mailPassConfigured = ref(false)
 const mailSecurities = ref(['tls', 'ssl', 'none'])
+
+// SEO-Bericht (Pro-Funktion): zusätzliche Ausschluss-Präfixe, eine je Zeile.
+// Die fest verdrahteten Ausschlüsse (edit/, cms-api/, cms-admin/) stehen NICHT
+// hier und lassen sich nicht entfernen.
+const seoExcludePrefixes = ref('')
 const mailSecurityItems = computed(() =>
   mailSecurities.value.map((v) => ({ value: v, title: t(`mailConfig.security.${v}`) })),
 )
@@ -95,6 +100,7 @@ watch(model, async (open) => {
     mailFrom.value = cfg.mailFrom ?? ''
     mailTo.value = cfg.mailTo ?? ''
     mailPassConfigured.value = !!cfg.mailPassConfigured
+    seoExcludePrefixes.value = cfg.seoExcludePrefixes ?? ''
   } catch (e) {
     error.value = errorText(t, e)
   } finally {
@@ -131,6 +137,7 @@ async function submit() {
       mailPass: mailPass.value, // leer = unverändert
       mailFrom: mailFrom.value,
       mailTo: mailTo.value,
+      seoExcludePrefixes: seoExcludePrefixes.value,
     })
     emit('saved')
     model.value = false
@@ -350,6 +357,20 @@ async function submit() {
             prepend-inner-icon="mdi-email-outline"
             variant="outlined"
             density="comfortable"
+          />
+
+          <v-divider class="my-3" />
+          <div class="text-subtitle-2 mb-2">{{ $t('seoConfig.section') }}</div>
+          <div class="text-caption text-medium-emphasis mb-1">{{ $t('seoConfig.excludePrefixesHint') }}</div>
+          <v-textarea
+            v-model="seoExcludePrefixes"
+            :label="$t('seoConfig.excludePrefixes')"
+            :placeholder="$t('seoConfig.excludePrefixesPlaceholder')"
+            prepend-inner-icon="mdi-folder-remove-outline"
+            variant="outlined"
+            density="comfortable"
+            rows="3"
+            auto-grow
           />
 
           <v-alert v-if="error" type="error" density="compact" class="mt-2">{{ error }}</v-alert>

@@ -296,6 +296,7 @@ export default {
       link_internal_broken: 'Internal link is broken: {0}',
       link_empty_href: 'Empty or anchor-only target (href="#").',
       link_orphan_page: 'Orphan page — no incoming internal links.',
+      page_unreferenced: 'Page is neither listed in the sitemap nor linked internally — unreachable for search engines.',
       url_uppercase: 'URL contains uppercase letters.',
       url_underscore: 'URL contains underscores (prefer hyphens).',
       url_space: 'URL contains spaces.',
@@ -411,6 +412,14 @@ export default {
     fromHint: "e.g. HugoCMS <cms{'@'}example.com>",
     to: 'Recipient',
     toHint: 'Address for the health-check reports.',
+  },
+
+  seoConfig: {
+    section: 'SEO report',
+    excludePrefixes: 'Excluded directories',
+    excludePrefixesHint:
+      'The report checks every HTML file in the built public/ folder, including unlinked ones. Add extra directories here (one per line) to skip, e.g. test or error pages. The HugoCMS directories (edit/, cms-api/, cms-admin/) are already excluded.',
+    excludePrefixesPlaceholder: 'test/\nerror/\ndraft/',
   },
 
   account: {

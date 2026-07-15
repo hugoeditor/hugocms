@@ -77,6 +77,8 @@ final class RuleCatalog
         'link.internal.broken'     => ['link', self::ERROR],
         'link.empty_href'          => ['link', self::HINT],
         'link.orphan_page'         => ['link', self::HINT],
+        // Weder in der Sitemap verzeichnet noch intern verlinkt (unerreichbar).
+        'page.unreferenced'        => ['link', self::ERROR],
 
         // URL-Struktur
         'url.uppercase'            => ['url', self::HINT],

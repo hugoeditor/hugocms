@@ -90,6 +90,18 @@ bin = ../bin/hugo/hugo
 ;model_audit = claude-haiku-4-5
 ;write_mode = confirm
 
+;[seo_report]
+; SEO-Bericht (Pro-Funktion). Der Audit durchläuft den gebauten public/-Ordner
+; und prüft JEDE gefundene HTML-Datei — unabhängig davon, ob darauf verlinkt
+; wird. Die HugoCMS-eigenen Verzeichnisse (edit/, cms-api/, cms-admin/) sind
+; fest verdrahtet ausgeschlossen. Über exclude_prefixes lassen sich WEITERE
+; public-relative Pfad-Präfixe ergänzen, die nicht in den Bericht sollen (z. B.
+; Test- oder Fehlerseiten). Kommagetrennt; ein Präfix pro Verzeichnis, mit
+; Schrägstrich am Ende (führende Schrägstriche und ".." werden entfernt).
+; Optional; fehlt die Sektion, gelten nur die fest verdrahteten Ausschlüsse.
+; Lässt sich auch über das Konfigurationsformular setzen.
+;exclude_prefixes = "test/, error/, entwurf/"
+
 ;[services]
 ; Externe Pro-Dienste (optional). Derzeit die Spracheingabe des KI-Assistenten
 ; über den Transkriptionsdienst (Projekt seo-success). Nur wirksam mit gültiger

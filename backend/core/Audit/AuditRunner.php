@@ -7,15 +7,27 @@ namespace HugoCMS\FileManager\Audit;
 /**
  * Führt einen vollständigen Audit-Lauf über den gebauten public/-Ordner und
  * die Hugo-Quellen aus. Reihenfolge: Dateien sammeln → URL-Verzeichnis bauen →
- * jede HTML-Seite einmal parsen und prüfen → seitenübergreifende Prüfungen →
- * Datei- und Quellprüfungen → Bericht zusammensetzen.
+ * erreichbare Seiten bestimmen (Sitemap + interne Verlinkung) → diese parsen
+ * und prüfen → nicht erreichbare Seiten melden → seitenübergreifende Prüfungen
+ * → Datei- und Quellprüfungen → Bericht zusammensetzen.
+ *
+ * Erreichbarkeit: Geprüft wird nur, was in der Sitemap steht oder von dort (und
+ * der Startseite) aus intern verlinkt ist (transitiver Erreichbarkeitslauf).
+ * Nicht ausgeschlossene HTML-Dateien, die so nicht erreichbar sind, ergeben
+ * einen Fehler (page.unreferenced) — für Suchmaschinen unauffindbare Seiten.
+ * Fehlt die Sitemap ganz, gelten alle HTML-Dateien als Wurzeln (Rückfall auf
+ * das frühere Verhalten, keine Fehlerflut).
  *
  * Bewusst synchron und ohne requestübergreifenden Zustand: Eine Instanz lebt
  * nur für die Dauer eines Laufs.
  */
 final class AuditRunner
 {
-    /** Verzeichnisse im public/, die zur HugoCMS-Installation gehören. */
+    /**
+     * Verzeichnisse im public/, die zur HugoCMS-Installation gehören und fest
+     * verdrahtet ausgeschlossen bleiben. Über die [seo_report]-Sektion der
+     * hugocms.ini lassen sich WEITERE Präfixe ergänzen (siehe Konstruktor).
+     */
     private const array EXCLUDED_PREFIXES = ['edit/', 'cms-api/', 'cms-admin/'];
 
     /** Obergrenze für die Anzahl Funde (Schutz vor Speicherüberlauf). */
@@ -29,11 +41,28 @@ final class AuditRunner
      */
     private array $dirIndex = [];
 
+    /**
+     * Fest verdrahtete plus konfigurierte Ausschluss-Präfixe (public-relativ,
+     * mit Schrägstrich am Ende). Reihenfolge/Duplikate sind unerheblich, da nur
+     * per str_starts_with geprüft wird.
+     *
+     * @var list<string>
+     */
+    private readonly array $excludedPrefixes;
+
+    /**
+     * @param list<string> $extraExcludedPrefixes Zusätzliche public-relative
+     *        Präfixe aus der [seo_report]-Sektion (bereits normalisiert).
+     */
     public function __construct(
         private readonly string $publicDir,
         private readonly string $sourceDir,
         private readonly string $contentDir = 'content',
+        array $extraExcludedPrefixes = [],
     ) {
+        $this->excludedPrefixes = array_values(array_unique(
+            [...self::EXCLUDED_PREFIXES, ...$extraExcludedPrefixes],
+        ));
     }
 
     /**
@@ -48,20 +77,30 @@ final class AuditRunner
         $allFiles = $this->collectFiles();
         $map = new UrlMap($allFiles);
 
+        // Prüfbare Seiten: HTML, nicht ausgeschlossen. rel → Request-Pfad.
+        /** @var array<string, string> $htmlFiles */
+        $htmlFiles = [];
+        foreach ($allFiles as $rel) {
+            if (self::isHtml($rel) && !$this->isExcluded($rel)) {
+                $htmlFiles[$rel] = self::urlForFile($rel);
+            }
+        }
+
+        $reachable = $this->reachableFiles($htmlFiles, $map);
+
         /** @var list<PageRecord> $pages */
         $pages = [];
         /** @var list<Issue> $issues */
         $issues = [];
         $truncated = false;
 
+        // Nur erreichbare Seiten prüfen — in sortierter Dateireihenfolge, damit
+        // seitenübergreifende Prüfungen (Duplikate) stabil bleiben.
         foreach ($allFiles as $rel) {
-            if (!self::isHtml($rel) || self::isExcluded($rel)) {
+            if (!isset($reachable[$rel])) {
                 continue;
             }
-            $url = self::urlForFile($rel);
-            $source = $this->guessSource($url);
-            $html = (string) file_get_contents($this->publicDir . '/' . $rel);
-            $page = HtmlInspector::inspect($html, $url, $rel, $source);
+            $page = $reachable[$rel];
             $pages[] = $page;
 
             foreach (Checks::page($page, $map) as $issue) {
@@ -69,6 +108,20 @@ final class AuditRunner
                 if (count($issues) >= self::MAX_ISSUES) {
                     $truncated = true;
                     break 2;
+                }
+            }
+        }
+
+        // Nicht erreichbare, nicht ausgeschlossene HTML-Seiten: Fehler.
+        if (!$truncated) {
+            foreach ($allFiles as $rel) {
+                if (!isset($htmlFiles[$rel]) || isset($reachable[$rel])) {
+                    continue;
+                }
+                $issues[] = Issue::of('page.unreferenced', $htmlFiles[$rel], $this->guessSource($htmlFiles[$rel]));
+                if (count($issues) >= self::MAX_ISSUES) {
+                    $truncated = true;
+                    break;
                 }
             }
         }
@@ -88,6 +141,73 @@ final class AuditRunner
         $seconds = round((hrtime(true) - $start) / 1e9, 2);
 
         return $this->buildReport($pages, $issues, $seconds, $truncated);
+    }
+
+    /**
+     * Bestimmt die erreichbaren Seiten per Breitensuche: Wurzeln sind die in
+     * der Sitemap verzeichneten Seiten plus die Startseite; von dort wird jeder
+     * interne Link verfolgt. Jede erreichte Seite wird EINMAL geparst und ihr
+     * {@see PageRecord} für die spätere Prüfung mitgeliefert (kein zweites
+     * Einlesen). Fehlt die Sitemap ganz, sind alle HTML-Dateien Wurzeln.
+     *
+     * @param array<string, string> $htmlFiles rel → Request-Pfad der prüfbaren Seiten
+     * @return array<string, PageRecord> rel → geparste Seite (nur erreichbare)
+     */
+    private function reachableFiles(array $htmlFiles, UrlMap $map): array
+    {
+        // Wurzeln (als rel-Dateien) sammeln.
+        $queue = [];
+        if (!Sitemap::present($this->publicDir)) {
+            // Rückfall: keine Sitemap → alle HTML-Dateien sind Wurzeln.
+            $queue = array_keys($htmlFiles);
+        } else {
+            // Startseite immer als Wurzel, dann alle Sitemap-Einträge.
+            foreach (['/' , ...Sitemap::paths($this->publicDir)] as $path) {
+                $rel = $map->fileFor($path);
+                if ($rel !== null && isset($htmlFiles[$rel])) {
+                    $queue[] = $rel;
+                }
+            }
+        }
+
+        /** @var array<string, PageRecord> $reached */
+        $reached = [];
+        $seen = [];
+        foreach ($queue as $rel) {
+            $seen[$rel] = true;
+        }
+        while ($queue !== []) {
+            $rel = array_shift($queue);
+            if (isset($reached[$rel])) {
+                continue;
+            }
+            $url = $htmlFiles[$rel];
+            $page = $this->inspectFile($rel, $url);
+            $reached[$rel] = $page;
+
+            // Internen Links folgen — neue, prüfbare Ziele einreihen.
+            foreach ($page->anchors as $a) {
+                $target = UrlMap::internalTarget($url, $a['href']);
+                if ($target === null) {
+                    continue;
+                }
+                $next = $map->fileFor($target);
+                if ($next !== null && isset($htmlFiles[$next]) && !isset($seen[$next])) {
+                    $seen[$next] = true;
+                    $queue[] = $next;
+                }
+            }
+        }
+
+        return $reached;
+    }
+
+    /** Liest und parst eine HTML-Seite zu ihrem {@see PageRecord}. */
+    private function inspectFile(string $rel, string $url): PageRecord
+    {
+        $html = (string) file_get_contents($this->publicDir . '/' . $rel);
+
+        return HtmlInspector::inspect($html, $url, $rel, $this->guessSource($url));
     }
 
     // --- Berichtsaufbau ----------------------------------------------------
@@ -160,9 +280,9 @@ final class AuditRunner
         return $ext === 'html' || $ext === 'htm';
     }
 
-    private static function isExcluded(string $rel): bool
+    private function isExcluded(string $rel): bool
     {
-        foreach (self::EXCLUDED_PREFIXES as $prefix) {
+        foreach ($this->excludedPrefixes as $prefix) {
             if (str_starts_with($rel, $prefix)) {
                 return true;
             }
