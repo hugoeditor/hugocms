@@ -827,6 +827,7 @@ export default {
     'UPLOAD-FAILED': 'Upload of “{0}” failed.',
     'AUDIO-TOO-LARGE': 'The audio recording is too large.',
     'SPEECH-NOT-CONFIGURED': 'Voice input is not configured.',
+    'SPEECH-NO-KEY': 'No key available to verify.',
     'SPEECH-UNREACHABLE': 'The transcription service is unreachable ({0}). Please check the service URL in the configuration.',
     'SPEECH-REQUEST-FAILED': 'Transcription failed.',
     'SPEECH-QUOTA-EXCEEDED': 'The voice input quota is exhausted.',

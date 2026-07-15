@@ -830,6 +830,7 @@ export default {
     'UPLOAD-TOO-LARGE': '„{0}“ ist zu groß (höchstens {1}).',
     'AUDIO-TOO-LARGE': 'Die Audioaufnahme ist zu groß.',
     'SPEECH-NOT-CONFIGURED': 'Die Spracheingabe ist nicht konfiguriert.',
+    'SPEECH-NO-KEY': 'Kein Schlüssel zum Prüfen vorhanden.',
     'SPEECH-UNREACHABLE': 'Der Transkriptionsdienst ist nicht erreichbar ({0}). Bitte die Dienst-URL in der Konfiguration prüfen.',
     'SPEECH-REQUEST-FAILED': 'Die Transkription ist fehlgeschlagen.',
     'SPEECH-QUOTA-EXCEEDED': 'Das Kontingent der Spracheingabe ist erschöpft.',

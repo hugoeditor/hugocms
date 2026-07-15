@@ -348,6 +348,7 @@ final class Connector
                 'assistantping' => $this->cmdAssistantPing(),
                 'assistantimprove' => $this->cmdAssistantImprove($request),
                 'speech' => $this->cmdSpeech($request),
+                'speechverify' => $this->cmdSpeechVerify($request),
                 'config' => $this->cmdConfig(),
                 'reconfigure' => $this->cmdReconfigure($request),
                 'setupdatelastmod' => $this->cmdSetUpdateLastmod($request),
@@ -1411,12 +1412,11 @@ final class Connector
 
         @set_time_limit(180);
 
-        // speech_url ist die Basis-Adresse; der Endpunkt wird angehängt (robust
-        // gegen fehlenden/vorhandenen Schrägstrich und bereits volle URLs).
-        $base = rtrim((string) $this->services['speechUrl'], '/');
-        $endpoint = str_ends_with($base, '/v1/transcribe') ? $base : $base . '/v1/transcribe';
-
-        $client = new SpeechClient($endpoint, (string) $this->services['speechKey']);
+        // speech_url ist die Basis-Adresse; der SpeechClient bildet den Endpunkt.
+        $client = new SpeechClient(
+            (string) $this->services['speechUrl'],
+            (string) $this->services['speechKey'],
+        );
         $result = $client->transcribe(
             $tmp,
             (string) ($file['name'] ?? 'audio'),
@@ -1427,6 +1427,45 @@ final class Connector
         return [
             'text' => (string) ($result['text'] ?? ''),
             'duration' => (float) ($result['duration'] ?? 0.0),
+        ];
+    }
+
+    /**
+     * speechverify — prüft den Spracheingabe-Schlüssel gegen den Dienst, ohne
+     * etwas zu speichern oder zu transkribieren. Für die Gültigkeitsprüfung im
+     * Konfigurationsdialog. Der Schlüssel des Formulars (evtl. noch
+     * ungespeichert) hat Vorrang; ist das Feld leer, wird der hinterlegte
+     * geprüft. Ebenso die URL.
+     *
+     * @return array{valid: bool, quotaLimit: ?int, quotaUsed: ?float, quotaExceeded: bool}
+     */
+    private function cmdSpeechVerify(array $request): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+        $this->requirePro();
+
+        $url = trim((string) ($request['speechUrl'] ?? ''));
+        if ($url === '') {
+            $url = (string) ($this->services['speechUrl'] ?? '');
+        }
+        if ($url === '') {
+            $url = 'https://api.hugocms.com/';
+        }
+
+        $keyNew = trim((string) ($request['speechKey'] ?? ''));
+        $key = $keyNew !== '' ? $keyNew : (string) ($this->services['speechKey'] ?? '');
+        if ($key === '') {
+            throw new ApiException('ECONFIG', 409, 'SPEECH-NO-KEY');
+        }
+
+        $info = (new SpeechClient($url, $key))->verify();
+
+        return [
+            'valid' => true,
+            'quotaLimit' => isset($info['quotaLimit']) ? (int) $info['quotaLimit'] : null,
+            'quotaUsed' => isset($info['quotaUsed']) ? (float) $info['quotaUsed'] : null,
+            'quotaExceeded' => (bool) ($info['quotaExceeded'] ?? false),
         ];
     }
 

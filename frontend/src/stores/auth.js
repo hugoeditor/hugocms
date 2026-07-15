@@ -75,6 +75,13 @@ export const useAuthStore = defineStore('auth', {
       await api.post('reconfigure', payload)
     },
 
+    // Prüft den Spracheingabe-Schlüssel (eingegeben oder hinterlegt) gegen den
+    // Dienst, ohne etwas zu speichern. Wirft bei ungültigem Schlüssel oder
+    // nicht erreichbarem Dienst; liefert sonst { valid, quota… }.
+    async verifySpeech(payload) {
+      return api.post('speechverify', payload)
+    },
+
     // Merkt die Benutzerwahl zum lastmod-Verhalten in [user] update_lastmod.
     async setUpdateLastmod(value) {
       await api.post('setupdatelastmod', { value })
