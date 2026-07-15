@@ -72,6 +72,25 @@ const loading = ref(false) // Laden der aktuellen Werte beim Öffnen
 const saving = ref(false)
 const error = ref(null)
 
+// Sprungnavigation zu den Formularabschnitten (analog zu den Kategorie-Filtern
+// im SEO-Bericht). Reihenfolge wie im Formular; jeder Knopf scrollt zur zugehörigen
+// Überschrift. Die Elemente werden per Funktions-Ref registriert.
+const sections = [
+  { key: 'ai', label: 'aiConfig.section' },
+  { key: 'speech', label: 'speechConfig.section' },
+  { key: 'mail', label: 'mailConfig.section' },
+  { key: 'seo', label: 'seoConfig.section' },
+]
+const sectionEls = {}
+function registerSection(key) {
+  return (el) => {
+    if (el) sectionEls[key] = el
+  }
+}
+function scrollToSection(key) {
+  sectionEls[key]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
 // Beim Öffnen die aktuellen (rohen) Werte aus der hugocms.ini vorbefüllen.
 watch(model, async (open) => {
   if (!open) return
@@ -178,7 +197,20 @@ async function submit() {
           @click="model = false"
         />
       </v-card-title>
-      <v-card-subtitle class="text-wrap">{{ $t('reconfigure.intro') }}</v-card-subtitle>
+      <v-card-subtitle class="text-wrap mb-2">{{ $t('reconfigure.intro') }}</v-card-subtitle>
+      <!-- Sprungnavigation zu den Abschnitten (analog zu den Kategorie-Filtern
+           im SEO-Bericht). Erst sichtbar, wenn das Formular geladen ist. -->
+      <div v-if="!loading" class="rc-nav">
+        <button
+          v-for="s in sections"
+          :key="s.key"
+          type="button"
+          class="rc-chip"
+          @click="scrollToSection(s.key)"
+        >
+          {{ $t(s.label) }}
+        </button>
+      </div>
       <v-card-text>
         <v-skeleton-loader v-if="loading" type="article" />
         <v-form v-else @submit.prevent="submit">
@@ -229,7 +261,7 @@ async function submit() {
           />
 
           <v-divider class="my-3" />
-          <div class="text-subtitle-2 mb-2">{{ $t('aiConfig.section') }}</div>
+          <div :ref="registerSection('ai')" class="text-subtitle-2 mb-2">{{ $t('aiConfig.section') }}</div>
           <div class="text-caption text-medium-emphasis mb-2">
             {{ aiConfigured ? $t('aiConfig.apiKeyHintSet') : $t('aiConfig.apiKeyHintUnset') }}
           </div>
@@ -284,7 +316,7 @@ async function submit() {
           />
 
           <v-divider class="my-3" />
-          <div class="text-subtitle-2 mb-2">{{ $t('speechConfig.section') }}</div>
+          <div :ref="registerSection('speech')" class="text-subtitle-2 mb-2">{{ $t('speechConfig.section') }}</div>
           <div class="text-caption text-medium-emphasis mb-2">{{ $t('speechConfig.urlHint') }}</div>
           <v-text-field
             v-model="speechUrl"
@@ -308,7 +340,7 @@ async function submit() {
           />
 
           <v-divider class="my-3" />
-          <div class="text-subtitle-2 mb-2">{{ $t('mailConfig.section') }}</div>
+          <div :ref="registerSection('mail')" class="text-subtitle-2 mb-2">{{ $t('mailConfig.section') }}</div>
           <div class="text-caption text-medium-emphasis mb-2">{{ $t('mailConfig.intro') }}</div>
           <v-text-field
             v-model="mailHost"
@@ -382,7 +414,7 @@ async function submit() {
           />
 
           <v-divider class="my-3" />
-          <div class="text-subtitle-2 mb-2">{{ $t('seoConfig.section') }}</div>
+          <div :ref="registerSection('seo')" class="text-subtitle-2 mb-2">{{ $t('seoConfig.section') }}</div>
           <div class="text-caption text-medium-emphasis mb-2">{{ $t('seoConfig.excludePrefixesHint') }}</div>
           <v-textarea
             v-model="seoExcludePrefixes"
@@ -409,3 +441,24 @@ async function submit() {
     </v-card>
   </v-dialog>
 </template>
+
+<style scoped>
+/* Sprungnavigation zu den Abschnitten — Stil analog zu den Kategorie-Chips
+   des SEO-Berichts (AuditView). */
+.rc-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 16px 8px;
+}
+.rc-chip {
+  border: 1px solid var(--mint-border);
+  border-radius: 999px;
+  background: #fff;
+  padding: 2px 12px;
+  font-size: 0.8rem;
+  color: var(--mint-text);
+  cursor: pointer;
+}
+.rc-chip:hover { background: var(--mint-panel-hover); }
+</style>

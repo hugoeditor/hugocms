@@ -138,7 +138,7 @@ export default {
   reconfigure: {
     open: 'Change configuration',
     title: 'Change configuration',
-    intro: 'Adjust directories, logging, the Hugo binary, AI assistant, voice input and email delivery. Login credentials stay unchanged.',
+    intro: 'Global settings, applied to all website projects.',
     submit: 'Save',
     cancel: 'Cancel',
     success: 'Configuration saved.',

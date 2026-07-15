@@ -138,7 +138,7 @@ export default {
   reconfigure: {
     open: 'Konfiguration ändern',
     title: 'Konfiguration ändern',
-    intro: 'Verzeichnisse, Logging, Hugo-Programm, KI-Assistent, Spracheingabe und E-Mail-Versand anpassen. Die Anmeldedaten bleiben unverändert.',
+    intro: 'Globale Einstellungen, gelten für alle Webseitenprojekte.',
     submit: 'Speichern',
     cancel: 'Abbrechen',
     success: 'Konfiguration gespeichert.',
