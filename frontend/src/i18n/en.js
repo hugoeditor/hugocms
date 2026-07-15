@@ -143,6 +143,8 @@ export default {
     cancel: 'Cancel',
     success: 'Configuration saved.',
     note: 'Changes to the session directory and log file take effect on the next load.',
+    hugoClean: 'Empty the destination directory before building',
+    hugoCleanHint: 'Removes everything in the destination folder that Hugo did not generate itself when publishing. Take care if other files live in the destination folder.',
   },
 
   license: {

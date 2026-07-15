@@ -17,6 +17,8 @@ const logFile = ref('')
 const logLevel = ref('warning')
 const logLevels = ref(['debug', 'info', 'warning', 'error'])
 const hugoBin = ref('')
+// --cleanDestinationDir: leert vor dem Build das Zielverzeichnis (siehe Hinweis).
+const hugoClean = ref(false)
 
 // KI-Assistent. Der Schlüssel wird nie geladen (Geheimnis); leeres Feld lässt
 // ihn unverändert. aiConfigured zeigt nur an, ob bereits einer gesetzt ist.
@@ -82,6 +84,7 @@ watch(model, async (open) => {
     logLevel.value = cfg.logLevel ?? 'warning'
     logLevels.value = cfg.logLevels ?? ['debug', 'info', 'warning', 'error']
     hugoBin.value = cfg.hugoBin ?? ''
+    hugoClean.value = !!cfg.hugoClean
     aiApiKey.value = ''
     aiModel.value = cfg.aiModel || 'claude-opus-4-8'
     aiModelCron.value = cfg.aiModelCron || ''
@@ -123,6 +126,7 @@ async function submit() {
       logFile: logFile.value,
       logLevel: logLevel.value,
       hugoBin: hugoBin.value,
+      hugoClean: hugoClean.value,
       aiApiKey: aiApiKey.value, // leer = unverändert
       aiModel: aiModel.value,
       aiModelCron: aiModelCron.value, // leer = wie Assistenten-Modell
@@ -168,7 +172,7 @@ async function submit() {
       <v-card-text>
         <v-skeleton-loader v-if="loading" type="article" />
         <v-form v-else @submit.prevent="submit">
-          <div class="text-caption text-medium-emphasis mb-1">{{ $t('setup.sessionPathHint') }}</div>
+          <div class="text-caption text-medium-emphasis mb-2">{{ $t('setup.sessionPathHint') }}</div>
           <v-text-field
             v-model="sessionPath"
             :label="$t('setup.sessionPath')"
@@ -177,7 +181,7 @@ async function submit() {
             density="comfortable"
             class="mb-2"
           />
-          <div class="text-caption text-medium-emphasis mb-1">{{ $t('setup.logFileHint') }}</div>
+          <div class="text-caption text-medium-emphasis mb-2">{{ $t('setup.logFileHint') }}</div>
           <v-text-field
             v-model="logFile"
             :label="$t('setup.logFile')"
@@ -186,7 +190,7 @@ async function submit() {
             density="comfortable"
             class="mb-2"
           />
-          <div class="text-caption text-medium-emphasis mb-1">{{ $t('setup.logLevelHint') }}</div>
+          <div class="text-caption text-medium-emphasis mb-2">{{ $t('setup.logLevelHint') }}</div>
           <v-select
             v-model="logLevel"
             :items="logLevels"
@@ -196,7 +200,7 @@ async function submit() {
             density="comfortable"
             class="mb-2"
           />
-          <div class="text-caption text-medium-emphasis mb-1">{{ $t('setup.hugoBinHint') }}</div>
+          <div class="text-caption text-medium-emphasis mb-2">{{ $t('setup.hugoBinHint') }}</div>
           <v-text-field
             v-model="hugoBin"
             :label="$t('setup.hugoBin')"
@@ -205,10 +209,18 @@ async function submit() {
             density="comfortable"
             class="mb-2"
           />
+          <div class="text-caption text-medium-emphasis">{{ $t('reconfigure.hugoCleanHint') }}</div>
+          <v-checkbox
+            v-model="hugoClean"
+            :label="$t('reconfigure.hugoClean')"
+            density="compact"
+            hide-details
+            class="mb-4"
+          />
 
           <v-divider class="my-3" />
           <div class="text-subtitle-2 mb-2">{{ $t('aiConfig.section') }}</div>
-          <div class="text-caption text-medium-emphasis mb-1">
+          <div class="text-caption text-medium-emphasis mb-2">
             {{ aiConfigured ? $t('aiConfig.apiKeyHintSet') : $t('aiConfig.apiKeyHintUnset') }}
           </div>
           <v-text-field
@@ -221,7 +233,7 @@ async function submit() {
             density="comfortable"
             class="mb-2"
           />
-          <div class="text-caption text-medium-emphasis mb-1">{{ $t('aiConfig.modelHint') }}</div>
+          <div class="text-caption text-medium-emphasis mb-2">{{ $t('aiConfig.modelHint') }}</div>
           <v-select
             v-model="aiModel"
             :items="aiModels"
@@ -231,7 +243,7 @@ async function submit() {
             density="comfortable"
             class="mb-2"
           />
-          <div class="text-caption text-medium-emphasis mb-1">{{ $t('aiConfig.modelCronHint') }}</div>
+          <div class="text-caption text-medium-emphasis mb-2">{{ $t('aiConfig.modelCronHint') }}</div>
           <v-select
             v-model="aiModelCron"
             :items="aiSubModels"
@@ -241,7 +253,7 @@ async function submit() {
             density="comfortable"
             class="mb-2"
           />
-          <div class="text-caption text-medium-emphasis mb-1">{{ $t('aiConfig.modelAuditHint') }}</div>
+          <div class="text-caption text-medium-emphasis mb-2">{{ $t('aiConfig.modelAuditHint') }}</div>
           <v-select
             v-model="aiModelAudit"
             :items="aiSubModels"
@@ -251,7 +263,7 @@ async function submit() {
             density="comfortable"
             class="mb-2"
           />
-          <div class="text-caption text-medium-emphasis mb-1">{{ $t('aiConfig.writeModeHint') }}</div>
+          <div class="text-caption text-medium-emphasis mb-2">{{ $t('aiConfig.writeModeHint') }}</div>
           <v-select
             v-model="aiWriteMode"
             :items="writeModeItems"
@@ -263,7 +275,7 @@ async function submit() {
 
           <v-divider class="my-3" />
           <div class="text-subtitle-2 mb-2">{{ $t('speechConfig.section') }}</div>
-          <div class="text-caption text-medium-emphasis mb-1">{{ $t('speechConfig.urlHint') }}</div>
+          <div class="text-caption text-medium-emphasis mb-2">{{ $t('speechConfig.urlHint') }}</div>
           <v-text-field
             v-model="speechUrl"
             :label="$t('speechConfig.url')"
@@ -272,7 +284,7 @@ async function submit() {
             density="comfortable"
             class="mb-2"
           />
-          <div class="text-caption text-medium-emphasis mb-1">
+          <div class="text-caption text-medium-emphasis mb-2">
             {{ speechConfigured ? $t('speechConfig.keyHintSet') : $t('speechConfig.keyHintUnset') }}
           </div>
           <v-text-field
@@ -287,7 +299,7 @@ async function submit() {
 
           <v-divider class="my-3" />
           <div class="text-subtitle-2 mb-2">{{ $t('mailConfig.section') }}</div>
-          <div class="text-caption text-medium-emphasis mb-1">{{ $t('mailConfig.intro') }}</div>
+          <div class="text-caption text-medium-emphasis mb-2">{{ $t('mailConfig.intro') }}</div>
           <v-text-field
             v-model="mailHost"
             :label="$t('mailConfig.host')"
@@ -328,7 +340,7 @@ async function submit() {
             density="comfortable"
             class="mb-2"
           />
-          <div class="text-caption text-medium-emphasis mb-1">
+          <div class="text-caption text-medium-emphasis mb-2">
             {{ mailPassConfigured ? $t('mailConfig.passHintSet') : $t('mailConfig.passHintUnset') }}
           </div>
           <v-text-field
@@ -361,7 +373,7 @@ async function submit() {
 
           <v-divider class="my-3" />
           <div class="text-subtitle-2 mb-2">{{ $t('seoConfig.section') }}</div>
-          <div class="text-caption text-medium-emphasis mb-1">{{ $t('seoConfig.excludePrefixesHint') }}</div>
+          <div class="text-caption text-medium-emphasis mb-2">{{ $t('seoConfig.excludePrefixesHint') }}</div>
           <v-textarea
             v-model="seoExcludePrefixes"
             :label="$t('seoConfig.excludePrefixes')"

@@ -143,6 +143,8 @@ export default {
     cancel: 'Abbrechen',
     success: 'Konfiguration gespeichert.',
     note: 'Änderungen am Sitzungsverzeichnis und an der Logdatei greifen erst beim nächsten Laden.',
+    hugoClean: 'Zielverzeichnis vor dem Build leeren',
+    hugoCleanHint: 'Entfernt beim Veröffentlichen alles im Zielordner, was Hugo nicht selbst erzeugt. Vorsicht, wenn im Zielordner weitere Dateien liegen.',
   },
 
   license: {

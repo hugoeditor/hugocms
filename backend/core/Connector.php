@@ -57,6 +57,13 @@ final class Connector
     private ?string $hugoBin = null;
 
     /**
+     * Global aktiviertes --cleanDestinationDir ([hugo] clean in der hugocms.ini).
+     * Ergänzt das webseitenbezogene clean-Flag aus der Mount-Konfiguration: Beim
+     * Build genügt eine der beiden Quellen, damit das Zielverzeichnis geleert wird.
+     */
+    private bool $hugoClean = false;
+
+    /**
      * KI-Assistent-Konfiguration aus der [ai]-Sektion der hugocms.ini.
      * apiKey=null → Assistent deaktiviert. writeMode: readonly|confirm|auto.
      *
@@ -158,6 +165,7 @@ final class Connector
             $options['logMaxBytes'] ??= $cfg['log']['maxBytes'] ?? 1_048_576;
             $options['logKeep'] ??= $cfg['log']['keep'] ?? 3;
             $options['hugoBin'] ??= $cfg['hugoBin'];
+            $this->hugoClean = $cfg['hugoClean'];
             $this->ai = $cfg['ai'];
             $this->services = $cfg['services'];
             $this->user = $cfg['user'];
@@ -1017,13 +1025,15 @@ final class Connector
             throw new ApiException('ECONFIG', 500, 'HUGO-SOURCE-MISSING', [$source]);
         }
 
-        // --cleanDestinationDir nur auf Wunsch (clean = true): Es entfernt im
-        // Ziel ALLES, was Hugo nicht selbst erzeugt — auch die im Publish-
+        // --cleanDestinationDir nur auf Wunsch: global über [hugo] clean in der
+        // hugocms.ini oder je Webseite über die Mount-Konfiguration. Es entfernt
+        // im Ziel ALLES, was Hugo nicht selbst erzeugt — auch die im Publish-
         // Ordner liegende Installation (edit/, cms-api/). Standard: aus.
         // Bewusst OHNE --buildFuture/--buildDrafts: künftige publishDate und
         // draft:true bleiben so unveröffentlicht — genau die Staffelung.
+        $clean = $this->hugoClean || !empty($this->hugo['clean']);
         $cmd = escapeshellarg($bin)
-            . (!empty($this->hugo['clean']) ? ' --cleanDestinationDir' : '')
+            . ($clean ? ' --cleanDestinationDir' : '')
             . ' -s ' . escapeshellarg($source)
             . ' -d ' . escapeshellarg($dest)
             . (!empty($this->hugo['minify']) ? ' --minify' : '')
@@ -1792,6 +1802,7 @@ final class Connector
             'logFile'     => $raw['log']['file'] ?? '',
             'logLevel'    => $raw['log']['level'] ?? 'warning',
             'hugoBin'     => $raw['hugo']['bin'] ?? '',
+            'hugoClean'   => filter_var($raw['hugo']['clean'] ?? false, FILTER_VALIDATE_BOOLEAN),
             'logLevels'   => self::LOG_LEVELS,
             // KI-Assistent: Status + Modus/Modelle, aber NIE der API-Schlüssel.
             // Cron-/Audit-Modell leer = „wie Assistenten-Modell" (Fallback).
@@ -1844,6 +1855,7 @@ final class Connector
             throw ApiException::badRequest('SETUP-LOG-LEVEL-INVALID', [implode(', ', self::LOG_LEVELS)]);
         }
         $hugoBin = self::cleanConfigValue($request['hugoBin'] ?? '', 'hugoBin', false);
+        $hugoClean = filter_var($request['hugoClean'] ?? false, FILTER_VALIDATE_BOOLEAN);
 
         // KI-Assistent. Der API-Schlüssel ist ein Geheimnis: ein leeres Feld
         // lässt den bestehenden unverändert; nur eine Eingabe ersetzt ihn.
@@ -1925,11 +1937,21 @@ final class Connector
         // Die fest verdrahteten Ausschlüsse bleiben im Code — hier nur die Extras.
         $seoPrefixes = Config::normalizeExcludePrefixes((string) ($request['seoExcludePrefixes'] ?? ''));
 
+        // [hugo]: Programmpfad und optional clean = true (--cleanDestinationDir).
+        // Ohne Programm keine Sektion (kein Build); clean nur schreiben, wenn
+        // gesetzt, damit die INI ohne Bedarf schlank bleibt.
+        $hugoSection = null;
+        if ($hugoBin !== '') {
+            $hugoSection = ['bin' => $hugoBin];
+            if ($hugoClean) {
+                $hugoSection['clean'] = 'true';
+            }
+        }
+
         Config::updateSections($this->configPath, [
             'session' => ['path' => $sessionPath],
             'log'     => ['file' => $logFile, 'level' => $logLevel],
-            // Leeres Hugo-Programm entfernt die Sektion (kein Build).
-            'hugo'    => $hugoBin === '' ? null : ['bin' => $hugoBin],
+            'hugo'    => $hugoSection,
             // Ohne API-Schlüssel keine [ai]-Sektion (Assistent aus).
             'ai'      => $apiKey === '' ? null : $aiSection,
             // Ohne Schlüssel keine [services]-Sektion (Spracheingabe aus).

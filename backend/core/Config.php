@@ -52,7 +52,8 @@ final class Config
      *   user: array{sessionLifetime: int, contentWidth: int, updateLastmod: ?bool},
      *   session: array{path: string},
      *   log: array{file: string, level: string, maxBytes: int, keep: int},
-     *   hugoBin: ?string
+     *   hugoBin: ?string,
+     *   hugoClean: bool
      * }
      */
     public static function load(string $configPath): array
@@ -96,6 +97,10 @@ final class Config
         // möglich — der Connector meldet das je Webseite (buildable=false).
         $hugoBin = trim((string) ($raw['hugo']['bin'] ?? ''));
 
+        // --cleanDestinationDir global aktivieren ([hugo] clean). updateSections
+        // schreibt den Wert gequotet ("true"); filter_var liest beide Formen.
+        $hugoClean = filter_var($raw['hugo']['clean'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
         return [
             'auth' => $auth,
             'user' => self::userSection($raw['user'] ?? null),
@@ -114,6 +119,7 @@ final class Config
                     : max(1, (int) $raw['log']['keep']),
             ],
             'hugoBin' => $hugoBin === '' ? null : self::resolvePath($hugoBin, $baseDir),
+            'hugoClean' => $hugoClean,
             'ai' => self::aiSection($raw['ai'] ?? null),
             'services' => self::servicesSection($raw['services'] ?? null),
             'mail' => self::mailSection($raw['mail'] ?? null),
