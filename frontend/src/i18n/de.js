@@ -225,6 +225,7 @@ export default {
     searchPlaceholder: 'Nach URL oder Quelle filtern …',
     noMatches: 'Keine Treffer.',
     openSource: 'Quelldatei öffnen',
+    openPage: 'Webseite in neuem Tab öffnen',
     showHelp: 'Hilfe anzeigen',
     delete: 'Löschen',
     deleteTitle: 'Lauf löschen?',

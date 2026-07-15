@@ -1,7 +1,8 @@
 <script setup>
 // Tabelle der Audit-Funde. Übersetzt jede Regel-ID in eine lesbare Meldung
 // (Schlüssel audit.rules.<ruleId mit Unterstrichen>, Parameter aus dem Fund).
-// Hat ein Fund eine fileId, lässt sich die Quelldatei direkt im Editor öffnen.
+// Die URL öffnet die veröffentlichte Webseite (das gebaute HTML) in einem neuen
+// Tab; hat ein Fund eine fileId, öffnet der Knopf rechts die Quelldatei im Editor.
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -18,6 +19,15 @@ const { t } = useI18n()
 
 function ruleMessage(issue) {
   return t('audit.rules.' + issue.ruleId.replaceAll('.', '_'), issue.params || [])
+}
+
+// Die veröffentlichte Webseite liegt auf derselben Domain wie das CMS (wie der
+// „Webseite ansehen"-Knopf in App.vue). issue.url ist der Request-Pfad, z. B.
+// "/about/"; daraus die aufrufbare Adresse des gebauten HTML bilden.
+const siteOrigin = window.location.origin
+function pageUrl(issue) {
+  const path = issue.url || '/'
+  return siteOrigin + (path.startsWith('/') ? path : '/' + path)
 }
 
 // Filter ausschließlich über URL und Quelldatei.
@@ -79,14 +89,26 @@ function showMore() {
           </button>
           <code class="audit-ruleid">{{ issue.ruleId }}</code>
         </td>
-        <td
-          class="col-url"
-          :class="{ 'col-url-clickable': issue.fileId }"
-          :title="issue.fileId ? $t('audit.openSource') : null"
-          @click="issue.fileId && emit('open-source', issue)"
-        >
-          <code v-if="issue.url">{{ issue.url }}</code>
-          <span v-else-if="issue.sourceFile" class="audit-src">{{ issue.sourceFile }}</span>
+        <td class="col-url">
+          <!-- URL öffnet die veröffentlichte Webseite (das gebaute HTML) in einem
+               neuen Tab; die Quelldatei erreicht man über den Knopf rechts. -->
+          <a
+            v-if="issue.url"
+            class="audit-url-link"
+            :href="pageUrl(issue)"
+            target="_blank"
+            rel="noopener noreferrer"
+            :title="$t('audit.openPage')"
+          >
+            <code>{{ issue.url }}</code>
+          </a>
+          <span
+            v-else-if="issue.sourceFile"
+            class="audit-src"
+            :class="{ 'col-url-clickable': issue.fileId }"
+            :title="issue.fileId ? $t('audit.openSource') : null"
+            @click="issue.fileId && emit('open-source', issue)"
+          >{{ issue.sourceFile }}</span>
           <span v-else>—</span>
         </td>
         <td class="col-act">
@@ -181,11 +203,16 @@ function showMore() {
   color: var(--mint-text-muted);
   word-break: break-all;
 }
-/* Zugeordnete Zeile: gesamte URL-/Quelldatei-Zelle öffnet die Datei im Editor
-   (wie der Springen-Button). */
-.col-url-clickable { cursor: pointer; }
-.col-url-clickable:hover code,
-.col-url-clickable:hover .audit-src {
+/* URL-Link: öffnet die veröffentlichte Webseite in einem neuen Tab. */
+.audit-url-link { text-decoration: none; }
+.audit-url-link:hover code {
+  color: var(--mint-green);
+  text-decoration: underline;
+}
+/* Quelldatei-Zelle (ohne URL): öffnet die Datei im Editor (wie der Springen-
+   Knopf rechts). */
+.audit-src.col-url-clickable { cursor: pointer; }
+.audit-src.col-url-clickable:hover {
   color: var(--mint-green);
   text-decoration: underline;
 }
