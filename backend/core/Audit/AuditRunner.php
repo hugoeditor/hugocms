@@ -51,18 +51,31 @@ final class AuditRunner
     private readonly array $excludedPrefixes;
 
     /**
+     * Einzelne ausgeschlossene Dateien (public-relativ) als Set: exakter Pfad →
+     * true. Ergänzt die Präfixe um Dateien, die nicht per Verzeichnis erfasst
+     * werden (z. B. Suchmaschinen-Bestätigungsdateien wie google….html).
+     *
+     * @var array<string, true>
+     */
+    private readonly array $excludedFiles;
+
+    /**
      * @param list<string> $extraExcludedPrefixes Zusätzliche public-relative
      *        Präfixe aus der [seo_report]-Sektion (bereits normalisiert).
+     * @param list<string> $excludedFiles Einzelne public-relative Dateien aus der
+     *        [seo_report]-Sektion (bereits normalisiert).
      */
     public function __construct(
         private readonly string $publicDir,
         private readonly string $sourceDir,
         private readonly string $contentDir = 'content',
         array $extraExcludedPrefixes = [],
+        array $excludedFiles = [],
     ) {
         $this->excludedPrefixes = array_values(array_unique(
             [...self::EXCLUDED_PREFIXES, ...$extraExcludedPrefixes],
         ));
+        $this->excludedFiles = array_fill_keys(array_values($excludedFiles), true);
     }
 
     /**
@@ -282,6 +295,9 @@ final class AuditRunner
 
     private function isExcluded(string $rel): bool
     {
+        if (isset($this->excludedFiles[$rel])) {
+            return true;
+        }
         foreach ($this->excludedPrefixes as $prefix) {
             if (str_starts_with($rel, $prefix)) {
                 return true;

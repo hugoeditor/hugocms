@@ -27,12 +27,15 @@ final class AuditService
     /**
      * @param list<string> $excludePrefixes Zusätzliche public-relative Präfixe
      *        aus der [seo_report]-Sektion, die vom Audit übersprungen werden.
+     * @param list<string> $excludeFiles Einzelne public-relative Dateien aus der
+     *        [seo_report]-Sektion, die vom Audit übersprungen werden.
      */
     public function __construct(
         private readonly string $publicDir,
         private readonly string $sourceDir,
         private readonly string $storageDir,
         private readonly array $excludePrefixes = [],
+        private readonly array $excludeFiles = [],
     ) {
     }
 
@@ -53,6 +56,7 @@ final class AuditService
             $this->sourceDir,
             self::detectContentDir($this->sourceDir),
             $this->excludePrefixes,
+            $this->excludeFiles,
         ))->run();
         $report['id'] = $this->freshId();
 

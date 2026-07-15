@@ -427,6 +427,10 @@ export default {
     excludePrefixesHint:
       'Der Bericht prüft jede HTML-Datei im gebauten public/-Ordner, auch unverlinkte. Hier zusätzliche Verzeichnisse eintragen (eines je Zeile), die übersprungen werden sollen, z. B. Test- oder Fehlerseiten. Die HugoCMS-eigenen Verzeichnisse (edit/, cms-api/, cms-admin/) sind bereits fest ausgeschlossen.',
     excludePrefixesPlaceholder: 'test/\nerror/\nentwurf/',
+    excludeFiles: 'Ausgeschlossene Dateien',
+    excludeFilesHint:
+      'Einzelne Dateien (public-relativer Pfad, eine je Zeile), die der Bericht überspringt — etwa Suchmaschinen-Bestätigungsdateien, die nicht verändert oder gelöscht werden dürfen. Anders als oben werden hier ganze Dateipfade exakt verglichen, keine Verzeichnisse.',
+    excludeFilesPlaceholder: 'googleXXX.html\nBingSiteAuth.xml',
   },
 
   account: {

@@ -1831,6 +1831,10 @@ final class Connector
             'seoExcludePrefixes' => implode("\n", Config::normalizeExcludePrefixes(
                 (string) ($raw['seo_report']['exclude_prefixes'] ?? ''),
             )),
+            // SEO-Bericht: einzelne ausgeschlossene Dateien (eine je Zeile).
+            'seoExcludeFiles' => implode("\n", Config::normalizeExcludeFiles(
+                (string) ($raw['seo_report']['exclude_files'] ?? ''),
+            )),
         ];
     }
 
@@ -1936,6 +1940,17 @@ final class Connector
         // frei (komma-/zeilengetrennt); normalisiert und kommagetrennt ablegen.
         // Die fest verdrahteten Ausschlüsse bleiben im Code — hier nur die Extras.
         $seoPrefixes = Config::normalizeExcludePrefixes((string) ($request['seoExcludePrefixes'] ?? ''));
+        $seoFiles = Config::normalizeExcludeFiles((string) ($request['seoExcludeFiles'] ?? ''));
+        // [seo_report] nur schreiben, wenn Präfixe oder Dateien vorliegen; sonst
+        // Sektion entfernen. Jeder Schlüssel nur bei Bedarf, damit keine leeren
+        // Einträge in der INI landen.
+        $seoSection = [];
+        if ($seoPrefixes !== []) {
+            $seoSection['exclude_prefixes'] = implode(', ', $seoPrefixes);
+        }
+        if ($seoFiles !== []) {
+            $seoSection['exclude_files'] = implode(', ', $seoFiles);
+        }
 
         // [hugo]: Programmpfad und optional clean = true (--cleanDestinationDir).
         // Ohne Programm keine Sektion (kein Build); clean nur schreiben, wenn
@@ -1958,8 +1973,8 @@ final class Connector
             'services' => $speechKey === '' ? null : ['speech_key' => $speechKey, 'speech_url' => $speechUrl],
             // Ohne Server/Absender/Empfänger keine [mail]-Sektion (Versand aus).
             'mail'    => $mailSection,
-            // Ohne zusätzliche Präfixe keine [seo_report]-Sektion.
-            'seo_report' => $seoPrefixes === [] ? null : ['exclude_prefixes' => implode(', ', $seoPrefixes)],
+            // Ohne zusätzliche Präfixe/Dateien keine [seo_report]-Sektion.
+            'seo_report' => $seoSection === [] ? null : $seoSection,
         ]);
         $this->logger->info('Konfiguration aktualisiert (reconfigure).');
 
@@ -2216,7 +2231,13 @@ final class Connector
         $public = (string) ($this->hugo['destination'] ?? $source . '/public');
         $storage = __DIR__ . '/../var/audit/' . sha1($source);
 
-        return new AuditService($public, $source, $storage, $this->seoReport['excludePrefixes']);
+        return new AuditService(
+            $public,
+            $source,
+            $storage,
+            $this->seoReport['excludePrefixes'],
+            $this->seoReport['excludeFiles'],
+        );
     }
 
     /** Führt einen neuen Audit-Lauf aus (synchron) und liefert den Bericht. */

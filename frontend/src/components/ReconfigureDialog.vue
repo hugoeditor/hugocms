@@ -64,6 +64,8 @@ const mailSecurities = ref(['tls', 'ssl', 'none'])
 // Die fest verdrahteten Ausschlüsse (edit/, cms-api/, cms-admin/) stehen NICHT
 // hier und lassen sich nicht entfernen.
 const seoExcludePrefixes = ref('')
+// Einzelne ausgeschlossene Dateien (exakter Pfad, eine je Zeile).
+const seoExcludeFiles = ref('')
 const mailSecurityItems = computed(() =>
   mailSecurities.value.map((v) => ({ value: v, title: t(`mailConfig.security.${v}`) })),
 )
@@ -123,6 +125,7 @@ watch(model, async (open) => {
     mailTo.value = cfg.mailTo ?? ''
     mailPassConfigured.value = !!cfg.mailPassConfigured
     seoExcludePrefixes.value = cfg.seoExcludePrefixes ?? ''
+    seoExcludeFiles.value = cfg.seoExcludeFiles ?? ''
   } catch (e) {
     error.value = errorText(t, e)
   } finally {
@@ -161,6 +164,7 @@ async function submit() {
       mailFrom: mailFrom.value,
       mailTo: mailTo.value,
       seoExcludePrefixes: seoExcludePrefixes.value,
+      seoExcludeFiles: seoExcludeFiles.value,
     })
     emit('saved')
     model.value = false
@@ -421,6 +425,18 @@ async function submit() {
             :label="$t('seoConfig.excludePrefixes')"
             :placeholder="$t('seoConfig.excludePrefixesPlaceholder')"
             prepend-inner-icon="mdi-folder-remove-outline"
+            variant="outlined"
+            density="comfortable"
+            rows="3"
+            auto-grow
+            class="mb-2"
+          />
+          <div class="text-caption text-medium-emphasis mb-2">{{ $t('seoConfig.excludeFilesHint') }}</div>
+          <v-textarea
+            v-model="seoExcludeFiles"
+            :label="$t('seoConfig.excludeFiles')"
+            :placeholder="$t('seoConfig.excludeFilesPlaceholder')"
+            prepend-inner-icon="mdi-file-remove-outline"
             variant="outlined"
             density="comfortable"
             rows="3"

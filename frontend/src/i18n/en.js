@@ -427,6 +427,10 @@ export default {
     excludePrefixesHint:
       'The report checks every HTML file in the built public/ folder, including unlinked ones. Add extra directories here (one per line) to skip, e.g. test or error pages. The HugoCMS directories (edit/, cms-api/, cms-admin/) are already excluded.',
     excludePrefixesPlaceholder: 'test/\nerror/\ndraft/',
+    excludeFiles: 'Excluded files',
+    excludeFilesHint:
+      'Individual files (public-relative path, one per line) that the report skips — e.g. search-engine verification files that must not be changed or deleted. Unlike above, whole file paths are matched exactly here, not directories.',
+    excludeFilesPlaceholder: 'googleXXX.html\nBingSiteAuth.xml',
   },
 
   account: {

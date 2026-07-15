@@ -106,6 +106,10 @@ bin = ../bin/hugo/hugo
 ; Optional; fehlt die Sektion, gelten nur die fest verdrahteten Ausschlüsse.
 ; Lässt sich auch über das Konfigurationsformular setzen.
 ;exclude_prefixes = "test/, error/, entwurf/"
+; Über exclude_files lassen sich EINZELNE Dateien ausschließen (exakter public-
+; relativer Pfad statt Verzeichnis-Präfix) — etwa Suchmaschinen-Bestätigungs-
+; dateien, die nicht verändert oder gelöscht werden dürfen. Kommagetrennt.
+;exclude_files = "google37dc500bdbcbca59.html, BingSiteAuth.xml"
 
 ;[services]
 ; Externe Pro-Dienste (optional). Derzeit die Spracheingabe des KI-Assistenten

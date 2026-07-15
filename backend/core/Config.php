@@ -131,15 +131,21 @@ final class Config
      * SEO-Bericht ([seo_report]-Sektion, optional). exclude_prefixes ergänzt die
      * fest verdrahteten Ausschlüsse des Audits ({@see \HugoCMS\FileManager\Audit\AuditRunner})
      * um WEITERE public-relative Pfad-Präfixe, die nicht geprüft werden sollen
-     * (z. B. "test/", "error/"). Kommagetrennt in der INI.
+     * (z. B. "test/", "error/"). exclude_files schließt EINZELNE Dateien aus
+     * (exakter public-relativer Pfad, z. B. Suchmaschinen-Bestätigungsdateien wie
+     * "google….html", die nicht verändert oder gelöscht werden dürfen). Beide
+     * kommagetrennt in der INI.
      *
-     * @return array{excludePrefixes: list<string>}
+     * @return array{excludePrefixes: list<string>, excludeFiles: list<string>}
      */
     private static function seoReportSection(mixed $section): array
     {
         $section = is_array($section) ? $section : [];
 
-        return ['excludePrefixes' => self::normalizeExcludePrefixes((string) ($section['exclude_prefixes'] ?? ''))];
+        return [
+            'excludePrefixes' => self::normalizeExcludePrefixes((string) ($section['exclude_prefixes'] ?? '')),
+            'excludeFiles' => self::normalizeExcludeFiles((string) ($section['exclude_files'] ?? '')),
+        ];
     }
 
     /**
@@ -165,6 +171,31 @@ final class Config
                 $prefix .= '/';
             }
             $out[$prefix] = true;
+        }
+
+        return array_keys($out);
+    }
+
+    /**
+     * Normalisiert eine kommagetrennte (oder zeilengetrennte) Liste EINZELNER
+     * public-relativer Dateien, die der SEO-Bericht überspringt: trimmt, entfernt
+     * führende Schrägstriche, verwirft leere Einträge und solche mit ".." und
+     * entdoppelt. Anders als bei den Präfixen wird KEIN Schrägstrich angehängt —
+     * verglichen wird der exakte Dateipfad. Gemeinsam genutzt vom Einlesen (load)
+     * und vom Schreiben (Connector::cmdReconfigure).
+     *
+     * @return list<string>
+     */
+    public static function normalizeExcludeFiles(string $raw): array
+    {
+        $out = [];
+        foreach (preg_split('/[,\r\n]+/', $raw) ?: [] as $entry) {
+            $file = trim((string) $entry);
+            $file = ltrim($file, '/');
+            if ($file === '' || str_contains($file, '..')) {
+                continue;
+            }
+            $out[$file] = true;
         }
 
         return array_keys($out);
