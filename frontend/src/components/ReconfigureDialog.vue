@@ -160,6 +160,16 @@ async function submit() {
         <span>{{ $t('reconfigure.title') }}</span>
         <v-spacer />
         <v-btn
+          icon="mdi-content-save"
+          variant="text"
+          density="comfortable"
+          color="primary"
+          :loading="saving"
+          :disabled="saving || loading"
+          :aria-label="$t('reconfigure.submit')"
+          @click="submit"
+        />
+        <v-btn
           icon="mdi-close"
           variant="text"
           density="comfortable"
