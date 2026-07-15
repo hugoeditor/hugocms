@@ -106,6 +106,22 @@ async function removeRun() {
   }
 }
 
+// Verlauf aufräumen: alle Läufe bis auf den zuletzt erzeugten löschen.
+async function removeOtherRuns() {
+  const ok = await confirm({
+    title: t('audit.pruneTitle'),
+    message: t('audit.pruneConfirm'),
+    confirmText: t('audit.pruneAction'),
+    color: 'error',
+  })
+  if (!ok) return
+  try {
+    await audit.deleteOtherRuns()
+  } catch (e) {
+    error.value = errorText(t, e)
+  }
+}
+
 async function openSource(issue) {
   try {
     // Audit-Modus bewusst NICHT verlassen: Der Editor legt sich nur als
@@ -206,6 +222,16 @@ function runLabel(run) {
             @click="removeRun"
           >
             <v-icon icon="mdi-delete-outline" size="16" class="mr-1" />{{ $t('audit.delete') }}
+          </button>
+          <!-- Verlauf aufräumen: erst sinnvoll, wenn es mehr als einen Lauf gibt. -->
+          <button
+            v-if="audit.runs.length > 1"
+            class="audit-btn danger"
+            :disabled="audit.running"
+            :title="$t('audit.pruneHint')"
+            @click="removeOtherRuns"
+          >
+            <v-icon icon="mdi-broom" size="16" class="mr-1" />{{ $t('audit.pruneOthers') }}
           </button>
         </div>
       </div>

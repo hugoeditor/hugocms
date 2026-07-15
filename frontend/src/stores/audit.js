@@ -75,6 +75,18 @@ export const useAuditStore = defineStore('audit', {
       await this.fetchRuns()
     },
 
+    // Alle Läufe bis auf den zuletzt erzeugten löschen (Verlauf aufräumen).
+    async deleteOtherRuns() {
+      const res = await api.post('auditdeleteothers')
+      await this.fetchRuns()
+      // War der angezeigte Lauf unter den gelöschten, auf den behaltenen
+      // (jüngsten) umschalten.
+      if (this.runs.length && (!this.current || !this.runs.some((r) => r.id === this.current.id))) {
+        await this.fetchRun(this.runs[0].id)
+      }
+      return res
+    },
+
     resetFilters() {
       this.severityFilter = 'all'
       this.categoryFilter = 'all'

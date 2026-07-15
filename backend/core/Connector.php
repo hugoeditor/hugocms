@@ -376,6 +376,7 @@ final class Connector
                 'auditlist' => $this->cmdAuditList(),
                 'auditget' => $this->cmdAuditGet($request),
                 'auditdelete' => $this->cmdAuditDelete($request),
+                'auditdeleteothers' => $this->cmdAuditDeleteOthers(),
                 'auditcontent' => $this->cmdAuditContent($request),
                 'auditcontentlist' => $this->cmdAuditContentList(),
                 'auditcontentget' => $this->cmdAuditContentGet($request),
@@ -2242,6 +2243,14 @@ final class Connector
         $id = $this->requireParam($request, 'id');
 
         return $this->audit()->delete($id);
+    }
+
+    /** Löscht alle gespeicherten Läufe bis auf den zuletzt erzeugten. */
+    private function cmdAuditDeleteOthers(): array
+    {
+        $this->requireMethod('POST');
+
+        return $this->audit()->deleteAllButLatest();
     }
 
     // --- LLM-Content-Qualität (Pro-Funktion, braucht KI-Schlüssel) ----------

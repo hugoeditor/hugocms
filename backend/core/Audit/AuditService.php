@@ -133,6 +133,27 @@ final class AuditService
         return ['deleted' => $id];
     }
 
+    /**
+     * Löscht alle gespeicherten Läufe bis auf den jüngsten. Aufräumhilfe, um den
+     * Verlauf ohne Einzellöschungen zu leeren; der zuletzt erzeugte Bericht (für
+     * Vergleiche der wichtigste) bleibt erhalten.
+     *
+     * @return array{deleted: int, kept: ?string}
+     */
+    public function deleteAllButLatest(): array
+    {
+        $files = $this->files(); // neueste zuerst
+        $kept = $files === [] ? null : basename($files[0], '.json');
+        $deleted = 0;
+        foreach (array_slice($files, 1) as $old) {
+            if (@unlink($old)) {
+                ++$deleted;
+            }
+        }
+
+        return ['deleted' => $deleted, 'kept' => $kept];
+    }
+
     // --- Intern ------------------------------------------------------------
 
     /**
