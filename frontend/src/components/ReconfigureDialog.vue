@@ -47,6 +47,13 @@ const speechUrl = ref(DEFAULT_SPEECH_URL)
 const speechKey = ref('')
 const speechConfigured = ref(false)
 
+// PageSpeed-Check (Pro-Dienst). Die zu messende Live-Adresse; ist keine
+// hinterlegt, wird sie aus der Hugo-baseURL vorbelegt (pagespeedBaseUrlDetected).
+// Der Google-Schlüssel ist optional und ein Geheimnis: leeres Feld = unverändert.
+const pagespeedBaseUrl = ref('')
+const pagespeedKey = ref('')
+const pagespeedConfigured = ref(false)
+
 // E-Mail-Versand (Gesundheitscheck). Das SMTP-Passwort wird nie geladen
 // (Geheimnis); leeres Feld lässt es unverändert. mailPassConfigured zeigt nur
 // an, ob bereits eines gesetzt ist.
@@ -82,6 +89,7 @@ const sections = [
   { key: 'speech', label: 'speechConfig.section' },
   { key: 'mail', label: 'mailConfig.section' },
   { key: 'seo', label: 'seoConfig.section' },
+  { key: 'pagespeed', label: 'pagespeedConfig.section' },
 ]
 const sectionEls = {}
 function registerSection(key) {
@@ -115,6 +123,10 @@ watch(model, async (open) => {
     speechUrl.value = cfg.speechUrl || DEFAULT_SPEECH_URL
     speechKey.value = ''
     speechConfigured.value = !!cfg.speechConfigured
+    // Vorhandene Adresse; sonst die aus der Hugo-baseURL erkannte Vorbelegung.
+    pagespeedBaseUrl.value = cfg.pagespeedBaseUrl || cfg.pagespeedBaseUrlDetected || ''
+    pagespeedKey.value = ''
+    pagespeedConfigured.value = !!cfg.pagespeedConfigured
     mailHost.value = cfg.mailHost ?? ''
     mailPort.value = cfg.mailPort ?? ''
     mailSecurity.value = cfg.mailSecurity || 'tls'
@@ -156,6 +168,8 @@ async function submit() {
       aiWriteMode: aiWriteMode.value,
       speechKey: speechKey.value, // leer = unverändert
       speechUrl: speechUrl.value,
+      pagespeedBaseUrl: pagespeedBaseUrl.value,
+      pagespeedKey: pagespeedKey.value, // leer = unverändert
       mailHost: mailHost.value,
       mailPort: mailPort.value,
       mailSecurity: mailSecurity.value,
@@ -441,6 +455,31 @@ async function submit() {
             density="comfortable"
             rows="3"
             auto-grow
+          />
+
+          <v-divider class="my-3" />
+          <div :ref="registerSection('pagespeed')" class="text-subtitle-2 mb-2">{{ $t('pagespeedConfig.section') }}</div>
+          <div class="text-caption text-medium-emphasis mb-2">{{ $t('pagespeedConfig.urlHint') }}</div>
+          <v-text-field
+            v-model="pagespeedBaseUrl"
+            :label="$t('pagespeedConfig.url')"
+            placeholder="https://example.com/"
+            prepend-inner-icon="mdi-web"
+            variant="outlined"
+            density="comfortable"
+            class="mb-2"
+          />
+          <div class="text-caption text-medium-emphasis mb-2">
+            {{ pagespeedConfigured ? $t('pagespeedConfig.keyHintSet') : $t('pagespeedConfig.keyHintUnset') }}
+          </div>
+          <v-text-field
+            v-model="pagespeedKey"
+            :label="$t('pagespeedConfig.key')"
+            type="password"
+            prepend-inner-icon="mdi-key-variant"
+            autocomplete="off"
+            variant="outlined"
+            density="comfortable"
           />
 
           <v-alert v-if="error" type="error" density="compact" class="mt-2">{{ error }}</v-alert>

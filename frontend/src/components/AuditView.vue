@@ -15,6 +15,7 @@ import { useConfirm } from '../util/confirm'
 import AuditSeverityChip from './AuditSeverityChip.vue'
 import AuditIssueTable from './AuditIssueTable.vue'
 import AuditContentList from './AuditContentList.vue'
+import PageSpeedPanel from './PageSpeedPanel.vue'
 
 const { t, locale } = useI18n()
 const audit = useAuditStore()
@@ -159,14 +160,18 @@ function runLabel(run) {
       <span class="audit-title">{{ $t('audit.title') }}</span>
     </div>
 
-    <!-- Reiter: nur wenn die Content-Prüfung freigeschaltet ist (sonst gibt es
-         nur den Bericht und eine Reiterleiste wäre überflüssig). -->
-    <div v-if="auth.auditContent" class="audit-tabs nemo-noselect">
+    <!-- Reiter: nur, wenn neben dem Bericht mindestens eine weitere Ansicht
+         freigeschaltet ist (Content-Prüfung oder PageSpeed) — sonst gibt es nur
+         den Bericht und eine Reiterleiste wäre überflüssig. -->
+    <div v-if="auth.auditContent || auth.pagespeed" class="audit-tabs nemo-noselect">
       <button class="audit-tab" :class="{ active: tab === 'report' }" @click="tab = 'report'">
         <v-icon icon="mdi-clipboard-search-outline" size="16" class="mr-1" />{{ $t('audit.tabReport') }}
       </button>
-      <button class="audit-tab" :class="{ active: tab === 'content' }" @click="tab = 'content'">
+      <button v-if="auth.auditContent" class="audit-tab" :class="{ active: tab === 'content' }" @click="tab = 'content'">
         <v-icon icon="mdi-text-search" size="16" class="mr-1" />{{ $t('contentQuality.title') }}
+      </button>
+      <button v-if="auth.pagespeed" class="audit-tab" :class="{ active: tab === 'pagespeed' }" @click="tab = 'pagespeed'">
+        <v-icon icon="mdi-speedometer" size="16" class="mr-1" />{{ $t('pagespeed.tab') }}
       </button>
     </div>
 
@@ -289,6 +294,9 @@ function runLabel(run) {
       <!-- Reiter „Content-Qualität": Liste der geprüften Seiten -->
       <AuditContentList v-if="tab === 'content'" />
 
+      <!-- Reiter „PageSpeed": Geschwindigkeitsmessung der Live-Adresse -->
+      <PageSpeedPanel v-else-if="tab === 'pagespeed'" />
+
       <!-- Läuft gerade / Bericht wird geladen -->
       <div v-else-if="audit.running || audit.loading" class="nemo-empty">
         <v-progress-circular indeterminate size="40" width="3" color="primary" />
@@ -318,6 +326,7 @@ function runLabel(run) {
       <span v-if="tab === 'content'">
         {{ $t('contentQuality.pageCount', [auditContent.checked.length]) }}
       </span>
+      <span v-else-if="tab === 'pagespeed'">{{ $t('pagespeed.tab') }}</span>
       <span v-else-if="audit.current">
         {{ $t('audit.issueCount', [audit.filteredIssues.length]) }}
       </span>

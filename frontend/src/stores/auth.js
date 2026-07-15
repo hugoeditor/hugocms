@@ -24,6 +24,7 @@ export const useAuthStore = defineStore('auth', {
     audit: false, // SEO-Audit nutzbar (Pro + Hugo-Projekt) — wie git
     auditContent: false, // LLM-Content-Prüfung (Audit-Voraussetzung + KI-Schlüssel)
     speech: false, // Spracheingabe des Assistenten (Pro + [services] konfiguriert)
+    pagespeed: false, // PageSpeed-Check (Pro + [services] pagespeed_base_url gesetzt)
     review: false, // gestaffelte Veröffentlichung: Entwürfe zur Freigabe (Hugo-Projekt)
   }),
 
@@ -50,6 +51,7 @@ export const useAuthStore = defineStore('auth', {
       this.audit = data.audit ?? false
       this.auditContent = data.auditContent ?? false
       this.speech = data.speech ?? false
+      this.pagespeed = data.pagespeed ?? false
       this.review = data.review ?? false
       setCsrfToken(data.csrf)
       this.ready = true

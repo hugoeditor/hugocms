@@ -322,23 +322,30 @@ final class Config
     }
 
     /**
-     * Externe Pro-Dienste (optional) aus der [services]-Sektion. Derzeit der
-     * Transkriptionsdienst (seo-success) für die Spracheingabe:
-     *   speech_key  API-Schlüssel des Dienstes (Geheimnis).
-     *   speech_url  Voller Endpunkt, z. B. https://…/v1/transcribe.
-     * Fehlt eines von beiden, ist die Spracheingabe aus.
+     * Externe Pro-Dienste (optional) aus der [services]-Sektion:
+     *   speech_key         API-Schlüssel des Transkriptionsdienstes (Geheimnis).
+     *   speech_url         Voller Endpunkt, z. B. https://…/v1/transcribe.
+     *                      Fehlt eines von beiden, ist die Spracheingabe aus.
+     *   pagespeed_key      Google-API-Schlüssel für PageSpeed Insights (Geheimnis,
+     *                      OPTIONAL — ohne Schlüssel gilt ein kleineres Kontingent).
+     *   pagespeed_base_url Zu prüfende öffentliche Live-Adresse der Webseite.
+     *                      Ohne sie ist der PageSpeed-Check aus (nichts zu messen).
      *
-     * @return array{speechKey: ?string, speechUrl: ?string}
+     * @return array{speechKey: ?string, speechUrl: ?string, pagespeedKey: ?string, pagespeedBaseUrl: ?string}
      */
     private static function servicesSection(mixed $section): array
     {
         $section = is_array($section) ? $section : [];
         $speechKey = trim((string) ($section['speech_key'] ?? ''));
         $speechUrl = trim((string) ($section['speech_url'] ?? ''));
+        $pagespeedKey = trim((string) ($section['pagespeed_key'] ?? ''));
+        $pagespeedBaseUrl = trim((string) ($section['pagespeed_base_url'] ?? ''));
 
         return [
             'speechKey' => $speechKey === '' ? null : $speechKey,
             'speechUrl' => $speechUrl === '' ? null : $speechUrl,
+            'pagespeedKey' => $pagespeedKey === '' ? null : $pagespeedKey,
+            'pagespeedBaseUrl' => $pagespeedBaseUrl === '' ? null : $pagespeedBaseUrl,
         ];
     }
 

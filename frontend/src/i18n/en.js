@@ -208,6 +208,36 @@ export default {
     notFoundHint: 'There is no help text for this topic yet.',
   },
 
+  pagespeed: {
+    tab: 'PageSpeed',
+    run: 'Run measurement',
+    running: 'PageSpeed is measuring the page …',
+    empty: 'No measurement yet. Run one to see scores and load metrics.',
+    mobile: 'Mobile',
+    desktop: 'Desktop',
+    metricsTitle: 'Load metrics (lab data)',
+    provider: 'Data source: Google PageSpeed Insights (Lighthouse).',
+    category: {
+      performance: 'Performance',
+      accessibility: 'Accessibility',
+      'best-practices': 'Best practices',
+      seo: 'SEO',
+    },
+    metric: {
+      'largest-contentful-paint': 'Largest Contentful Paint (LCP)',
+      'cumulative-layout-shift': 'Cumulative Layout Shift (CLS)',
+      'total-blocking-time': 'Total Blocking Time (TBT)',
+      'first-contentful-paint': 'First Contentful Paint (FCP)',
+      'speed-index': 'Speed Index',
+      interactive: 'Time to Interactive (TTI)',
+    },
+    field: {
+      FAST: 'Real-user experience: fast.',
+      AVERAGE: 'Real-user experience: average.',
+      SLOW: 'Real-user experience: slow.',
+    },
+  },
+
   audit: {
     open: 'SEO check',
     title: 'SEO check',
@@ -396,6 +426,17 @@ export default {
     key: 'API key',
     keyHintSet: 'A key is stored. Leave empty to keep it; entering one replaces it.',
     keyHintUnset: 'No key stored yet. Without a key, voice input stays disabled.',
+  },
+
+  pagespeedConfig: {
+    section: 'PageSpeed check',
+    url: 'Live URL',
+    urlHint:
+      'Public address of the site that Google PageSpeed Insights measures (Google fetches it itself — the local build is not enough). Without an address the check is off. Prefilled from the Hugo baseURL.',
+    key: 'Google API key',
+    keyHintSet: 'A key is stored. Leave empty to keep it; entering one replaces it.',
+    keyHintUnset:
+      'Optional. Without a key a small quota applies; a free key from the Google Cloud Console raises it considerably (25,000 requests/day).',
   },
 
   mailConfig: {
@@ -855,6 +896,11 @@ export default {
     'SPEECH-AUTH-FAILED': 'The transcription service rejected the credentials.',
     'SPEECH-MIC-DENIED': 'No access to the microphone. Please allow the permission.',
     'SPEECH-NO-RESULT': 'No speech was recognized.',
+    'PAGESPEED-NOT-CONFIGURED': 'The PageSpeed check is not configured. Please set a live URL in the configuration.',
+    'PAGESPEED-UNREACHABLE': 'Google PageSpeed Insights is unreachable ({0}).',
+    'PAGESPEED-REQUEST-FAILED': 'The PageSpeed measurement failed ({0}).',
+    'PAGESPEED-QUOTA-EXCEEDED': 'The PageSpeed quota is exhausted. Your own Google API key raises the limit.',
+    'PAGESPEED-AUTH-FAILED': 'Google rejected the API key ({0}).',
     'UPLOAD-TOO-LARGE': '“{0}” is too large (at most {1}).',
     'NOT-AN-IMAGE': 'Not an image file.',
     'FILETYPE-NOT-IMAGE': 'The edited data is not a supported image format (JPEG, PNG, WebP, GIF).',

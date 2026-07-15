@@ -119,9 +119,19 @@ bin = ../bin/hugo/hugo
 ;   speech_key  API-Schlüssel des Dienstes (Geheimnis; Datei mit 0640 schützen).
 ;   speech_url  Basis-Adresse des Dienstes (der Endpunkt /v1/transcribe wird
 ;               automatisch angehängt). Standard: https://api.hugocms.com/
-; Lässt sich auch über das Konfigurationsformular setzen.
+; Ebenfalls hier: der Geschwindigkeits-Check über Google PageSpeed Insights.
+; Nur wirksam mit gültiger Pro-Lizenz. Der Google-Schlüssel bleibt serverseitig.
+;   pagespeed_base_url  Öffentliche Live-Adresse der Webseite, die gemessen wird
+;                       (Google ruft sie selbst ab). Ohne sie ist der Check aus.
+;   pagespeed_key       Google-API-Schlüssel (OPTIONAL). Ohne Schlüssel gilt ein
+;                       kleines Kontingent; mit kostenlosem Schlüssel aus der
+;                       Google Cloud Console deutlich mehr (25.000 Anfragen/Tag).
+; Lässt sich auch über das Konfigurationsformular setzen (baseURL wird aus der
+; Hugo-Konfiguration vorbelegt).
 ;speech_key = "seosk_live_..."
 ;speech_url = "https://api.hugocms.com/"
+;pagespeed_base_url = "https://example.com/"
+;pagespeed_key = "AIza..."
 
 ;[mail]
 ; E-Mail-Versand für den Gesundheitscheck-Cron (cron-healthcheck.php). Der

@@ -14,6 +14,12 @@ export const useAuditStore = defineStore('audit', {
     loading: false, // Bericht/Liste wird geladen
     severityFilter: 'all', // 'all' | 'error' | 'warning' | 'hint'
     categoryFilter: 'all', // 'all' | <Kategorie>
+    // PageSpeed-Check (Pro, eigener Reiter). Misst die konfigurierte Live-Adresse
+    // über Google PageSpeed Insights; das Ergebnis wird nicht als Verlauf
+    // vorgehalten (immer der jüngste Lauf).
+    pageSpeed: null, // letztes Ergebnis (Scores + Kern-Web-Vitalwerte) oder null
+    pageSpeedRunning: false, // läuft gerade eine Messung?
+    pageSpeedStrategy: 'mobile', // 'mobile' | 'desktop'
   }),
 
   getters: {
@@ -85,6 +91,21 @@ export const useAuditStore = defineStore('audit', {
         await this.fetchRun(this.runs[0].id)
       }
       return res
+    },
+
+    // PageSpeed-Messung der konfigurierten Live-Adresse starten. Die Strategie
+    // (mobile/desktop) kommt aus dem Zustand; das reduzierte Ergebnis kommt
+    // direkt zurück und wird angezeigt.
+    async runPageSpeed(strategy) {
+      if (strategy) this.pageSpeedStrategy = strategy
+      this.pageSpeedRunning = true
+      try {
+        const result = await api.post('pagespeed', { strategy: this.pageSpeedStrategy })
+        this.pageSpeed = markRaw(result)
+        return result
+      } finally {
+        this.pageSpeedRunning = false
+      }
     },
 
     resetFilters() {

@@ -81,13 +81,15 @@ final class Connector
     ];
 
     /**
-     * Externe Pro-Dienste aus der [services]-Sektion der hugocms.ini. Derzeit
-     * der Transkriptionsdienst (seo-success) für die Spracheingabe.
+     * Externe Pro-Dienste aus der [services]-Sektion der hugocms.ini:
+     * der Transkriptionsdienst (seo-success) für die Spracheingabe sowie
+     * Google PageSpeed Insights für den Geschwindigkeits-Check.
      * speechKey/speechUrl = null → Spracheingabe aus.
+     * pagespeedBaseUrl = null → PageSpeed-Check aus (keine zu messende Adresse).
      *
-     * @var array{speechKey: ?string, speechUrl: ?string}
+     * @var array{speechKey: ?string, speechUrl: ?string, pagespeedKey: ?string, pagespeedBaseUrl: ?string}
      */
-    private array $services = ['speechKey' => null, 'speechUrl' => null];
+    private array $services = ['speechKey' => null, 'speechUrl' => null, 'pagespeedKey' => null, 'pagespeedBaseUrl' => null];
 
     /** Globale [user]-Einstellungen (Sitzungsdauer, Inhaltsbreite). */
     private array $user = ['sessionLifetime' => 28800, 'contentWidth' => 1200, 'updateLastmod' => null];
@@ -367,6 +369,7 @@ final class Connector
                 'assistantimprove' => $this->cmdAssistantImprove($request),
                 'speech' => $this->cmdSpeech($request),
                 'speechverify' => $this->cmdSpeechVerify($request),
+                'pagespeed' => $this->cmdPageSpeed($request),
                 'config' => $this->cmdConfig(),
                 'reconfigure' => $this->cmdReconfigure($request),
                 'setupdatelastmod' => $this->cmdSetUpdateLastmod($request),
@@ -534,6 +537,12 @@ final class Connector
             'speech' => $this->license()->isPro()
                 && $this->services['speechKey'] !== null
                 && $this->services['speechUrl'] !== null,
+            // PageSpeed-Check (Pro): braucht eine Pro-Lizenz UND eine
+            // konfigurierte öffentliche Live-Adresse ([services] pagespeed_base_url).
+            // Der Google-Schlüssel ist optional (ohne ihn gilt ein kleineres
+            // Kontingent), taugt daher nicht als Freischalt-Merkmal.
+            'pagespeed' => $this->license()->isPro()
+                && $this->services['pagespeedBaseUrl'] !== null,
             // Gestaffelte Veröffentlichung: Entwürfe zur Freigabe setzen
             // Hugos draft/publishDate voraus, also ein konfiguriertes Hugo-
             // Projekt. Keine Pro-Bindung — der Entwurf-Modus ist eine allgemeine
@@ -1491,6 +1500,37 @@ final class Connector
     }
 
     /**
+     * pagespeed — misst die konfigurierte Live-Adresse ([services]
+     * pagespeed_base_url) über Google PageSpeed Insights und liefert die
+     * reduzierten Kennzahlen (Scores + Kern-Web-Vitalwerte). Pro-Funktion; der
+     * Google-Schlüssel ist optional und bleibt serverseitig. Der Lauf misst live
+     * und kann einige Sekunden dauern.
+     *
+     * @return array<string, mixed>
+     */
+    private function cmdPageSpeed(array $request): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+        $this->requirePro();
+
+        $baseUrl = $this->services['pagespeedBaseUrl'];
+        if ($baseUrl === null) {
+            throw new ApiException('ECONFIG', 409, 'PAGESPEED-NOT-CONFIGURED');
+        }
+
+        // Strategie aus dem Request; alles außer "desktop" gilt als "mobile".
+        $strategy = ((string) ($request['strategy'] ?? 'mobile')) === 'desktop' ? 'desktop' : 'mobile';
+
+        $result = (new PageSpeedClient($this->services['pagespeedKey']))
+            ->run($baseUrl, $strategy, PageSpeedClient::CATEGORIES);
+
+        $this->logger->info(sprintf('PageSpeed-Check (%s) für %s.', $strategy, $baseUrl));
+
+        return $result;
+    }
+
+    /**
      * CLI-Einstieg (Cron): verbessert die nächsten bis zu $limit noch nicht
      * verbesserten, geprüften Content-Dateien mit Score < 100 — im Schreibmodus
      * "auto" (ohne Bestätigung). KEINE Web-Authentifizierung; der Aufruf erfolgt
@@ -1816,6 +1856,15 @@ final class Connector
             // Schlüssel. Leere URL → der Client füllt den Standard vor.
             'speechConfigured' => trim((string) ($raw['services']['speech_key'] ?? '')) !== '',
             'speechUrl'        => $raw['services']['speech_url'] ?? '',
+            // PageSpeed-Check (Pro-Dienst): Status des optionalen Google-Schlüssels
+            // (nie der Schlüssel selbst) und die zu messende Live-Adresse. Ist
+            // keine hinterlegt, liefert pagespeedBaseUrlDetected die aus der
+            // Hugo-baseURL erkannte Adresse als Vorbelegung fürs Formular.
+            'pagespeedConfigured'      => trim((string) ($raw['services']['pagespeed_key'] ?? '')) !== '',
+            'pagespeedBaseUrl'         => $raw['services']['pagespeed_base_url'] ?? '',
+            'pagespeedBaseUrlDetected' => $this->hugo !== null
+                ? (AuditService::detectBaseUrl((string) $this->hugo['source']) ?? '')
+                : '',
             // E-Mail-Versand (Gesundheitscheck): alle Werte AUSSER dem Passwort.
             // mailPassConfigured zeigt nur an, ob bereits eines hinterlegt ist.
             'mailHost'           => $raw['mail']['smtp_host'] ?? '',
@@ -1899,6 +1948,29 @@ final class Connector
         $existingServices = Config::raw($this->configPath)['services'] ?? [];
         $speechKey = $speechKeyNew !== '' ? $speechKeyNew : trim((string) ($existingServices['speech_key'] ?? ''));
 
+        // PageSpeed-Check (Pro-Dienst). Der Google-Schlüssel ist ein Geheimnis
+        // (leeres Feld = unverändert) UND optional. Die Basis-URL ist die zu
+        // messende öffentliche Live-Adresse; ohne sie ist der Check aus.
+        $pagespeedBaseUrl = self::cleanConfigValue($request['pagespeedBaseUrl'] ?? '', 'pagespeedBaseUrl', false);
+        $pagespeedKeyNew = self::cleanConfigValue($request['pagespeedKey'] ?? '', 'pagespeedKey', false);
+        $pagespeedKey = $pagespeedKeyNew !== '' ? $pagespeedKeyNew : trim((string) ($existingServices['pagespeed_key'] ?? ''));
+
+        // [services] aus beiden Diensten zusammensetzen — jeder Schlüssel nur bei
+        // Bedarf, damit keine leeren Einträge in der INI landen. Ohne jeglichen
+        // Wert entfällt die Sektion.
+        $servicesSection = [];
+        if ($speechKey !== '') {
+            $servicesSection['speech_key'] = $speechKey;
+            $servicesSection['speech_url'] = $speechUrl;
+        }
+        if ($pagespeedBaseUrl !== '') {
+            $servicesSection['pagespeed_base_url'] = $pagespeedBaseUrl;
+            // Der Schlüssel ist optional: nur schreiben, wenn vorhanden.
+            if ($pagespeedKey !== '') {
+                $servicesSection['pagespeed_key'] = $pagespeedKey;
+            }
+        }
+
         // E-Mail-Versand (Gesundheitscheck). Das SMTP-Passwort ist ein Geheimnis:
         // ein leeres Feld lässt das bestehende unverändert. Die Sektion wird nur
         // geschrieben, wenn Server, Absender und Empfänger gesetzt sind — sonst
@@ -1969,8 +2041,8 @@ final class Connector
             'hugo'    => $hugoSection,
             // Ohne API-Schlüssel keine [ai]-Sektion (Assistent aus).
             'ai'      => $apiKey === '' ? null : $aiSection,
-            // Ohne Schlüssel keine [services]-Sektion (Spracheingabe aus).
-            'services' => $speechKey === '' ? null : ['speech_key' => $speechKey, 'speech_url' => $speechUrl],
+            // Ohne konfigurierten Dienst keine [services]-Sektion.
+            'services' => $servicesSection === [] ? null : $servicesSection,
             // Ohne Server/Absender/Empfänger keine [mail]-Sektion (Versand aus).
             'mail'    => $mailSection,
             // Ohne zusätzliche Präfixe/Dateien keine [seo_report]-Sektion.

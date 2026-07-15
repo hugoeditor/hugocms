@@ -190,6 +190,38 @@ final class AuditService
         return 'content';
     }
 
+    /**
+     * Liest die in der Hugo-Konfiguration hinterlegte baseURL (Live-Adresse der
+     * Webseite) — zur Vorbelegung des PageSpeed-Feldes im Konfigurationsdialog.
+     * TOML/YAML/JSON werden wie bei {@see detectContentDir} per Regex abgegriffen,
+     * ohne Parser-Abhängigkeit. Liefert die getrimmte Adresse oder null, wenn
+     * keine (brauchbare) baseURL gefunden wird. Ein reines "/" (Hugo-Vorgabe für
+     * relative URLs) gilt als nicht gesetzt.
+     */
+    public static function detectBaseUrl(string $sourceDir): ?string
+    {
+        $candidates = [
+            'hugo.toml', 'hugo.yaml', 'hugo.yml', 'hugo.json',
+            'config.toml', 'config.yaml', 'config.yml', 'config.json',
+            'config/_default/hugo.toml', 'config/_default/config.toml',
+        ];
+        foreach ($candidates as $rel) {
+            $path = $sourceDir . '/' . $rel;
+            if (!is_file($path)) {
+                continue;
+            }
+            $raw = (string) file_get_contents($path);
+            if (preg_match('/^\s*["\']?baseURL["\']?\s*[:=]\s*["\']([^"\']+)["\']/mi', $raw, $m) === 1) {
+                $url = trim($m[1]);
+                if ($url !== '' && $url !== '/' && preg_match('#^https?://#i', $url) === 1) {
+                    return rtrim($url, '/') . '/';
+                }
+            }
+        }
+
+        return null;
+    }
+
     /** Erzeugt eine eindeutige, dateinamenssichere Lauf-ID (UTC-Zeitstempel). */
     private function freshId(): string
     {

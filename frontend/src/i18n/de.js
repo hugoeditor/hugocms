@@ -208,6 +208,36 @@ export default {
     notFoundHint: 'Zu diesem Thema gibt es noch keinen Hilfetext.',
   },
 
+  pagespeed: {
+    tab: 'PageSpeed',
+    run: 'Messung starten',
+    running: 'PageSpeed misst die Seite …',
+    empty: 'Noch keine Messung. Starte eine, um Scores und Ladewerte zu sehen.',
+    mobile: 'Mobil',
+    desktop: 'Desktop',
+    metricsTitle: 'Ladewerte (Labormessung)',
+    provider: 'Datenquelle: Google PageSpeed Insights (Lighthouse).',
+    category: {
+      performance: 'Leistung',
+      accessibility: 'Barrierefreiheit',
+      'best-practices': 'Empfehlungen',
+      seo: 'SEO',
+    },
+    metric: {
+      'largest-contentful-paint': 'Größtes Inhaltselement (LCP)',
+      'cumulative-layout-shift': 'Layoutverschiebung (CLS)',
+      'total-blocking-time': 'Blockierzeit gesamt (TBT)',
+      'first-contentful-paint': 'Erstes Inhaltselement (FCP)',
+      'speed-index': 'Geschwindigkeitsindex',
+      interactive: 'Interaktiv (TTI)',
+    },
+    field: {
+      FAST: 'Echte Nutzererfahrung: schnell.',
+      AVERAGE: 'Echte Nutzererfahrung: durchschnittlich.',
+      SLOW: 'Echte Nutzererfahrung: langsam.',
+    },
+  },
+
   audit: {
     open: 'SEO-Check',
     title: 'SEO-Check',
@@ -396,6 +426,17 @@ export default {
     key: 'API-Schlüssel',
     keyHintSet: 'Ein Schlüssel ist hinterlegt. Leer lassen, um ihn beizubehalten; Eingabe ersetzt ihn.',
     keyHintUnset: 'Noch kein Schlüssel hinterlegt. Ohne Schlüssel bleibt die Spracheingabe deaktiviert.',
+  },
+
+  pagespeedConfig: {
+    section: 'PageSpeed-Check',
+    url: 'Live-Adresse',
+    urlHint:
+      'Öffentliche Adresse der Webseite, die Google PageSpeed Insights misst (Google ruft sie selbst ab — der lokale Build reicht nicht). Ohne Adresse ist der Check aus. Aus der Hugo-baseURL vorbelegt.',
+    key: 'Google-API-Schlüssel',
+    keyHintSet: 'Ein Schlüssel ist hinterlegt. Leer lassen, um ihn beizubehalten; Eingabe ersetzt ihn.',
+    keyHintUnset:
+      'Optional. Ohne Schlüssel gilt ein kleines Kontingent; mit kostenlosem Schlüssel aus der Google Cloud Console deutlich mehr (25.000 Anfragen/Tag).',
   },
 
   mailConfig: {
@@ -858,6 +899,11 @@ export default {
     'SPEECH-AUTH-FAILED': 'Der Transkriptionsdienst hat die Anmeldung abgelehnt.',
     'SPEECH-MIC-DENIED': 'Kein Zugriff auf das Mikrofon. Bitte die Berechtigung erlauben.',
     'SPEECH-NO-RESULT': 'Es wurde keine Sprache erkannt.',
+    'PAGESPEED-NOT-CONFIGURED': 'Der PageSpeed-Check ist nicht konfiguriert. Bitte in der Konfiguration eine Live-Adresse hinterlegen.',
+    'PAGESPEED-UNREACHABLE': 'Google PageSpeed Insights ist nicht erreichbar ({0}).',
+    'PAGESPEED-REQUEST-FAILED': 'Die PageSpeed-Messung ist fehlgeschlagen ({0}).',
+    'PAGESPEED-QUOTA-EXCEEDED': 'Das PageSpeed-Kontingent ist erschöpft. Ein eigener Google-API-Schlüssel erhöht das Limit.',
+    'PAGESPEED-AUTH-FAILED': 'Google hat den API-Schlüssel abgelehnt ({0}).',
     'NOT-AN-IMAGE': 'Keine Bilddatei.',
     'FILETYPE-NOT-IMAGE': 'Die bearbeiteten Daten sind kein unterstütztes Bildformat (JPEG, PNG, WebP, GIF).',
 
