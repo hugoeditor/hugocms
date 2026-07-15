@@ -138,7 +138,7 @@ export default {
   reconfigure: {
     open: 'Change configuration',
     title: 'Change configuration',
-    intro: 'Adjust directories, logging and the Hugo binary. Login credentials stay unchanged.',
+    intro: 'Adjust directories, logging, the Hugo binary, AI assistant, voice input and email delivery. Login credentials stay unchanged.',
     submit: 'Save',
     cancel: 'Cancel',
     success: 'Configuration saved.',
@@ -407,7 +407,7 @@ export default {
     passHintSet: 'A password is stored. Leave empty to keep it; entering one replaces it.',
     passHintUnset: 'No password stored yet. Only needed if the server requires a login.',
     from: 'Sender',
-    fromHint: 'e.g. HugoCMS <cms@example.com>',
+    fromHint: "e.g. HugoCMS <cms{'@'}example.com>",
     to: 'Recipient',
     toHint: 'Address for the health-check reports.',
   },

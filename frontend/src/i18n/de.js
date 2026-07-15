@@ -138,7 +138,7 @@ export default {
   reconfigure: {
     open: 'Konfiguration ändern',
     title: 'Konfiguration ändern',
-    intro: 'Verzeichnisse, Logging und Hugo-Programm anpassen. Die Anmeldedaten bleiben unverändert.',
+    intro: 'Verzeichnisse, Logging, Hugo-Programm, KI-Assistent, Spracheingabe und E-Mail-Versand anpassen. Die Anmeldedaten bleiben unverändert.',
     submit: 'Speichern',
     cancel: 'Abbrechen',
     success: 'Konfiguration gespeichert.',
@@ -407,7 +407,7 @@ export default {
     passHintSet: 'Ein Passwort ist hinterlegt. Leer lassen, um es beizubehalten; Eingabe ersetzt es.',
     passHintUnset: 'Noch kein Passwort hinterlegt. Nur nötig, wenn der Server eine Anmeldung verlangt.',
     from: 'Absender',
-    fromHint: 'z. B. HugoCMS <cms@example.com>',
+    fromHint: "z. B. HugoCMS <cms{'@'}example.com>",
     to: 'Empfänger',
     toHint: 'Adresse für die Gesundheitscheck-Berichte.',
   },

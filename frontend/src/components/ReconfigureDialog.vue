@@ -139,7 +139,18 @@ async function submit() {
 <template>
   <v-dialog v-model="model" width="480" :persistent="saving">
     <v-card class="pa-2">
-      <v-card-title class="text-h6">{{ $t('reconfigure.title') }}</v-card-title>
+      <v-card-title class="d-flex align-center text-h6">
+        <span>{{ $t('reconfigure.title') }}</span>
+        <v-spacer />
+        <v-btn
+          icon="mdi-close"
+          variant="text"
+          density="comfortable"
+          :disabled="saving"
+          :aria-label="$t('reconfigure.cancel')"
+          @click="model = false"
+        />
+      </v-card-title>
       <v-card-subtitle class="text-wrap">{{ $t('reconfigure.intro') }}</v-card-subtitle>
       <v-card-text>
         <v-skeleton-loader v-if="loading" type="article" />
@@ -339,7 +350,7 @@ async function submit() {
           <div class="text-caption text-medium-emphasis mt-3">{{ $t('reconfigure.note') }}</div>
         </v-form>
       </v-card-text>
-      <v-card-actions>
+      <v-card-actions v-if="!loading">
         <v-spacer />
         <v-btn variant="text" :disabled="saving" @click="model = false">{{ $t('reconfigure.cancel') }}</v-btn>
         <v-btn color="primary" variant="flat" :loading="saving" :disabled="loading" @click="submit">
