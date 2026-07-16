@@ -200,7 +200,7 @@ async function confirmDialog() {
 }
 
 function trashSelection() {
-  run(() => files.trashEntries([...files.selectedIds]))
+  run(() => files.moveToTrash([...files.selectedIds]))
 }
 
 // --- Upload (Dateiauswahl + Drag-and-Drop) --------------------------------

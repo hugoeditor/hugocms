@@ -266,7 +266,10 @@ export const useFilesStore = defineStore('files', {
       await this.refresh()
     },
 
-    async trashEntries(ids) {
+    // Name bewusst nicht `trashEntries`: So heißt bereits das State-Feld mit der
+    // Papierkorb-Liste. Pinia führt State und Actions auf demselben Objekt
+    // zusammen, sodass ein gleichnamiges Paar sich gegenseitig überschreibt.
+    async moveToTrash(ids) {
       if (!ids.length) return
       await api.post('delete', { targets: ids })
       await this.refresh()
