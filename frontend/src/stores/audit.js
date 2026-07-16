@@ -114,15 +114,34 @@ export const useAuditStore = defineStore('audit', {
     // (mobile/desktop) kommt aus dem Zustand. Das Ergebnis wird der jeweiligen
     // Strategie zugeordnet, damit Mobil- und Desktop-Bericht nebeneinander
     // bestehen bleiben.
-    async runPageSpeed(url, strategy) {
+    async runPageSpeed(url, strategy, locale) {
       const s = strategy || this.pageSpeedStrategy
       this.pageSpeedStrategy = s
       this.pageSpeedRunning = true
       try {
-        const result = await api.post('pagespeed', { url, strategy: s })
+        // locale steuert die Sprache der Optimierungs-Chancen (Lighthouse-Texte).
+        const result = await api.post('pagespeed', { url, strategy: s, locale })
         this.pageSpeedResults[s] = markRaw(result)
         return result
       } finally {
+        this.pageSpeedRunning = false
+      }
+    },
+
+    // Beide Strategien nacheinander messen (die API liefert je Aufruf nur eine).
+    // Die Anzeige folgt der jeweils laufenden Messung; am Ende wird die zuvor
+    // gewählte Strategie wieder eingestellt.
+    async runPageSpeedBoth(url, locale) {
+      const original = this.pageSpeedStrategy
+      this.pageSpeedRunning = true
+      try {
+        for (const s of ['mobile', 'desktop']) {
+          this.pageSpeedStrategy = s
+          const result = await api.post('pagespeed', { url, strategy: s, locale })
+          this.pageSpeedResults[s] = markRaw(result)
+        }
+      } finally {
+        this.pageSpeedStrategy = original
         this.pageSpeedRunning = false
       }
     },

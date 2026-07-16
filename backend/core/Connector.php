@@ -1549,8 +1549,13 @@ final class Connector
         // Strategie aus dem Request; alles außer "desktop" gilt als "mobile".
         $strategy = ((string) ($request['strategy'] ?? 'mobile')) === 'desktop' ? 'desktop' : 'mobile';
 
+        // Oberflächensprache für die Texte der Optimierungs-Chancen (nur die
+        // zweistellige Kennung, z. B. "de"/"en").
+        $locale = strtolower(substr((string) ($request['locale'] ?? ''), 0, 2));
+        $locale = preg_match('/^[a-z]{2}$/', $locale) === 1 ? $locale : null;
+
         $result = (new PageSpeedClient($this->services['pagespeedKey']))
-            ->run($url, $strategy, PageSpeedClient::CATEGORIES);
+            ->run($url, $strategy, PageSpeedClient::CATEGORIES, $locale);
 
         // Zeitpunkt der Messung (Serverzeit, UTC) für die Anzeige „zuletzt
         // gemessen" und das jüngste Ergebnis je Webseite merken.

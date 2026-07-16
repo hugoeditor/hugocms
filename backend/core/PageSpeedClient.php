@@ -28,7 +28,10 @@ final class PageSpeedClient
     /** Von Google unterstützte Prüf-Kategorien (Lighthouse). */
     public const CATEGORIES = ['performance', 'seo', 'accessibility', 'best-practices'];
 
-    /** Lab-Kennwerte (Lighthouse-Audit-IDs), die {@see extract()} übernimmt. */
+    /**
+     * Kern-Web-Vitalwerte (Labormessung, Lighthouse-Audit-IDs) — die
+     * wichtigsten Ladekennwerte, die {@see extract()} als „metrics" übernimmt.
+     */
     private const METRIC_AUDITS = [
         'first-contentful-paint',
         'largest-contentful-paint',
@@ -37,6 +40,37 @@ final class PageSpeedClient
         'speed-index',
         'interactive',
     ];
+
+    /**
+     * Weitere Diagnose-Kennwerte (Gruppe C): Server-Antwortzeit, Seitengewicht,
+     * DOM-Größe, JavaScript-Ausführungs- und Hauptthread-Zeit. Ebenfalls als
+     * „metrics" übernommen; das Panel zeigt sie in einem eigenen Abschnitt.
+     */
+    private const DIAGNOSTIC_AUDITS = [
+        'server-response-time',
+        'total-byte-weight',
+        'dom-size',
+        'bootup-time',
+        'mainthread-work-breakdown',
+    ];
+
+    /**
+     * Ausweich-IDs für Kennwerte, die Lighthouse 13 in „Insight"-Audits
+     * umbenannt hat: fehlt die Original-ID, wird die Insight-Variante genutzt.
+     */
+    private const METRIC_ALIASES = [
+        'dom-size' => 'dom-size-insight',
+    ];
+
+    /** Obergrenze der übernommenen Optimierungs-Chancen (Gruppe B). */
+    private const MAX_OPPORTUNITIES = 12;
+
+    /**
+     * Obergrenze der Detailposten je Chance. Gekürzt gespeichert: die
+     * wirkungsvollsten fünf Verursacher genügen; sind sie behoben, rücken beim
+     * nächsten Lauf die nächsten nach (jeder Lauf misst frisch).
+     */
+    private const MAX_OPPORTUNITY_ITEMS = 5;
 
     public function __construct(
         private readonly ?string $apiKey = null,
@@ -49,9 +83,11 @@ final class PageSpeedClient
      *
      * @param 'mobile'|'desktop' $strategy
      * @param list<string>       $categories Teilmenge von {@see CATEGORIES}
+     * @param ?string            $locale     Sprache der Lighthouse-Texte (z. B. "de");
+     *                                        wirkt v. a. auf die Titel der Chancen (B)
      * @return array<string, mixed>
      */
-    public function run(string $url, string $strategy = 'mobile', array $categories = ['performance']): array
+    public function run(string $url, string $strategy = 'mobile', array $categories = ['performance'], ?string $locale = null): array
     {
         // Nur bekannte Kategorien; leere Auswahl → Performance als Vorgabe.
         $categories = array_values(array_intersect($categories, self::CATEGORIES));
@@ -63,6 +99,10 @@ final class PageSpeedClient
         // category=seo…). http_build_query erzeugt aus einem Array category[0]=…
         // — das akzeptiert die API nicht, daher von Hand zusammensetzen.
         $params = ['url' => $url, 'strategy' => $strategy === 'desktop' ? 'desktop' : 'mobile'];
+        // Nur eine schlichte Sprachkennung durchreichen (a-z), nie roh.
+        if ($locale !== null && preg_match('/^[a-z]{2}$/', $locale) === 1) {
+            $params['locale'] = $locale;
+        }
         if ($this->apiKey !== null && $this->apiKey !== '') {
             $params['key'] = $this->apiKey;
         }
@@ -130,9 +170,16 @@ final class PageSpeedClient
     }
 
     /**
-     * Reduziert die Lighthouse-Antwort auf das Anzeigenötige: Kategorie-Scores
-     * (0–100), Lab-Kennwerte als Zahl + lesbare Darstellung und — falls
-     * vorhanden — das CrUX-Felddaten-Gesamturteil (echte Nutzererfahrung).
+     * Reduziert die Lighthouse-Antwort auf das Anzeigenötige. Alles stammt aus
+     * derselben Antwort — kein zusätzlicher Abruf:
+     *   scores        Kategorie-Scores 0–100.
+     *   metrics       Kern- und Diagnose-Kennwerte (Labormessung) als Zahl +
+     *                 lesbare Darstellung.
+     *   opportunities Optimierungs-Chancen mit geschätzter Zeitersparnis (B).
+     *   fieldData     CrUX-Felddaten (echte Nutzererfahrung) je Metrik mit
+     *                 Verteilung gut/verbesserungswürdig/schlecht — für die
+     *                 URL und die gesamte Domain (A).
+     *   runWarnings   Lauf-Warnungen; environment die Messbedingungen (E).
      *
      * @param array<string, mixed> $data
      * @return array<string, mixed>
@@ -140,6 +187,7 @@ final class PageSpeedClient
     private function extract(array $data, string $strategy): array
     {
         $lh = is_array($data['lighthouseResult'] ?? null) ? $data['lighthouseResult'] : [];
+        $audits = is_array($lh['audits'] ?? null) ? $lh['audits'] : [];
 
         /** @var array<string, int> $scores */
         $scores = [];
@@ -150,11 +198,13 @@ final class PageSpeedClient
             }
         }
 
+        // Kern- (A/Bestand) und Diagnose-Kennwerte (C) in EINE Map — das Panel
+        // ordnet sie über zwei feste Reihenfolgen in Abschnitte.
         /** @var array<string, array{value: float, display: string}> $metrics */
         $metrics = [];
-        $audits = is_array($lh['audits'] ?? null) ? $lh['audits'] : [];
-        foreach (self::METRIC_AUDITS as $id) {
-            $audit = $audits[$id] ?? null;
+        foreach ([...self::METRIC_AUDITS, ...self::DIAGNOSTIC_AUDITS] as $id) {
+            // Original-ID; fehlt sie, die umbenannte Insight-Variante (Lighthouse 13).
+            $audit = $audits[$id] ?? $audits[self::METRIC_ALIASES[$id] ?? ''] ?? null;
             if (is_array($audit) && isset($audit['numericValue'])) {
                 $metrics[$id] = [
                     'value' => (float) $audit['numericValue'],
@@ -169,10 +219,241 @@ final class PageSpeedClient
             'fetchTime' => (string) ($lh['fetchTime'] ?? ''),
             'scores' => $scores,
             'metrics' => $metrics,
-            // CrUX-Gesamturteil der Felddaten: FAST | AVERAGE | SLOW | null.
-            'fieldData' => isset($data['loadingExperience']['overall_category'])
-                ? (string) $data['loadingExperience']['overall_category']
-                : null,
+            'opportunities' => self::opportunities($audits),
+            'fieldData' => [
+                'url' => self::fieldExperience($data['loadingExperience'] ?? null),
+                'origin' => self::fieldExperience($data['originLoadingExperience'] ?? null),
+            ],
+            'runWarnings' => array_values(array_filter(
+                array_map(static fn (mixed $w): string => is_string($w) ? $w : '', (array) ($lh['runWarnings'] ?? [])),
+                static fn (string $w): bool => $w !== '',
+            )),
+            'environment' => [
+                'device' => (string) ($lh['configSettings']['formFactor'] ?? $strategy),
+                'throttling' => (string) ($lh['configSettings']['throttlingMethod'] ?? ''),
+                'lighthouseVersion' => (string) ($lh['lighthouseVersion'] ?? ''),
+            ],
+        ];
+    }
+
+    /**
+     * Optimierungs-Chancen (B): Audits mit geschätzter Ersparnis (Zeit ODER
+     * Datenmenge), nach Wirkung absteigend, gekappt auf {@see MAX_OPPORTUNITIES}.
+     * Je Chance die konkreten Verursacher (Detailtabelle), gekürzt auf die
+     * wirkungsvollsten {@see MAX_OPPORTUNITY_ITEMS}.
+     *
+     * Erkennung versionsübergreifend: bis Lighthouse 11 über das
+     * opportunity-Detail samt overallSavingsMs; ab 12/13 über
+     * scoreDisplayMode „metricSavings". Wichtig: Ab Lighthouse 13 kann eine
+     * Chance NUR Byte-Ersparnis haben (metricSavings = 0 ms) — etwa die
+     * Bildauslieferung. Deshalb zählt Byte-Ersparnis gleichwertig. Audits, die
+     * bereits als Diagnose-Kennwert (Abschnitt C) erscheinen, werden nicht
+     * doppelt gelistet.
+     *
+     * @param array<string, mixed> $audits
+     * @return list<array{id: string, title: string, display: string, savingsMs: int, savingsBytes: ?int, items: list<array{label: string, bytes: ?int, ms: ?int}>, moreItems: int}>
+     */
+    private static function opportunities(array $audits): array
+    {
+        $metricIds = array_flip([...self::METRIC_AUDITS, ...self::DIAGNOSTIC_AUDITS, ...array_values(self::METRIC_ALIASES)]);
+
+        $out = [];
+        foreach ($audits as $id => $audit) {
+            if (!is_array($audit) || isset($metricIds[$id])) {
+                continue;
+            }
+            $details = is_array($audit['details'] ?? null) ? $audit['details'] : [];
+            // Chance = Audit mit Metrik-Ersparnis (Lighthouse 12/13) bzw. das
+            // alte opportunity-Detail (≤11).
+            if (($audit['scoreDisplayMode'] ?? '') !== 'metricSavings' && ($details['type'] ?? '') !== 'opportunity') {
+                continue;
+            }
+            // Nur unvollständige Prüfungen (bestandene haben nichts zu tun).
+            $score = is_numeric($audit['score'] ?? null) ? (float) $audit['score'] : null;
+            if ($score !== null && $score >= 1.0) {
+                continue;
+            }
+            // Ersparnis: Zeit (ms) und/oder Datenmenge (Bytes).
+            $savingsMs = self::intOrNull($details['overallSavingsMs'] ?? null) ?? 0;
+            if ($savingsMs < 1) {
+                $savingsMs = self::metricSavingsMax($audit['metricSavings'] ?? null);
+            }
+            $savingsBytes = self::opportunityBytes($details);
+            // Spürbare Ersparnis verlangen: mindestens 1 ms Zeit ODER 1 KiB
+            // Daten. So fällt Rauschen wie „0 KiB" (wenige hundert Byte) weg.
+            if ($savingsMs < 1 && ($savingsBytes ?? 0) < 1024) {
+                continue;
+            }
+            [$items, $total] = self::opportunityItems($details);
+            $out[] = [
+                'id' => (string) $id,
+                'title' => (string) ($audit['title'] ?? $id),
+                // Lighthouses eigene, lokalisierte Ersparnis-Angabe (z. B.
+                // „Geschätzte Einsparung von 127 KiB" oder „… von 0,3 s").
+                'display' => (string) ($audit['displayValue'] ?? ''),
+                'savingsMs' => $savingsMs,
+                'savingsBytes' => $savingsBytes,
+                'items' => $items,
+                'moreItems' => max(0, $total - count($items)),
+            ];
+        }
+        // Nach Zeit-, bei Gleichstand nach Datenersparnis absteigend.
+        usort($out, static fn (array $a, array $b): int =>
+            ($b['savingsMs'] <=> $a['savingsMs']) ?: (($b['savingsBytes'] ?? 0) <=> ($a['savingsBytes'] ?? 0)));
+
+        return array_slice($out, 0, self::MAX_OPPORTUNITIES);
+    }
+
+    /**
+     * Geschätzte Byte-Ersparnis einer Chance: bevorzugt details.overallSavingsBytes
+     * (≤11), sonst die Summe der wastedBytes aller Posten (12/13). null, wenn es
+     * keine Byte-Ersparnis gibt.
+     *
+     * @param array<string, mixed> $details
+     */
+    private static function opportunityBytes(array $details): ?int
+    {
+        $overall = self::intOrNull($details['overallSavingsBytes'] ?? null);
+        if ($overall !== null) {
+            return $overall;
+        }
+        $sum = 0;
+        $any = false;
+        foreach ((array) ($details['items'] ?? []) as $item) {
+            if (is_array($item) && is_numeric($item['wastedBytes'] ?? null)) {
+                $sum += (int) round((float) $item['wastedBytes']);
+                $any = true;
+            }
+        }
+
+        return $any ? $sum : null;
+    }
+
+    /**
+     * Konkrete Verursacher einer Chance aus deren details.items: je Posten die
+     * bezeichnende Ressource (URL bzw. DOM-Element) und die Ersparnis in Bytes
+     * oder Millisekunden. Lighthouse liefert die Posten bereits nach Wirkung
+     * sortiert; wir übernehmen sie in dieser Reihenfolge und kürzen auf die
+     * ersten {@see MAX_OPPORTUNITY_ITEMS}.
+     *
+     * @param array<string, mixed> $details
+     * @return array{0: list<array{label: string, bytes: ?int, ms: ?int}>, 1: int} [Posten, Gesamtzahl]
+     */
+    private static function opportunityItems(array $details): array
+    {
+        $items = is_array($details['items'] ?? null) ? $details['items'] : [];
+        $rows = [];
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $label = self::itemLabel($item);
+            if ($label === '') {
+                continue;
+            }
+            $rows[] = [
+                'label' => $label,
+                'bytes' => self::intOrNull($item['wastedBytes'] ?? $item['totalBytes'] ?? null),
+                'ms' => self::intOrNull($item['wastedMs'] ?? null),
+            ];
+        }
+
+        return [array_slice($rows, 0, self::MAX_OPPORTUNITY_ITEMS), count($rows)];
+    }
+
+    /**
+     * Bezeichnung eines Detailpostens: bevorzugt die Ressourcen-URL, sonst das
+     * DOM-Element (Beschriftung/Selektor/Ausschnitt), sonst der erste
+     * String-Wert. Leer, wenn nichts Brauchbares vorliegt.
+     *
+     * @param array<string, mixed> $item
+     */
+    private static function itemLabel(array $item): string
+    {
+        if (isset($item['url']) && is_string($item['url']) && $item['url'] !== '') {
+            return $item['url'];
+        }
+        if (is_array($item['node'] ?? null)) {
+            $node = $item['node'];
+            $label = (string) ($node['nodeLabel'] ?? $node['selector'] ?? $node['snippet'] ?? '');
+            if ($label !== '') {
+                return $label;
+            }
+        }
+        foreach ($item as $value) {
+            if (is_string($value) && $value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
+    }
+
+    /** Wandelt einen numerischen Wert in einen gerundeten Ganzzahlwert oder null. */
+    private static function intOrNull(mixed $value): ?int
+    {
+        return is_numeric($value) ? (int) round((float) $value) : null;
+    }
+
+    /**
+     * Größte metrische Zeitersparnis aus audit.metricSavings (Lighthouse 12+),
+     * in Millisekunden. CLS wird übersprungen (einheitenlos, keine ms). 0, wenn
+     * nichts vorliegt.
+     *
+     * @param mixed $metricSavings Erwartet eine Map Metrik → Ersparnis
+     */
+    private static function metricSavingsMax(mixed $metricSavings): int
+    {
+        if (!is_array($metricSavings)) {
+            return 0;
+        }
+        $max = 0;
+        foreach ($metricSavings as $metric => $value) {
+            if (strtoupper((string) $metric) === 'CLS' || !is_numeric($value)) {
+                continue;
+            }
+            $max = max($max, (int) round((float) $value));
+        }
+
+        return $max;
+    }
+
+    /**
+     * Reduziert eine CrUX-Erfahrung (loadingExperience/originLoadingExperience)
+     * auf Gesamturteil und je Metrik Perzentil, Kategorie und die Verteilung
+     * gut/verbesserungswürdig/schlecht. Generisch über die vorhandenen Metriken,
+     * um Google-Schlüsselnamen nicht fest zu verdrahten. null, wenn keine
+     * Felddaten vorliegen (zu wenig realer Verkehr).
+     *
+     * @return ?array{overallCategory: string, metrics: array<string, array{percentile: ?float, category: string, good: float, needsImprovement: float, poor: float}>}
+     */
+    private static function fieldExperience(mixed $exp): ?array
+    {
+        if (!is_array($exp) || !is_array($exp['metrics'] ?? null) || $exp['metrics'] === []) {
+            return null;
+        }
+        $metrics = [];
+        foreach ($exp['metrics'] as $key => $m) {
+            if (!is_array($m)) {
+                continue;
+            }
+            // distributions: drei Eimer in fester Reihenfolge gut/mittel/schlecht.
+            $prop = [];
+            foreach ((array) ($m['distributions'] ?? []) as $d) {
+                $prop[] = is_array($d) && isset($d['proportion']) ? (float) $d['proportion'] : 0.0;
+            }
+            $metrics[(string) $key] = [
+                'percentile' => isset($m['percentile']) && is_numeric($m['percentile']) ? (float) $m['percentile'] : null,
+                'category' => (string) ($m['category'] ?? ''),
+                'good' => $prop[0] ?? 0.0,
+                'needsImprovement' => $prop[1] ?? 0.0,
+                'poor' => $prop[2] ?? 0.0,
+            ];
+        }
+
+        return [
+            'overallCategory' => (string) ($exp['overall_category'] ?? ''),
+            'metrics' => $metrics,
         ];
     }
 }
