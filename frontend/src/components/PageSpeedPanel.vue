@@ -3,7 +3,7 @@
 // Konfiguration hinterlegte Live-Adresse über Google PageSpeed Insights und
 // zeigt die Kategorie-Scores sowie die Kern-Web-Vitalwerte. Anders als der
 // SEO-Bericht wird kein Verlauf vorgehalten — angezeigt wird der jüngste Lauf.
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuditStore } from '../stores/audit'
 import { useAuthStore } from '../stores/auth'
@@ -14,6 +14,22 @@ const { t } = useI18n()
 const audit = useAuditStore()
 const auth = useAuthStore()
 const error = useTransientError()
+
+// Beim Öffnen das zuletzt gespeicherte Ergebnis dieser Webseite laden (falls
+// eines vorliegt), damit Datum und Kennzahlen ohne neue Messung erscheinen.
+onMounted(async () => {
+  try {
+    await audit.fetchPageSpeed()
+  } catch {
+    // Kein gespeichertes Ergebnis / Ladefehler: Panel bleibt leer, unkritisch.
+  }
+})
+
+// Zeitpunkt der letzten Messung, sprachabhängig formatiert (oder null).
+const lastMeasured = computed(() => {
+  const iso = audit.pageSpeed?.measuredAt
+  return iso ? new Date(iso).toLocaleString() : null
+})
 
 // Zu messende Live-Adresse. Vorbelegung: die pro Webseite gespeicherte Adresse,
 // sonst die aus der Hugo-baseURL erkannte. Beim Messstart wird sie serverseitig
@@ -80,6 +96,11 @@ async function run(strategy) {
       {{ error }}
     </v-alert>
 
+    <!-- Zeitpunkt der letzten Messung — ganz oben, sobald ein Ergebnis vorliegt. -->
+    <div v-if="lastMeasured" class="ps-last mb-4">
+      <v-icon icon="mdi-history" size="20" class="mr-1 mb-1" /><span class="text-subtitle-1">{{ $t('pagespeed.lastMeasured', [lastMeasured]) }}</span>
+    </div>
+
     <!-- Zu messende Live-Adresse (pro Webseite). Vorbelegt aus der gespeicherten
          bzw. der aus der Hugo-baseURL erkannten Adresse; beim Messstart gespeichert. -->
     <v-text-field
@@ -91,7 +112,7 @@ async function run(strategy) {
       prepend-inner-icon="mdi-web"
       density="compact"
       variant="outlined"
-      class="mb-3"
+      class="mb-5"
       :disabled="audit.pageSpeedRunning"
       @keyup.enter="run()"
     />
@@ -177,6 +198,13 @@ async function run(strategy) {
   padding: 16px;
   max-width: 900px;
   margin: 0 auto;
+}
+.ps-last {
+  display: flex;
+  align-items: center;
+  font-size: 0.8rem;
+  opacity: 0.7;
+  margin-bottom: 12px;
 }
 .ps-controls {
   display: flex;

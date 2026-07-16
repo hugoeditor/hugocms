@@ -93,6 +93,14 @@ export const useAuditStore = defineStore('audit', {
       return res
     },
 
+    // Zuletzt gespeichertes PageSpeed-Ergebnis dieser Webseite laden (oder null).
+    // Für die Anzeige beim Öffnen des Panels, ohne neu zu messen.
+    async fetchPageSpeed() {
+      const data = await api.get('pagespeedlatest')
+      if (data.result) this.pageSpeed = markRaw(data.result)
+      return data.result
+    },
+
     // PageSpeed-Messung der eingegebenen Live-Adresse starten. Die Adresse wird
     // serverseitig pro Webseite gespeichert (Mount-Konfiguration); die Strategie
     // (mobile/desktop) kommt aus dem Zustand. Das reduzierte Ergebnis kommt

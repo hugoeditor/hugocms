@@ -210,6 +210,7 @@ export default {
 
   pagespeed: {
     tab: 'PageSpeed',
+    lastMeasured: 'Zuletzt gemessen am {0}',
     urlLabel: 'Zu messende Adresse',
     urlHint: 'Öffentliche Adresse, die Google misst. Wird beim Messstart gespeichert.',
     run: 'Messung starten',
