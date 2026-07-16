@@ -147,6 +147,20 @@ export default {
     hugoCleanHint: 'Removes everything in the destination folder that Hugo did not generate itself when publishing. Take care if other files live in the destination folder.',
   },
 
+  projectConfig: {
+    open: 'Project settings',
+    title: 'Project settings',
+    intro: 'Settings for this website only. They add to the global configuration.',
+    submit: 'Save',
+    cancel: 'Cancel',
+    success: 'Project settings saved.',
+    note: 'These entries apply on top of the global ones from the configuration and the permanently excluded directories. They take effect with the next SEO report.',
+    excludePrefixesHint:
+      'Directories (one per line) that the SEO report skips for THIS website only — for folders that exist only here. Anything that should apply to all websites belongs in the configuration.',
+    excludeFilesHint:
+      'Individual files (public-relative path, one per line) that the report skips for this website only. Unlike above, whole file paths are matched exactly, not directories.',
+  },
+
   license: {
     open: 'License',
     title: 'Pro license',
@@ -488,7 +502,7 @@ export default {
     section: 'SEO report',
     excludePrefixes: 'Excluded directories',
     excludePrefixesHint:
-      'The report checks every HTML file in the built public/ folder, including unlinked ones. Add extra directories here (one per line) to skip, e.g. test or error pages. The HugoCMS directories (edit/, cms-api/, cms-admin/) and the mounts’ trash folders (.trash/) are already excluded.',
+      'The report checks every HTML file in the built public/ folder, including unlinked ones. Add extra directories here (one per line) to skip, e.g. test or error pages. The HugoCMS directories (edit/, cms-api/, cms-admin/) and the mounts’ trash folders (.trash/) are already excluded. What you enter here applies to ALL sites; exclusions for a single site are kept in that site’s mount configuration and add to this list.',
     excludePrefixesPlaceholder: 'test/\nerror/\ndraft/',
     excludeFiles: 'Excluded files',
     excludeFilesHint:
@@ -870,6 +884,7 @@ export default {
 
     'CONFIG-WRITE-FAILED': 'The configuration could not be written.',
     'RECONFIGURE-UNAVAILABLE': 'The configuration cannot be changed at runtime for this installation.',
+    'PROJECT-CONFIG-UNAVAILABLE': 'This website’s settings cannot be changed: its mounts do not come from a configuration file.',
     'CURRENT-PASSWORD-WRONG': 'The current password is incorrect.',
     'ACCOUNT-NOT-SUPPORTED': 'Changing credentials is not supported for this authentication method.',
     'CONFIG-NOT-READABLE': 'Configuration not readable: {0}',

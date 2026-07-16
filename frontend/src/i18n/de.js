@@ -147,6 +147,20 @@ export default {
     hugoCleanHint: 'Entfernt beim Veröffentlichen alles im Zielordner, was Hugo nicht selbst erzeugt. Vorsicht, wenn im Zielordner weitere Dateien liegen.',
   },
 
+  projectConfig: {
+    open: 'Projekteinstellungen',
+    title: 'Projekteinstellungen',
+    intro: 'Einstellungen nur für diese Webseite. Sie ergänzen die globale Konfiguration.',
+    submit: 'Speichern',
+    cancel: 'Abbrechen',
+    success: 'Projekteinstellungen gespeichert.',
+    note: 'Die Einträge gelten zusätzlich zu den globalen aus der Konfiguration und zu den fest ausgeschlossenen Verzeichnissen. Sie wirken beim nächsten SEO-Bericht.',
+    excludePrefixesHint:
+      'Verzeichnisse (eines je Zeile), die der SEO-Bericht nur bei DIESER Webseite überspringt — für Ordner, die es nur hier gibt. Was für alle Webseiten gelten soll, gehört in die Konfiguration.',
+    excludeFilesHint:
+      'Einzelne Dateien (public-relativer Pfad, eine je Zeile), die der Bericht nur bei dieser Webseite überspringt. Anders als oben werden hier ganze Dateipfade exakt verglichen, keine Verzeichnisse.',
+  },
+
   license: {
     open: 'Lizenz',
     title: 'Pro-Lizenz',
@@ -488,7 +502,7 @@ export default {
     section: 'SEO-Bericht',
     excludePrefixes: 'Ausgeschlossene Verzeichnisse',
     excludePrefixesHint:
-      'Der Bericht prüft jede HTML-Datei im gebauten public/-Ordner, auch unverlinkte. Hier zusätzliche Verzeichnisse eintragen (eines je Zeile), die übersprungen werden sollen, z. B. Test- oder Fehlerseiten. Die HugoCMS-eigenen Verzeichnisse (edit/, cms-api/, cms-admin/) und die Papierkörbe der Mounts (.trash/) sind bereits fest ausgeschlossen.',
+      'Der Bericht prüft jede HTML-Datei im gebauten public/-Ordner, auch unverlinkte. Hier zusätzliche Verzeichnisse eintragen (eines je Zeile), die übersprungen werden sollen, z. B. Test- oder Fehlerseiten. Die HugoCMS-eigenen Verzeichnisse (edit/, cms-api/, cms-admin/) und die Papierkörbe der Mounts (.trash/) sind bereits fest ausgeschlossen. Die Angaben hier gelten für ALLE Webseiten; Ausschlüsse für eine einzelne Webseite werden in deren Mount-Konfiguration gepflegt und ergänzen diese Liste.',
     excludePrefixesPlaceholder: 'test/\nerror/\nentwurf/',
     excludeFiles: 'Ausgeschlossene Dateien',
     excludeFilesHint:
@@ -872,6 +886,7 @@ export default {
 
     'CONFIG-WRITE-FAILED': 'Die Konfiguration konnte nicht geschrieben werden.',
     'RECONFIGURE-UNAVAILABLE': 'Die Konfiguration lässt sich für diese Installation nicht im laufenden Betrieb ändern.',
+    'PROJECT-CONFIG-UNAVAILABLE': 'Die Einstellungen dieser Webseite lassen sich nicht ändern: Ihre Mounts stammen nicht aus einer Konfigurationsdatei.',
     'CURRENT-PASSWORD-WRONG': 'Das aktuelle Passwort ist falsch.',
     'ACCOUNT-NOT-SUPPORTED': 'Das Ändern der Anmeldedaten wird für dieses Authentifizierungsverfahren nicht unterstützt.',
     'CONFIG-NOT-READABLE': 'Konfiguration nicht lesbar: {0}',

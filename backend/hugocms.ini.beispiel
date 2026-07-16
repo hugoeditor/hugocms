@@ -111,6 +111,9 @@ bin = ../bin/hugo/hugo
 ; relativer Pfad statt Verzeichnis-Präfix) — etwa Suchmaschinen-Bestätigungs-
 ; dateien, die nicht verändert oder gelöscht werden dürfen. Kommagetrennt.
 ;exclude_files = "google37dc500bdbcbca59.html, BingSiteAuth.xml"
+; Diese Sektion gilt GLOBAL für alle Webseiten. Was nur EINE Webseite betrifft,
+; gehört in die gleichnamige Sektion ihrer Mount-Konfiguration (mounts/
+; <hash>.ini, siehe mounts.ini.beispiel); beide Listen ergänzen einander.
 
 ;[services]
 ; Externe Pro-Dienste (optional). Derzeit die Spracheingabe des KI-Assistenten

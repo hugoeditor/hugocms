@@ -36,6 +36,13 @@ use HugoCMS\FileManager\Exception\ApiException;
  *   clean       (optional) true = --cleanDestinationDir. VORSICHT: entfernt
  *               im Ziel alles Nicht-Generierte — auch eine dort liegende
  *               Installation (edit/, cms-api/). Standard: false.
+ *
+ * Reservierte Sektion [seo_report] (kein Mount): Ausschlüsse des SEO-Berichts,
+ * die NUR für diese Webseite gelten. Sie ERGÄNZEN die fest verdrahteten
+ * Ausschlüsse und die globale [seo_report]-Sektion der hugocms.ini (siehe
+ * {@see Config}) — nichts wird dadurch wieder eingeschlossen.
+ *   exclude_prefixes (optional) Kommaliste public-relativer Verzeichnis-Präfixe.
+ *   exclude_files    (optional) Kommaliste einzelner public-relativer Dateien.
  */
 final class MountConfig
 {
@@ -43,6 +50,7 @@ final class MountConfig
     private const HUGO_SECTION = 'hugo';
     private const LICENSE_SECTION = 'license';
     private const PAGESPEED_SECTION = 'pagespeed';
+    private const SEO_REPORT_SECTION = 'seo_report';
 
     /**
      * @return array{
@@ -50,6 +58,7 @@ final class MountConfig
      *   hugo: ?array{source: string, destination: string, minify: bool, clean: bool},
      *   license: ?string,
      *   pagespeed: ?string,
+     *   seoReport: array{excludePrefixes: list<string>, excludeFiles: list<string>},
      *   warnings: list<array{key: string, params: list<mixed>}>
      * }
      */
@@ -69,6 +78,7 @@ final class MountConfig
         $hugo = null;
         $license = null;
         $pagespeed = null;
+        $seoReport = ['excludePrefixes' => [], 'excludeFiles' => []];
         $warnings = [];
 
         foreach ($raw as $name => $section) {
@@ -105,6 +115,19 @@ final class MountConfig
                 continue;
             }
 
+            // Zusätzliche Ausschlüsse des SEO-Berichts NUR für diese Webseite
+            // (optional). Dieselbe Schreibweise und Normalisierung wie die
+            // globale Sektion der hugocms.ini — der Connector legt beide
+            // Listen zusammen. Ausgeschlossen bleibt ausgeschlossen: Diese
+            // Sektion kann global Ausgeschlossenes nicht zurückholen.
+            if (strtolower((string) $name) === self::SEO_REPORT_SECTION) {
+                $seoReport = [
+                    'excludePrefixes' => Config::normalizeExcludePrefixes((string) ($section['exclude_prefixes'] ?? '')),
+                    'excludeFiles' => Config::normalizeExcludeFiles((string) ($section['exclude_files'] ?? '')),
+                ];
+                continue;
+            }
+
             $path = isset($section['path']) ? trim((string) $section['path']) : '';
             if ($path === '') {
                 throw new ApiException('ECONFIG', 500, 'MOUNTS-PATH-REQUIRED', [(string) $name]);
@@ -132,7 +155,14 @@ final class MountConfig
             throw new ApiException('ECONFIG', 500, 'MOUNTS-NO-SECTION', [$configPath]);
         }
 
-        return ['mounts' => $mounts, 'hugo' => $hugo, 'license' => $license, 'pagespeed' => $pagespeed, 'warnings' => $warnings];
+        return [
+            'mounts' => $mounts,
+            'hugo' => $hugo,
+            'license' => $license,
+            'pagespeed' => $pagespeed,
+            'seoReport' => $seoReport,
+            'warnings' => $warnings,
+        ];
     }
 
     /**

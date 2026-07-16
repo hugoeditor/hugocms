@@ -81,3 +81,20 @@ label = Medien
 ;   url   Öffentliche Adresse, die Google misst, z. B. https://example.com/
 ;[pagespeed]
 ;url = "https://example.com/"
+
+; Reservierte Sektion [seo_report] (KEIN Mount): zusätzliche Ausschlüsse des
+; SEO-Berichts (Pro) NUR für DIESE Webseite — für Verzeichnisse und Dateien, die
+; es nur hier gibt. Die Ausschlüsse sind gestaffelt und ERGÄNZEN einander:
+;   1. fest verdrahtet: die HugoCMS-Verzeichnisse (edit/, cms-api/, cms-admin/)
+;      und die Papierkörbe der Mounts (.trash/)
+;   2. global für alle Webseiten: [seo_report] der hugocms.ini
+;   3. nur diese Webseite: diese Sektion
+; Eine spätere Ebene kann nichts zurückholen, was eine frühere ausschließt.
+; Schreibweise wie in der hugocms.ini: public-relativ, kommagetrennt; Präfixe mit
+; Schrägstrich am Ende, Dateien als exakter Pfad ("..“ wird verworfen). Anders
+; als [license] und [pagespeed] schreibt der Client diese Sektion NICHT — sie
+; wird von Hand gepflegt. Das Konfigurationsformular bearbeitet ausschließlich
+; die globale Sektion der hugocms.ini.
+;[seo_report]
+;exclude_prefixes = "kampagne/, landingpages/"
+;exclude_files = "google37dc500bdbcbca59.html"

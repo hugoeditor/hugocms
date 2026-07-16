@@ -111,13 +111,25 @@ final class Connector
     private array $mail = ['configured' => false, 'host' => null, 'port' => 587, 'security' => 'tls', 'user' => null, 'pass' => null, 'from' => null, 'to' => null];
 
     /**
-     * SEO-Bericht aus der [seo_report]-Sektion der hugocms.ini. excludePrefixes
-     * ergänzt die fest verdrahteten Ausschlüsse des Audits um weitere
-     * public-relative Pfad-Präfixe.
+     * SEO-Bericht aus der [seo_report]-Sektion der hugocms.ini — GLOBAL, also
+     * für alle Webseiten dieser Installation. Ergänzt die fest verdrahteten
+     * Ausschlüsse des Audits um weitere public-relative Pfad-Präfixe und
+     * einzelne Dateien. Ziel des Konfigurationsformulars (cmdReconfigure).
      *
-     * @var array{excludePrefixes: list<string>}
+     * @var array{excludePrefixes: list<string>, excludeFiles: list<string>}
      */
-    private array $seoReport = ['excludePrefixes' => []];
+    private array $seoReport = ['excludePrefixes' => [], 'excludeFiles' => []];
+
+    /**
+     * Dasselbe aus der [seo_report]-Sektion der Mount-Konfiguration — nur für
+     * DIESE Webseite. Bewusst getrennt gehalten statt beim Laden vermischt: Die
+     * Aufrufreihenfolge von Config und mountsFromFile ist nicht festgelegt, und
+     * das Konfigurationsformular darf ausschließlich die globale Sektion
+     * überschreiben. Zusammengelegt wird erst in {@see auditStore}.
+     *
+     * @var array{excludePrefixes: list<string>, excludeFiles: list<string>}
+     */
+    private array $seoReportSite = ['excludePrefixes' => [], 'excludeFiles' => []];
 
     /**
      * Roher Pro-Lizenzschlüssel dieser WEBSEITE (aus der [license]-Sektion der
@@ -297,6 +309,9 @@ final class Connector
         }
         // Gespeicherte PageSpeed-Adresse dieser Webseite (falls schon gesetzt).
         $this->pagespeedUrl = $config['pagespeed'];
+        // Ausschlüsse des SEO-Berichts NUR für diese Webseite; sie ergänzen die
+        // globalen aus der hugocms.ini (siehe auditStore).
+        $this->seoReportSite = $config['seoReport'];
         foreach ($config['warnings'] as $warning) {
             $this->addSetupWarning($warning['key'], $warning['params']);
         }
@@ -383,6 +398,8 @@ final class Connector
                 'pagespeedlatest' => $this->cmdPageSpeedLatest(),
                 'config' => $this->cmdConfig(),
                 'reconfigure' => $this->cmdReconfigure($request),
+                'projectconfig' => $this->cmdProjectConfig(),
+                'projectreconfigure' => $this->cmdProjectReconfigure($request),
                 'setupdatelastmod' => $this->cmdSetUpdateLastmod($request),
                 'account' => $this->cmdAccount($request),
                 'license' => $this->cmdLicense(),
@@ -511,6 +528,10 @@ final class Connector
             // Lässt sich die Konfiguration im laufenden Betrieb ändern? Nur,
             // wenn der Connector aus einer hugocms.ini aufgebaut wurde.
             'reconfigurable' => $this->configPath !== null,
+            // Dasselbe für die Einstellungen DIESER Webseite: nur, wenn die
+            // Mounts aus einer Datei stammen (bei programmatischer Konfiguration
+            // über custom.php gibt es keine Datei zum Schreiben).
+            'projectConfigurable' => $this->mountsPath !== null,
             // KI-Assistent: aktiv, wenn ein API-Schlüssel konfiguriert ist.
             'ai' => [
                 'enabled' => $this->ai['apiKey'] !== null,
@@ -2127,21 +2148,9 @@ final class Connector
             }
         }
 
-        // SEO-Bericht: zusätzliche Ausschluss-Präfixe. Das Formular liefert sie
-        // frei (komma-/zeilengetrennt); normalisiert und kommagetrennt ablegen.
-        // Die fest verdrahteten Ausschlüsse bleiben im Code — hier nur die Extras.
-        $seoPrefixes = Config::normalizeExcludePrefixes((string) ($request['seoExcludePrefixes'] ?? ''));
-        $seoFiles = Config::normalizeExcludeFiles((string) ($request['seoExcludeFiles'] ?? ''));
-        // [seo_report] nur schreiben, wenn Präfixe oder Dateien vorliegen; sonst
-        // Sektion entfernen. Jeder Schlüssel nur bei Bedarf, damit keine leeren
-        // Einträge in der INI landen.
-        $seoSection = [];
-        if ($seoPrefixes !== []) {
-            $seoSection['exclude_prefixes'] = implode(', ', $seoPrefixes);
-        }
-        if ($seoFiles !== []) {
-            $seoSection['exclude_files'] = implode(', ', $seoFiles);
-        }
+        // SEO-Bericht: zusätzliche Ausschlüsse (global). Dieselbe Sektion gibt es
+        // webseitenspezifisch in der Mount-Konfiguration (cmdProjectReconfigure).
+        $seoSection = self::seoReportSection($request);
 
         // [hugo]: Programmpfad und optional clean = true (--cleanDestinationDir).
         // Ohne Programm keine Sektion (kein Build); clean nur schreiben, wenn
@@ -2165,9 +2174,99 @@ final class Connector
             // Ohne Server/Absender/Empfänger keine [mail]-Sektion (Versand aus).
             'mail'    => $mailSection,
             // Ohne zusätzliche Präfixe/Dateien keine [seo_report]-Sektion.
-            'seo_report' => $seoSection === [] ? null : $seoSection,
+            'seo_report' => $seoSection,
         ]);
         $this->logger->info('Konfiguration aktualisiert (reconfigure).');
+
+        return ['ok' => true];
+    }
+
+    /**
+     * Baut die [seo_report]-Sektion aus den Formularfeldern seoExcludePrefixes /
+     * seoExcludeFiles. Das Formular liefert sie frei (komma-/zeilengetrennt);
+     * abgelegt wird normalisiert und kommagetrennt. Jeder Schlüssel nur bei
+     * Bedarf, damit keine leeren Einträge in der INI landen; ohne jeden Eintrag
+     * null — {@see Config::updateSections} entfernt die Sektion dann.
+     *
+     * Gemeinsam genutzt von der globalen hugocms.ini ({@see cmdReconfigure}) und
+     * der webseitenspezifischen Mount-Konfiguration ({@see cmdProjectReconfigure}):
+     * Beide Ebenen sollen dieselbe Schreibweise erzeugen. Die fest verdrahteten
+     * Ausschlüsse bleiben im Code ({@see AuditRunner}) — hier nur die Zusätze.
+     *
+     * @param array<string, mixed> $request
+     * @return ?array<string, string>
+     */
+    private static function seoReportSection(array $request): ?array
+    {
+        $prefixes = Config::normalizeExcludePrefixes((string) ($request['seoExcludePrefixes'] ?? ''));
+        $files = Config::normalizeExcludeFiles((string) ($request['seoExcludeFiles'] ?? ''));
+
+        $section = [];
+        if ($prefixes !== []) {
+            $section['exclude_prefixes'] = implode(', ', $prefixes);
+        }
+        if ($files !== []) {
+            $section['exclude_files'] = implode(', ', $files);
+        }
+
+        return $section === [] ? null : $section;
+    }
+
+    /**
+     * Aktuelle Projekteinstellungen dieser WEBSEITE aus ihrer Mount-Konfiguration
+     * — zum Vorbefüllen des Dialogs „Projekteinstellungen". Gegenstück zu
+     * {@see cmdConfig}, das die globale hugocms.ini liest. Geliefert werden nur
+     * Felder, die der Dialog auch schreiben darf: Die Mount-Sektionen selbst,
+     * [hugo] und die Lizenz bleiben außen vor.
+     *
+     * @return array<string, mixed>
+     */
+    private function cmdProjectConfig(): array
+    {
+        $this->requireAuth();
+        if ($this->mountsPath === null) {
+            throw new ApiException('ECONFIG', 409, 'PROJECT-CONFIG-UNAVAILABLE');
+        }
+        $raw = Config::raw($this->mountsPath);
+
+        return [
+            // Eine Zeile je Eintrag fürs Formular (wie im globalen Dialog).
+            'seoExcludePrefixes' => implode("\n", Config::normalizeExcludePrefixes(
+                (string) ($raw['seo_report']['exclude_prefixes'] ?? ''),
+            )),
+            'seoExcludeFiles' => implode("\n", Config::normalizeExcludeFiles(
+                (string) ($raw['seo_report']['exclude_files'] ?? ''),
+            )),
+        ];
+    }
+
+    /**
+     * Schreibt die [seo_report]-Sektion der Mount-Konfiguration dieser Webseite.
+     * Die Mount-Sektionen, [hugo], [license] und [pagespeed] bleiben über
+     * Config::updateSections wörtlich erhalten — hier wird ausschließlich die
+     * eine Sektion ersetzt oder (wenn leer) entfernt.
+     *
+     * Die geschriebenen Ausschlüsse ERGÄNZEN die globalen aus der hugocms.ini und
+     * die fest verdrahteten; sie können nichts davon zurückholen (siehe
+     * {@see auditStore}).
+     */
+    private function cmdProjectReconfigure(array $request): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+        if ($this->mountsPath === null) {
+            throw new ApiException('ECONFIG', 409, 'PROJECT-CONFIG-UNAVAILABLE');
+        }
+
+        $seoSection = self::seoReportSection($request);
+        Config::updateSections($this->mountsPath, ['seo_report' => $seoSection]);
+        // Für den weiteren Verlauf DIESES Requests sofort wirksam (der Audit
+        // liest die Ausschlüsse aus dem Connector, nicht erneut aus der Datei).
+        $this->seoReportSite = [
+            'excludePrefixes' => Config::normalizeExcludePrefixes($seoSection['exclude_prefixes'] ?? ''),
+            'excludeFiles' => Config::normalizeExcludeFiles($seoSection['exclude_files'] ?? ''),
+        ];
+        $this->logger->info('Projekteinstellungen aktualisiert (projectreconfigure).');
 
         return ['ok' => true];
     }
@@ -2415,6 +2514,10 @@ final class Connector
      * Baut den Audit-Dienst OHNE Freischalt-Prüfung (setzt ein Hugo-Projekt
      * voraus). Für interne Aufrufe und den CLI-Einstieg, die eigene Vorbedingungen
      * prüfen. Die Web-Befehle nutzen das gegatete {@see audit()}.
+     *
+     * Die Ausschlüsse stammen aus zwei Ebenen, die sich ERGÄNZEN: global aus der
+     * hugocms.ini, webseitenspezifisch aus der Mount-Konfiguration. Hinzu kommen
+     * die fest verdrahteten des {@see AuditRunner}.
      */
     private function auditStore(): AuditService
     {
@@ -2426,9 +2529,23 @@ final class Connector
             $public,
             $source,
             $storage,
-            $this->seoReport['excludePrefixes'],
-            $this->seoReport['excludeFiles'],
+            self::mergeExcludes($this->seoReport['excludePrefixes'], $this->seoReportSite['excludePrefixes']),
+            self::mergeExcludes($this->seoReport['excludeFiles'], $this->seoReportSite['excludeFiles']),
         );
+    }
+
+    /**
+     * Legt globale und webseitenspezifische Ausschlussliste zusammen (beide
+     * bereits von {@see Config} normalisiert). Rein additiv und entdoppelt —
+     * eine Ebene kann die andere nicht aufheben, nur erweitern.
+     *
+     * @param list<string> $global
+     * @param list<string> $site
+     * @return list<string>
+     */
+    private static function mergeExcludes(array $global, array $site): array
+    {
+        return array_values(array_unique([...$global, ...$site]));
     }
 
     /** Führt einen neuen Audit-Lauf aus (synchron) und liefert den Bericht. */

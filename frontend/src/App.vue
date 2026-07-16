@@ -17,6 +17,7 @@ import ContentQualityView from './components/ContentQualityView.vue'
 import ReviewQueueView from './components/ReviewQueueView.vue'
 import EditorPanel from './components/EditorPanel.vue'
 import ReconfigureDialog from './components/ReconfigureDialog.vue'
+import ProjectSettingsDialog from './components/ProjectSettingsDialog.vue'
 import AccountDialog from './components/AccountDialog.vue'
 import LicenseDialog from './components/LicenseDialog.vue'
 import RepositoryDialog from './components/RepositoryDialog.vue'
@@ -268,6 +269,8 @@ const editorPanelRef = ref(null)
 
 // --- Konfiguration im laufenden Betrieb ändern -----------------------------
 const reconfigureOpen = ref(false)
+// Einstellungen nur DIESER Webseite (Mount-Konfiguration).
+const projectSettingsOpen = ref(false)
 
 // Eine KI-Funktion hat um das Öffnen der Konfiguration gebeten (Hinweisdialog
 // bestätigt). Flag wieder zurücksetzen und den ReconfigureDialog öffnen.
@@ -340,6 +343,12 @@ async function onReconfigured() {
   } catch {
     // unkritisch — beim nächsten Laden konsistent
   }
+}
+
+// Die Projekteinstellungen berühren keine Statuswerte aus whoami (nur die
+// Ausschlüsse des SEO-Berichts) — kein erneutes auth.check() nötig.
+function onProjectSettingsSaved() {
+  notice.value = t('projectConfig.success')
 }
 
 async function build() {
@@ -683,6 +692,28 @@ async function build() {
                 </template>
               </v-tooltip>
 
+              <!-- Projekteinstellungen: gelten nur für DIESE Webseite (ihre
+                   Mount-Konfiguration) — im Gegensatz zur globalen Konfiguration
+                   darunter. -->
+              <v-tooltip
+                v-if="auth.projectConfigurable"
+                :text="$t('projectConfig.open')"
+                location="right"
+                :disabled="!toolbarCollapsed"
+              >
+                <template #activator="{ props }">
+                  <button
+                    v-bind="props"
+                    type="button"
+                    class="nemo-tool-btn"
+                    @click="projectSettingsOpen = true"
+                  >
+                    <v-icon icon="mdi-folder-cog-outline" size="20" />
+                    <span class="nemo-tool-label">{{ $t('projectConfig.open') }}</span>
+                  </button>
+                </template>
+              </v-tooltip>
+
               <!-- Konfiguration ändern (nur bei INI-basierter Installation) -->
               <v-tooltip v-if="auth.reconfigurable" :text="$t('reconfigure.open')" location="right" :disabled="!toolbarCollapsed">
                 <template #activator="{ props }">
@@ -806,6 +837,7 @@ async function build() {
 
     <!-- Konfiguration im laufenden Betrieb ändern -->
     <ReconfigureDialog v-model="reconfigureOpen" @saved="onReconfigured" />
+    <ProjectSettingsDialog v-model="projectSettingsOpen" @saved="onProjectSettingsSaved" />
     <AccountDialog v-model="accountOpen" @changed="onAccountChanged" />
 
     <!-- Pro-Lizenz aktivieren · Git-Versionierung (Pro-Funktion) -->

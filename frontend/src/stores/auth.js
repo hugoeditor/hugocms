@@ -11,6 +11,9 @@ export const useAuthStore = defineStore('auth', {
     setupDefaults: null, // Vorgaben des Servers für das Setup-Formular
     buildable: false, // true, wenn für diese Webseite ein Hugo-Aufruf konfiguriert ist
     reconfigurable: false, // true, wenn die hugocms.ini im Betrieb änderbar ist
+    // true, wenn die Einstellungen DIESER Webseite änderbar sind (die Mounts
+    // stammen aus einer Datei). Steuert den Dialog „Projekteinstellungen“.
+    projectConfigurable: false,
     ai: { enabled: false, model: '', writeMode: 'confirm' }, // KI-Assistent (aus whoami)
     // globale UI-Vorgaben aus [user]. updateLastmod ist dreiwertig:
     // null = beim Speichern nachfragen, true/false = ohne Nachfrage anwenden.
@@ -45,6 +48,7 @@ export const useAuthStore = defineStore('auth', {
       this.setupDefaults = data.defaults ?? null
       this.buildable = data.buildable ?? false
       this.reconfigurable = data.reconfigurable ?? false
+      this.projectConfigurable = data.projectConfigurable ?? false
       this.ai = data.ai ?? { enabled: false, model: '', writeMode: 'confirm' }
       this.ui = data.ui ?? { contentWidth: 1200, updateLastmod: null }
       this.license = data.license ?? { edition: 'community', licensee: null, domain: '', configured: false }
@@ -79,6 +83,17 @@ export const useAuthStore = defineStore('auth', {
     // Schreibt die hugocms.ini neu (Verzeichnisse, Log, Hugo-Programm).
     async reconfigure(payload) {
       await api.post('reconfigure', payload)
+    },
+
+    // Einstellungen DIESER Webseite (Mount-Konfiguration) zum Vorbefüllen des
+    // Dialogs „Projekteinstellungen“ — das Gegenstück zu loadConfig.
+    async loadProjectConfig() {
+      return api.get('projectconfig')
+    },
+
+    // Schreibt die Einstellungen dieser Webseite in ihre Mount-Konfiguration.
+    async projectReconfigure(payload) {
+      await api.post('projectreconfigure', payload)
     },
 
     // Prüft den Spracheingabe-Schlüssel (eingegeben oder hinterlegt) gegen den
