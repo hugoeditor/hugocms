@@ -82,14 +82,22 @@ final class Connector
 
     /**
      * Externe Pro-Dienste aus der [services]-Sektion der hugocms.ini:
-     * der Transkriptionsdienst (seo-success) für die Spracheingabe sowie
-     * Google PageSpeed Insights für den Geschwindigkeits-Check.
+     * der Transkriptionsdienst (seo-success) für die Spracheingabe sowie der
+     * (globale) Google-Schlüssel für den PageSpeed-Check.
      * speechKey/speechUrl = null → Spracheingabe aus.
-     * pagespeedBaseUrl = null → PageSpeed-Check aus (keine zu messende Adresse).
+     * pagespeedKey = null → PageSpeed ohne eigenen Schlüssel (kleines Kontingent).
      *
-     * @var array{speechKey: ?string, speechUrl: ?string, pagespeedKey: ?string, pagespeedBaseUrl: ?string}
+     * @var array{speechKey: ?string, speechUrl: ?string, pagespeedKey: ?string}
      */
-    private array $services = ['speechKey' => null, 'speechUrl' => null, 'pagespeedKey' => null, 'pagespeedBaseUrl' => null];
+    private array $services = ['speechKey' => null, 'speechUrl' => null, 'pagespeedKey' => null];
+
+    /**
+     * Zu messende Live-Adresse des PageSpeed-Checks — PRO WEBSEITE, daher aus der
+     * Mount-Konfiguration ([pagespeed] url), nicht aus der zentralen hugocms.ini.
+     * null → noch keine gespeichert; das Panel schlägt dann die aus der
+     * Hugo-baseURL erkannte Adresse vor. Beim Messstart wird der Wert geschrieben.
+     */
+    private ?string $pagespeedUrl = null;
 
     /** Globale [user]-Einstellungen (Sitzungsdauer, Inhaltsbreite). */
     private array $user = ['sessionLifetime' => 28800, 'contentWidth' => 1200, 'updateLastmod' => null];
@@ -287,6 +295,8 @@ final class Connector
                 $this->addSetupWarning('HUGO-BIN-NOT-CONFIGURED');
             }
         }
+        // Gespeicherte PageSpeed-Adresse dieser Webseite (falls schon gesetzt).
+        $this->pagespeedUrl = $config['pagespeed'];
         foreach ($config['warnings'] as $warning) {
             $this->addSetupWarning($warning['key'], $warning['params']);
         }
@@ -537,12 +547,17 @@ final class Connector
             'speech' => $this->license()->isPro()
                 && $this->services['speechKey'] !== null
                 && $this->services['speechUrl'] !== null,
-            // PageSpeed-Check (Pro): braucht eine Pro-Lizenz UND eine
-            // konfigurierte öffentliche Live-Adresse ([services] pagespeed_base_url).
-            // Der Google-Schlüssel ist optional (ohne ihn gilt ein kleineres
-            // Kontingent), taugt daher nicht als Freischalt-Merkmal.
-            'pagespeed' => $this->license()->isPro()
-                && $this->services['pagespeedBaseUrl'] !== null,
+            // PageSpeed-Check (Pro): dieselbe Voraussetzung wie das SEO-Audit —
+            // Pro-Lizenz und ein Hugo-Projekt (für die baseURL-Vorbelegung). Die
+            // zu messende Adresse wird IM Panel eingegeben und dort gespeichert,
+            // ist also KEIN Freischalt-Merkmal (das Panel ist immer sichtbar).
+            'pagespeed' => $this->hugo !== null && $this->license()->isPro(),
+            // Gespeicherte bzw. aus der Hugo-baseURL erkannte Live-Adresse für die
+            // Vorbelegung des PageSpeed-Eingabefeldes.
+            'pagespeedUrl' => $this->pagespeedUrl ?? '',
+            'pagespeedUrlDetected' => $this->hugo !== null
+                ? (AuditService::detectBaseUrl((string) $this->hugo['source']) ?? '')
+                : '',
             // Gestaffelte Veröffentlichung: Entwürfe zur Freigabe setzen
             // Hugos draft/publishDate voraus, also ein konfiguriertes Hugo-
             // Projekt. Keine Pro-Bindung — der Entwurf-Modus ist eine allgemeine
@@ -1500,11 +1515,12 @@ final class Connector
     }
 
     /**
-     * pagespeed — misst die konfigurierte Live-Adresse ([services]
-     * pagespeed_base_url) über Google PageSpeed Insights und liefert die
-     * reduzierten Kennzahlen (Scores + Kern-Web-Vitalwerte). Pro-Funktion; der
-     * Google-Schlüssel ist optional und bleibt serverseitig. Der Lauf misst live
-     * und kann einige Sekunden dauern.
+     * pagespeed — misst die im Panel eingegebene Live-Adresse über Google
+     * PageSpeed Insights und liefert die reduzierten Kennzahlen (Scores + Kern-
+     * Web-Vitalwerte). Pro-Funktion; der Google-Schlüssel ist global und bleibt
+     * serverseitig, die zu messende Adresse gehört PRO WEBSEITE in die
+     * Mount-Konfiguration ([pagespeed] url) und wird hier beim Messstart
+     * gespeichert. Der Lauf misst live und kann einige Sekunden dauern.
      *
      * @return array<string, mixed>
      */
@@ -1514,20 +1530,39 @@ final class Connector
         $this->requireMethod('POST');
         $this->requirePro();
 
-        $baseUrl = $this->services['pagespeedBaseUrl'];
-        if ($baseUrl === null) {
-            throw new ApiException('ECONFIG', 409, 'PAGESPEED-NOT-CONFIGURED');
+        // Eingegebene Adresse prüfen: nur absolute http(s)-URLs sind messbar
+        // (Google ruft sie selbst ab).
+        $url = trim((string) ($request['url'] ?? ''));
+        if ($url === '' || !self::isPublicHttpUrl($url)) {
+            throw ApiException::badRequest('PAGESPEED-URL-INVALID');
+        }
+
+        // Adresse dieser Webseite dauerhaft merken (Mount-Konfiguration). Im
+        // programmatischen Betrieb (custom.php) gibt es keine schreibbare
+        // Mount-INI — dann wird nur gemessen, nicht gespeichert.
+        if ($this->mountsPath !== null && $url !== $this->pagespeedUrl) {
+            Config::updateSections($this->mountsPath, ['pagespeed' => ['url' => $url]]);
+            $this->pagespeedUrl = $url;
         }
 
         // Strategie aus dem Request; alles außer "desktop" gilt als "mobile".
         $strategy = ((string) ($request['strategy'] ?? 'mobile')) === 'desktop' ? 'desktop' : 'mobile';
 
         $result = (new PageSpeedClient($this->services['pagespeedKey']))
-            ->run($baseUrl, $strategy, PageSpeedClient::CATEGORIES);
+            ->run($url, $strategy, PageSpeedClient::CATEGORIES);
 
-        $this->logger->info(sprintf('PageSpeed-Check (%s) für %s.', $strategy, $baseUrl));
+        $this->logger->info(sprintf('PageSpeed-Check (%s) für %s.', $strategy, $url));
 
         return $result;
+    }
+
+    /** Prüft, ob $url eine absolute http(s)-Adresse mit Host ist. */
+    private static function isPublicHttpUrl(string $url): bool
+    {
+        $parts = parse_url($url);
+        return is_array($parts)
+            && in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true)
+            && ($parts['host'] ?? '') !== '';
     }
 
     /**
@@ -1856,15 +1891,11 @@ final class Connector
             // Schlüssel. Leere URL → der Client füllt den Standard vor.
             'speechConfigured' => trim((string) ($raw['services']['speech_key'] ?? '')) !== '',
             'speechUrl'        => $raw['services']['speech_url'] ?? '',
-            // PageSpeed-Check (Pro-Dienst): Status des optionalen Google-Schlüssels
-            // (nie der Schlüssel selbst) und die zu messende Live-Adresse. Ist
-            // keine hinterlegt, liefert pagespeedBaseUrlDetected die aus der
-            // Hugo-baseURL erkannte Adresse als Vorbelegung fürs Formular.
-            'pagespeedConfigured'      => trim((string) ($raw['services']['pagespeed_key'] ?? '')) !== '',
-            'pagespeedBaseUrl'         => $raw['services']['pagespeed_base_url'] ?? '',
-            'pagespeedBaseUrlDetected' => $this->hugo !== null
-                ? (AuditService::detectBaseUrl((string) $this->hugo['source']) ?? '')
-                : '',
+            // PageSpeed-Check: Status des optionalen (globalen) Google-Schlüssels
+            // — nie der Schlüssel selbst. Die zu messende Live-Adresse steht
+            // dagegen pro Webseite in der Mount-Konfiguration und wird im Panel
+            // gesetzt, nicht hier.
+            'pagespeedConfigured' => trim((string) ($raw['services']['pagespeed_key'] ?? '')) !== '',
             // E-Mail-Versand (Gesundheitscheck): alle Werte AUSSER dem Passwort.
             // mailPassConfigured zeigt nur an, ob bereits eines hinterlegt ist.
             'mailHost'           => $raw['mail']['smtp_host'] ?? '',
@@ -1948,10 +1979,10 @@ final class Connector
         $existingServices = Config::raw($this->configPath)['services'] ?? [];
         $speechKey = $speechKeyNew !== '' ? $speechKeyNew : trim((string) ($existingServices['speech_key'] ?? ''));
 
-        // PageSpeed-Check (Pro-Dienst). Der Google-Schlüssel ist ein Geheimnis
-        // (leeres Feld = unverändert) UND optional. Die Basis-URL ist die zu
-        // messende öffentliche Live-Adresse; ohne sie ist der Check aus.
-        $pagespeedBaseUrl = self::cleanConfigValue($request['pagespeedBaseUrl'] ?? '', 'pagespeedBaseUrl', false);
+        // PageSpeed-Check: der (globale) Google-Schlüssel ist ein Geheimnis
+        // (leeres Feld = unverändert) UND optional. Die zu messende Adresse steht
+        // pro Webseite in der Mount-Konfiguration und wird im Panel gesetzt, nicht
+        // hier.
         $pagespeedKeyNew = self::cleanConfigValue($request['pagespeedKey'] ?? '', 'pagespeedKey', false);
         $pagespeedKey = $pagespeedKeyNew !== '' ? $pagespeedKeyNew : trim((string) ($existingServices['pagespeed_key'] ?? ''));
 
@@ -1963,12 +1994,8 @@ final class Connector
             $servicesSection['speech_key'] = $speechKey;
             $servicesSection['speech_url'] = $speechUrl;
         }
-        if ($pagespeedBaseUrl !== '') {
-            $servicesSection['pagespeed_base_url'] = $pagespeedBaseUrl;
-            // Der Schlüssel ist optional: nur schreiben, wenn vorhanden.
-            if ($pagespeedKey !== '') {
-                $servicesSection['pagespeed_key'] = $pagespeedKey;
-            }
+        if ($pagespeedKey !== '') {
+            $servicesSection['pagespeed_key'] = $pagespeedKey;
         }
 
         // E-Mail-Versand (Gesundheitscheck). Das SMTP-Passwort ist ein Geheimnis:

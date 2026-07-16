@@ -3,15 +3,25 @@
 // Konfiguration hinterlegte Live-Adresse über Google PageSpeed Insights und
 // zeigt die Kategorie-Scores sowie die Kern-Web-Vitalwerte. Anders als der
 // SEO-Bericht wird kein Verlauf vorgehalten — angezeigt wird der jüngste Lauf.
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuditStore } from '../stores/audit'
+import { useAuthStore } from '../stores/auth'
 import { errorText } from '../i18n/apiMessage'
 import { useTransientError } from '../util/transientError'
 
 const { t } = useI18n()
 const audit = useAuditStore()
+const auth = useAuthStore()
 const error = useTransientError()
+
+// Zu messende Live-Adresse. Vorbelegung: die pro Webseite gespeicherte Adresse,
+// sonst die aus der Hugo-baseURL erkannte. Beim Messstart wird sie serverseitig
+// gespeichert.
+const url = ref(auth.pagespeedUrl || auth.pagespeedUrlDetected || '')
+
+// Nur absolute http(s)-Adressen sind messbar (Google ruft sie selbst ab).
+const canRun = computed(() => /^https?:\/\/.+/i.test(url.value.trim()))
 
 // Anzuzeigende Kategorien in fester Reihenfolge (nur, was Google zurückliefert).
 const CATEGORIES = ['performance', 'accessibility', 'best-practices', 'seo']
@@ -46,9 +56,10 @@ const fieldClass = computed(() => {
 })
 
 async function run(strategy) {
+  if (!canRun.value) return
   error.value = null
   try {
-    await audit.runPageSpeed(strategy)
+    await audit.runPageSpeed(url.value.trim(), strategy)
   } catch (e) {
     error.value = errorText(t, e)
   }
@@ -68,6 +79,22 @@ async function run(strategy) {
     >
       {{ error }}
     </v-alert>
+
+    <!-- Zu messende Live-Adresse (pro Webseite). Vorbelegt aus der gespeicherten
+         bzw. der aus der Hugo-baseURL erkannten Adresse; beim Messstart gespeichert. -->
+    <v-text-field
+      v-model="url"
+      :label="$t('pagespeed.urlLabel')"
+      :hint="$t('pagespeed.urlHint')"
+      persistent-hint
+      placeholder="https://example.com/"
+      prepend-inner-icon="mdi-web"
+      density="compact"
+      variant="outlined"
+      class="mb-3"
+      :disabled="audit.pageSpeedRunning"
+      @keyup.enter="run()"
+    />
 
     <!-- Steuerung: Strategie (Mobil/Desktop) + Start. -->
     <div class="ps-controls nemo-noselect">
@@ -89,7 +116,7 @@ async function run(strategy) {
           <v-icon icon="mdi-monitor" size="16" class="mr-1" />{{ $t('pagespeed.desktop') }}
         </button>
       </div>
-      <button class="audit-btn primary" :disabled="audit.pageSpeedRunning" @click="run()">
+      <button class="audit-btn primary" :disabled="audit.pageSpeedRunning || !canRun" @click="run()">
         <v-progress-circular v-if="audit.pageSpeedRunning" indeterminate size="14" width="2" class="mr-1" />
         <v-icon v-else icon="mdi-speedometer" size="16" class="mr-1" />{{ $t('pagespeed.run') }}
       </button>

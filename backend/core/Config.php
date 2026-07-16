@@ -328,10 +328,11 @@ final class Config
      *                      Fehlt eines von beiden, ist die Spracheingabe aus.
      *   pagespeed_key      Google-API-Schlüssel für PageSpeed Insights (Geheimnis,
      *                      OPTIONAL — ohne Schlüssel gilt ein kleineres Kontingent).
-     *   pagespeed_base_url Zu prüfende öffentliche Live-Adresse der Webseite.
-     *                      Ohne sie ist der PageSpeed-Check aus (nichts zu messen).
+     *                      Global, da ein Google-Konto genügt; die zu messende
+     *                      Live-Adresse steht dagegen PRO PROJEKT in der
+     *                      Mount-Konfiguration ([pagespeed] url, siehe MountConfig).
      *
-     * @return array{speechKey: ?string, speechUrl: ?string, pagespeedKey: ?string, pagespeedBaseUrl: ?string}
+     * @return array{speechKey: ?string, speechUrl: ?string, pagespeedKey: ?string}
      */
     private static function servicesSection(mixed $section): array
     {
@@ -339,13 +340,11 @@ final class Config
         $speechKey = trim((string) ($section['speech_key'] ?? ''));
         $speechUrl = trim((string) ($section['speech_url'] ?? ''));
         $pagespeedKey = trim((string) ($section['pagespeed_key'] ?? ''));
-        $pagespeedBaseUrl = trim((string) ($section['pagespeed_base_url'] ?? ''));
 
         return [
             'speechKey' => $speechKey === '' ? null : $speechKey,
             'speechUrl' => $speechUrl === '' ? null : $speechUrl,
             'pagespeedKey' => $pagespeedKey === '' ? null : $pagespeedKey,
-            'pagespeedBaseUrl' => $pagespeedBaseUrl === '' ? null : $pagespeedBaseUrl,
         ];
     }
 

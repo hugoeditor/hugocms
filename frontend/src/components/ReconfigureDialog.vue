@@ -47,10 +47,9 @@ const speechUrl = ref(DEFAULT_SPEECH_URL)
 const speechKey = ref('')
 const speechConfigured = ref(false)
 
-// PageSpeed-Check (Pro-Dienst). Die zu messende Live-Adresse; ist keine
-// hinterlegt, wird sie aus der Hugo-baseURL vorbelegt (pagespeedBaseUrlDetected).
-// Der Google-Schlüssel ist optional und ein Geheimnis: leeres Feld = unverändert.
-const pagespeedBaseUrl = ref('')
+// PageSpeed-Check (Pro-Dienst). Nur der (globale) Google-Schlüssel — optional und
+// ein Geheimnis: leeres Feld = unverändert. Die zu messende Live-Adresse steht
+// pro Webseite in der Mount-Konfiguration und wird im PageSpeed-Panel gesetzt.
 const pagespeedKey = ref('')
 const pagespeedConfigured = ref(false)
 
@@ -123,8 +122,6 @@ watch(model, async (open) => {
     speechUrl.value = cfg.speechUrl || DEFAULT_SPEECH_URL
     speechKey.value = ''
     speechConfigured.value = !!cfg.speechConfigured
-    // Vorhandene Adresse; sonst die aus der Hugo-baseURL erkannte Vorbelegung.
-    pagespeedBaseUrl.value = cfg.pagespeedBaseUrl || cfg.pagespeedBaseUrlDetected || ''
     pagespeedKey.value = ''
     pagespeedConfigured.value = !!cfg.pagespeedConfigured
     mailHost.value = cfg.mailHost ?? ''
@@ -168,7 +165,6 @@ async function submit() {
       aiWriteMode: aiWriteMode.value,
       speechKey: speechKey.value, // leer = unverändert
       speechUrl: speechUrl.value,
-      pagespeedBaseUrl: pagespeedBaseUrl.value,
       pagespeedKey: pagespeedKey.value, // leer = unverändert
       mailHost: mailHost.value,
       mailPort: mailPort.value,
@@ -459,16 +455,7 @@ async function submit() {
 
           <v-divider class="my-3" />
           <div :ref="registerSection('pagespeed')" class="text-subtitle-2 mb-2">{{ $t('pagespeedConfig.section') }}</div>
-          <div class="text-caption text-medium-emphasis mb-2">{{ $t('pagespeedConfig.urlHint') }}</div>
-          <v-text-field
-            v-model="pagespeedBaseUrl"
-            :label="$t('pagespeedConfig.url')"
-            placeholder="https://example.com/"
-            prepend-inner-icon="mdi-web"
-            variant="outlined"
-            density="comfortable"
-            class="mb-2"
-          />
+          <div class="text-caption text-medium-emphasis mb-2">{{ $t('pagespeedConfig.intro') }}</div>
           <div class="text-caption text-medium-emphasis mb-2">
             {{ pagespeedConfigured ? $t('pagespeedConfig.keyHintSet') : $t('pagespeedConfig.keyHintUnset') }}
           </div>

@@ -72,3 +72,12 @@ label = Medien
 ;   key   Lizenzschlüssel im Format HUGOCMS-...-...
 ;[license]
 ;key = "HUGOCMS-...-..."
+
+; Reservierte Sektion [pagespeed] (KEIN Mount): Live-Adresse DIESER Webseite für
+; den PageSpeed-Check (Pro). Wird über das PageSpeed-Panel eingegeben und beim
+; Messstart automatisch geschrieben — ein manueller Eintrag ist nicht nötig. Der
+; (globale) Google-API-Schlüssel steht dagegen zentral in der hugocms.ini
+; ([services] pagespeed_key).
+;   url   Öffentliche Adresse, die Google misst, z. B. https://example.com/
+;[pagespeed]
+;url = "https://example.com/"

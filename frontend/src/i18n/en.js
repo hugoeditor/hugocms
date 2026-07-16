@@ -210,9 +210,11 @@ export default {
 
   pagespeed: {
     tab: 'PageSpeed',
+    urlLabel: 'URL to measure',
+    urlHint: 'Public address Google measures. Saved when you start the measurement.',
     run: 'Run measurement',
     running: 'PageSpeed is measuring the page …',
-    empty: 'No measurement yet. Run one to see scores and load metrics.',
+    empty: 'No measurement yet. Check the address and start the measurement.',
     mobile: 'Mobile',
     desktop: 'Desktop',
     metricsTitle: 'Load metrics (lab data)',
@@ -430,9 +432,8 @@ export default {
 
   pagespeedConfig: {
     section: 'PageSpeed check',
-    url: 'Live URL',
-    urlHint:
-      'Public address of the site that Google PageSpeed Insights measures (Google fetches it itself — the local build is not enough). Without an address the check is off. Prefilled from the Hugo baseURL.',
+    intro:
+      'Global Google API key for PageSpeed Insights. The URL to measure is entered per site directly in the PageSpeed tab.',
     key: 'Google API key',
     keyHintSet: 'A key is stored. Leave empty to keep it; entering one replaces it.',
     keyHintUnset:
@@ -896,7 +897,7 @@ export default {
     'SPEECH-AUTH-FAILED': 'The transcription service rejected the credentials.',
     'SPEECH-MIC-DENIED': 'No access to the microphone. Please allow the permission.',
     'SPEECH-NO-RESULT': 'No speech was recognized.',
-    'PAGESPEED-NOT-CONFIGURED': 'The PageSpeed check is not configured. Please set a live URL in the configuration.',
+    'PAGESPEED-URL-INVALID': 'Please provide a valid address (starting with http:// or https://).',
     'PAGESPEED-UNREACHABLE': 'Google PageSpeed Insights is unreachable ({0}).',
     'PAGESPEED-REQUEST-FAILED': 'The PageSpeed measurement failed ({0}).',
     'PAGESPEED-QUOTA-EXCEEDED': 'The PageSpeed quota is exhausted. Your own Google API key raises the limit.',

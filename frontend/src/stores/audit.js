@@ -93,14 +93,15 @@ export const useAuditStore = defineStore('audit', {
       return res
     },
 
-    // PageSpeed-Messung der konfigurierten Live-Adresse starten. Die Strategie
-    // (mobile/desktop) kommt aus dem Zustand; das reduzierte Ergebnis kommt
+    // PageSpeed-Messung der eingegebenen Live-Adresse starten. Die Adresse wird
+    // serverseitig pro Webseite gespeichert (Mount-Konfiguration); die Strategie
+    // (mobile/desktop) kommt aus dem Zustand. Das reduzierte Ergebnis kommt
     // direkt zurück und wird angezeigt.
-    async runPageSpeed(strategy) {
+    async runPageSpeed(url, strategy) {
       if (strategy) this.pageSpeedStrategy = strategy
       this.pageSpeedRunning = true
       try {
-        const result = await api.post('pagespeed', { strategy: this.pageSpeedStrategy })
+        const result = await api.post('pagespeed', { url, strategy: this.pageSpeedStrategy })
         this.pageSpeed = markRaw(result)
         return result
       } finally {

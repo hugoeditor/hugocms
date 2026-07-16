@@ -42,12 +42,14 @@ final class MountConfig
     /** Sektionsnamen, die NICHT als Mount interpretiert werden. */
     private const HUGO_SECTION = 'hugo';
     private const LICENSE_SECTION = 'license';
+    private const PAGESPEED_SECTION = 'pagespeed';
 
     /**
      * @return array{
      *   mounts: list<array{name: string, path: string, options: array}>,
      *   hugo: ?array{source: string, destination: string, minify: bool, clean: bool},
      *   license: ?string,
+     *   pagespeed: ?string,
      *   warnings: list<array{key: string, params: list<mixed>}>
      * }
      */
@@ -66,6 +68,7 @@ final class MountConfig
         $mounts = [];
         $hugo = null;
         $license = null;
+        $pagespeed = null;
         $warnings = [];
 
         foreach ($raw as $name => $section) {
@@ -89,6 +92,16 @@ final class MountConfig
             if (strtolower((string) $name) === self::LICENSE_SECTION) {
                 $key = trim((string) ($section['key'] ?? ''));
                 $license = $key === '' ? null : $key;
+                continue;
+            }
+
+            // PageSpeed-Check dieser Webseite (optional): die zu messende
+            // öffentliche Live-Adresse. Pro Projekt, daher hier statt zentral in
+            // der hugocms.ini. Wird über das PageSpeed-Panel gesetzt und beim
+            // Messstart geschrieben.
+            if (strtolower((string) $name) === self::PAGESPEED_SECTION) {
+                $url = trim((string) ($section['url'] ?? ''));
+                $pagespeed = $url === '' ? null : $url;
                 continue;
             }
 
@@ -119,7 +132,7 @@ final class MountConfig
             throw new ApiException('ECONFIG', 500, 'MOUNTS-NO-SECTION', [$configPath]);
         }
 
-        return ['mounts' => $mounts, 'hugo' => $hugo, 'license' => $license, 'warnings' => $warnings];
+        return ['mounts' => $mounts, 'hugo' => $hugo, 'license' => $license, 'pagespeed' => $pagespeed, 'warnings' => $warnings];
     }
 
     /**
