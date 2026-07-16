@@ -35,9 +35,10 @@ final class GitService
     }
 
     /**
-     * Arbeitsbaum-Status: aktueller Branch, geänderte und unverfolgte Dateien.
+     * Arbeitsbaum-Status: aktueller Branch und die Liste der Änderungen, jede
+     * Datei mit ihrer Art (siehe classifyStatus).
      *
-     * @return array{branch: string, clean: bool, modified: list<string>, untracked: list<string>}
+     * @return array{branch: string, clean: bool, entries: list<array{path: string, status: string, from: string|null}>}
      */
     public function status(): array
     {
@@ -47,31 +48,67 @@ final class GitService
         $branchName = $branch['exit'] === 0 ? trim($branch['output']) : 'HEAD';
 
         $porcelain = $this->run(['status', '--porcelain=v1', '--untracked-files=all']);
-        $modified = [];
-        $untracked = [];
+        $entries = [];
         foreach ($porcelain['lines'] as $line) {
             if ($line === '' || strlen($line) < 4) {
                 continue;
             }
             $code = substr($line, 0, 2);
             $path = substr($line, 3);
-            // Umbenennungen melden den Zielpfad (nach " -> ").
+            // Umbenennungen melden „alt -> neu“: angezeigt wird der Zielpfad,
+            // der Quellpfad bleibt als `from` erhalten.
+            $from = null;
             if (str_contains($path, ' -> ')) {
-                $path = substr($path, (int) strpos($path, ' -> ') + 4);
+                $sep = (int) strpos($path, ' -> ');
+                $from = $this->unquotePath(substr($path, 0, $sep));
+                $path = substr($path, $sep + 4);
             }
-            if ($code === '??') {
-                $untracked[] = $path;
-            } else {
-                $modified[] = $path;
-            }
+            $entries[] = [
+                'path' => $this->unquotePath($path),
+                'status' => $this->classifyStatus($code),
+                'from' => $from,
+            ];
         }
 
         return [
             'branch' => $branchName,
-            'clean' => $modified === [] && $untracked === [],
-            'modified' => $modified,
-            'untracked' => $untracked,
+            'clean' => $entries === [],
+            'entries' => $entries,
         ];
+    }
+
+    /**
+     * Übersetzt den zweistelligen Porcelain-Code (X = Index, Y = Arbeitsbaum)
+     * in eine Art für die Anzeige. Da `commit` mit `add -A` ohnehin alles
+     * übernimmt, zählt der Endzustand gegenüber HEAD — die beiden Spalten
+     * werden deshalb zusammengefasst und nicht getrennt ausgewiesen.
+     */
+    private function classifyStatus(string $code): string
+    {
+        // Konflikte zuerst: beidseitig geändert (UU/AA/DD) oder eine U-Spalte.
+        if ($code === 'AA' || $code === 'DD' || str_contains($code, 'U')) {
+            return 'conflict';
+        }
+        return match (true) {
+            $code === '??' => 'untracked',
+            str_contains($code, 'R') => 'renamed',
+            str_contains($code, 'D') => 'deleted',
+            str_contains($code, 'A') => 'added',
+            default => 'modified',
+        };
+    }
+
+    /**
+     * Porcelain v1 setzt Pfade mit Sonderzeichen in Anführungszeichen und
+     * maskiert sie C-artig. Für die Anzeige wird das rückgängig gemacht.
+     */
+    private function unquotePath(string $path): string
+    {
+        if (!str_starts_with($path, '"') || !str_ends_with($path, '"')) {
+            return $path;
+        }
+        $inner = substr($path, 1, -1);
+        return stripcslashes($inner);
     }
 
     /**

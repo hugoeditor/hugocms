@@ -92,6 +92,22 @@ watch(
   },
 )
 
+// Browser-Tab: Der Rechnername der Hugo-baseURL (z. B. dev.opensourceerp.dev)
+// benennt die Webseite, sodass mehrere offene Instanzen unterscheidbar sind.
+// Der Zusatz hält den CMS-Tab vom Tab der Webseite selbst auseinander, die
+// unter derselben Adresse läuft. Führt das Projekt keine baseURL, bleibt es
+// beim Titel aus der index.html — der nennt HugoCMS bereits.
+const defaultTitle = document.title
+const TITLE_SUFFIX = ' - HugoCMS'
+
+watch(
+  () => auth.siteHost,
+  (host) => {
+    document.title = host ? host + TITLE_SUFFIX : defaultTitle
+  },
+  { immediate: true },
+)
+
 let resizing = false
 
 function startResize(event) {

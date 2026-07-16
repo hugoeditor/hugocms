@@ -44,6 +44,49 @@ watch(model, async (open) => {
   }
 })
 
+// Anzeige-Gruppen der Arbeitsbaum-Änderungen. Das Backend meldet den Git-Status
+// je Datei; `added` (bereits vorgemerkt) und `untracked` (noch nicht vorgemerkt)
+// bilden zusammen die Gruppe „Neu“, weil der Commit mit `add -A` ohnehin beides
+// übernimmt — die Unterscheidung wäre für die Bedienung ohne Folge.
+const STATUS_GROUP = {
+  modified: 'modified',
+  added: 'new',
+  untracked: 'new',
+  deleted: 'deleted',
+  renamed: 'renamed',
+  conflict: 'conflict',
+}
+
+// Je Gruppe Symbol, Farbe und Beschriftung. Die Art steht als Wort in der Liste,
+// nicht nur als Farbe — sonst wäre sie bei Farbenblindheit nicht zu erkennen.
+const GROUP_META = {
+  conflict: { icon: 'mdi-alert-outline', color: 'error', label: 'repo.statusConflict', count: 'repo.countConflict' },
+  deleted: { icon: 'mdi-file-remove-outline', color: 'error', label: 'repo.statusDeleted', count: 'repo.countDeleted' },
+  new: { icon: 'mdi-file-plus-outline', color: 'success', label: 'repo.statusNew', count: 'repo.countNew' },
+  modified: { icon: 'mdi-file-edit-outline', color: 'warning', label: 'repo.statusModified', count: 'repo.countModified' },
+  renamed: { icon: 'mdi-file-move-outline', color: 'info', label: 'repo.statusRenamed', count: 'repo.countRenamed' },
+}
+
+// Reihenfolge in Liste und Zusammenfassung: Dringendes zuerst.
+const GROUP_ORDER = ['conflict', 'deleted', 'new', 'modified', 'renamed']
+
+// Änderungen nach Art gruppiert, damit Gleichartiges beieinandersteht.
+const changes = computed(() =>
+  (repo.status?.entries ?? [])
+    .map((e) => ({ ...e, group: STATUS_GROUP[e.status] ?? 'modified' }))
+    .sort(
+      (a, b) =>
+        GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group) || a.path.localeCompare(b.path),
+    ),
+)
+
+// Zähler je Gruppe für die Chips in der Kopfzeile.
+const summary = computed(() => {
+  const counts = new Map()
+  for (const c of changes.value) counts.set(c.group, (counts.get(c.group) ?? 0) + 1)
+  return GROUP_ORDER.filter((g) => counts.has(g)).map((g) => ({ group: g, count: counts.get(g) }))
+})
+
 // Diff in Zeilen mit Typ (Kontext/Hinzu/Weg/Kopf) für die Einfärbung.
 const diffLines = computed(() => {
   const text = repo.diff?.diff ?? ''
@@ -174,20 +217,22 @@ const busy = computed(() => committing.value || pushing.value || resetting.value
           <!-- Status -->
           <div v-if="repo.status" class="d-flex align-center flex-wrap mb-3" style="gap: 8px">
             <v-chip size="small" prepend-icon="mdi-source-branch" label>{{ repo.status.branch }}</v-chip>
-            <v-chip
-              :color="repo.status.clean ? 'success' : 'warning'"
-              size="small"
-              :prepend-icon="repo.status.clean ? 'mdi-check' : 'mdi-pencil'"
-              label
-            >
-              {{ repo.status.clean ? $t('repo.clean') : $t('repo.dirty') }}
+            <v-chip v-if="repo.status.clean" color="success" size="small" prepend-icon="mdi-check" label>
+              {{ $t('repo.clean') }}
             </v-chip>
-            <v-chip v-if="repo.status.modified.length" size="small" variant="tonal" color="warning" label>
-              {{ $t('repo.modifiedCount', [repo.status.modified.length]) }}
-            </v-chip>
-            <v-chip v-if="repo.status.untracked.length" size="small" variant="tonal" label>
-              {{ $t('repo.untrackedCount', [repo.status.untracked.length]) }}
-            </v-chip>
+            <template v-else>
+              <v-chip
+                v-for="s in summary"
+                :key="s.group"
+                size="small"
+                variant="tonal"
+                :color="GROUP_META[s.group].color"
+                :prepend-icon="GROUP_META[s.group].icon"
+                label
+              >
+                {{ $t(GROUP_META[s.group].count, [s.count]) }}
+              </v-chip>
+            </template>
             <v-spacer />
             <v-btn
               variant="text"
@@ -212,24 +257,27 @@ const busy = computed(() => committing.value || pushing.value || resetting.value
             </v-btn>
           </div>
 
-          <!-- Geänderte/unverfolgte Dateien -->
-          <div
-            v-if="repo.status && (repo.status.modified.length || repo.status.untracked.length)"
-            class="mb-3"
-          >
+          <!-- Geänderte Dateien, je Zeile mit der Art der Änderung -->
+          <div v-if="changes.length" class="mb-3">
             <div
-              v-for="f in repo.status.modified"
-              :key="'m-' + f"
-              class="text-body-2 d-flex align-center"
+              v-for="c in changes"
+              :key="c.status + '-' + c.path"
+              class="d-flex align-center py-1"
             >
-              <v-icon icon="mdi-file-edit-outline" size="16" color="warning" class="mr-1" />{{ f }}
-            </div>
-            <div
-              v-for="f in repo.status.untracked"
-              :key="'u-' + f"
-              class="text-body-2 d-flex align-center text-medium-emphasis"
-            >
-              <v-icon icon="mdi-file-plus-outline" size="16" class="mr-1" />{{ f }}
+              <v-chip
+                :color="GROUP_META[c.group].color"
+                :prepend-icon="GROUP_META[c.group].icon"
+                size="x-small"
+                variant="tonal"
+                label
+                class="repo-badge mr-2"
+              >
+                {{ $t(GROUP_META[c.group].label) }}
+              </v-chip>
+              <span class="repo-path">{{ c.path }}</span>
+              <span v-if="c.from" class="text-caption text-medium-emphasis ml-2 flex-shrink-0">
+                {{ $t('repo.renamedFrom', [c.from]) }}
+              </span>
             </div>
           </div>
 
@@ -357,6 +405,18 @@ const busy = computed(() => committing.value || pushing.value || resetting.value
 <style scoped>
 .repo-table :deep(tbody tr) {
   cursor: pointer;
+}
+/* Feste Breite: So stehen die Pfade in einer Flucht und die Liste lässt sich
+   nach der Art der Änderung überfliegen. */
+.repo-badge {
+  min-width: 86px;
+  flex-shrink: 0;
+}
+/* Gelöschte Pfade werden bewusst normal gesetzt (weder durchgestrichen noch
+   gedimmt): Die Art der Änderung trägt das Abzeichen, der Pfad bleibt lesbar. */
+.repo-path {
+  font-size: 0.82rem;
+  word-break: break-all;
 }
 .repo-output {
   font-size: 0.78rem;

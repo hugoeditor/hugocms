@@ -31,6 +31,9 @@ export const useAuthStore = defineStore('auth', {
     pagespeedUrl: '', // gespeicherte Live-Adresse dieser Webseite (Mount-Konfig)
     pagespeedUrlDetected: '', // aus der Hugo-baseURL erkannte Adresse (Vorbelegung)
     review: false, // gestaffelte Veröffentlichung: Entwürfe zur Freigabe (Hugo-Projekt)
+    // Rechnername der Hugo-baseURL (z. B. dev.opensourceerp.dev) — benennt die
+    // Webseite im Browser-Tab. Leer, wenn das Projekt keine baseURL führt.
+    siteHost: '',
   }),
 
   getters: {
@@ -61,6 +64,7 @@ export const useAuthStore = defineStore('auth', {
       this.pagespeedUrl = data.pagespeedUrl ?? ''
       this.pagespeedUrlDetected = data.pagespeedUrlDetected ?? ''
       this.review = data.review ?? false
+      this.siteHost = data.siteHost ?? ''
       setCsrfToken(data.csrf)
       this.ready = true
     },

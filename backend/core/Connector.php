@@ -516,6 +516,12 @@ final class Connector
             throw new ApiException('ESESSION', 500, null, [$this->sessionDir]);
         }
 
+        // Die Hugo-baseURL einmal ermitteln (liest die Projekt-Konfiguration von
+        // der Platte) und für beide Felder unten nutzen.
+        $baseUrl = $this->hugo !== null
+            ? AuditService::detectBaseUrl((string) $this->hugo['source'])
+            : null;
+
         return [
             'authenticated' => $this->auth->isAuthenticated(),
             'user' => $this->auth->currentUser(),
@@ -577,9 +583,11 @@ final class Connector
             // Gespeicherte bzw. aus der Hugo-baseURL erkannte Live-Adresse für die
             // Vorbelegung des PageSpeed-Eingabefeldes.
             'pagespeedUrl' => $this->pagespeedUrl ?? '',
-            'pagespeedUrlDetected' => $this->hugo !== null
-                ? (AuditService::detectBaseUrl((string) $this->hugo['source']) ?? '')
-                : '',
+            'pagespeedUrlDetected' => $baseUrl ?? '',
+            // Der Rechnername der baseURL (z. B. dev.opensourceerp.dev) benennt
+            // die Webseite im Browser-Tab. Leer, wenn das Projekt keine baseURL
+            // führt — der Client bleibt dann beim allgemeinen Titel.
+            'siteHost' => $baseUrl !== null ? (parse_url($baseUrl, PHP_URL_HOST) ?: '') : '',
             // Gestaffelte Veröffentlichung: Entwürfe zur Freigabe setzen
             // Hugos draft/publishDate voraus, also ein konfiguriertes Hugo-
             // Projekt. Keine Pro-Bindung — der Entwurf-Modus ist eine allgemeine

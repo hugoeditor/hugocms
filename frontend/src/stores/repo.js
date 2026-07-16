@@ -6,7 +6,9 @@ import { api } from '../api/client'
 // Hugo-Projektverzeichnis der Webseite; der Server sperrt alle Aufrufe darauf ein.
 export const useRepoStore = defineStore('repo', {
   state: () => ({
-    status: null, // { branch, clean, modified[], untracked[] }
+    // { branch, clean, entries[] }; entries: [{ path, status, from }] mit status
+    // modified|added|deleted|renamed|untracked|conflict (from nur bei renamed).
+    status: null,
     commits: [], // [{ sha, shortSha, author, email, date, message }]
     total: 0, // Gesamtzahl der Commits
     page: 1,
