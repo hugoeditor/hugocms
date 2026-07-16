@@ -15,14 +15,18 @@ export const useAuditStore = defineStore('audit', {
     severityFilter: 'all', // 'all' | 'error' | 'warning' | 'hint'
     categoryFilter: 'all', // 'all' | <Kategorie>
     // PageSpeed-Check (Pro, eigener Reiter). Misst die konfigurierte Live-Adresse
-    // über Google PageSpeed Insights; das Ergebnis wird nicht als Verlauf
-    // vorgehalten (immer der jüngste Lauf).
-    pageSpeed: null, // letztes Ergebnis (Scores + Kern-Web-Vitalwerte) oder null
+    // über Google PageSpeed Insights. Je Strategie wird das jüngste Ergebnis
+    // vorgehalten (kein Verlauf); der Umschalter wählt, welches angezeigt wird.
+    pageSpeedResults: { mobile: null, desktop: null }, // je Strategie das letzte Ergebnis oder null
     pageSpeedRunning: false, // läuft gerade eine Messung?
-    pageSpeedStrategy: 'mobile', // 'mobile' | 'desktop'
+    pageSpeedStrategy: 'mobile', // angezeigte/zu messende Strategie: 'mobile' | 'desktop'
   }),
 
   getters: {
+    // Angezeigtes PageSpeed-Ergebnis: das der gerade gewählten Strategie (oder
+    // null, wenn dafür noch keine Messung vorliegt).
+    pageSpeed: (state) => state.pageSpeedResults[state.pageSpeedStrategy] ?? null,
+
     // Kategorien des aktuellen Berichts in Berichtsreihenfolge.
     categories: (state) => (state.current ? Object.keys(state.current.byCategory || {}) : []),
 
@@ -93,24 +97,30 @@ export const useAuditStore = defineStore('audit', {
       return res
     },
 
-    // Zuletzt gespeichertes PageSpeed-Ergebnis dieser Webseite laden (oder null).
-    // Für die Anzeige beim Öffnen des Panels, ohne neu zu messen.
+    // Zuletzt gespeicherte PageSpeed-Ergebnisse dieser Webseite laden — je
+    // Strategie eines (oder null). Für die Anzeige beim Öffnen des Panels, ohne
+    // neu zu messen.
     async fetchPageSpeed() {
       const data = await api.get('pagespeedlatest')
-      if (data.result) this.pageSpeed = markRaw(data.result)
-      return data.result
+      this.pageSpeedResults = {
+        mobile: data.mobile ? markRaw(data.mobile) : null,
+        desktop: data.desktop ? markRaw(data.desktop) : null,
+      }
+      return data
     },
 
     // PageSpeed-Messung der eingegebenen Live-Adresse starten. Die Adresse wird
     // serverseitig pro Webseite gespeichert (Mount-Konfiguration); die Strategie
-    // (mobile/desktop) kommt aus dem Zustand. Das reduzierte Ergebnis kommt
-    // direkt zurück und wird angezeigt.
+    // (mobile/desktop) kommt aus dem Zustand. Das Ergebnis wird der jeweiligen
+    // Strategie zugeordnet, damit Mobil- und Desktop-Bericht nebeneinander
+    // bestehen bleiben.
     async runPageSpeed(url, strategy) {
-      if (strategy) this.pageSpeedStrategy = strategy
+      const s = strategy || this.pageSpeedStrategy
+      this.pageSpeedStrategy = s
       this.pageSpeedRunning = true
       try {
-        const result = await api.post('pagespeed', { url, strategy: this.pageSpeedStrategy })
-        this.pageSpeed = markRaw(result)
+        const result = await api.post('pagespeed', { url, strategy: s })
+        this.pageSpeedResults[s] = markRaw(result)
         return result
       } finally {
         this.pageSpeedRunning = false
