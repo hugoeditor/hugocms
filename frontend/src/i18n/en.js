@@ -575,6 +575,7 @@ export default {
   },
 
   editor: {
+    storageLocation: 'Storage location: {0}',
     save: 'Save (Ctrl+S)',
     saveDraft: 'Save as draft for review',
     savedAsDraft: 'Saved as a draft for review.',

@@ -576,6 +576,9 @@ export default {
   },
 
   editor: {
+    // Vorgelesen für die Pfadzeile unter dem Dateinamen (sichtbar steht dort
+    // nur der Pfad selbst, dessen Ordnersymbol allein nichts aussagt).
+    storageLocation: 'Speicherort: {0}',
     save: 'Speichern (Strg+S)',
     saveDraft: 'Als Entwurf zur Freigabe',
     savedAsDraft: 'Als Entwurf zur Freigabe abgelegt.',

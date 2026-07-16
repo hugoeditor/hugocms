@@ -63,6 +63,22 @@ const JSON_MODE_KEY = 'hugocms_json_mode'
 
 const isMarkdown = computed(() => /\.(md|markdown)$/i.test(files.openFile?.name ?? ''))
 
+// Speicherort der offenen Datei: Mount und Verzeichnis OHNE den Dateinamen —
+// der steht bereits als Titel darüber. Das Backend liefert `path` als
+// „<mount>/<relativer Pfad>“, wobei der Mount seine interne Kennung trägt; hier
+// erscheint er mit dem Anzeigenamen aus der Seitenleiste. Quelle ist bewusst
+// openFile.path und nicht der Breadcrumb: Aus dem SEO-Bericht heraus geöffnete
+// Dateien liegen nicht im gerade angezeigten Verzeichnis.
+const storagePath = computed(() => {
+  const raw = files.openFile?.path ?? ''
+  if (raw === '') return ''
+  const segments = raw.split('/')
+  const mountName = segments.shift()
+  segments.pop() // Dateiname
+  const label = files.mounts.find((m) => m.name === mountName)?.label ?? mountName
+  return [label, ...segments].join('/') + '/'
+})
+
 // Veröffentlichungszustand aus dem Front Matter (Entwurf / geplant / abgelaufen)
 // — macht sichtbar, ob und wann eine Content-Datei live geht. Reaktiv auf den
 // Editorinhalt, aktualisiert sich also beim Tippen. Nur für Markdown-Content.
@@ -452,8 +468,20 @@ onBeforeUnmount(() => {
         </v-tooltip>
         <v-icon class="mx-3" icon="mdi-file-document-edit" />
         <v-toolbar-title>
-          {{ files.openFile.name }}
-          <span v-if="files.dirty" class="text-warning dirty-dot">•</span>
+          <div class="editor-name">
+            {{ files.openFile.name }}
+            <span v-if="files.dirty" class="text-warning dirty-dot">•</span>
+          </div>
+          <!-- Speicherort unter dem Dateinamen: bei gleichnamigen Dateien in
+               mehreren Mounts die einzige Unterscheidung. -->
+          <div
+            v-if="storagePath"
+            class="editor-path"
+            :title="storagePath"
+            :aria-label="$t('editor.storageLocation', [storagePath])"
+          >
+            <v-icon icon="mdi-folder-outline" size="13" class="mr-1" />{{ storagePath }}
+          </div>
         </v-toolbar-title>
         <v-spacer />
 
@@ -662,6 +690,26 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   background: var(--mint-content);
+}
+
+/* Zwei Zeilen im Titel der Werkzeugleiste: Dateiname, darunter der Speicherort.
+   Die Zeilenhöhen sind eng gesetzt, damit beides in die Leiste passt; lange
+   Pfade werden abgeschnitten (der volle Pfad steht im title-Attribut). */
+.editor-name {
+  /* Kleiner als die 1.25rem, die v-toolbar-title vorgibt: Der Titel besteht
+     jetzt aus zwei Zeilen und braucht weniger Gewicht auf der ersten. */
+  font-size: 1.05rem;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.editor-path {
+  font-size: 0.9rem;
+  line-height: 1.3;
+  opacity: 0.75;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Indikator für ungespeicherte Änderungen: deutlich größer als der Titel, damit
