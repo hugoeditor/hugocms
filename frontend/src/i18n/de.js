@@ -488,7 +488,7 @@ export default {
     section: 'SEO-Bericht',
     excludePrefixes: 'Ausgeschlossene Verzeichnisse',
     excludePrefixesHint:
-      'Der Bericht prüft jede HTML-Datei im gebauten public/-Ordner, auch unverlinkte. Hier zusätzliche Verzeichnisse eintragen (eines je Zeile), die übersprungen werden sollen, z. B. Test- oder Fehlerseiten. Die HugoCMS-eigenen Verzeichnisse (edit/, cms-api/, cms-admin/) sind bereits fest ausgeschlossen.',
+      'Der Bericht prüft jede HTML-Datei im gebauten public/-Ordner, auch unverlinkte. Hier zusätzliche Verzeichnisse eintragen (eines je Zeile), die übersprungen werden sollen, z. B. Test- oder Fehlerseiten. Die HugoCMS-eigenen Verzeichnisse (edit/, cms-api/, cms-admin/) und die Papierkörbe der Mounts (.trash/) sind bereits fest ausgeschlossen.',
     excludePrefixesPlaceholder: 'test/\nerror/\nentwurf/',
     excludeFiles: 'Ausgeschlossene Dateien',
     excludeFilesHint:

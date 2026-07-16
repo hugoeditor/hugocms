@@ -488,7 +488,7 @@ export default {
     section: 'SEO report',
     excludePrefixes: 'Excluded directories',
     excludePrefixesHint:
-      'The report checks every HTML file in the built public/ folder, including unlinked ones. Add extra directories here (one per line) to skip, e.g. test or error pages. The HugoCMS directories (edit/, cms-api/, cms-admin/) are already excluded.',
+      'The report checks every HTML file in the built public/ folder, including unlinked ones. Add extra directories here (one per line) to skip, e.g. test or error pages. The HugoCMS directories (edit/, cms-api/, cms-admin/) and the mounts’ trash folders (.trash/) are already excluded.',
     excludePrefixesPlaceholder: 'test/\nerror/\ndraft/',
     excludeFiles: 'Excluded files',
     excludeFilesHint:

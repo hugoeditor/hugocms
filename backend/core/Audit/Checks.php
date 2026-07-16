@@ -297,7 +297,9 @@ final class Checks
 
     /**
      * Hugo-Quellprüfungen im Content-Verzeichnis: fehlende Frontmatter-Pflicht-
-     * felder und tote relative Markdown-Links/Bilder.
+     * felder und tote relative Markdown-Links/Bilder. Übersprungen wird der
+     * Papierkorb eines Mounts, der auf dieses Verzeichnis zeigt (siehe
+     * AuditRunner::inTrash) — Hugo baut daraus nichts.
      *
      * @param string $contentDirAbs absoluter Pfad des Content-Verzeichnisses
      * @param string $contentName    sein Name relativ zur Projektwurzel (für sourceFile)
@@ -319,6 +321,9 @@ final class Checks
             }
             $abs = $file->getPathname();
             $rel = $contentName . '/' . ltrim(str_replace('\\', '/', substr($abs, strlen($contentDirAbs))), '/');
+            if (AuditRunner::inTrash($rel)) {
+                continue;
+            }
             $raw = (string) file_get_contents($abs);
             [$frontMatter, $body] = self::splitFrontMatter($raw);
 

@@ -67,8 +67,8 @@ const mailPassConfigured = ref(false)
 const mailSecurities = ref(['tls', 'ssl', 'none'])
 
 // SEO-Bericht (Pro-Funktion): zusätzliche Ausschluss-Präfixe, eine je Zeile.
-// Die fest verdrahteten Ausschlüsse (edit/, cms-api/, cms-admin/) stehen NICHT
-// hier und lassen sich nicht entfernen.
+// Die fest verdrahteten Ausschlüsse (edit/, cms-api/, cms-admin/ und die
+// Papierkörbe der Mounts) stehen NICHT hier und lassen sich nicht entfernen.
 const seoExcludePrefixes = ref('')
 // Einzelne ausgeschlossene Dateien (exakter Pfad, eine je Zeile).
 const seoExcludeFiles = ref('')

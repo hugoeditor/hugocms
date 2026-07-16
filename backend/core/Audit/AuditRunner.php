@@ -30,6 +30,14 @@ final class AuditRunner
      */
     private const array EXCLUDED_PREFIXES = ['edit/', 'cms-api/', 'cms-admin/'];
 
+    /**
+     * Papierkorb eines Mounts (siehe FileService::trash). Ein Mount darf überall
+     * liegen — auch unterhalb von public/ oder auf static/, dessen Inhalt Hugo
+     * unverändert nach public/ kopiert. Der Name wird deshalb als PFADSEGMENT in
+     * beliebiger Tiefe ausgeschlossen, nicht als Präfix (siehe inTrash).
+     */
+    private const string TRASH_DIR = '.trash';
+
     /** Obergrenze für die Anzahl Funde (Schutz vor Speicherüberlauf). */
     private const int MAX_ISSUES = 20000;
 
@@ -295,7 +303,7 @@ final class AuditRunner
 
     private function isExcluded(string $rel): bool
     {
-        if (isset($this->excludedFiles[$rel])) {
+        if (isset($this->excludedFiles[$rel]) || self::inTrash($rel)) {
             return true;
         }
         foreach ($this->excludedPrefixes as $prefix) {
@@ -305,6 +313,18 @@ final class AuditRunner
         }
 
         return false;
+    }
+
+    /**
+     * Liegt der Pfad im Papierkorb eines Mounts? Gelöschtes bleibt dort
+     * wiederherstellbar liegen, gehört aber nicht mehr zur Webseite und darf
+     * keine Funde erzeugen. Gilt für public-relative Pfade wie für Quellpfade
+     * (siehe Checks::hugoSource); geprüft wird das Segment in jeder Tiefe.
+     */
+    public static function inTrash(string $rel): bool
+    {
+        return str_starts_with($rel, self::TRASH_DIR . '/')
+            || str_contains($rel, '/' . self::TRASH_DIR . '/');
     }
 
     /** Leitet aus einem public-relativen Dateipfad den Request-Pfad ab. */
