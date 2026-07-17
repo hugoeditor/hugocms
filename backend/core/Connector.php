@@ -82,14 +82,14 @@ final class Connector
 
     /**
      * Externe Pro-Dienste aus der [services]-Sektion der hugocms.ini:
-     * der Transkriptionsdienst (seo-success) für die Spracheingabe sowie der
-     * (globale) Google-Schlüssel für den PageSpeed-Check.
-     * speechKey/speechUrl = null → Spracheingabe aus.
+     * der seo-success-Dienst (ein Schlüssel für Spracheingabe UND Live-Analyse)
+     * sowie der (globale) Google-Schlüssel für den PageSpeed-Check.
+     * serviceKey/serviceUrl = null → seo-success-Funktionen aus.
      * pagespeedKey = null → PageSpeed ohne eigenen Schlüssel (kleines Kontingent).
      *
-     * @var array{speechKey: ?string, speechUrl: ?string, pagespeedKey: ?string}
+     * @var array{serviceKey: ?string, serviceUrl: ?string, pagespeedKey: ?string}
      */
-    private array $services = ['speechKey' => null, 'speechUrl' => null, 'pagespeedKey' => null];
+    private array $services = ['serviceKey' => null, 'serviceUrl' => null, 'pagespeedKey' => null];
 
     /**
      * Zu messende Live-Adresse des PageSpeed-Checks — PRO WEBSEITE, daher aus der
@@ -98,6 +98,14 @@ final class Connector
      * Hugo-baseURL erkannte Adresse vor. Beim Messstart wird der Wert geschrieben.
      */
     private ?string $pagespeedUrl = null;
+
+    /**
+     * Zu prüfende Live-Adresse der Live-Analyse (seo-success) — PRO WEBSEITE, aus
+     * der Mount-Konfiguration ([live_analysis] url). Eigene Sektion, unabhängig von
+     * [pagespeed]. null → noch keine gespeichert; das Panel schlägt dann die aus
+     * der Hugo-baseURL erkannte Adresse vor. Beim Start wird der Wert geschrieben.
+     */
+    private ?string $liveAnalysisUrl = null;
 
     /** Globale [user]-Einstellungen (Sitzungsdauer, Inhaltsbreite). */
     private array $user = ['sessionLifetime' => 28800, 'contentWidth' => 1200, 'updateLastmod' => null];
@@ -309,6 +317,8 @@ final class Connector
         }
         // Gespeicherte PageSpeed-Adresse dieser Webseite (falls schon gesetzt).
         $this->pagespeedUrl = $config['pagespeed'];
+        // Gespeicherte Live-Analyse-Adresse dieser Webseite (falls schon gesetzt).
+        $this->liveAnalysisUrl = $config['liveAnalysis'];
         // Ausschlüsse des SEO-Berichts NUR für diese Webseite; sie ergänzen die
         // globalen aus der hugocms.ini (siehe auditStore).
         $this->seoReportSite = $config['seoReport'];
@@ -393,9 +403,15 @@ final class Connector
                 'assistantping' => $this->cmdAssistantPing(),
                 'assistantimprove' => $this->cmdAssistantImprove($request),
                 'speech' => $this->cmdSpeech($request),
-                'speechverify' => $this->cmdSpeechVerify($request),
+                'serviceverify' => $this->cmdServiceVerify($request),
                 'pagespeed' => $this->cmdPageSpeed($request),
                 'pagespeedlatest' => $this->cmdPageSpeedLatest(),
+                'liveanalyze' => $this->cmdLiveAnalyze($request),
+                'liveanalyzestatus' => $this->cmdLiveAnalyzeStatus($request),
+                'liveanalyzecancel' => $this->cmdLiveAnalyzeCancel($request),
+                'liveanalyzelatest' => $this->cmdLiveAnalyzeLatest(),
+                'liveanalyzehistory' => $this->cmdLiveAnalyzeHistory($request),
+                'liveanalyzeexport' => $this->cmdLiveAnalyzeExport($request),
                 'config' => $this->cmdConfig(),
                 'reconfigure' => $this->cmdReconfigure($request),
                 'projectconfig' => $this->cmdProjectConfig(),
@@ -569,12 +585,12 @@ final class Connector
             // Die LLM-Content-Prüfung braucht zusätzlich einen konfigurierten
             // KI-Schlüssel ([ai] api_key).
             'auditContent' => $this->hugo !== null && $this->license()->isPro() && $this->ai['apiKey'] !== null,
-            // Spracheingabe (Pro): der externe Transkriptionsdienst muss
-            // konfiguriert sein ([services] speech_key/speech_url) UND eine
+            // Spracheingabe (Pro): der seo-success-Dienst muss konfiguriert sein
+            // ([services] service_key/service_url, Rückfall speech_*) UND eine
             // gültige Pro-Lizenz vorliegen. Unabhängig vom Hugo-Projekt.
             'speech' => $this->license()->isPro()
-                && $this->services['speechKey'] !== null
-                && $this->services['speechUrl'] !== null,
+                && $this->services['serviceKey'] !== null
+                && $this->services['serviceUrl'] !== null,
             // PageSpeed-Check (Pro): dieselbe Voraussetzung wie das SEO-Audit —
             // Pro-Lizenz und ein Hugo-Projekt (für die baseURL-Vorbelegung). Die
             // zu messende Adresse wird IM Panel eingegeben und dort gespeichert,
@@ -584,6 +600,17 @@ final class Connector
             // Vorbelegung des PageSpeed-Eingabefeldes.
             'pagespeedUrl' => $this->pagespeedUrl ?? '',
             'pagespeedUrlDetected' => $baseUrl ?? '',
+            // Live-Analyse (Pro): braucht — anders als PageSpeed — zusätzlich den
+            // konfigurierten seo-success-Dienst (ein Schlüssel für Sprache und
+            // Analyse). Unabhängig vom PageSpeed-Reiter; der Benutzer wählt.
+            'liveAnalysis' => $this->hugo !== null && $this->license()->isPro()
+                && $this->services['serviceKey'] !== null
+                && $this->services['serviceUrl'] !== null,
+            // Gespeicherte Live-Analyse-Adresse dieser Webseite (eigene Sektion).
+            'liveAnalysisUrl' => $this->liveAnalysisUrl ?? '',
+            // Aus der Hugo-baseURL erkannte Adresse — gemeinsame Vorbelegung für
+            // PageSpeed UND Live-Analyse (Eigenschaft der Webseite, nicht der Prüfung).
+            'siteUrlDetected' => $baseUrl ?? '',
             // Der Rechnername der baseURL (z. B. dev.opensourceerp.dev) benennt
             // die Webseite im Browser-Tab. Leer, wenn das Projekt keine baseURL
             // führt — der Client bleibt dann beim allgemeinen Titel.
@@ -1460,7 +1487,7 @@ final class Connector
         $this->requireAuth();
         $this->requireMethod('POST');
         $this->requirePro();
-        if ($this->services['speechKey'] === null || $this->services['speechUrl'] === null) {
+        if ($this->services['serviceKey'] === null || $this->services['serviceUrl'] === null) {
             throw new ApiException('ECONFIG', 409, 'SPEECH-NOT-CONFIGURED');
         }
 
@@ -1487,10 +1514,10 @@ final class Connector
 
         @set_time_limit(180);
 
-        // speech_url ist die Basis-Adresse; der SpeechClient bildet den Endpunkt.
-        $client = new SpeechClient(
-            (string) $this->services['speechUrl'],
-            (string) $this->services['speechKey'],
+        // service_url ist die Basis-Adresse; der SeoSuccessClient bildet den Endpunkt.
+        $client = new SeoSuccessClient(
+            (string) $this->services['serviceUrl'],
+            (string) $this->services['serviceKey'],
         );
         $result = $client->transcribe(
             $tmp,
@@ -1506,40 +1533,43 @@ final class Connector
     }
 
     /**
-     * speechverify — prüft den Spracheingabe-Schlüssel gegen den Dienst, ohne
-     * etwas zu speichern oder zu transkribieren. Für die Gültigkeitsprüfung im
-     * Konfigurationsdialog. Der Schlüssel des Formulars (evtl. noch
-     * ungespeichert) hat Vorrang; ist das Feld leer, wird der hinterlegte
-     * geprüft. Ebenso die URL.
+     * serviceverify — prüft den seo-success-Schlüssel gegen den Dienst, ohne
+     * etwas zu speichern oder zu transkribieren. Bedient den Konfigurationsdialog
+     * UND die Kontingentanzeige der Live-Analyse. Der Schlüssel des Formulars
+     * (evtl. noch ungespeichert) hat Vorrang; ist das Feld leer, wird der
+     * hinterlegte geprüft. Ebenso die URL. Die Feldnamen tragen aus
+     * Kompatibilität noch speech*, mit Rückfall auf service*.
      *
-     * @return array{valid: bool, quotaLimit: ?int, quotaUsed: ?float, quotaExceeded: bool}
+     * @return array{valid: bool, name: string, quotaLimit: ?int, quotaUsed: ?float, quotaRemaining: ?float, quotaExceeded: bool}
      */
-    private function cmdSpeechVerify(array $request): array
+    private function cmdServiceVerify(array $request): array
     {
         $this->requireAuth();
         $this->requireMethod('POST');
         $this->requirePro();
 
-        $url = trim((string) ($request['speechUrl'] ?? ''));
+        $url = trim((string) ($request['serviceUrl'] ?? $request['speechUrl'] ?? ''));
         if ($url === '') {
-            $url = (string) ($this->services['speechUrl'] ?? '');
+            $url = (string) ($this->services['serviceUrl'] ?? '');
         }
         if ($url === '') {
             $url = 'https://api.hugocms.com/';
         }
 
-        $keyNew = trim((string) ($request['speechKey'] ?? ''));
-        $key = $keyNew !== '' ? $keyNew : (string) ($this->services['speechKey'] ?? '');
+        $keyNew = trim((string) ($request['serviceKey'] ?? $request['speechKey'] ?? ''));
+        $key = $keyNew !== '' ? $keyNew : (string) ($this->services['serviceKey'] ?? '');
         if ($key === '') {
             throw new ApiException('ECONFIG', 409, 'SPEECH-NO-KEY');
         }
 
-        $info = (new SpeechClient($url, $key))->verify();
+        $info = (new SeoSuccessClient($url, $key))->verify();
 
         return [
             'valid' => true,
+            'name' => (string) ($info['name'] ?? ''),
             'quotaLimit' => isset($info['quotaLimit']) ? (int) $info['quotaLimit'] : null,
             'quotaUsed' => isset($info['quotaUsed']) ? (float) $info['quotaUsed'] : null,
+            'quotaRemaining' => isset($info['quotaRemaining']) ? (float) $info['quotaRemaining'] : null,
             'quotaExceeded' => (bool) ($info['quotaExceeded'] ?? false),
         ];
     }
@@ -1684,6 +1714,300 @@ final class Connector
         if ($json === false || @file_put_contents($path, $json, LOCK_EX) === false) {
             $this->logger->warning('PageSpeed-Ergebnis konnte nicht abgelegt werden (Schreiben).');
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Live-Analyse (seo-success): Proxy zum externen Dienst. Anders als der
+    // lokale SEO-Bericht crawlt der Dienst die laufende Produktionssite. Job-
+    // basiert: anstoßen → pollen → Ergebnis. Strikt getrennt von PageSpeed.
+    // ------------------------------------------------------------------
+
+    /**
+     * liveanalyze — stößt eine Live-Analyse der eingegebenen Adresse an. Merkt
+     * die Adresse pro Webseite (Mount-Konfig, [live_analysis] url) und den offenen
+     * Job (für Weiterpollen nach Neuladen). Liefert {jobId, status}.
+     *
+     * @return array{jobId: string, status: string}
+     */
+    private function cmdLiveAnalyze(array $request): array
+    {
+        $this->requireMethod('POST');
+        $client = $this->liveAnalysisClient();
+
+        // Nur absolute http(s)-URLs; die verbindliche SSRF-Prüfung macht der Dienst.
+        $url = trim((string) ($request['url'] ?? ''));
+        if ($url === '' || !self::isPublicHttpUrl($url)) {
+            throw ApiException::badRequest('ANALYZE-URL-INVALID');
+        }
+
+        // Adresse dieser Webseite dauerhaft merken (Mount-Konfiguration). Im
+        // programmatischen Betrieb (custom.php) ohne schreibbare Mount-INI wird
+        // nur analysiert, nicht gespeichert.
+        if ($this->mountsPath !== null && $url !== $this->liveAnalysisUrl) {
+            Config::updateSections($this->mountsPath, ['live_analysis' => ['url' => $url]]);
+            $this->liveAnalysisUrl = $url;
+        }
+
+        $res = $client->analyzeStart($url);
+        $jobId = (string) ($res['job_id'] ?? '');
+
+        // Offenen Job ablegen, damit das Panel nach dem Öffnen/Neuladen weiterpollt.
+        $state = $this->readLiveAnalysis();
+        $state['job'] = ['id' => $jobId, 'startedAt' => gmdate('c'), 'url' => $url];
+        $this->persistLiveAnalysis($state);
+
+        $this->logger->info(sprintf('Live-Analyse gestartet für %s (Job %s).', $url, $jobId));
+
+        return ['jobId' => $jobId, 'status' => (string) ($res['status'] ?? 'queued')];
+    }
+
+    /**
+     * liveanalyzestatus — fragt den Status eines Auftrags ab und reicht ihn samt
+     * `stale`-Flag durch. Bei `done` wird das Ergebnis als jüngstes abgelegt und
+     * der offene Job gelöscht; bei `error`/`cancelled` nur aufgeräumt.
+     *
+     * @return array<string, mixed>
+     */
+    private function cmdLiveAnalyzeStatus(array $request): array
+    {
+        $client = $this->liveAnalysisClient();
+        $jobId = trim((string) ($request['jobId'] ?? ''));
+        if ($jobId === '') {
+            throw ApiException::badRequest('PARAM-MISSING', ['jobId']);
+        }
+
+        $res = $client->analyzeStatus($jobId);
+        $status = (string) ($res['status'] ?? '');
+
+        $out = ['jobId' => $jobId, 'status' => $status];
+        if (isset($res['stale'])) {
+            $out['stale'] = (bool) $res['stale'];
+        }
+
+        if ($status === 'done' && is_array($res['result'] ?? null)) {
+            $state = $this->readLiveAnalysis();
+            $state['job'] = null;
+            $state['jobId'] = $jobId;
+            $state['analyzedAt'] = gmdate('c');
+            $state['result'] = $res['result'];
+            $this->persistLiveAnalysis($state);
+            $out['result'] = $res['result'];
+            $out['analyzedAt'] = $state['analyzedAt'];
+        } elseif ($status === 'error') {
+            $this->clearLiveAnalysisJob();
+            $out['error'] = (string) ($res['error'] ?? 'unbekannt');
+        } elseif ($status === 'cancelled') {
+            $this->clearLiveAnalysisJob();
+            // Teil-Ergebnis nur durchreichen, NICHT als jüngstes ablegen (unvollständig).
+            if (is_array($res['result'] ?? null)) {
+                $out['result'] = $res['result'];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * liveanalyzecancel — bricht einen laufenden/wartenden Auftrag serverseitig
+     * ab und räumt den offenen Job auf. Ist der Auftrag zwischenzeitlich fertig
+     * geworden (Rennen mit dem Worker), liefert stattdessen der Statusabruf das
+     * Ergebnis — kein harter Fehler.
+     *
+     * @return array<string, mixed>
+     */
+    private function cmdLiveAnalyzeCancel(array $request): array
+    {
+        $this->requireMethod('POST');
+        $client = $this->liveAnalysisClient();
+        $jobId = trim((string) ($request['jobId'] ?? ''));
+        if ($jobId === '') {
+            throw ApiException::badRequest('PARAM-MISSING', ['jobId']);
+        }
+
+        try {
+            $res = $client->analyzeCancel($jobId);
+        } catch (ApiException $e) {
+            if ($e->messageKey() === 'ANALYZE-JOB-NOT-CANCELABLE') {
+                // Gerade abgeschlossen: den finalen Status holen (legt bei `done`
+                // das Ergebnis ab) statt einen Fehler nach außen zu geben.
+                return $this->cmdLiveAnalyzeStatus(['jobId' => $jobId]);
+            }
+            throw $e;
+        }
+
+        $this->clearLiveAnalysisJob();
+
+        return ['jobId' => $jobId, 'status' => (string) ($res['status'] ?? 'cancelled')];
+    }
+
+    /**
+     * liveanalyzelatest — liefert das zuletzt abgelegte Ergebnis dieser Webseite
+     * samt Zeitpunkt und einen etwaigen offenen Job (damit das Panel nach dem
+     * Öffnen/Neuladen sofort anzeigt bzw. weiterpollt).
+     *
+     * @return array{result: ?array<string, mixed>, analyzedAt: ?string, job: ?array<string, mixed>}
+     */
+    private function cmdLiveAnalyzeLatest(): array
+    {
+        $this->requireAuth();
+        $this->requirePro();
+        if ($this->hugo === null) {
+            throw new ApiException('ECONFIG', 409, 'AUDIT-NO-PROJECT');
+        }
+
+        $state = $this->readLiveAnalysis();
+
+        return [
+            'result' => $state['result'],
+            'analyzedAt' => $state['analyzedAt'],
+            'jobId' => $state['jobId'], // Auftrags-ID des angezeigten Ergebnisses (für den Export)
+            'job' => $state['job'],
+        ];
+    }
+
+    /**
+     * liveanalyzehistory — Trend-Historie (Score-Verlauf) für den Host der
+     * gespeicherten Adresse, neueste zuerst. Ohne gespeicherte Adresse leer.
+     *
+     * @return array{host?: string, runs: list<array<string, mixed>>}
+     */
+    private function cmdLiveAnalyzeHistory(array $request): array
+    {
+        $client = $this->liveAnalysisClient();
+
+        $url = (string) ($this->liveAnalysisUrl ?? '');
+        $host = $url !== '' ? (string) (parse_url($url, PHP_URL_HOST) ?: '') : '';
+        if ($host === '') {
+            return ['runs' => []];
+        }
+
+        $limit = max(1, min(100, (int) ($request['limit'] ?? 20)));
+        $res = $client->analyzeHistory($host, $limit);
+
+        return [
+            'host' => $host,
+            'runs' => is_array($res['runs'] ?? null) ? $res['runs'] : [],
+        ];
+    }
+
+    /**
+     * liveanalyzeexport — liefert den HTML- bzw. CSV-Bericht eines abgeschlossenen
+     * Auftrags am JSON-Umschlag vorbei an den Browser (HTML inline für „als PDF
+     * drucken", CSV als Download). Der Bericht stammt aus unserer eigenen API und
+     * ist eigenständiges HTML+CSS ohne Skript; eine strenge CSP unterbindet
+     * dennoch jede aktive Ausführung (XSS-Schutz analog {@see cmdRaw}).
+     */
+    private function cmdLiveAnalyzeExport(array $request): never
+    {
+        $client = $this->liveAnalysisClient();
+        $jobId = trim((string) ($request['jobId'] ?? ''));
+        if ($jobId === '') {
+            throw ApiException::badRequest('PARAM-MISSING', ['jobId']);
+        }
+        $format = ((string) ($request['format'] ?? 'html')) === 'csv' ? 'csv' : 'html';
+
+        $export = $client->analyzeExport($jobId, $format);
+
+        $name = 'seo-live-analyse-' . preg_replace('/[^A-Za-z0-9_-]/', '', $jobId) . '.' . $format;
+        $encoded = rawurlencode($name);
+        $disposition = $format === 'csv' ? 'attachment' : 'inline';
+
+        header('Content-Type: ' . $export['contentType']);
+        header('Content-Length: ' . (string) strlen($export['body']));
+        header("Content-Disposition: {$disposition}; filename=\"{$encoded}\"; filename*=UTF-8''{$encoded}");
+        header('X-Content-Type-Options: nosniff');
+        // Reiner Anzeige-Bericht: keine Skripte, keine externen Ressourcen zulassen.
+        header("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src data:;");
+        echo $export['body'];
+        exit;
+    }
+
+    /**
+     * Baut den seo-success-Client für die Live-Analyse und prüft die
+     * Voraussetzungen (Anmeldung, Pro-Lizenz, Hugo-Projekt, konfigurierter
+     * Dienst). requireMethod('POST') macht der jeweilige Schreibbefehl selbst.
+     */
+    private function liveAnalysisClient(): SeoSuccessClient
+    {
+        $this->requireAuth();
+        $this->requirePro();
+        if ($this->hugo === null) {
+            throw new ApiException('ECONFIG', 409, 'AUDIT-NO-PROJECT');
+        }
+        if ($this->services['serviceKey'] === null || $this->services['serviceUrl'] === null) {
+            throw new ApiException('ECONFIG', 409, 'SERVICE-NOT-CONFIGURED');
+        }
+
+        return new SeoSuccessClient(
+            (string) $this->services['serviceUrl'],
+            (string) $this->services['serviceKey'],
+        );
+    }
+
+    /**
+     * Speicherpfad des Live-Analyse-Zustands dieser Webseite — je Projekt getrennt
+     * unter var/analyze/<hash(source)>.json. null, wenn kein Hugo-Projekt vorliegt.
+     */
+    private function liveAnalysisStorePath(): ?string
+    {
+        if ($this->hugo === null) {
+            return null;
+        }
+
+        return __DIR__ . '/../var/analyze/' . sha1((string) $this->hugo['source']) . '.json';
+    }
+
+    /**
+     * Liest den abgelegten Live-Analyse-Zustand oder liefert die Vorgaben
+     * (nichts gespeichert): {job, jobId, analyzedAt, result}.
+     *
+     * @return array{job: ?array<string, mixed>, jobId: ?string, analyzedAt: ?string, result: ?array<string, mixed>}
+     */
+    private function readLiveAnalysis(): array
+    {
+        $default = ['job' => null, 'jobId' => null, 'analyzedAt' => null, 'result' => null];
+        $path = $this->liveAnalysisStorePath();
+        if ($path === null || !is_file($path)) {
+            return $default;
+        }
+        $data = json_decode((string) file_get_contents($path), true);
+
+        return is_array($data) ? array_merge($default, $data) : $default;
+    }
+
+    /**
+     * Legt den Live-Analyse-Zustand ab (überschreibt den vorherigen). Best effort:
+     * ein fehlgeschlagener Schreibvorgang bricht nichts ab — der Benutzer hat sein
+     * Ergebnis bereits; nur das Merken misslingt.
+     *
+     * @param array<string, mixed> $state
+     */
+    private function persistLiveAnalysis(array $state): void
+    {
+        $path = $this->liveAnalysisStorePath();
+        if ($path === null) {
+            return;
+        }
+        $dir = dirname($path);
+        if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) {
+            $this->logger->warning('Live-Analyse-Zustand konnte nicht abgelegt werden (Verzeichnis).');
+            return;
+        }
+        $json = json_encode($state, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if ($json === false || @file_put_contents($path, $json, LOCK_EX) === false) {
+            $this->logger->warning('Live-Analyse-Zustand konnte nicht abgelegt werden (Schreiben).');
+        }
+    }
+
+    /** Löscht nur den offenen Job aus dem abgelegten Zustand (Ergebnis bleibt). */
+    private function clearLiveAnalysisJob(): void
+    {
+        $state = $this->readLiveAnalysis();
+        if ($state['job'] === null) {
+            return;
+        }
+        $state['job'] = null;
+        $this->persistLiveAnalysis($state);
     }
 
     /**
@@ -2008,10 +2332,11 @@ final class Connector
             'aiModelAudit' => $raw['ai']['model_audit'] ?? '',
             'aiWriteMode'  => $raw['ai']['write_mode'] ?? 'confirm',
             'aiWriteModes' => self::AI_WRITE_MODES,
-            // Spracheingabe (Pro-Dienst): Status + Basis-URL, aber NIE der
-            // Schlüssel. Leere URL → der Client füllt den Standard vor.
-            'speechConfigured' => trim((string) ($raw['services']['speech_key'] ?? '')) !== '',
-            'speechUrl'        => $raw['services']['speech_url'] ?? '',
+            // seo-success-Dienst (Pro): Status + Basis-URL, aber NIE der Schlüssel.
+            // Leere URL → der Client füllt den Standard vor. Neue Namen (service_*)
+            // mit Rückfall auf die alten (speech_*).
+            'speechConfigured' => trim((string) ($raw['services']['service_key'] ?? $raw['services']['speech_key'] ?? '')) !== '',
+            'speechUrl'        => $raw['services']['service_url'] ?? $raw['services']['speech_url'] ?? '',
             // PageSpeed-Check: Status des optionalen (globalen) Google-Schlüssels
             // — nie der Schlüssel selbst. Die zu messende Live-Adresse steht
             // dagegen pro Webseite in der Mount-Konfiguration und wird im Panel
@@ -2098,7 +2423,9 @@ final class Connector
         }
         $speechKeyNew = self::cleanConfigValue($request['speechKey'] ?? '', 'speechKey', false);
         $existingServices = Config::raw($this->configPath)['services'] ?? [];
-        $speechKey = $speechKeyNew !== '' ? $speechKeyNew : trim((string) ($existingServices['speech_key'] ?? ''));
+        // Bestand mit Rückfall lesen (service_* neu, speech_* alt), damit
+        // „leer = unverändert" den vorhandenen Schlüssel unter beiden Namen erhält.
+        $speechKey = $speechKeyNew !== '' ? $speechKeyNew : trim((string) ($existingServices['service_key'] ?? $existingServices['speech_key'] ?? ''));
 
         // PageSpeed-Check: der (globale) Google-Schlüssel ist ein Geheimnis
         // (leeres Feld = unverändert) UND optional. Die zu messende Adresse steht
@@ -2112,8 +2439,10 @@ final class Connector
         // Wert entfällt die Sektion.
         $servicesSection = [];
         if ($speechKey !== '') {
-            $servicesSection['speech_key'] = $speechKey;
-            $servicesSection['speech_url'] = $speechUrl;
+            // Neutrale Namen schreiben; ein etwaiger alter speech_*-Eintrag
+            // verschwindet, weil updateSections die Sektion vollständig ersetzt.
+            $servicesSection['service_key'] = $speechKey;
+            $servicesSection['service_url'] = $speechUrl;
         }
         if ($pagespeedKey !== '') {
             $servicesSection['pagespeed_key'] = $pagespeedKey;

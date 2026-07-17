@@ -50,6 +50,7 @@ final class MountConfig
     private const HUGO_SECTION = 'hugo';
     private const LICENSE_SECTION = 'license';
     private const PAGESPEED_SECTION = 'pagespeed';
+    private const LIVE_ANALYSIS_SECTION = 'live_analysis';
     private const SEO_REPORT_SECTION = 'seo_report';
 
     /**
@@ -58,6 +59,7 @@ final class MountConfig
      *   hugo: ?array{source: string, destination: string, minify: bool, clean: bool},
      *   license: ?string,
      *   pagespeed: ?string,
+     *   liveAnalysis: ?string,
      *   seoReport: array{excludePrefixes: list<string>, excludeFiles: list<string>},
      *   warnings: list<array{key: string, params: list<mixed>}>
      * }
@@ -78,6 +80,7 @@ final class MountConfig
         $hugo = null;
         $license = null;
         $pagespeed = null;
+        $liveAnalysis = null;
         $seoReport = ['excludePrefixes' => [], 'excludeFiles' => []];
         $warnings = [];
 
@@ -112,6 +115,16 @@ final class MountConfig
             if (strtolower((string) $name) === self::PAGESPEED_SECTION) {
                 $url = trim((string) ($section['url'] ?? ''));
                 $pagespeed = $url === '' ? null : $url;
+                continue;
+            }
+
+            // Live-Analyse dieser Webseite (optional): die zu prüfende öffentliche
+            // Live-Adresse. Eigene Sektion, unabhängig von [pagespeed] — beide
+            // Prüfungen teilen keinen Zustand. Wird über das Live-Analyse-Panel
+            // gesetzt und beim Start geschrieben.
+            if (strtolower((string) $name) === self::LIVE_ANALYSIS_SECTION) {
+                $url = trim((string) ($section['url'] ?? ''));
+                $liveAnalysis = $url === '' ? null : $url;
                 continue;
             }
 
@@ -160,6 +173,7 @@ final class MountConfig
             'hugo' => $hugo,
             'license' => $license,
             'pagespeed' => $pagespeed,
+            'liveAnalysis' => $liveAnalysis,
             'seoReport' => $seoReport,
             'warnings' => $warnings,
         ];

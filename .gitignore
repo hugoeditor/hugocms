@@ -28,6 +28,7 @@ backend/var/audit/
 backend/var/audit-content/
 backend/var/review/
 backend/var/pagespeed/
+backend/var/analyze/
 .DS_Store
 node_modules/
 tmp/

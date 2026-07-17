@@ -323,27 +323,33 @@ final class Config
 
     /**
      * Externe Pro-Dienste (optional) aus der [services]-Sektion:
-     *   speech_key         API-Schlüssel des Transkriptionsdienstes (Geheimnis).
-     *   speech_url         Voller Endpunkt, z. B. https://…/v1/transcribe.
-     *                      Fehlt eines von beiden, ist die Spracheingabe aus.
+     *   service_key        API-Schlüssel des seo-success-Dienstes (Geheimnis) —
+     *                      ein Schlüssel für Spracheingabe UND Live-Analyse.
+     *                      Rückfall auf den alten Namen speech_key.
+     *   service_url        Basis-Adresse des Dienstes (die Endpunkte werden
+     *                      angehängt). Rückfall auf speech_url. Fehlt eines von
+     *                      beiden, sind die seo-success-Funktionen aus.
      *   pagespeed_key      Google-API-Schlüssel für PageSpeed Insights (Geheimnis,
      *                      OPTIONAL — ohne Schlüssel gilt ein kleineres Kontingent).
      *                      Global, da ein Google-Konto genügt; die zu messende
      *                      Live-Adresse steht dagegen PRO PROJEKT in der
      *                      Mount-Konfiguration ([pagespeed] url, siehe MountConfig).
      *
-     * @return array{speechKey: ?string, speechUrl: ?string, pagespeedKey: ?string}
+     * @return array{serviceKey: ?string, serviceUrl: ?string, pagespeedKey: ?string}
      */
     private static function servicesSection(mixed $section): array
     {
         $section = is_array($section) ? $section : [];
-        $speechKey = trim((string) ($section['speech_key'] ?? ''));
-        $speechUrl = trim((string) ($section['speech_url'] ?? ''));
+        // Neutrale Namen (service_*), weil derselbe seo-success-Schlüssel Sprach-
+        // eingabe UND Live-Analyse bedient. Die alten Namen (speech_*) werden als
+        // Rückfall weitergelesen, damit Bestandsinstallationen unverändert laufen.
+        $serviceKey = trim((string) ($section['service_key'] ?? $section['speech_key'] ?? ''));
+        $serviceUrl = trim((string) ($section['service_url'] ?? $section['speech_url'] ?? ''));
         $pagespeedKey = trim((string) ($section['pagespeed_key'] ?? ''));
 
         return [
-            'speechKey' => $speechKey === '' ? null : $speechKey,
-            'speechUrl' => $speechUrl === '' ? null : $speechUrl,
+            'serviceKey' => $serviceKey === '' ? null : $serviceKey,
+            'serviceUrl' => $serviceUrl === '' ? null : $serviceUrl,
             'pagespeedKey' => $pagespeedKey === '' ? null : $pagespeedKey,
         ];
     }

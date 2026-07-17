@@ -30,6 +30,11 @@ export const useAuthStore = defineStore('auth', {
     pagespeed: false, // PageSpeed-Check (Pro + Hugo-Projekt) — Panel immer sichtbar
     pagespeedUrl: '', // gespeicherte Live-Adresse dieser Webseite (Mount-Konfig)
     pagespeedUrlDetected: '', // aus der Hugo-baseURL erkannte Adresse (Vorbelegung)
+    // Live-Analyse (Pro + Hugo-Projekt + seo-success-Dienst konfiguriert). Strikt
+    // getrennt von PageSpeed; der Benutzer wählt, welche Analyse er nutzt.
+    liveAnalysis: false,
+    liveAnalysisUrl: '', // gespeicherte Live-Analyse-Adresse (Mount-Konfig)
+    siteUrlDetected: '', // aus der Hugo-baseURL erkannte Adresse (Vorbelegung, geteilt)
     review: false, // gestaffelte Veröffentlichung: Entwürfe zur Freigabe (Hugo-Projekt)
     // Rechnername der Hugo-baseURL (z. B. dev.opensourceerp.dev) — benennt die
     // Webseite im Browser-Tab. Leer, wenn das Projekt keine baseURL führt.
@@ -63,6 +68,9 @@ export const useAuthStore = defineStore('auth', {
       this.pagespeed = data.pagespeed ?? false
       this.pagespeedUrl = data.pagespeedUrl ?? ''
       this.pagespeedUrlDetected = data.pagespeedUrlDetected ?? ''
+      this.liveAnalysis = data.liveAnalysis ?? false
+      this.liveAnalysisUrl = data.liveAnalysisUrl ?? ''
+      this.siteUrlDetected = data.siteUrlDetected ?? ''
       this.review = data.review ?? false
       this.siteHost = data.siteHost ?? ''
       setCsrfToken(data.csrf)
@@ -100,11 +108,12 @@ export const useAuthStore = defineStore('auth', {
       await api.post('projectreconfigure', payload)
     },
 
-    // Prüft den Spracheingabe-Schlüssel (eingegeben oder hinterlegt) gegen den
-    // Dienst, ohne etwas zu speichern. Wirft bei ungültigem Schlüssel oder
-    // nicht erreichbarem Dienst; liefert sonst { valid, quota… }.
-    async verifySpeech(payload) {
-      return api.post('speechverify', payload)
+    // Prüft den seo-success-Schlüssel (eingegeben oder hinterlegt) gegen den
+    // Dienst, ohne etwas zu speichern. Bedient den Konfigurationsdialog und die
+    // Kontingentanzeige der Live-Analyse. Wirft bei ungültigem Schlüssel oder
+    // nicht erreichbarem Dienst; liefert sonst { valid, name, quota… }.
+    async verifyService(payload) {
+      return api.post('serviceverify', payload)
     },
 
     // Merkt die Benutzerwahl zum lastmod-Verhalten in [user] update_lastmod.

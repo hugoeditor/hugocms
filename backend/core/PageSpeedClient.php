@@ -124,7 +124,7 @@ final class PageSpeedClient
 
     /**
      * Führt die vorbereitete Anfrage aus und behandelt Transport-, JSON- und
-     * HTTP-Fehler einheitlich (analog {@see SpeechClient}).
+     * HTTP-Fehler einheitlich (analog {@see SeoSuccessClient}).
      *
      * @return array<string, mixed>
      */

@@ -1,0 +1,540 @@
+<script setup>
+// Live-Analyse (Pro, seo-success) — eigener Reiter im SEO-Check. Stößt einen
+// Live-Crawl der Produktionssite an, pollt den Job und zeigt das Ergebnis
+// VOLLSTÄNDIG: Score/Note, Trend, Verlaufskurve, Befunde, Server-, Crawlability-
+// und Browser-Block sowie Export. Strikt getrennt von PageSpeed — beide optional,
+// der Benutzer wählt.
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useLiveAnalysisStore } from '../stores/liveAnalysis'
+import { useAuthStore } from '../stores/auth'
+import { api } from '../api/client'
+import { errorText } from '../i18n/apiMessage'
+import { useTransientError } from '../util/transientError'
+
+const { t, te } = useI18n()
+const live = useLiveAnalysisStore()
+const auth = useAuthStore()
+const error = useTransientError()
+
+// Zu prüfende Adresse: gespeicherte Adresse dieser Webseite, sonst die aus der
+// Hugo-baseURL erkannte. Beim Start wird sie serverseitig gespeichert.
+const url = ref(auth.liveAnalysisUrl || auth.siteUrlDetected || '')
+
+// Nur absolute http(s)-Adressen sind prüfbar (der Dienst ruft sie selbst ab).
+const canRun = computed(() => /^https?:\/\/.+/i.test(url.value.trim()))
+
+onMounted(async () => {
+  try {
+    await live.fetchLatest()
+  } catch {
+    // Kein gespeichertes Ergebnis / Ladefehler: Panel bleibt leer, unkritisch.
+  }
+  // Restkontingent für die Anzeige vor dem Start (best effort).
+  live.fetchQuota().catch(() => {})
+})
+
+// Poll-Fehler laufen über den Store-Zustand (die Schleife läuft im Hintergrund);
+// hier in die zeitbegrenzte Fehleranzeige übernehmen.
+watch(
+  () => live.error,
+  (e) => {
+    if (e) error.value = errorText(t, e)
+  },
+)
+
+// Beim Verlassen der Ansicht nur lokal aufhören — der Lauf bleibt serverseitig
+// bestehen und wird beim nächsten Öffnen (fetchLatest) wieder aufgenommen.
+onBeforeUnmount(() => live.stopPolling())
+
+const lastAnalyzed = computed(() =>
+  live.analyzedAt ? new Date(live.analyzedAt).toLocaleString() : null,
+)
+
+async function startAnalyse() {
+  error.value = null
+  try {
+    await live.start(url.value.trim())
+  } catch (e) {
+    error.value = errorText(t, e)
+  }
+}
+
+async function cancelAnalyse() {
+  try {
+    await live.cancel()
+  } catch (e) {
+    error.value = errorText(t, e)
+  }
+}
+
+// Note-Farbe (A/B gut, C/D mittel, F schlecht) — für Score-Kachel und Kurve.
+function gradeClass(grade) {
+  if (grade === 'A' || grade === 'B') return 'good'
+  if (grade === 'C' || grade === 'D') return 'medium'
+  return 'poor'
+}
+
+// Schweregrad → Farbe/Icon (inline, eigener Namensraum — nicht mit dem Audit-
+// Chip geteilt, damit die Features getrennt bleiben).
+const SEV = {
+  critical: { cls: 'sev-critical', icon: 'mdi-alert-circle-outline' },
+  warning: { cls: 'sev-warning', icon: 'mdi-alert-outline' },
+  info: { cls: 'sev-info', icon: 'mdi-information-outline' },
+}
+function sevMeta(sev) {
+  return SEV[sev] ?? SEV.info
+}
+
+// Befund-Titel/-Behebung: über den sprachneutralen `type` übersetzen, mit
+// Rückfall auf den (deutschen) Text der API, wenn der Typ dem Client unbekannt
+// ist. So bleiben neue API-Befundtypen ohne Client-Änderung anzeigbar.
+function ruleTitle(issue) {
+  const key = `liveAnalysis.rules.${issue.type}.title`
+  return te(key) ? t(key) : issue.title || issue.type
+}
+function ruleFix(issue) {
+  const key = `liveAnalysis.rules.${issue.type}.fix`
+  return te(key) ? t(key) : issue.fix || ''
+}
+function issueLocation(issue) {
+  return issue.url || issue.host || ''
+}
+
+const SEVERITIES = ['critical', 'warning', 'info']
+
+// Export-Adressen (server-seitig, am JSON-Umschlag vorbei). HTML im neuen Tab
+// zum Drucken, CSV als Download.
+function exportUrl(format) {
+  return live.resultJobId ? api.url('liveanalyzeexport', { jobId: live.resultJobId, format }) : '#'
+}
+
+// Verlaufskurve: Score (0–100) über die Läufe, älteste links. Handgezeichnetes
+// SVG (keine Diagramm-Abhängigkeit im Projekt).
+const CURVE_W = 480
+const CURVE_H = 90
+const CURVE_PAD = 6
+const curvePoints = computed(() => {
+  const runs = [...live.history].reverse() // API liefert neueste zuerst
+  if (runs.length < 2) return null
+  const n = runs.length
+  const innerW = CURVE_W - 2 * CURVE_PAD
+  const innerH = CURVE_H - 2 * CURVE_PAD
+  return runs.map((r, i) => {
+    const x = CURVE_PAD + (n === 1 ? 0 : (i / (n - 1)) * innerW)
+    const y = CURVE_PAD + (1 - Math.max(0, Math.min(100, r.score)) / 100) * innerH
+    return { x, y, run: r }
+  })
+})
+const curveLine = computed(() =>
+  curvePoints.value ? curvePoints.value.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') : '',
+)
+
+function fmtDate(iso) {
+  return iso ? new Date(iso).toLocaleDateString() : ''
+}
+</script>
+
+<template>
+  <div class="la-panel">
+    <v-alert
+      v-if="error"
+      type="error"
+      density="compact"
+      class="mb-3 nemo-alert"
+      tile
+      closable
+      @click:close="error = null"
+    >
+      {{ error }}
+    </v-alert>
+
+    <!-- 1) Kopf: Adresse, Start, Restkontingent, zuletzt geprüft -->
+    <div class="la-head">
+      <v-text-field
+        v-model="url"
+        :label="$t('liveAnalysis.urlLabel')"
+        :placeholder="$t('liveAnalysis.urlPlaceholder')"
+        prepend-inner-icon="mdi-web"
+        density="compact"
+        variant="outlined"
+        hide-details
+        class="la-url"
+      />
+      <button
+        class="la-btn primary"
+        :disabled="!canRun || live.running || live.quotaExceeded"
+        @click="startAnalyse"
+      >
+        <v-progress-circular v-if="live.running" indeterminate size="14" width="2" class="mr-1" />
+        <v-icon v-else icon="mdi-radar" size="16" class="mr-1" />{{ $t('liveAnalysis.run') }}
+      </button>
+    </div>
+
+    <div class="la-subhead">
+      <span v-if="live.quota">
+        <template v-if="live.quota.quotaRemaining === null">{{ $t('liveAnalysis.quotaUnlimited') }}</template>
+        <template v-else>{{ $t('liveAnalysis.quotaRemaining', [live.quota.quotaRemaining]) }}</template>
+        · {{ $t('liveAnalysis.quotaHint') }}
+      </span>
+      <span v-if="lastAnalyzed" class="la-muted">· {{ $t('liveAnalysis.lastAnalyzed', [lastAnalyzed]) }}</span>
+      <span v-if="live.quotaExceeded" class="la-warn">· {{ $t('liveAnalysis.quotaExceeded') }}</span>
+    </div>
+
+    <!-- 2) Laufanzeige: Status + echter Abbruch + stale/Worker-Hinweis -->
+    <div v-if="live.running" class="la-running">
+      <v-progress-circular indeterminate size="20" width="2" color="primary" />
+      <span>{{ $t('liveAnalysis.status.' + (live.status || 'queued')) }}</span>
+      <button class="la-btn danger" @click="cancelAnalyse">
+        <v-icon icon="mdi-stop" size="16" class="mr-1" />{{ $t('liveAnalysis.cancel') }}
+      </button>
+      <span v-if="live.stale" class="la-warn">{{ $t('liveAnalysis.workerDown') }}</span>
+    </div>
+    <div v-else-if="live.timedOut" class="la-running">
+      <span class="la-warn">{{ $t('liveAnalysis.timedOut') }}</span>
+      <button class="la-btn" @click="live.resume()">{{ $t('liveAnalysis.keepWaiting') }}</button>
+    </div>
+
+    <!-- Ergebnis -->
+    <template v-if="live.result">
+      <!-- 3) Kennzahlen -->
+      <div class="la-kpis">
+        <div class="la-score" :class="gradeClass(live.result.grade)">
+          <div class="la-score-val">{{ live.result.score }}</div>
+          <div class="la-score-grade">{{ live.result.grade }}</div>
+        </div>
+        <div class="la-kpi-list">
+          <div class="la-kpi"><span class="la-kpi-n">{{ live.result.pages_crawled }}</span>{{ $t('liveAnalysis.pagesCrawled') }}</div>
+          <div class="la-kpi"><span class="la-kpi-n">{{ live.result.cost }}</span>{{ $t('liveAnalysis.costUnits') }}</div>
+          <div class="la-kpi la-sev-counts">
+            <span v-for="sev in SEVERITIES" :key="sev" class="la-sev-count" :class="sevMeta(sev).cls">
+              <v-icon :icon="sevMeta(sev).icon" size="14" />{{ live.bySeverity[sev] ?? 0 }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4) Trend -->
+      <div v-if="live.result.trend" class="la-section">
+        <div v-if="live.result.trend.first_run" class="la-trend-first">
+          <v-icon icon="mdi-flag-outline" size="16" class="mr-1" />{{ $t('liveAnalysis.trend.firstRun') }}
+        </div>
+        <div v-else class="la-trend">
+          <span
+            class="la-delta"
+            :class="live.result.trend.delta_score >= 0 ? 'up' : 'down'"
+          >
+            <v-icon :icon="live.result.trend.delta_score >= 0 ? 'mdi-arrow-up' : 'mdi-arrow-down'" size="16" />
+            {{ live.result.trend.delta_score >= 0 ? '+' : '' }}{{ live.result.trend.delta_score }}
+          </span>
+          <span class="la-muted">
+            {{ $t('liveAnalysis.trend.previous', [live.result.trend.previous_score, live.result.trend.previous_grade]) }}
+          </span>
+          <span v-if="live.result.trend.resolved_count" class="la-trend-good">
+            {{ $t('liveAnalysis.trend.resolved', [live.result.trend.resolved_count]) }}
+          </span>
+          <span v-if="live.result.trend.new_count" class="la-trend-bad">
+            {{ $t('liveAnalysis.trend.new', [live.result.trend.new_count]) }}
+          </span>
+        </div>
+      </div>
+
+      <!-- 5) Verlaufskurve -->
+      <div v-if="curvePoints" class="la-section">
+        <div class="la-section-title">{{ $t('liveAnalysis.historyTitle') }}</div>
+        <svg class="la-curve" :viewBox="`0 0 ${CURVE_W} ${CURVE_H}`" preserveAspectRatio="none" role="img">
+          <polyline :points="curveLine" fill="none" stroke="var(--mint-green)" stroke-width="2" />
+          <circle
+            v-for="(p, i) in curvePoints"
+            :key="i"
+            :cx="p.x"
+            :cy="p.y"
+            r="3"
+            :class="gradeClass(p.run.grade)"
+          >
+            <title>{{ fmtDate(p.run.created_at) }} — {{ p.run.score }} ({{ p.run.grade }})</title>
+          </circle>
+        </svg>
+      </div>
+
+      <!-- 6) Befundliste -->
+      <div class="la-section">
+        <div class="la-section-title">{{ $t('liveAnalysis.issuesTitle') }}</div>
+        <div class="la-sevfilters">
+          <button class="la-chip" :class="{ active: live.severityFilter === 'all' }" @click="live.setSeverityFilter('all')">
+            {{ $t('liveAnalysis.allSeverities') }}
+          </button>
+          <button
+            v-for="sev in SEVERITIES"
+            :key="sev"
+            class="la-chip"
+            :class="[sevMeta(sev).cls, { active: live.severityFilter === sev }]"
+            @click="live.setSeverityFilter(sev)"
+          >
+            <v-icon :icon="sevMeta(sev).icon" size="13" />
+            {{ $t('liveAnalysis.severity.' + sev) }} · {{ live.bySeverity[sev] ?? 0 }}
+          </button>
+        </div>
+
+        <div v-if="!live.filteredIssues.length" class="la-muted la-noissues">{{ $t('liveAnalysis.noIssues') }}</div>
+        <ul v-else class="la-issues">
+          <li v-for="(issue, i) in live.filteredIssues" :key="i" class="la-issue">
+            <v-icon :icon="sevMeta(issue.severity).icon" size="16" :class="sevMeta(issue.severity).cls" class="la-issue-icon" />
+            <div class="la-issue-body">
+              <div class="la-issue-title">{{ ruleTitle(issue) }}</div>
+              <div v-if="issueLocation(issue)" class="la-issue-loc">{{ issueLocation(issue) }}</div>
+              <div v-if="ruleFix(issue)" class="la-issue-fix">{{ ruleFix(issue) }}</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <!-- 7) Server / Infrastruktur -->
+      <div v-if="live.result.server" class="la-section">
+        <div class="la-section-title">{{ $t('liveAnalysis.server.title') }}</div>
+        <div class="la-facts">
+          <div v-if="live.result.server.ipv4?.length" class="la-fact">
+            <span class="la-fact-k">{{ $t('liveAnalysis.server.ipv4') }}</span>{{ live.result.server.ipv4.join(', ') }}
+          </div>
+          <div class="la-fact">
+            <span class="la-fact-k">{{ $t('liveAnalysis.server.httpVersion') }}</span>HTTP/{{ live.result.server.http_version }}
+          </div>
+          <div class="la-fact">
+            <span class="la-fact-k">SPF</span><span :class="live.result.server.spf ? 'la-yes' : 'la-no'">{{ live.result.server.spf ? $t('liveAnalysis.yes') : $t('liveAnalysis.no') }}</span>
+          </div>
+          <div class="la-fact">
+            <span class="la-fact-k">DMARC</span><span :class="live.result.server.dmarc ? 'la-yes' : 'la-no'">{{ live.result.server.dmarc ? $t('liveAnalysis.yes') : $t('liveAnalysis.no') }}</span>
+          </div>
+          <div class="la-fact">
+            <span class="la-fact-k">{{ $t('liveAnalysis.server.httpsRedirect') }}</span><span :class="live.result.server.https_redirect ? 'la-yes' : 'la-no'">{{ live.result.server.https_redirect ? $t('liveAnalysis.yes') : $t('liveAnalysis.no') }}</span>
+          </div>
+          <div class="la-fact">
+            <span class="la-fact-k">{{ $t('liveAnalysis.server.wwwConsistent') }}</span><span :class="live.result.server.www_consistent ? 'la-yes' : 'la-no'">{{ live.result.server.www_consistent ? $t('liveAnalysis.yes') : $t('liveAnalysis.no') }}</span>
+          </div>
+          <div v-if="live.result.server.cert" class="la-fact la-fact-wide">
+            <span class="la-fact-k">{{ $t('liveAnalysis.server.cert') }}</span>
+            {{ live.result.server.cert.issuer }} · {{ $t('liveAnalysis.server.certValid', [fmtDate(live.result.server.cert.valid_to), live.result.server.cert.days_left]) }}
+          </div>
+        </div>
+      </div>
+
+      <!-- 8) Crawlability -->
+      <div v-if="live.result.crawlability" class="la-section">
+        <div class="la-section-title">{{ $t('liveAnalysis.crawl.title') }}</div>
+        <div class="la-facts">
+          <div class="la-fact">
+            <span class="la-fact-k">robots.txt</span><span :class="live.result.crawlability.robots_txt ? 'la-yes' : 'la-no'">{{ live.result.crawlability.robots_txt ? $t('liveAnalysis.yes') : $t('liveAnalysis.no') }}</span>
+          </div>
+          <div class="la-fact">
+            <span class="la-fact-k">Sitemap</span><span :class="live.result.crawlability.sitemap ? 'la-yes' : 'la-no'">{{ live.result.crawlability.sitemap ? $t('liveAnalysis.yes') : $t('liveAnalysis.no') }}</span>
+          </div>
+          <template v-if="live.result.crawlability.page">
+            <div class="la-fact la-fact-wide">
+              <span class="la-fact-k">{{ $t('liveAnalysis.crawl.pageTitle') }}</span>{{ live.result.crawlability.page.title || '—' }}
+            </div>
+            <div class="la-fact">
+              <span class="la-fact-k">Meta-Description</span><span :class="live.result.crawlability.page.meta_description ? 'la-yes' : 'la-no'">{{ live.result.crawlability.page.meta_description ? $t('liveAnalysis.yes') : $t('liveAnalysis.no') }}</span>
+            </div>
+            <div class="la-fact">
+              <span class="la-fact-k">Canonical</span><span :class="live.result.crawlability.page.canonical ? 'la-yes' : 'la-no'">{{ live.result.crawlability.page.canonical ? $t('liveAnalysis.yes') : $t('liveAnalysis.no') }}</span>
+            </div>
+            <div class="la-fact">
+              <span class="la-fact-k">JSON-LD</span>{{ live.result.crawlability.page.structured_data ?? 0 }}
+            </div>
+            <div class="la-fact">
+              <span class="la-fact-k">og:image</span><span :class="live.result.crawlability.page.og_image ? 'la-yes' : 'la-no'">{{ live.result.crawlability.page.og_image ? $t('liveAnalysis.yes') : $t('liveAnalysis.no') }}</span>
+            </div>
+            <div v-if="live.result.crawlability.page.third_party?.hosts?.length" class="la-fact la-fact-wide">
+              <span class="la-fact-k">{{ $t('liveAnalysis.crawl.thirdParty') }}</span>{{ live.result.crawlability.page.third_party.hosts.join(', ') }}
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- 9) Browser (Lighthouse aus dem chrome-sidecar) -->
+      <div v-if="live.result.browser" class="la-section">
+        <div class="la-section-title">{{ $t('liveAnalysis.browser.title') }}</div>
+        <div v-if="!live.result.browser.available" class="la-muted">{{ $t('liveAnalysis.browser.unavailable') }}</div>
+        <template v-else>
+          <div class="la-scores">
+            <div v-for="(val, key) in live.result.browser.scores" :key="key" class="la-bscore" :class="gradeClass(val >= 90 ? 'A' : val >= 50 ? 'C' : 'F')">
+              <div class="la-bscore-val">{{ val }}</div>
+              <div class="la-bscore-label">{{ $t('liveAnalysis.browser.' + key) }}</div>
+            </div>
+          </div>
+          <div v-if="live.result.browser.metrics" class="la-facts la-bmetrics">
+            <div class="la-fact"><span class="la-fact-k">LCP</span>{{ live.result.browser.metrics.lcp_ms }} ms</div>
+            <div class="la-fact"><span class="la-fact-k">CLS</span>{{ live.result.browser.metrics.cls }}</div>
+            <div class="la-fact"><span class="la-fact-k">TBT</span>{{ live.result.browser.metrics.tbt_ms }} ms</div>
+          </div>
+        </template>
+      </div>
+
+      <!-- 10) Export -->
+      <div v-if="live.resultJobId" class="la-section la-export">
+        <a class="la-btn" :href="exportUrl('html')" target="_blank" rel="noopener">
+          <v-icon icon="mdi-file-document-outline" size="16" class="mr-1" />{{ $t('liveAnalysis.exportHtml') }}
+        </a>
+        <a class="la-btn" :href="exportUrl('csv')">
+          <v-icon icon="mdi-file-delimited-outline" size="16" class="mr-1" />{{ $t('liveAnalysis.exportCsv') }}
+        </a>
+      </div>
+    </template>
+
+    <!-- Noch kein Ergebnis und kein Lauf -->
+    <div v-else-if="!live.running" class="la-empty">
+      <v-icon icon="mdi-radar" size="56" class="la-empty-icon" />
+      <p>{{ $t('liveAnalysis.empty') }}</p>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.la-panel { padding: 14px 16px; max-width: 900px; }
+
+.la-head { display: flex; align-items: center; gap: 10px; }
+.la-url { flex: 1 1 auto; }
+.la-subhead { margin: 8px 0 4px; font-size: 0.82rem; color: var(--mint-text); }
+.la-muted { color: var(--mint-text-muted); }
+.la-warn { color: #b03a2e; }
+
+.la-btn {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--mint-border);
+  border-radius: var(--mint-radius);
+  background: #fff;
+  padding: 5px 14px;
+  font-size: 0.85rem;
+  color: var(--mint-text);
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.la-btn:hover:not(:disabled) { background: var(--mint-panel-hover); }
+.la-btn:disabled { color: #b6b6b3; cursor: default; }
+.la-btn.primary { border-color: var(--mint-green); color: var(--mint-green); }
+.la-btn.primary:hover:not(:disabled) { background: var(--mint-green); color: #fff; }
+.la-btn.danger:hover { background: #fbeaea; border-color: #d9b0ab; color: #b03a2e; }
+
+.la-running {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 10px 12px;
+  background: var(--mint-panel);
+  border: 1px solid var(--mint-border);
+  border-radius: var(--mint-radius);
+  font-size: 0.88rem;
+}
+
+/* Kennzahlen */
+.la-kpis { display: flex; align-items: center; gap: 20px; margin: 16px 0; }
+.la-score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  color: #fff;
+  flex: 0 0 auto;
+}
+.la-score-val { font-size: 1.6rem; font-weight: 700; line-height: 1; }
+.la-score-grade { font-size: 0.8rem; opacity: 0.9; }
+.la-score.good { background: #4a9c5d; }
+.la-score.medium { background: #c47f17; }
+.la-score.poor { background: #b03a2e; }
+
+.la-kpi-list { display: flex; flex-direction: column; gap: 4px; font-size: 0.86rem; color: var(--mint-text-muted); }
+.la-kpi-n { font-weight: 700; color: var(--mint-text); margin-right: 6px; font-size: 1.05rem; }
+.la-sev-counts { display: flex; gap: 12px; margin-top: 2px; }
+.la-sev-count { display: inline-flex; align-items: center; gap: 3px; font-weight: 600; }
+
+.sev-critical { color: #b03a2e; }
+.sev-warning { color: #c47f17; }
+.sev-info { color: #3a7ca5; }
+
+/* Abschnitte */
+.la-section { margin: 18px 0; padding-top: 14px; border-top: 1px solid var(--mint-border); }
+.la-section-title { font-weight: 600; font-size: 0.9rem; margin-bottom: 10px; color: var(--mint-text); }
+
+/* Trend */
+.la-trend { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; font-size: 0.86rem; }
+.la-trend-first { color: var(--mint-text-muted); font-size: 0.86rem; }
+.la-delta { display: inline-flex; align-items: center; font-weight: 700; }
+.la-delta.up { color: #4a9c5d; }
+.la-delta.down { color: #b03a2e; }
+.la-trend-good { color: #4a9c5d; }
+.la-trend-bad { color: #b03a2e; }
+
+/* Verlaufskurve */
+.la-curve { width: 100%; height: 90px; display: block; }
+.la-curve circle.good { fill: #4a9c5d; }
+.la-curve circle.medium { fill: #c47f17; }
+.la-curve circle.poor { fill: #b03a2e; }
+
+/* Filter-Chips */
+.la-sevfilters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.la-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--mint-border);
+  border-radius: 999px;
+  background: #fff;
+  padding: 2px 12px;
+  font-size: 0.8rem;
+  color: var(--mint-text);
+  cursor: pointer;
+}
+.la-chip:hover { background: var(--mint-panel-hover); }
+.la-chip.active { background: var(--mint-green); border-color: var(--mint-green); color: #fff; }
+
+/* Befundliste */
+.la-issues { list-style: none; margin: 0; padding: 0; }
+.la-issue { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--mint-border); }
+.la-issue-icon { flex: 0 0 auto; margin-top: 2px; }
+.la-issue-body { min-width: 0; }
+.la-issue-title { font-weight: 600; font-size: 0.88rem; color: var(--mint-text); }
+.la-issue-loc { font-size: 0.78rem; color: var(--mint-text-muted); word-break: break-all; margin-top: 1px; }
+.la-issue-fix { font-size: 0.82rem; color: var(--mint-text); margin-top: 3px; }
+.la-noissues { padding: 8px 0; }
+
+/* Fakten-Raster (server/crawlability) */
+.la-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px 18px; font-size: 0.84rem; }
+.la-fact-wide { grid-column: 1 / -1; word-break: break-all; }
+.la-fact-k { display: inline-block; min-width: 120px; color: var(--mint-text-muted); }
+.la-yes { color: #4a9c5d; font-weight: 600; }
+.la-no { color: #b03a2e; font-weight: 600; }
+
+/* Browser-Scores */
+.la-scores { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; }
+.la-bscore { display: flex; flex-direction: column; align-items: center; width: 72px; padding: 8px 0; border-radius: var(--mint-radius); color: #fff; }
+.la-bscore.good { background: #4a9c5d; }
+.la-bscore.medium { background: #c47f17; }
+.la-bscore.poor { background: #b03a2e; }
+.la-bscore-val { font-size: 1.3rem; font-weight: 700; }
+.la-bscore-label { font-size: 0.72rem; text-align: center; }
+.la-bmetrics { margin-top: 4px; }
+
+.la-export { display: flex; gap: 10px; }
+
+.la-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 0;
+  color: var(--mint-text-muted);
+  gap: 12px;
+}
+.la-empty-icon { color: #c4c4c0; }
+
+@media (max-width: 599.98px) {
+  .la-head { flex-wrap: wrap; }
+  .la-url { flex-basis: 100%; }
+}
+</style>

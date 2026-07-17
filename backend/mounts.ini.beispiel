@@ -82,6 +82,16 @@ label = Medien
 ;[pagespeed]
 ;url = "https://example.com/"
 
+; Reservierte Sektion [live_analysis] (KEIN Mount): Live-Adresse DIESER Webseite
+; für die Live-Analyse (Pro, seo-success). Eigene Sektion, unabhängig von
+; [pagespeed] — beide Prüfungen sind getrennt und optional. Wird über das
+; Live-Analyse-Panel eingegeben und beim Start automatisch geschrieben — ein
+; manueller Eintrag ist nicht nötig. Der Dienst-Schlüssel steht zentral in der
+; hugocms.ini ([services] service_key).
+;   url   Öffentliche Adresse, die der Dienst crawlt, z. B. https://example.com/
+;[live_analysis]
+;url = "https://example.com/"
+
 ; Reservierte Sektion [seo_report] (KEIN Mount): zusätzliche Ausschlüsse des
 ; SEO-Berichts (Pro) NUR für DIESE Webseite — für Verzeichnisse und Dateien, die
 ; es nur hier gibt. Die Ausschlüsse sind gestaffelt und ERGÄNZEN einander:

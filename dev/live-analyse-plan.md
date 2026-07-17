@@ -176,9 +176,17 @@ Analysestart über `Config::updateSections($this->mountsPath, …)` geschrieben.
 
 Die **Erkennung** aus der Hugo-`baseURL` wird geteilt, nicht der gespeicherte Wert:
 `AuditService::detectBaseUrl()` läuft in `cmdWhoami` bereits einmal (:521). Das
-whoami-Feld `pagespeedUrlDetected` wird dabei zu `siteUrlDetected` — es ist eine
-Eigenschaft der Webseite, nicht des PageSpeed-Checks — und belegt beide Panels vor.
+neue whoami-Feld `siteUrlDetected` trägt diesen Wert — es ist eine Eigenschaft der
+Webseite, nicht des PageSpeed-Checks — und belegt beide Panels vor.
 `mounts.ini.beispiel` um die neue Sektion ergänzen (Muster :76-83).
+
+> **Umgesetzt (Abweichung, bewusst):** `siteUrlDetected` wurde **additiv**
+> eingeführt, statt `pagespeedUrlDetected` umzubenennen. So bleibt Block 2 ohne
+> Bestandsrisiko — die PageSpeed-Vorbelegung läuft unverändert weiter. Beide Felder
+> tragen denselben Wert. Das neue Live-Analyse-Panel nutzt `siteUrlDetected`; das
+> alte `pagespeedUrlDetected` kann später (Aufräumen) entfallen, wenn auch der
+> PageSpeed-Reiter auf das gemeinsame Feld zeigt. Per Smoke-Test bestätigt:
+> `siteUrlDetected` und `pagespeedUrlDetected` liefern beide die baseURL.
 
 ### B4 — Neue Connector-Befehle (`match`-Block, Connector.php:368-432)
 - `liveanalyze` (POST `{url}`) — Guards `requireAuth`/`requireMethod('POST')`/
@@ -265,6 +273,9 @@ Neuer Reiter-Inhalt. Zeigt das Ergebnis **vollständig**, in dieser Reihenfolge:
    Hinweis „ein Lauf kostet bis zu 14 Einheiten"), „zuletzt geprüft". Ist das
    Kontingent zu knapp oder erschöpft, wird „Analyse starten" gesperrt statt in
    `ANALYZE-QUOTA-EXCEEDED` zu laufen.
+   **Unbegrenztes Kontingent** (`quotaLimit`/`quotaRemaining = null`, im Test der
+   Regelfall) ist ausdrücklich zu behandeln: dann keine Zahl anzeigen („unbegrenzt")
+   und **nie** sperren. Nur bei gesetztem Limit vergleichen.
 2. **Laufanzeige** — `queued`/`running` + Spinner + Knopf **„Analyse abbrechen"**
    (nicht „Anzeige beenden" — der Abbruch ist jetzt echt, `cancel()` stoppt den
    Lauf serverseitig). Bei `stale:true` bzw. `WORKER-DOWN` ein deutlicher Hinweis,
@@ -344,6 +355,14 @@ jedem Sprachwechsel sofort neu, auch für alte gespeicherte Läufe. Der Preis si
 deutsch — das kann Client-seitige Übersetzung nicht lösen. Die passende Änderung
 dort wäre ein Sprach-Parameter **am Export** (`?format=html&lang=en`), der beim
 Rendern per `type` aus einem Katalog nachschlägt — nicht am JSON.
+
+> **Umgesetzt (Stand Block 3):** Der Übersetzungs-*Mechanismus* ist da —
+> `ruleTitle()`/`ruleFix()` im Panel schlagen `liveAnalysis.rules.<type>.title/fix`
+> nach und fallen auf den API-Text zurück. Der **rules-Katalog selbst** (die ~45
+> Befundtyp-Texte) ist noch **nicht** gefüllt: Die deutsche UI zeigt korrekt den
+> deutschen API-Text (Rückfall), die englische UI vorläufig ebenfalls. Den
+> EN-Katalog zu füllen ist reine, additive Daten-Arbeit ohne Architekturbezug —
+> als Folgeaufgabe markiert, blockiert den Durchstich nicht.
 
 ## Betrieb / Doku
 

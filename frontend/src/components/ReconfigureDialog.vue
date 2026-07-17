@@ -146,11 +146,11 @@ async function submit() {
   saving.value = true
   error.value = null
   try {
-    // Ist ein (neuer) Spracheingabe-Schlüssel eingegeben, vor dem Speichern
-    // gegen den Dienst prüfen; bei ungültigem Schlüssel oder nicht erreichbarem
-    // Dienst nicht speichern (der Fehler landet im gemeinsamen catch).
+    // Ist ein (neuer) Dienst-Schlüssel eingegeben, vor dem Speichern gegen den
+    // Dienst prüfen; bei ungültigem Schlüssel oder nicht erreichbarem Dienst
+    // nicht speichern (der Fehler landet im gemeinsamen catch).
     if (speechKey.value.trim()) {
-      await auth.verifySpeech({ speechKey: speechKey.value, speechUrl: speechUrl.value })
+      await auth.verifyService({ speechKey: speechKey.value, speechUrl: speechUrl.value })
     }
     await auth.reconfigure({
       sessionPath: sessionPath.value,

@@ -16,6 +16,7 @@ import AuditSeverityChip from './AuditSeverityChip.vue'
 import AuditIssueTable from './AuditIssueTable.vue'
 import AuditContentList from './AuditContentList.vue'
 import PageSpeedPanel from './PageSpeedPanel.vue'
+import LiveAnalysisPanel from './LiveAnalysisPanel.vue'
 
 const { t, locale } = useI18n()
 const audit = useAuditStore()
@@ -163,7 +164,7 @@ function runLabel(run) {
     <!-- Reiter: nur, wenn neben dem Bericht mindestens eine weitere Ansicht
          freigeschaltet ist (Content-Prüfung oder PageSpeed) — sonst gibt es nur
          den Bericht und eine Reiterleiste wäre überflüssig. -->
-    <div v-if="auth.auditContent || auth.pagespeed" class="audit-tabs nemo-noselect">
+    <div v-if="auth.auditContent || auth.pagespeed || auth.liveAnalysis" class="audit-tabs nemo-noselect">
       <button class="audit-tab" :class="{ active: tab === 'report' }" @click="tab = 'report'">
         <v-icon icon="mdi-clipboard-search-outline" size="16" class="mr-1" />{{ $t('audit.tabReport') }}
       </button>
@@ -172,6 +173,9 @@ function runLabel(run) {
       </button>
       <button v-if="auth.pagespeed" class="audit-tab" :class="{ active: tab === 'pagespeed' }" @click="tab = 'pagespeed'">
         <v-icon icon="mdi-speedometer" size="16" class="mr-1" />{{ $t('pagespeed.tab') }}
+      </button>
+      <button v-if="auth.liveAnalysis" class="audit-tab" :class="{ active: tab === 'live' }" @click="tab = 'live'">
+        <v-icon icon="mdi-radar" size="16" class="mr-1" />{{ $t('liveAnalysis.tab') }}
       </button>
     </div>
 
@@ -297,6 +301,9 @@ function runLabel(run) {
       <!-- Reiter „PageSpeed": Geschwindigkeitsmessung der Live-Adresse -->
       <PageSpeedPanel v-else-if="tab === 'pagespeed'" />
 
+      <!-- Reiter „Live-Analyse": Live-Crawl der Produktionssite (seo-success) -->
+      <LiveAnalysisPanel v-else-if="tab === 'live'" />
+
       <!-- Läuft gerade / Bericht wird geladen -->
       <div v-else-if="audit.running || audit.loading" class="nemo-empty">
         <v-progress-circular indeterminate size="40" width="3" color="primary" />
@@ -327,6 +334,7 @@ function runLabel(run) {
         {{ $t('contentQuality.pageCount', [auditContent.checked.length]) }}
       </span>
       <span v-else-if="tab === 'pagespeed'">{{ $t('pagespeed.tab') }}</span>
+      <span v-else-if="tab === 'live'">{{ $t('liveAnalysis.tab') }}</span>
       <span v-else-if="audit.current">
         {{ $t('audit.issueCount', [audit.filteredIssues.length]) }}
       </span>

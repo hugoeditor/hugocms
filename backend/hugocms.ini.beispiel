@@ -116,13 +116,18 @@ bin = ../bin/hugo/hugo
 ; <hash>.ini, siehe mounts.ini.beispiel); beide Listen ergänzen einander.
 
 ;[services]
-; Externe Pro-Dienste (optional). Derzeit die Spracheingabe des KI-Assistenten
-; über den Transkriptionsdienst (Projekt seo-success). Nur wirksam mit gültiger
-; Pro-Lizenz. Der Schlüssel bleibt serverseitig und wird nie an den Client
-; gegeben.
-;   speech_key  API-Schlüssel des Dienstes (Geheimnis; Datei mit 0640 schützen).
-;   speech_url  Basis-Adresse des Dienstes (der Endpunkt /v1/transcribe wird
-;               automatisch angehängt). Standard: https://api.hugocms.com/
+; Externe Pro-Dienste (optional). Der seo-success-Dienst deckt mit EINEM
+; Schlüssel (ein gemeinsames Kontingent) die Spracheingabe des KI-Assistenten
+; UND die Live-Analyse ab. Nur wirksam mit gültiger Pro-Lizenz. Der Schlüssel
+; bleibt serverseitig und wird nie an den Client gegeben.
+;   service_key  API-Schlüssel des Dienstes (Geheimnis; Datei mit 0640 schützen).
+;   service_url  Basis-Adresse des Dienstes (die Endpunkte /v1/transcribe,
+;                /v1/analyze … werden automatisch angehängt).
+;                Standard: https://api.hugocms.com/
+; Rückfall: Die früheren Namen speech_key/speech_url werden weiterhin gelesen,
+; falls noch gesetzt — bestehende Installationen laufen unverändert weiter. Beim
+; nächsten Speichern über das Konfigurationsformular werden sie auf service_*
+; umgeschrieben.
 ; Ebenfalls hier: der (globale) Google-API-Schlüssel für den PageSpeed-Check.
 ; Nur wirksam mit gültiger Pro-Lizenz. Der Schlüssel bleibt serverseitig.
 ;   pagespeed_key  Google-API-Schlüssel (OPTIONAL). Ohne Schlüssel gilt ein
@@ -131,8 +136,8 @@ bin = ../bin/hugo/hugo
 ; Die zu messende Live-Adresse steht PRO WEBSEITE in der Mount-Konfiguration
 ; ([pagespeed] url) und wird im PageSpeed-Panel gesetzt — nicht hier.
 ; Lässt sich auch über das Konfigurationsformular setzen.
-;speech_key = "seosk_live_..."
-;speech_url = "https://api.hugocms.com/"
+;service_key = "seosk_live_..."
+;service_url = "https://api.hugocms.com/"
 ;pagespeed_key = "AIza..."
 
 ;[mail]
