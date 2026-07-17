@@ -298,7 +298,11 @@ final class Config
      * fallen bei leerem Wert auf `model` zurück, `model` auf claude-opus-4-8 —
      * so laufen bestehende Installationen mit nur `model` unverändert weiter.
      *
-     * @return array{apiKey: ?string, model: string, modelCron: string, modelAudit: string, writeMode: string}
+     * `models` (kommagetrennt) überschreibt die Auswahlliste der Oberfläche;
+     * leer = die fest verdrahtete Liste des Clients gilt. Der Aktualisieren-
+     * Knopf im Konfigurationsdialog schreibt hierher, was /v1/models liefert.
+     *
+     * @return array{apiKey: ?string, model: string, modelCron: string, modelAudit: string, writeMode: string, models: list<string>}
      */
     private static function aiSection(mixed $section): array
     {
@@ -318,7 +322,28 @@ final class Config
             'modelCron' => $modelCron,
             'modelAudit' => $modelAudit,
             'writeMode' => $writeMode,
+            'models' => self::normalizeModels($section['models'] ?? ''),
         ];
+    }
+
+    /**
+     * Zerlegt eine kommagetrennte Modell-Liste in ihre Einträge: leert
+     * Leerraum, wirft Leereinträge und Doppelte weg. Leere Eingabe → leere
+     * Liste (die Oberfläche nutzt dann ihre eigene Liste).
+     *
+     * @return list<string>
+     */
+    public static function normalizeModels(mixed $value): array
+    {
+        $models = [];
+        foreach (explode(',', (string) $value) as $entry) {
+            $id = trim($entry);
+            if ($id !== '' && !in_array($id, $models, true)) {
+                $models[] = $id;
+            }
+        }
+
+        return $models;
     }
 
     /**

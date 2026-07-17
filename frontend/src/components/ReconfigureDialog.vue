@@ -29,12 +29,38 @@ const aiModelCron = ref('')
 const aiModelAudit = ref('')
 const aiWriteMode = ref('confirm')
 const aiConfigured = ref(false)
-const aiModels = AI_MODELS
+// Auswahlliste: aus der hugocms.ini ([ai] models), sonst die mitgelieferte
+// Liste. Der Aktualisieren-Knopf neben der Abschnitts-Überschrift ersetzt sie
+// durch den Live-Stand der API und schreibt ihn in die INI.
+const aiModels = ref(AI_MODELS)
+const modelsLoading = ref(false)
+// Ein bereits konfiguriertes Modell, das nicht in der Liste steht, würde beim
+// Öffnen still aus dem Feld fallen — deshalb vorn anhängen.
+const aiModelItems = computed(() => {
+  const list = [...aiModels.value]
+  if (aiModel.value && !list.includes(aiModel.value)) list.unshift(aiModel.value)
+  return list
+})
 // Auswahl für Cron/Audit: zusätzlich die Option „wie Assistenten-Modell“ (leer).
 const aiSubModels = computed(() => [
   { value: '', title: t('aiConfig.modelSame') },
-  ...aiModels.map((m) => ({ value: m, title: m })),
+  ...aiModelItems.value.map((m) => ({ value: m, title: m })),
 ])
+
+// Modell-Liste bei der API abfragen und in die INI schreiben. Nutzt den
+// GESPEICHERTEN Schlüssel — ein gerade eingetippter, noch nicht gespeicherter
+// ist dem Backend nicht bekannt (daher der deaktivierte Knopf ohne aiConfigured).
+async function refreshModels() {
+  modelsLoading.value = true
+  error.value = null
+  try {
+    aiModels.value = await auth.refreshAiModels()
+  } catch (e) {
+    error.value = errorText(t, e)
+  } finally {
+    modelsLoading.value = false
+  }
+}
 const writeModeItems = computed(() =>
   ['readonly', 'confirm', 'auto'].map((v) => ({ value: v, title: t(`assistant.mode.${v}`) })),
 )
@@ -119,6 +145,8 @@ watch(model, async (open) => {
     aiModelAudit.value = cfg.aiModelAudit || ''
     aiWriteMode.value = cfg.aiWriteMode || 'confirm'
     aiConfigured.value = !!cfg.aiConfigured
+    // Hinterlegte Liste bevorzugen; ohne Eintrag bleibt die mitgelieferte.
+    aiModels.value = cfg.aiModels?.length ? cfg.aiModels : AI_MODELS
     speechUrl.value = cfg.speechUrl || DEFAULT_SPEECH_URL
     speechKey.value = ''
     speechConfigured.value = !!cfg.speechConfigured
@@ -280,7 +308,24 @@ async function submit() {
           />
 
           <v-divider class="my-3" />
-          <div :ref="registerSection('ai')" class="text-subtitle-2 mb-2">{{ $t('aiConfig.section') }}</div>
+          <!-- Überschrift mit Aktualisieren-Knopf: holt die Modell-Liste von der
+               API und hinterlegt sie in der hugocms.ini. Ohne gespeicherten
+               Schlüssel gibt es nichts abzufragen — dann ist er aus. -->
+          <div :ref="registerSection('ai')" class="d-flex align-center mb-2">
+            <span class="text-subtitle-2">{{ $t('aiConfig.section') }}</span>
+            <v-btn
+              icon="mdi-refresh"
+              variant="text"
+              density="compact"
+              size="small"
+              class="ml-1"
+              :loading="modelsLoading"
+              :disabled="!aiConfigured || modelsLoading || saving"
+              :title="aiConfigured ? $t('aiConfig.refreshModels') : $t('aiConfig.refreshModelsUnavailable')"
+              :aria-label="$t('aiConfig.refreshModels')"
+              @click="refreshModels"
+            />
+          </div>
           <div class="text-caption text-medium-emphasis mb-2">
             {{ aiConfigured ? $t('aiConfig.apiKeyHintSet') : $t('aiConfig.apiKeyHintUnset') }}
           </div>
@@ -297,7 +342,7 @@ async function submit() {
           <div class="text-caption text-medium-emphasis mb-2">{{ $t('aiConfig.modelHint') }}</div>
           <v-select
             v-model="aiModel"
-            :items="aiModels"
+            :items="aiModelItems"
             :label="$t('aiConfig.model')"
             prepend-inner-icon="mdi-brain"
             variant="outlined"

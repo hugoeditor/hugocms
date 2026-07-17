@@ -87,11 +87,20 @@ bin = ../bin/hugo/hugo
 ;               ohne Angabe wie `model`.
 ;   model_audit Modell der Content-Qualitätsprüfung. Optional; ohne Angabe wie
 ;               `model`.
+;   models      Auswahlliste der Modell-Felder in der Oberfläche, kommagetrennt.
+;               Optional; ohne Angabe gilt die mitgelieferte Liste. Der
+;               Aktualisieren-Knopf neben „KI-Assistent" im Konfigurations-
+;               dialog holt die aktuelle Liste von der API und schreibt sie
+;               hierher — ohne Datums-Suffix und ohne veraltete Modelle
+;               (Auswahl siehe AnthropicClient::HIDDEN_MODELS). Wer ein
+;               ausgefiltertes Modell braucht, trägt es hier von Hand ein;
+;               der Assistent nutzt jede gültige Modell-ID.
 ;   write_mode  readonly = nur lesen | confirm = vor dem Schreiben bestätigen
 ;               | auto = Schreibaktionen direkt ausführen. Standard: confirm.
 ;api_key = "sk-ant-..."
 ;model = claude-opus-4-8
-;model_cron = claude-sonnet-4-6
+;models = claude-opus-4-8,claude-sonnet-5,claude-haiku-4-5
+;model_cron = claude-sonnet-5
 ;model_audit = claude-haiku-4-5
 ;write_mode = confirm
 

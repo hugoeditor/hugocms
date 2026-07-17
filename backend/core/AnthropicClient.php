@@ -17,8 +17,27 @@ use HugoCMS\FileManager\Exception\ApiException;
 final class AnthropicClient
 {
     private const ENDPOINT = 'https://api.anthropic.com/v1/messages';
-    private const MODELS_ENDPOINT = 'https://api.anthropic.com/v1/models?limit=1';
+    private const MODELS_ENDPOINT = 'https://api.anthropic.com/v1/models';
     private const VERSION = '2023-06-01';
+
+    /**
+     * Modelle, die listModels() aus der API-Antwort entfernt. Die API liefert
+     * alles, wofür der Schlüssel freigeschaltet ist — auch Vorgänger-
+     * generationen; ein Kennzeichen „veraltet" gibt es dort nicht, daher diese
+     * Liste. Sie ist nach dem Abschneiden des Datums-Suffixes zu lesen (also
+     * claude-opus-4-5, nicht claude-opus-4-5-20251101) und braucht Pflege,
+     * sobald eine Generation nachrückt.
+     *
+     * claude-fable-5 steht bewusst hier: doppelter Preis gegenüber Opus 4.8 und
+     * abweichendes API-Verhalten (u. a. der Abbruchgrund „refusal", den der
+     * AssistantService nicht behandelt).
+     */
+    private const HIDDEN_MODELS = [
+        'claude-opus-4-5',
+        'claude-opus-4-1',
+        'claude-sonnet-4-5',
+        'claude-fable-5',
+    ];
 
     public function __construct(
         private readonly string $apiKey,
@@ -103,9 +122,61 @@ final class AnthropicClient
      */
     public function ping(): void
     {
-        // Kurzer Timeout: die Prüfung soll das Öffnen des Assistenten nicht
-        // spürbar verzögern.
-        $ch = curl_init(self::MODELS_ENDPOINT);
+        // Ein Eintrag genügt: geprüft wird nur der HTTP-Status.
+        $this->requestModels(1);
+    }
+
+    /**
+     * Liefert die anbietbaren Modell-Kennungen, neueste zuerst (Reihenfolge der
+     * API). Grundlage der Modell-Auswahl im Konfigurationsdialog; ohne Abruf
+     * gilt die fest verdrahtete Liste des Clients.
+     *
+     * Zwei Aufbereitungsschritte, weil die API rohen Katalog liefert:
+     * 1. Das Datums-Suffix fällt weg — die API mischt beide Namensformen
+     *    (claude-opus-4-8 neben claude-haiku-4-5-20251001), gemeint ist aber
+     *    dasselbe Modell. Ohne diesen Schritt fiele Haiku 4.5 aus der Auswahl.
+     * 2. Veraltete Modelle fliegen raus (siehe HIDDEN_MODELS).
+     * Unbekannte neue Modelle kommen dadurch automatisch durch.
+     *
+     * @return list<string>
+     */
+    public function listModels(): array
+    {
+        // 100 deckt den Katalog um ein Vielfaches ab (aktuell unter zehn
+        // Modelle), daher wird die Seitenweiterschaltung (has_more/after_id)
+        // bewusst nicht ausgewertet.
+        $data = $this->requestModels(100);
+
+        $models = [];
+        foreach ($data['data'] ?? [] as $entry) {
+            $id = is_array($entry) ? trim((string) ($entry['id'] ?? '')) : '';
+            if ($id === '') {
+                continue;
+            }
+            // claude-haiku-4-5-20251001 → claude-haiku-4-5
+            $id = (string) preg_replace('/-\d{8}$/', '', $id);
+            if (in_array($id, self::HIDDEN_MODELS, true) || in_array($id, $models, true)) {
+                continue;
+            }
+            $models[] = $id;
+        }
+        if ($models === []) {
+            throw new ApiException('EAI', 502, 'AI-MODELS-EMPTY');
+        }
+
+        return $models;
+    }
+
+    /**
+     * Gemeinsamer GET auf /v1/models für ping() und listModels(). Kurzer
+     * Timeout: beide Aufrufe hängen an einer Nutzeraktion und dürfen sie nicht
+     * spürbar verzögern.
+     *
+     * @return array<string, mixed>
+     */
+    private function requestModels(int $limit): array
+    {
+        $ch = curl_init(self::MODELS_ENDPOINT . '?limit=' . $limit);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT => min($this->timeout, 15),
@@ -124,11 +195,12 @@ final class AnthropicClient
         $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         curl_close($ch);
 
+        $data = json_decode((string) $raw, true);
+
         if ($status >= 200 && $status < 300) {
-            return;
+            return is_array($data) ? $data : [];
         }
 
-        $data = json_decode((string) $raw, true);
         $message = is_array($data)
             ? (string) ($data['error']['message'] ?? ('HTTP ' . $status))
             : ('HTTP ' . $status);

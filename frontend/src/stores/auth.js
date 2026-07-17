@@ -14,7 +14,9 @@ export const useAuthStore = defineStore('auth', {
     // true, wenn die Einstellungen DIESER Webseite änderbar sind (die Mounts
     // stammen aus einer Datei). Steuert den Dialog „Projekteinstellungen“.
     projectConfigurable: false,
-    ai: { enabled: false, model: '', writeMode: 'confirm' }, // KI-Assistent (aus whoami)
+    // KI-Assistent (aus whoami). models = in der INI hinterlegte Auswahlliste;
+    // leer bedeutet: die mitgelieferte Liste aus util/aiModels.js gilt.
+    ai: { enabled: false, model: '', writeMode: 'confirm', models: [] },
     // globale UI-Vorgaben aus [user]. updateLastmod ist dreiwertig:
     // null = beim Speichern nachfragen, true/false = ohne Nachfrage anwenden.
     ui: { contentWidth: 1200, updateLastmod: null },
@@ -95,6 +97,16 @@ export const useAuthStore = defineStore('auth', {
     // Schreibt die hugocms.ini neu (Verzeichnisse, Log, Hugo-Programm).
     async reconfigure(payload) {
       await api.post('reconfigure', payload)
+    },
+
+    // Holt die verfügbaren Claude-Modelle von der API und hinterlegt sie in der
+    // hugocms.ini ([ai] models). Braucht einen GESPEICHERTEN API-Schlüssel.
+    // Liefert die neue Liste und übernimmt sie zugleich für das Assistenten-
+    // Panel, damit die Auswahl ohne Neuladen stimmt.
+    async refreshAiModels() {
+      const { models } = await api.post('aimodels')
+      this.ai = { ...this.ai, models }
+      return models
     },
 
     // Einstellungen DIESER Webseite (Mount-Konfiguration) zum Vorbefüllen des

@@ -70,7 +70,10 @@ final class Connector
      * modelCron/modelAudit: getrennte Modelle für Cron-Verbesserer bzw.
      * Content-Qualitätsprüfung (fallen ohne Angabe auf `model` zurück).
      *
-     * @var array{apiKey: ?string, model: string, modelCron: string, modelAudit: string, writeMode: string}
+     * models: in der INI hinterlegte Auswahlliste der Oberfläche (leer = die
+     * fest verdrahtete Liste des Clients gilt).
+     *
+     * @var array{apiKey: ?string, model: string, modelCron: string, modelAudit: string, writeMode: string, models: list<string>}
      */
     private array $ai = [
         'apiKey' => null,
@@ -78,6 +81,7 @@ final class Connector
         'modelCron' => 'claude-opus-4-8',
         'modelAudit' => 'claude-opus-4-8',
         'writeMode' => 'confirm',
+        'models' => [],
     ];
 
     /**
@@ -414,6 +418,7 @@ final class Connector
                 'liveanalyzeexport' => $this->cmdLiveAnalyzeExport($request),
                 'config' => $this->cmdConfig(),
                 'reconfigure' => $this->cmdReconfigure($request),
+                'aimodels' => $this->cmdAiModels(),
                 'projectconfig' => $this->cmdProjectConfig(),
                 'projectreconfigure' => $this->cmdProjectReconfigure($request),
                 'setupdatelastmod' => $this->cmdSetUpdateLastmod($request),
@@ -559,6 +564,9 @@ final class Connector
                 'enabled' => $this->ai['apiKey'] !== null,
                 'model' => $this->ai['model'],
                 'writeMode' => $this->ai['writeMode'],
+                // Auswahlliste des Assistenten-Panels. Leer = der Client nutzt
+                // seine eigene Liste (siehe util/aiModels.js).
+                'models' => $this->ai['models'],
             ],
             // Globale UI-Vorgaben aus [user]. contentWidth ist im Einzelbenutzer-
             // Modus der Startwert für die Fensterbreite nach jedem Neuladen.
@@ -2332,6 +2340,9 @@ final class Connector
             'aiModelAudit' => $raw['ai']['model_audit'] ?? '',
             'aiWriteMode'  => $raw['ai']['write_mode'] ?? 'confirm',
             'aiWriteModes' => self::AI_WRITE_MODES,
+            // Hinterlegte Modell-Auswahl (leer = der Client nutzt seine eigene
+            // Liste). Der Aktualisieren-Knopf im Dialog füllt sie über /aimodels.
+            'aiModels'     => Config::normalizeModels($raw['ai']['models'] ?? ''),
             // seo-success-Dienst (Pro): Status + Basis-URL, aber NIE der Schlüssel.
             // Leere URL → der Client füllt den Standard vor. Neue Namen (service_*)
             // mit Rückfall auf die alten (speech_*).
@@ -2412,6 +2423,12 @@ final class Connector
             $aiSection['model_audit'] = $aiModelAudit;
         }
         $aiSection['write_mode'] = $aiWriteMode;
+        // Die abgerufene Modell-Liste gehört nicht ins Formular; sie wird hier
+        // aus dem Bestand übernommen, sonst löschte jedes Speichern sie.
+        $existingModels = Config::normalizeModels($existingAi['models'] ?? '');
+        if ($existingModels !== []) {
+            $aiSection['models'] = implode(',', $existingModels);
+        }
 
         // Spracheingabe (Pro-Dienst). Der Schlüssel ist ein Geheimnis: ein leeres
         // Feld lässt den bestehenden unverändert. Die URL ist die Basis-Adresse
@@ -2547,6 +2564,41 @@ final class Connector
         }
 
         return $section === [] ? null : $section;
+    }
+
+    /**
+     * Fragt die verfügbaren Modelle bei der Anthropic-API ab (/v1/models) und
+     * hinterlegt sie als `models` in der [ai]-Sektion der hugocms.ini. Danach
+     * bestückt diese Liste die Auswahlfelder; ohne Eintrag gilt die fest
+     * verdrahtete Liste des Clients.
+     *
+     * Gearbeitet wird mit dem GESPEICHERTEN Schlüssel: ein im Dialog frisch
+     * eingetippter, noch nicht gespeicherter Schlüssel ist hier nicht bekannt.
+     * Die übrige [ai]-Sektion bleibt wörtlich erhalten.
+     *
+     * @return array{models: list<string>}
+     */
+    private function cmdAiModels(): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+        if ($this->configPath === null) {
+            throw new ApiException('ECONFIG', 409, 'RECONFIGURE-UNAVAILABLE');
+        }
+        if ($this->ai['apiKey'] === null) {
+            throw new ApiException('ECONFIG', 409, 'AI-NOT-CONFIGURED');
+        }
+
+        $models = (new AnthropicClient((string) $this->ai['apiKey']))->listModels();
+
+        // Bestand der Sektion übernehmen und nur `models` setzen —
+        // updateSections ersetzt die Sektion als Ganzes.
+        $aiSection = Config::raw($this->configPath)['ai'] ?? [];
+        $aiSection = is_array($aiSection) ? $aiSection : [];
+        $aiSection['models'] = implode(',', $models);
+        Config::updateSections($this->configPath, ['ai' => $aiSection]);
+
+        return ['models' => $models];
     }
 
     /**

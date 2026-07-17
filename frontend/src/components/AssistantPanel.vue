@@ -24,10 +24,11 @@ if (assistant.writeMode === null) assistant.writeMode = auth.ai?.writeMode || 'c
 
 const writeModes = ['readonly', 'confirm', 'auto']
 
-// Auswählbare Modelle: die zentrale Liste plus ein evtl. abweichend in der INI
-// konfiguriertes Modell (damit es nicht aus der Auswahl fällt).
+// Auswählbare Modelle: die in der hugocms.ini hinterlegte Liste ([ai] models),
+// sonst die mitgelieferte, plus ein evtl. abweichend konfiguriertes Modell
+// (damit es nicht aus der Auswahl fällt).
 const modelItems = computed(() => {
-  const list = [...AI_MODELS]
+  const list = auth.ai?.models?.length ? [...auth.ai.models] : [...AI_MODELS]
   for (const m of [auth.ai?.model, assistant.model]) {
     if (m && !list.includes(m)) list.unshift(m)
   }
