@@ -12,7 +12,7 @@ import { api } from '../api/client'
 import { errorText } from '../i18n/apiMessage'
 import { useTransientError } from '../util/transientError'
 
-const { t, te } = useI18n()
+const { t, locale } = useI18n()
 const live = useLiveAnalysisStore()
 const auth = useAuthStore()
 const error = useTransientError()
@@ -43,6 +43,13 @@ watch(
   },
 )
 
+// Sprachwechsel: Das angezeigte Ergebnis in der neuen Sprache neu holen. Der
+// Dienst übersetzt beim Abruf über den Befund-Typ — derselbe Auftrag, kein
+// neuer Lauf, kein Kontingent. „zuletzt geprüft" bleibt dabei stehen.
+watch(locale, (l) => {
+  live.refetchInLocale(l)
+})
+
 // Beim Verlassen der Ansicht nur lokal aufhören — der Lauf bleibt serverseitig
 // bestehen und wird beim nächsten Öffnen (fetchLatest) wieder aufgenommen.
 onBeforeUnmount(() => live.stopPolling())
@@ -54,7 +61,7 @@ const lastAnalyzed = computed(() =>
 async function startAnalyse() {
   error.value = null
   try {
-    await live.start(url.value.trim())
+    await live.start(url.value.trim(), locale.value)
   } catch (e) {
     error.value = errorText(t, e)
   }
@@ -86,17 +93,11 @@ function sevMeta(sev) {
   return SEV[sev] ?? SEV.info
 }
 
-// Befund-Titel/-Behebung: über den sprachneutralen `type` übersetzen, mit
-// Rückfall auf den (deutschen) Text der API, wenn der Typ dem Client unbekannt
-// ist. So bleiben neue API-Befundtypen ohne Client-Änderung anzeigbar.
-function ruleTitle(issue) {
-  const key = `liveAnalysis.rules.${issue.type}.title`
-  return te(key) ? t(key) : issue.title || issue.type
-}
-function ruleFix(issue) {
-  const key = `liveAnalysis.rules.${issue.type}.fix`
-  return te(key) ? t(key) : issue.fix || ''
-}
+// Befund-Texte kommen fertig lokalisiert vom Dienst: Er übersetzt sie über den
+// sprachneutralen `type` beim Abruf (mit eigenem Rückfall auf Deutsch, wenn ein
+// Typ dort noch nicht übersetzt ist). Der Client übersetzt sie bewusst NICHT
+// parallel — ein Katalog an zwei Orten wäre eine zweite Quelle der Wahrheit und
+// würde den HTML-/CSV-Export ohnehin nicht erreichen.
 function issueLocation(issue) {
   return issue.url || issue.host || ''
 }
@@ -116,9 +117,12 @@ const BROWSER_METRICS = [
 ]
 
 // Export-Adressen (server-seitig, am JSON-Umschlag vorbei). HTML im neuen Tab
-// zum Drucken, CSV als Download.
+// zum Drucken, CSV als Download. `locale` lokalisiert auch den Bericht selbst
+// (Befundtexte und Beschriftungen) — das leistet nur der Dienst.
 function exportUrl(format) {
-  return live.resultJobId ? api.url('liveanalyzeexport', { jobId: live.resultJobId, format }) : '#'
+  return live.resultJobId
+    ? api.url('liveanalyzeexport', { jobId: live.resultJobId, format, locale: locale.value })
+    : '#'
 }
 
 // Verlaufskurve: Score (0–100) über die Läufe, älteste links. Handgezeichnetes
@@ -293,9 +297,9 @@ function fmtDate(iso) {
           <li v-for="(issue, i) in live.filteredIssues" :key="i" class="la-issue">
             <v-icon :icon="sevMeta(issue.severity).icon" size="16" :class="sevMeta(issue.severity).cls" class="la-issue-icon" />
             <div class="la-issue-body">
-              <div class="la-issue-title">{{ ruleTitle(issue) }}</div>
+              <div class="la-issue-title">{{ issue.title || issue.type }}</div>
               <div v-if="issueLocation(issue)" class="la-issue-loc">{{ issueLocation(issue) }}</div>
-              <div v-if="ruleFix(issue)" class="la-issue-fix">{{ ruleFix(issue) }}</div>
+              <div v-if="issue.fix" class="la-issue-fix">{{ issue.fix }}</div>
             </div>
           </li>
         </ul>

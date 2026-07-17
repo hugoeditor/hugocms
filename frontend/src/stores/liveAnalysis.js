@@ -29,6 +29,7 @@ export const useLiveAnalysisStore = defineStore('liveAnalysis', {
     error: null, // { code, key, params } eines Poll-Fehlers (Panel übersetzt)
     history: [], // Verlaufsläufe (neueste zuerst) für die Kurve
     quota: null, // { name, quotaLimit, quotaRemaining, quotaExceeded } oder null
+    locale: null, // Berichtssprache des laufenden/angezeigten Ergebnisses (de/en)
     severityFilter: 'all', // 'all' | 'critical' | 'warning' | 'info'
     typeFilter: 'all', // 'all' | <befund-typ>
     _timer: null, // Polling-Timer (intern)
@@ -79,14 +80,16 @@ export const useLiveAnalysisStore = defineStore('liveAnalysis', {
     },
 
     // Analyse der eingegebenen Adresse anstoßen und mit dem Polling beginnen.
-    // Wirft bei ungültiger Adresse, erschöpftem Kontingent oder totem Worker
-    // (ANALYZE-WORKER-DOWN) — das Panel fängt und zeigt den Grund.
-    async start(url) {
+    // `locale` legt die Berichtssprache fest (der Dienst lokalisiert über den
+    // Befund-Typ). Wirft bei ungültiger Adresse, erschöpftem Kontingent oder
+    // totem Worker (ANALYZE-WORKER-DOWN) — das Panel fängt und zeigt den Grund.
+    async start(url, locale) {
       this.reset()
+      this.locale = locale ?? null
       this.running = true
       this.status = 'queued'
       try {
-        const res = await api.post('liveanalyze', { url })
+        const res = await api.post('liveanalyze', { url, locale })
         this.jobId = res.jobId
         this.status = res.status ?? 'queued'
         this.startPolling()
@@ -94,6 +97,24 @@ export const useLiveAnalysisStore = defineStore('liveAnalysis', {
         this.running = false
         this.status = null
         throw e
+      }
+    },
+
+    // Angezeigtes Ergebnis in einer anderen Sprache neu holen. Der Dienst
+    // übersetzt die Befunde beim Abruf über den sprachneutralen Typ — derselbe
+    // Auftrag, kein neuer Lauf, KEIN Kontingent. Best effort: Ist der Auftrag
+    // beim Dienst nicht mehr vorhanden, bleibt das Ergebnis in der alten Sprache.
+    async refetchInLocale(locale) {
+      if (!this.resultJobId || this.running) return
+      this.locale = locale ?? null
+      try {
+        const res = await api.get('liveanalyzestatus', { jobId: this.resultJobId, locale })
+        if (res.status === 'done' && res.result) {
+          this.result = markRaw(res.result)
+          // analyzedAt bewusst NICHT überschreiben — es wurde nichts neu geprüft.
+        }
+      } catch {
+        // Auftrag weg/nicht abrufbar: alte Sprache stehen lassen, nicht stören.
       }
     },
 
@@ -143,7 +164,7 @@ export const useLiveAnalysisStore = defineStore('liveAnalysis', {
     async _poll() {
       if (!this.jobId) return
       try {
-        const res = await api.get('liveanalyzestatus', { jobId: this.jobId })
+        const res = await api.get('liveanalyzestatus', { jobId: this.jobId, locale: this.locale ?? '' })
         this.status = res.status ?? null
         this.stale = !!res.stale
 

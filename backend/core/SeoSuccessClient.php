@@ -83,10 +83,18 @@ final class SeoSuccessClient
      * Stößt eine Live-Analyse an (POST /v1/analyze). Liefert sofort
      * {job_id, status:"queued"}; der audit-worker arbeitet den Job ab.
      *
+     * $lang legt die Berichtssprache des Auftrags fest (de/en, Standard beim
+     * Dienst: de); sie lässt sich beim Abruf je Anfrage überschreiben.
+     *
      * @return array<string, mixed>
      */
-    public function analyzeStart(string $url): array
+    public function analyzeStart(string $url, ?string $lang = null): array
     {
+        $payload = ['url' => $url];
+        if ($lang !== null && $lang !== '') {
+            $payload['lang'] = $lang;
+        }
+
         $ch = curl_init($this->endpoint('/v1/analyze'));
         curl_setopt_array($ch, [
             CURLOPT_POST => true,
@@ -96,7 +104,7 @@ final class SeoSuccessClient
                 'Authorization: Bearer ' . $this->apiKey,
                 'Content-Type: application/json',
             ],
-            CURLOPT_POSTFIELDS => (string) json_encode(['url' => $url]),
+            CURLOPT_POSTFIELDS => (string) json_encode($payload),
         ]);
 
         return $this->sendAnalyze($ch);
@@ -106,11 +114,21 @@ final class SeoSuccessClient
      * Fragt Status/Ergebnis eines Auftrags ab (GET /v1/analyze/<id>). Trägt bei
      * `queued` ohne lebenden Worker das Feld `stale`, bei `done` das `result`.
      *
+     * $lang übersteuert die Berichtssprache dieses Abrufs: Der Dienst lokalisiert
+     * die Befunde über den sprachneutralen `type` ERST BEIM ABRUF. Derselbe
+     * Auftrag lässt sich damit in jeder Sprache holen — ohne neuen Lauf und ohne
+     * Kontingent.
+     *
      * @return array<string, mixed>
      */
-    public function analyzeStatus(string $jobId): array
+    public function analyzeStatus(string $jobId, ?string $lang = null): array
     {
-        $ch = curl_init($this->endpoint('/v1/analyze/' . rawurlencode($jobId)));
+        $url = $this->endpoint('/v1/analyze/' . rawurlencode($jobId));
+        if ($lang !== null && $lang !== '') {
+            $url .= '?' . http_build_query(['lang' => $lang]);
+        }
+
+        $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_HTTPGET => true,
             CURLOPT_RETURNTRANSFER => true,
@@ -164,13 +182,18 @@ final class SeoSuccessClient
     /**
      * Export eines abgeschlossenen Auftrags (GET /v1/analyze/<id>?format=html|csv).
      * Liefert die Roh-Bytes und den Content-Type — der Connector reicht beides am
-     * JSON-Umschlag vorbei an den Browser weiter.
+     * JSON-Umschlag vorbei an den Browser weiter. $lang lokalisiert den Bericht
+     * (Befundtexte UND Beschriftungen) beim Rendern.
      *
      * @return array{body: string, contentType: string}
      */
-    public function analyzeExport(string $jobId, string $format): array
+    public function analyzeExport(string $jobId, string $format, ?string $lang = null): array
     {
-        $query = http_build_query(['format' => $format === 'csv' ? 'csv' : 'html']);
+        $params = ['format' => $format === 'csv' ? 'csv' : 'html'];
+        if ($lang !== null && $lang !== '') {
+            $params['lang'] = $lang;
+        }
+        $query = http_build_query($params);
         $ch = curl_init($this->endpoint('/v1/analyze/' . rawurlencode($jobId)) . '?' . $query);
         curl_setopt_array($ch, [
             CURLOPT_HTTPGET => true,

@@ -326,43 +326,41 @@ Reiter/Knöpfe/Status (inkl. „Analyse abbrechen"), der Worker-/`stale`-Hinweis
 `browser.*`, `export.*` sowie die Fehlerschlüssel `ANALYZE-*` (inkl.
 `ANALYZE-WORKER-DOWN`, `ANALYZE-JOB-NOT-CANCELABLE`).
 
-**Wichtig — die i18n-Grenze:** Die API liefert `title` und `fix` **fest auf
-Deutsch** (`Audit/Report.php:25-88`, ~45 Typen). Für die englische Oberfläche
-reicht Durchreichen nicht. Der Client übersetzt deshalb über das
-sprachneutrale, stabile `type`-Feld — genau wie der bestehende Bericht es mit
-`audit.rules.*` (50 Einträge) tut — und fällt auf `title`/`fix` der API zurück,
-wenn ein Typ dem Client unbekannt ist. Damit bleiben neue API-Befundtypen ohne
-Client-Änderung anzeigbar, und die Hausregel („Backend liefert Codes, der Client
-übersetzt") gilt weiter.
+**Die i18n-Grenze — gelöst auf der API-Seite (überholt die frühere Planung).**
+Der Dienst lokalisiert die Befunde inzwischen selbst (`Audit/Messages.php`,
+Commit „Reporting überarbeitet (i18n-Support)"):
 
-**Geprüft und verworfen: das Problem vorher in der API lösen („IDs statt Text").**
-Die ID gibt es bereits — `type` ist sprachneutral und stabil; die deutschen Texte
-sind ein Zusatz, keine Alternative. Es gibt also nichts vorab aufzuräumen. Sie zu
-entfernen wäre ein Rückschritt: Der HTML-/CSV-Export der API liest `title`/`fix`
-direkt aus dem Ergebnis (`ReportExport.php:51/54/91/95`), `Trend::brief()`
-übernimmt `title` in `resolved`/`new`, und jeder andere Client müsste 45 Strings
-nachbauen, um überhaupt etwas anzuzeigen.
+- `POST /v1/analyze` nimmt `lang` (am Auftrag gemerkt), `GET /v1/analyze/<id>`
+  nimmt `?lang=` als Override — **auch fürs JSON** (`localizeResult`), nicht nur
+  für den Export. Der Export trägt zusätzlich `Content-Language`.
+- `Messages::localizeIssues()` übersetzt über den **sprachneutralen `type`** und
+  zwar **beim Abruf**, mit Rückfall auf den deutschen Standard.
+  `Messages::SUPPORTED = ['de','en']`.
 
-Entscheidend für die Client-Seite: Der Text wird **zur Analysezeit eingebrannt**
-(`Crawler.php:138` → `Report::compile`) und liegt fertig in JobStore/HistoryStore.
-Da HugoCMS das Ergebnis ablegt und später wieder anzeigt, würde angezeigter
-API-Text nach einem Sprachwechsel deutsch bleiben — das Ergebnis müsste neu geholt
-oder neu berechnet werden (Kontingent!). Übersetzen über `type` rendert dagegen bei
-jedem Sprachwechsel sofort neu, auch für alte gespeicherte Läufe. Der Preis sind
-~45 deutsche Strings, die dann in beiden Repos stehen.
+**Daraus folgt: Der Client übersetzt die Befundtexte NICHT.** Er reicht nur die
+Oberflächensprache durch (`locale` → `lang`) und zeigt `issue.title`/`issue.fix`
+direkt. Gründe:
 
-**Bleibt offen (Sache von seo-success, blockiert hier nichts):** Der **Export** ist
-deutsch — das kann Client-seitige Übersetzung nicht lösen. Die passende Änderung
-dort wäre ein Sprach-Parameter **am Export** (`?format=html&lang=en`), der beim
-Rendern per `type` aus einem Katalog nachschlägt — nicht am JSON.
+1. **Eine Quelle der Wahrheit.** Der Katalog liegt dort, wo die Typen entstehen.
+   Ein zweiter Katalog im Client wäre Doppelpflege mit Divergenzrisiko.
+2. **Der Export ist automatisch konsistent** — genau das konnte eine
+   Client-Übersetzung prinzipiell nicht erreichen.
+3. **Das frühere Gegenargument ist ausgeräumt.** Es lautete: „Der Text wird zur
+   Analysezeit eingebrannt, ein Sprachwechsel zeigt weiter Deutsch, Neuberechnung
+   kostet Kontingent." Die API lokalisiert **beim Abruf**, nicht beim Analysieren
+   — derselbe Auftrag lässt sich in jeder Sprache holen, ohne neuen Lauf und ohne
+   Kontingent. Ein Sprachwechsel im CMS ist damit ein reiner Neu-Abruf.
 
-> **Umgesetzt (Stand Block 3):** Der Übersetzungs-*Mechanismus* ist da —
-> `ruleTitle()`/`ruleFix()` im Panel schlagen `liveAnalysis.rules.<type>.title/fix`
-> nach und fallen auf den API-Text zurück. Der **rules-Katalog selbst** (die ~45
-> Befundtyp-Texte) ist noch **nicht** gefüllt: Die deutsche UI zeigt korrekt den
-> deutschen API-Text (Rückfall), die englische UI vorläufig ebenfalls. Den
-> EN-Katalog zu füllen ist reine, additive Daten-Arbeit ohne Architekturbezug —
-> als Folgeaufgabe markiert, blockiert den Durchstich nicht.
+> **Umgesetzt:** `SeoSuccessClient::analyzeStart/analyzeStatus/analyzeExport`
+> nehmen `$lang`; `Connector::analyzeLang()` normalisiert `locale` auf die
+> zweistellige Kennung (Muster wie `cmdPageSpeed`); Store/Panel senden `locale`
+> mit; `refetchInLocale()` holt das angezeigte Ergebnis bei Sprachwechsel neu
+> (best effort, „zuletzt geprüft" bleibt stehen — es wurde nichts neu geprüft).
+> Der geplante `rules`-Katalog im Client **entfällt ersatzlos**.
+>
+> Verifiziert gegen die echte API mit einem bestehenden Auftrag: gleicher `type`,
+> `title`/`fix` wechseln de↔en, Export `<html lang="de">` bzw. `"en"` — ohne
+> neuen Lauf.
 
 ## Betrieb / Doku
 

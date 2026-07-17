@@ -1756,7 +1756,7 @@ final class Connector
             $this->liveAnalysisUrl = $url;
         }
 
-        $res = $client->analyzeStart($url);
+        $res = $client->analyzeStart($url, self::analyzeLang($request));
         $jobId = (string) ($res['job_id'] ?? '');
 
         // Offenen Job ablegen, damit das Panel nach dem Öffnen/Neuladen weiterpollt.
@@ -1784,7 +1784,7 @@ final class Connector
             throw ApiException::badRequest('PARAM-MISSING', ['jobId']);
         }
 
-        $res = $client->analyzeStatus($jobId);
+        $res = $client->analyzeStatus($jobId, self::analyzeLang($request));
         $status = (string) ($res['status'] ?? '');
 
         $out = ['jobId' => $jobId, 'status' => $status];
@@ -1794,9 +1794,13 @@ final class Connector
 
         if ($status === 'done' && is_array($res['result'] ?? null)) {
             $state = $this->readLiveAnalysis();
+            // Prüfzeitpunkt nur bei einem NEUEN Auftrag setzen. Wird derselbe
+            // Auftrag nur erneut geholt (z. B. nach einem Sprachwechsel), bleibt
+            // „zuletzt geprüft" stehen — geprüft wurde ja nichts neu.
+            $isNewRun = ($state['jobId'] ?? null) !== $jobId || ($state['analyzedAt'] ?? null) === null;
             $state['job'] = null;
             $state['jobId'] = $jobId;
-            $state['analyzedAt'] = gmdate('c');
+            $state['analyzedAt'] = $isNewRun ? gmdate('c') : $state['analyzedAt'];
             $state['result'] = $res['result'];
             $this->persistLiveAnalysis($state);
             $out['result'] = $res['result'];
@@ -1914,7 +1918,7 @@ final class Connector
         }
         $format = ((string) ($request['format'] ?? 'html')) === 'csv' ? 'csv' : 'html';
 
-        $export = $client->analyzeExport($jobId, $format);
+        $export = $client->analyzeExport($jobId, $format, self::analyzeLang($request));
 
         $name = 'seo-live-analyse-' . preg_replace('/[^A-Za-z0-9_-]/', '', $jobId) . '.' . $format;
         $encoded = rawurlencode($name);
@@ -1928,6 +1932,24 @@ final class Connector
         header("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src data:;");
         echo $export['body'];
         exit;
+    }
+
+    /**
+     * Berichtssprache für den Dienst aus der Oberflächensprache des Requests —
+     * nur die zweistellige Kennung (z. B. „de"/„en"), nie roh durchgereicht.
+     * null → der Dienst nutzt seinen Standard (de).
+     *
+     * Der Dienst lokalisiert die Befunde über den sprachneutralen `type` erst
+     * BEIM ABRUF. Deshalb genügt es, die Sprache mitzusenden; ein Sprachwechsel
+     * im CMS kostet nur einen erneuten Abruf, keinen neuen Lauf.
+     *
+     * @param array<string, mixed> $request
+     */
+    private static function analyzeLang(array $request): ?string
+    {
+        $locale = strtolower(substr((string) ($request['locale'] ?? ''), 0, 2));
+
+        return preg_match('/^[a-z]{2}$/', $locale) === 1 ? $locale : null;
     }
 
     /**
