@@ -187,7 +187,9 @@ async function submit() {
 </script>
 
 <template>
-  <v-dialog v-model="model" width="480" :persistent="saving">
+  <!-- scrollable: nur der v-card-text scrollt; Titel, Sprungnavigation und die
+       Aktionsleiste bleiben stehen (Muster wie im RepositoryDialog). -->
+  <v-dialog v-model="model" width="480" :persistent="saving" scrollable>
     <v-card class="pa-2">
       <v-card-title class="d-flex align-center text-h6">
         <span>{{ $t('reconfigure.title') }}</span>
@@ -211,6 +213,9 @@ async function submit() {
           @click="model = false"
         />
       </v-card-title>
+      <!-- Außerhalb des scrollbaren Bereichs: der Fehler bleibt sichtbar,
+           egal wohin im Formular gescrollt wurde. -->
+      <v-alert v-if="error" type="error" density="compact" class="rc-error mx-4 mb-2">{{ error }}</v-alert>
       <v-card-subtitle class="text-wrap mb-2">{{ $t('reconfigure.intro') }}</v-card-subtitle>
       <!-- Sprungnavigation zu den Abschnitten (analog zu den Kategorie-Filtern
            im SEO-Bericht). Erst sichtbar, wenn das Formular geladen ist. -->
@@ -469,7 +474,6 @@ async function submit() {
             density="comfortable"
           />
 
-          <v-alert v-if="error" type="error" density="compact" class="mt-2">{{ error }}</v-alert>
           <div class="text-caption text-medium-emphasis mt-3">{{ $t('reconfigure.note') }}</div>
         </v-form>
       </v-card-text>
@@ -503,4 +507,11 @@ async function submit() {
   cursor: pointer;
 }
 .rc-chip:hover { background: var(--mint-panel-hover); }
+
+/* Vuetify gibt .v-alert „flex: 1 1“ mit overflow: hidden. In der Flex-Spalte des
+   scrollbaren Dialogs entfällt dadurch die automatische Mindesthöhe und die
+   Meldung wird von der Aktionsleiste plattgedrückt. Eigengröße erzwingen. */
+.rc-error {
+  flex: 0 0 auto;
+}
 </style>
