@@ -12,7 +12,7 @@ import { api } from '../api/client'
 import { errorText } from '../i18n/apiMessage'
 import { useTransientError } from '../util/transientError'
 
-const { t, locale } = useI18n()
+const { t, te, locale } = useI18n()
 const live = useLiveAnalysisStore()
 const auth = useAuthStore()
 const error = useTransientError()
@@ -58,6 +58,19 @@ const lastAnalyzed = computed(() =>
   live.analyzedAt ? new Date(live.analyzedAt).toLocaleString() : null,
 )
 
+// Hinweis, warum der Lauf endete. `stop_reason` ist die präzise Auskunft des
+// Dienstes; „completed" ist der Normalfall und braucht keinen Hinweis. Ergebnisse
+// aus der Zeit vor diesem Feld fallen auf `reached_page_limit` zurück.
+const stopNote = computed(() => {
+  const reason = live.result?.stop_reason
+  if (reason && reason !== 'completed') {
+    const key = `liveAnalysis.stopReason.${reason}`
+    return te(key) ? t(key) : reason
+  }
+  if (!reason && live.result?.reached_page_limit) return t('liveAnalysis.pageLimitReached')
+  return null
+})
+
 async function startAnalyse() {
   error.value = null
   try {
@@ -102,7 +115,33 @@ function issueLocation(issue) {
   return issue.url || issue.host || ''
 }
 
+// Zusatzfelder eines Befunds (alles außer den überall vorhandenen Standard-
+// feldern) — z. B. `source` (Seite, auf der ein toter Link steht), `status`
+// (HTTP-Code), `variant`, `bytes`, `count`. Generisch wie der Bericht des
+// Dienstes (ReportExport::detail), damit auch künftige Befundtypen ihre Details
+// zeigen, ohne dass der Client nachziehen muss. Bekannte Schlüssel bekommen eine
+// lesbare Beschriftung, unbekannte den Rohnamen.
+const ISSUE_STD_FIELDS = ['type', 'severity', 'title', 'fix', 'url', 'host']
+function issueDetails(issue) {
+  return Object.entries(issue)
+    .filter(([k]) => !ISSUE_STD_FIELDS.includes(k))
+    .map(([k, v]) => ({
+      key: k,
+      label: te(`liveAnalysis.issueField.${k}`) ? t(`liveAnalysis.issueField.${k}`) : k,
+      value: Array.isArray(v) ? v.join(', ') : String(v),
+    }))
+}
+
 const SEVERITIES = ['critical', 'warning', 'info']
+
+// Befundtypen mit Anzahl (aus summary.by_type), häufigste zuerst — treibt den
+// Typ-Filter neben dem Schweregrad-Filter.
+const typeCounts = computed(() => {
+  const byType = live.result?.summary?.by_type ?? {}
+  return Object.entries(byType)
+    .map(([type, count]) => ({ type, count }))
+    .sort((a, b) => b.count - a.count)
+})
 
 // Browser-Kennwerte in Anzeigereihenfolge: erst die drei Core Web Vitals, dann
 // die weiteren Ladekennwerte. Alle sechs liefert der chrome-sidecar; einzelne
@@ -188,10 +227,15 @@ function fmtDate(iso) {
     </div>
 
     <div class="la-subhead">
+      <!-- Der Hinweis gilt nur bei begrenztem Kontingent: Der Dienst leitet daraus
+           das Seitenbudget ab, ein Lauf kostet also nie mehr als das Restguthaben.
+           Bei unbegrenztem Schlüssel greift stattdessen der Backstop des Dienstes. -->
       <span v-if="live.quota">
         <template v-if="live.quota.quotaRemaining === null">{{ $t('liveAnalysis.quotaUnlimited') }}</template>
-        <template v-else>{{ $t('liveAnalysis.quotaRemaining', [live.quota.quotaRemaining]) }}</template>
-        · {{ $t('liveAnalysis.quotaHint') }}
+        <template v-else>
+          {{ $t('liveAnalysis.quotaRemaining', [live.quota.quotaRemaining]) }}
+          · {{ $t('liveAnalysis.quotaHint') }}
+        </template>
       </span>
       <span v-if="lastAnalyzed" class="la-muted">· {{ $t('liveAnalysis.lastAnalyzed', [lastAnalyzed]) }}</span>
       <span v-if="live.quotaExceeded" class="la-warn">· {{ $t('liveAnalysis.quotaExceeded') }}</span>
@@ -220,8 +264,23 @@ function fmtDate(iso) {
           <div class="la-score-grade">{{ live.result.grade }}</div>
         </div>
         <div class="la-kpi-list">
-          <div class="la-kpi"><span class="la-kpi-n">{{ live.result.pages_crawled }}</span>{{ $t('liveAnalysis.pagesCrawled') }}</div>
-          <div class="la-kpi"><span class="la-kpi-n">{{ live.result.cost }}</span>{{ $t('liveAnalysis.costUnits') }}</div>
+          <div class="la-kpi">
+            <span class="la-kpi-n">{{ live.result.pages_crawled }}</span>{{ $t('liveAnalysis.pagesCrawled') }}
+            <!-- Warum der Lauf endete: stop_reason ist die präzise Auskunft des
+                 Dienstes (Kontingent-Budget, Backstop, Auslastung, Abbruch).
+                 Ältere Ergebnisse ohne das Feld fallen auf reached_page_limit zurück. -->
+            <span v-if="stopNote" class="la-warn la-limit">· {{ stopNote }}</span>
+          </div>
+          <div class="la-kpi">
+            <span class="la-kpi-n">{{ live.result.cost }}</span>{{ $t('liveAnalysis.costUnits') }}
+            <span class="la-muted">· {{ $t('liveAnalysis.totalIssues', [live.result.summary?.total ?? 0]) }}</span>
+          </div>
+          <div v-if="live.result.external_links_found" class="la-kpi la-muted la-extlinks">
+            {{ $t('liveAnalysis.externalLinks', [live.result.external_links_found]) }}
+            <span v-if="live.result.external_links_truncated" class="la-warn">
+              · {{ $t('liveAnalysis.externalLinksTruncated') }}
+            </span>
+          </div>
           <div class="la-kpi la-sev-counts">
             <span v-for="sev in SEVERITIES" :key="sev" class="la-sev-count" :class="sevMeta(sev).cls">
               <v-icon :icon="sevMeta(sev).icon" size="14" />{{ live.bySeverity[sev] ?? 0 }}
@@ -230,29 +289,60 @@ function fmtDate(iso) {
         </div>
       </div>
 
+      <!-- Geprüfte Adresse (was der Dienst tatsächlich angefasst hat) -->
+      <div v-if="live.result.start_url" class="la-analyzed">
+        <v-icon icon="mdi-web" size="14" class="mr-1" />
+        <a :href="live.result.start_url" target="_blank" rel="noopener">{{ live.result.start_url }}</a>
+      </div>
+
       <!-- 4) Trend -->
       <div v-if="live.result.trend" class="la-section">
         <div v-if="live.result.trend.first_run" class="la-trend-first">
           <v-icon icon="mdi-flag-outline" size="16" class="mr-1" />{{ $t('liveAnalysis.trend.firstRun') }}
         </div>
-        <div v-else class="la-trend">
-          <span
-            class="la-delta"
-            :class="live.result.trend.delta_score >= 0 ? 'up' : 'down'"
-          >
-            <v-icon :icon="live.result.trend.delta_score >= 0 ? 'mdi-arrow-up' : 'mdi-arrow-down'" size="16" />
-            {{ live.result.trend.delta_score >= 0 ? '+' : '' }}{{ live.result.trend.delta_score }}
-          </span>
-          <span class="la-muted">
-            {{ $t('liveAnalysis.trend.previous', [live.result.trend.previous_score, live.result.trend.previous_grade]) }}
-          </span>
-          <span v-if="live.result.trend.resolved_count" class="la-trend-good">
-            {{ $t('liveAnalysis.trend.resolved', [live.result.trend.resolved_count]) }}
-          </span>
-          <span v-if="live.result.trend.new_count" class="la-trend-bad">
-            {{ $t('liveAnalysis.trend.new', [live.result.trend.new_count]) }}
-          </span>
-        </div>
+        <template v-else>
+          <div class="la-trend">
+            <span
+              class="la-delta"
+              :class="live.result.trend.delta_score >= 0 ? 'up' : 'down'"
+            >
+              <v-icon :icon="live.result.trend.delta_score >= 0 ? 'mdi-arrow-up' : 'mdi-arrow-down'" size="16" />
+              {{ live.result.trend.delta_score >= 0 ? '+' : '' }}{{ live.result.trend.delta_score }}
+            </span>
+            <span class="la-muted">
+              {{ $t('liveAnalysis.trend.previous', [live.result.trend.previous_score, live.result.trend.previous_grade]) }}
+              <template v-if="live.result.trend.previous_at">
+                ({{ new Date(live.result.trend.previous_at).toLocaleString() }})
+              </template>
+            </span>
+            <span v-if="live.result.trend.resolved_count" class="la-trend-good">
+              {{ $t('liveAnalysis.trend.resolved', [live.result.trend.resolved_count]) }}
+            </span>
+            <span v-if="live.result.trend.new_count" class="la-trend-bad">
+              {{ $t('liveAnalysis.trend.new', [live.result.trend.new_count]) }}
+            </span>
+          </div>
+
+          <!-- Welche Befunde seither behoben bzw. hinzugekommen sind -->
+          <div v-if="live.result.trend.resolved?.length || live.result.trend.new?.length" class="la-trend-lists">
+            <div v-if="live.result.trend.resolved?.length" class="la-trend-list">
+              <div class="la-trend-list-title la-trend-good">{{ $t('liveAnalysis.trend.resolvedTitle') }}</div>
+              <ul>
+                <li v-for="(x, i) in live.result.trend.resolved" :key="'r' + i">
+                  {{ x.title || x.type }}<span v-if="x.location" class="la-muted"> — {{ x.location }}</span>
+                </li>
+              </ul>
+            </div>
+            <div v-if="live.result.trend.new?.length" class="la-trend-list">
+              <div class="la-trend-list-title la-trend-bad">{{ $t('liveAnalysis.trend.newTitle') }}</div>
+              <ul>
+                <li v-for="(x, i) in live.result.trend.new" :key="'n' + i">
+                  {{ x.title || x.type }}<span v-if="x.location" class="la-muted"> — {{ x.location }}</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </template>
       </div>
 
       <!-- 5) Verlaufskurve -->
@@ -292,6 +382,20 @@ function fmtDate(iso) {
           </button>
         </div>
 
+        <!-- Typ-Filter aus summary.by_type (nach Häufigkeit absteigend) -->
+        <div v-if="typeCounts.length" class="la-sevfilters la-typefilters">
+          <button
+            v-for="tc in typeCounts"
+            :key="tc.type"
+            class="la-chip"
+            :class="{ active: live.typeFilter === tc.type }"
+            :title="tc.type"
+            @click="live.setTypeFilter(tc.type)"
+          >
+            {{ tc.type }} · {{ tc.count }}
+          </button>
+        </div>
+
         <div v-if="!live.filteredIssues.length" class="la-muted la-noissues">{{ $t('liveAnalysis.noIssues') }}</div>
         <ul v-else class="la-issues">
           <li v-for="(issue, i) in live.filteredIssues" :key="i" class="la-issue">
@@ -299,6 +403,13 @@ function fmtDate(iso) {
             <div class="la-issue-body">
               <div class="la-issue-title">{{ issue.title || issue.type }}</div>
               <div v-if="issueLocation(issue)" class="la-issue-loc">{{ issueLocation(issue) }}</div>
+              <!-- Zusatzfelder: bei toten Links steht hier die Quellseite (source)
+                   und der HTTP-Code (status) — das Wichtigste zum Beheben. -->
+              <div v-if="issueDetails(issue).length" class="la-issue-details">
+                <span v-for="d in issueDetails(issue)" :key="d.key" class="la-issue-detail">
+                  <span class="la-detail-k">{{ d.label }}:</span> {{ d.value }}
+                </span>
+              </div>
               <div v-if="issue.fix" class="la-issue-fix">{{ issue.fix }}</div>
             </div>
           </li>
@@ -311,6 +422,9 @@ function fmtDate(iso) {
         <div class="la-facts">
           <div v-if="live.result.server.ipv4?.length" class="la-fact">
             <span class="la-fact-k">{{ $t('liveAnalysis.server.ipv4') }}</span>{{ live.result.server.ipv4.join(', ') }}
+          </div>
+          <div v-if="live.result.server.ipv6?.length" class="la-fact">
+            <span class="la-fact-k">{{ $t('liveAnalysis.server.ipv6') }}</span>{{ live.result.server.ipv6.join(', ') }}
           </div>
           <div class="la-fact">
             <span class="la-fact-k">{{ $t('liveAnalysis.server.httpVersion') }}</span>HTTP/{{ live.result.server.http_version }}
@@ -326,6 +440,7 @@ function fmtDate(iso) {
           </div>
           <div class="la-fact">
             <span class="la-fact-k">{{ $t('liveAnalysis.server.wwwConsistent') }}</span><span :class="live.result.server.www_consistent ? 'la-yes' : 'la-no'">{{ live.result.server.www_consistent ? $t('liveAnalysis.yes') : $t('liveAnalysis.no') }}</span>
+            <span v-if="live.result.server.www_variant" class="la-muted"> ({{ live.result.server.www_variant }})</span>
           </div>
           <div v-if="live.result.server.cert" class="la-fact la-fact-wide">
             <span class="la-fact-k">{{ $t('liveAnalysis.server.cert') }}</span>
@@ -343,6 +458,9 @@ function fmtDate(iso) {
           </div>
           <div class="la-fact">
             <span class="la-fact-k">Sitemap</span><span :class="live.result.crawlability.sitemap ? 'la-yes' : 'la-no'">{{ live.result.crawlability.sitemap ? $t('liveAnalysis.yes') : $t('liveAnalysis.no') }}</span>
+            <span v-if="live.result.crawlability.sitemap_urls" class="la-muted">
+              · {{ $t('liveAnalysis.crawl.sitemapUrls', [live.result.crawlability.sitemap_urls]) }}
+            </span>
           </div>
           <template v-if="live.result.crawlability.page">
             <div class="la-fact la-fact-wide">
@@ -362,6 +480,9 @@ function fmtDate(iso) {
             </div>
             <div v-if="live.result.crawlability.page.third_party?.hosts?.length" class="la-fact la-fact-wide">
               <span class="la-fact-k">{{ $t('liveAnalysis.crawl.thirdParty') }}</span>{{ live.result.crawlability.page.third_party.hosts.join(', ') }}
+            </div>
+            <div v-if="live.result.crawlability.page.third_party?.categories?.length" class="la-fact la-fact-wide">
+              <span class="la-fact-k">{{ $t('liveAnalysis.crawl.thirdPartyCategories') }}</span>{{ live.result.crawlability.page.third_party.categories.join(', ') }}
             </div>
           </template>
         </div>
@@ -545,6 +666,27 @@ function fmtDate(iso) {
 .la-issue-loc { font-size: 0.78rem; color: var(--mint-text-muted); word-break: break-all; margin-top: 1px; }
 .la-issue-fix { font-size: 0.82rem; color: var(--mint-text); margin-top: 3px; }
 .la-noissues { padding: 8px 0; }
+
+/* Zusatzfelder eines Befunds (source, status, …) — kompakt unter dem Ort. */
+.la-issue-details { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 3px; }
+.la-issue-detail { font-size: 0.78rem; color: var(--mint-text); word-break: break-all; }
+.la-detail-k { color: var(--mint-text-muted); }
+
+.la-typefilters { margin-top: -4px; }
+.la-typefilters .la-chip { font-family: inherit; }
+
+/* Geprüfte Adresse + Umfangshinweise */
+.la-analyzed { margin: -8px 0 12px; font-size: 0.8rem; }
+.la-analyzed a { color: var(--mint-green); text-decoration: none; word-break: break-all; }
+.la-analyzed a:hover { text-decoration: underline; }
+.la-limit, .la-extlinks { font-size: 0.82rem; }
+
+/* Trend: Listen der behobenen/neuen Befunde */
+.la-trend-lists { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 12px; }
+.la-trend-list { flex: 1 1 260px; min-width: 0; }
+.la-trend-list-title { font-size: 0.82rem; font-weight: 600; margin-bottom: 4px; }
+.la-trend-list ul { list-style: none; margin: 0; padding: 0; }
+.la-trend-list li { font-size: 0.8rem; padding: 2px 0; word-break: break-all; }
 
 /* Fakten-Raster (server/crawlability) */
 .la-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px 18px; font-size: 0.84rem; }
