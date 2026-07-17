@@ -103,6 +103,18 @@ function issueLocation(issue) {
 
 const SEVERITIES = ['critical', 'warning', 'info']
 
+// Browser-Kennwerte in Anzeigereihenfolge: erst die drei Core Web Vitals, dann
+// die weiteren Ladekennwerte. Alle sechs liefert der chrome-sidecar; einzelne
+// können null sein (Lighthouse konnte sie nicht messen).
+const BROWSER_METRICS = [
+  { key: 'lcp_ms', unit: ' ms' },
+  { key: 'cls', unit: '' },
+  { key: 'tbt_ms', unit: ' ms' },
+  { key: 'fcp_ms', unit: ' ms' },
+  { key: 'si_ms', unit: ' ms' },
+  { key: 'tti_ms', unit: ' ms' },
+]
+
 // Export-Adressen (server-seitig, am JSON-Umschlag vorbei). HTML im neuen Tab
 // zum Drucken, CSV als Download.
 function exportUrl(format) {
@@ -354,18 +366,45 @@ function fmtDate(iso) {
       <!-- 9) Browser (Lighthouse aus dem chrome-sidecar) -->
       <div v-if="live.result.browser" class="la-section">
         <div class="la-section-title">{{ $t('liveAnalysis.browser.title') }}</div>
-        <div v-if="!live.result.browser.available" class="la-muted">{{ $t('liveAnalysis.browser.unavailable') }}</div>
+        <div v-if="!live.result.browser.available" class="la-muted">
+          {{ $t('liveAnalysis.browser.unavailable') }}
+          <span v-if="live.result.browser.error"> ({{ live.result.browser.error }})</span>
+        </div>
         <template v-else>
           <div class="la-scores">
             <div v-for="(val, key) in live.result.browser.scores" :key="key" class="la-bscore" :class="gradeClass(val >= 90 ? 'A' : val >= 50 ? 'C' : 'F')">
-              <div class="la-bscore-val">{{ val }}</div>
+              <div class="la-bscore-val">{{ val ?? '—' }}</div>
               <div class="la-bscore-label">{{ $t('liveAnalysis.browser.' + key) }}</div>
             </div>
           </div>
+
+          <!-- Kennwerte: Core Web Vitals zuerst, dann die weiteren Ladekennwerte -->
           <div v-if="live.result.browser.metrics" class="la-facts la-bmetrics">
-            <div class="la-fact"><span class="la-fact-k">LCP</span>{{ live.result.browser.metrics.lcp_ms }} ms</div>
-            <div class="la-fact"><span class="la-fact-k">CLS</span>{{ live.result.browser.metrics.cls }}</div>
-            <div class="la-fact"><span class="la-fact-k">TBT</span>{{ live.result.browser.metrics.tbt_ms }} ms</div>
+            <div v-for="m in BROWSER_METRICS" :key="m.key" class="la-fact">
+              <span class="la-fact-k">{{ $t('liveAnalysis.browser.metric.' + m.key) }}</span>
+              <template v-if="live.result.browser.metrics[m.key] !== null && live.result.browser.metrics[m.key] !== undefined">
+                {{ live.result.browser.metrics[m.key] }}{{ m.unit }}
+              </template>
+              <template v-else>—</template>
+            </div>
+          </div>
+
+          <!-- Konkrete Accessibility-Verstöße (der Befund nennt nur den Score) -->
+          <div v-if="live.result.browser.accessibility_failures?.length" class="la-a11y">
+            <div class="la-a11y-title">
+              {{ $t('liveAnalysis.browser.a11yTitle', [live.result.browser.accessibility_failures.length]) }}
+            </div>
+            <ul class="la-a11y-list">
+              <li v-for="f in live.result.browser.accessibility_failures" :key="f.id" class="la-a11y-item">
+                <span v-if="f.impact" class="la-a11y-impact" :class="'impact-' + f.impact">{{ f.impact }}</span>
+                <span class="la-a11y-text">{{ f.title || f.id }}</span>
+                <code class="la-a11y-id">{{ f.id }}</code>
+              </li>
+            </ul>
+          </div>
+
+          <div v-if="live.result.browser.lighthouse_version" class="la-muted la-lhver">
+            {{ $t('liveAnalysis.browser.version', [live.result.browser.lighthouse_version]) }}
           </div>
         </template>
       </div>
@@ -519,6 +558,36 @@ function fmtDate(iso) {
 .la-bscore-val { font-size: 1.3rem; font-weight: 700; }
 .la-bscore-label { font-size: 0.72rem; text-align: center; }
 .la-bmetrics { margin-top: 4px; }
+
+/* Konkrete Accessibility-Verstöße: kompakte Liste mit Wirkungsgrad. */
+.la-a11y { margin-top: 14px; }
+.la-a11y-title { font-size: 0.84rem; font-weight: 600; margin-bottom: 6px; color: var(--mint-text); }
+.la-a11y-list { list-style: none; margin: 0; padding: 0; }
+.la-a11y-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 0.82rem;
+  border-bottom: 1px solid var(--mint-border);
+}
+.la-a11y-impact {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  background: var(--mint-panel);
+  color: var(--mint-text-muted);
+}
+.la-a11y-impact.impact-critical { background: #fbeaea; color: #b03a2e; }
+.la-a11y-impact.impact-serious { background: #fbeaea; color: #b03a2e; }
+.la-a11y-impact.impact-moderate { background: #fdf2e0; color: #c47f17; }
+.la-a11y-impact.impact-minor { background: #eaf1f6; color: #3a7ca5; }
+.la-a11y-text { flex: 1 1 auto; color: var(--mint-text); }
+.la-a11y-id { flex: 0 0 auto; font-size: 0.72rem; color: var(--mint-text-muted); }
+.la-lhver { margin-top: 10px; font-size: 0.76rem; }
 
 .la-export { display: flex; gap: 10px; }
 

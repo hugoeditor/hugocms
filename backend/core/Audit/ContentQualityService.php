@@ -299,7 +299,7 @@ final class ContentQualityService
                 && ($block['type'] ?? '') === 'tool_use'
                 && ($block['name'] ?? '') === 'report_quality'
                 && is_array($block['input'] ?? null)) {
-                return $block['input'];
+                return self::normalizeVerdict($block['input']);
             }
         }
 
@@ -310,6 +310,13 @@ final class ContentQualityService
      * Werkzeugdefinition, die das Antwortschema erzwingt. Maschinenwerte
      * (rating, severity) sind stabil englisch; der Client übersetzt sie.
      *
+     * `strict` lässt die API das Schema durchsetzen, statt es dem Modell nur
+     * nahezulegen — ohne das kann die Antwort verschachtelte Felder flach oder
+     * als Zeichenkette liefern. Dafür verlangt die API auf jedem Objekt
+     * `additionalProperties: false` samt vollständigem `required`; Zahlen- und
+     * Längengrenzen (minimum/maximum) unterstützt sie nicht, die gehören in die
+     * Beschreibung.
+     *
      * @return array<string, mixed>
      */
     private static function toolDef(): array
@@ -317,14 +324,13 @@ final class ContentQualityService
         return [
             'name' => 'report_quality',
             'description' => 'Report the editorial/SEO quality assessment of the supplied page text.',
+            'strict' => true,
             'input_schema' => [
                 'type' => 'object',
                 'properties' => [
                     'score' => [
                         'type' => 'integer',
-                        'minimum' => 0,
-                        'maximum' => 100,
-                        'description' => 'Overall content quality 0 (poor) to 100 (excellent).',
+                        'description' => 'Overall content quality from 0 (poor) to 100 (excellent).',
                     ],
                     'summary' => ['type' => 'string', 'description' => 'One or two sentences summarising the assessment.'],
                     'readability' => [
@@ -334,6 +340,7 @@ final class ContentQualityService
                             'note' => ['type' => 'string'],
                         ],
                         'required' => ['rating', 'note'],
+                        'additionalProperties' => false,
                     ],
                     'findings' => [
                         'type' => 'array',
@@ -345,6 +352,7 @@ final class ContentQualityService
                                 'detail' => ['type' => 'string'],
                             ],
                             'required' => ['severity', 'title', 'detail'],
+                            'additionalProperties' => false,
                         ],
                     ],
                     'suggestions' => [
@@ -354,7 +362,70 @@ final class ContentQualityService
                     ],
                 ],
                 'required' => ['score', 'summary', 'readability', 'findings', 'suggestions'],
+                'additionalProperties' => false,
             ],
+        ];
+    }
+
+    /**
+     * Prüft und säubert das Modellergebnis, bevor es abgelegt wird.
+     *
+     * Nötig, weil die API `tool_use.input` nur bei Modellen mit `strict`-Support
+     * gegen das Schema prüft. Ohne diese Schranke landet eine misslungene Antwort
+     * (etwa `findings` als Zeichenkette statt Liste) unbemerkt im Speicher, und
+     * der Client iteriert die Zeichenkette zeichenweise.
+     *
+     * Fehlt die Grundstruktur, ist das Ergebnis unbrauchbar → Fehler statt
+     * Teilbericht: erneutes Prüfen liefert in aller Regel ein sauberes Verdikt.
+     * Einzelne unbrauchbare Befunde/Vorschläge werden nur verworfen.
+     *
+     * @param array<string, mixed> $input
+     * @return array<string, mixed>
+     */
+    private static function normalizeVerdict(array $input): array
+    {
+        $score = $input['score'] ?? null;
+        $summary = $input['summary'] ?? null;
+        $readability = $input['readability'] ?? null;
+        if (!is_numeric($score)
+            || !is_string($summary)
+            || trim($summary) === ''
+            || !is_array($readability)
+            || !in_array($readability['rating'] ?? null, ['good', 'medium', 'weak'], true)
+            || !is_array($input['findings'] ?? null)) {
+            throw new ApiException('EAI', 502, 'AI-REQUEST-FAILED', ['unbrauchbares Ergebnis']);
+        }
+
+        $findings = [];
+        foreach ($input['findings'] as $f) {
+            if (is_array($f)
+                && in_array($f['severity'] ?? null, ['hint', 'warning'], true)
+                && is_string($f['title'] ?? null)
+                && is_string($f['detail'] ?? null)) {
+                $findings[] = [
+                    'severity' => $f['severity'],
+                    'title' => $f['title'],
+                    'detail' => $f['detail'],
+                ];
+            }
+        }
+
+        $suggestions = [];
+        foreach (is_array($input['suggestions'] ?? null) ? $input['suggestions'] : [] as $s) {
+            if (is_string($s) && trim($s) !== '') {
+                $suggestions[] = $s;
+            }
+        }
+
+        return [
+            'score' => max(0, min(100, (int) $score)),
+            'summary' => $summary,
+            'readability' => [
+                'rating' => $readability['rating'],
+                'note' => is_string($readability['note'] ?? null) ? $readability['note'] : '',
+            ],
+            'findings' => $findings,
+            'suggestions' => $suggestions,
         ];
     }
 

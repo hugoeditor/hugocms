@@ -30,6 +30,15 @@ const help = useHelpStore()
 
 const entry = computed(() => store.current?.contentQuality ?? null)
 const verdict = computed(() => entry.value?.verdict ?? null)
+// Listenfelder nur übernehmen, wenn sie wirklich Listen sind: v-for liefe sonst
+// über die Zeichen einer Zeichenkette. Schützt die Anzeige vor Altberichten aus
+// misslungenen Modellantworten (das Backend prüft neue Berichte selbst).
+const findings = computed(() =>
+  Array.isArray(verdict.value?.findings) ? verdict.value.findings : [],
+)
+const suggestions = computed(() =>
+  Array.isArray(verdict.value?.suggestions) ? verdict.value.suggestions : [],
+)
 const audit = computed(() => store.current?.audit ?? null)
 const fileId = computed(() => store.current?.file?.fileId ?? null)
 // Schlüssel (sha1) des Berichts — Adresse für Speicher-/Verwaltungsbefehle.
@@ -43,7 +52,7 @@ const editSuggestions = ref([])
 const editInstruction = ref('')
 
 function startEdit() {
-  editSuggestions.value = [...(verdict.value?.suggestions ?? [])]
+  editSuggestions.value = [...suggestions.value]
   editInstruction.value = entry.value?.userInstruction ?? ''
   editing.value = true
 }
@@ -197,9 +206,9 @@ function openHelp(ruleId) {
           </p>
 
           <!-- Funde -->
-          <template v-if="verdict.findings?.length">
+          <template v-if="findings.length">
             <div class="text-subtitle-2 mb-2">{{ $t('contentQuality.findings') }}</div>
-            <div v-for="(f, i) in verdict.findings" :key="'f' + i" class="cq-finding mb-2">
+            <div v-for="(f, i) in findings" :key="'f' + i" class="cq-finding mb-2">
               <AuditSeverityChip :severity="f.severity" size="x-small" />
               <div class="ml-2">
                 <div class="font-weight-medium">{{ f.title }}</div>
@@ -241,8 +250,8 @@ function openHelp(ruleId) {
 
           <!-- Anzeige -->
           <template v-if="!editing">
-            <ul v-if="verdict.suggestions?.length" class="cq-suggestions">
-              <li v-for="(s, i) in verdict.suggestions" :key="'s' + i">{{ s }}</li>
+            <ul v-if="suggestions.length" class="cq-suggestions">
+              <li v-for="(s, i) in suggestions" :key="'s' + i">{{ s }}</li>
             </ul>
             <p v-else class="text-body-2 text-medium-emphasis">
               {{ $t('contentQuality.noSuggestions') }}
