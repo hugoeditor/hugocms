@@ -11,6 +11,8 @@ import { setEditorSaver, flushEditor } from '../util/editorBridge'
 import WysiwygEditor from './WysiwygEditor.vue'
 import FrontMatterPanel from './FrontMatterPanel.vue'
 import FrontMatterDialog from './FrontMatterDialog.vue'
+import LinkDialog from './LinkDialog.vue'
+import { htmlLink, markdownLink } from '../util/linkSnippet'
 import HugoConfigEditor from './settings/HugoConfigEditor.vue'
 import { useTransientError } from '../util/transientError'
 import { useConfirm } from '../util/confirm'
@@ -202,6 +204,25 @@ const language = ref(null)
 const editorRef = ref(null)
 const history = ref({ undo: false, redo: false })
 
+// --- Link im Quelltext einfügen -------------------------------------------
+// Nur für Dateien, deren Syntax einen Link kennt: HTML bekommt <a …>, Markdown
+// die Klammerform (der Titel wandert dort in die Anführungszeichen).
+const isHtml = computed(() => /\.(html?|xhtml)$/i.test(files.openFile?.name ?? ''))
+const supportsLink = computed(() => isMarkdown.value || isHtml.value)
+
+const linkDialog = ref(false)
+const linkInitial = ref({ href: '', text: '', title: '' })
+
+function openLinkDialog() {
+  linkInitial.value = { href: '', text: editorRef.value?.selectionText() ?? '', title: '' }
+  linkDialog.value = true
+}
+
+function insertLink(values) {
+  const snippet = isHtml.value ? htmlLink(values) : markdownLink(values)
+  editorRef.value?.insertSnippet(snippet)
+}
+
 const tools = computed(() => [
   {
     name: 'save',
@@ -229,6 +250,10 @@ const tools = computed(() => [
   { name: 'clipboardCut', icon: 'mdi-content-cut', label: t('editor.cut') },
   { name: 'clipboardCopy', icon: 'mdi-content-copy', label: t('editor.copy') },
   { name: 'clipboardPaste', icon: 'mdi-content-paste', label: t('editor.paste') },
+  ...(supportsLink.value ? [
+    { divider: true },
+    { name: 'insertLink', icon: 'mdi-link-variant', label: t('link.insertTitle'), action: openLinkDialog },
+  ] : []),
   { divider: true },
   { name: 'openSearchPanel', icon: 'mdi-magnify', label: t('editor.search') },
   { name: 'gotoLine', icon: 'mdi-format-list-numbered', label: t('editor.gotoLine') },
@@ -651,6 +676,9 @@ onBeforeUnmount(() => {
 
     <!-- Fehlendes Front Matter beim Öffnen ergänzen (Content-Dateien). -->
     <FrontMatterDialog v-model="fmDialog" :fields="fmFields" @apply="applyFrontMatter" />
+
+    <!-- Link in den Quelltext einfügen (HTML- oder Markdown-Syntax). -->
+    <LinkDialog v-model="linkDialog" :initial="linkInitial" @submit="insertLink" />
 
     <!-- Beim Speichern fragen, ob lastmod aktualisiert werden soll (nur, solange
          [user] update_lastmod nicht gesetzt ist). -->

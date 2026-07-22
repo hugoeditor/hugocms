@@ -972,6 +972,24 @@ export default {
     hr: 'Horizontal rule',
   },
 
+  // Link dialog (visual editor and source editor)
+  link: {
+    insertTitle: 'Insert link',
+    editTitle: 'Edit link',
+    url: 'Address (URL)',
+    urlRequired: 'Please enter an address.',
+    httpsHint: 'Put “https://” at the start of the address',
+    tldHint: 'Insert “{0}” at the cursor position',
+    text: 'Link text',
+    textHint: 'Leave empty to use the address as the text.',
+    title: 'Title (title attribute)',
+    titleHint: 'Shown as a tooltip when the pointer rests on the link.',
+    insert: 'Insert',
+    apply: 'Apply',
+    remove: 'Remove link',
+    cancel: 'Cancel',
+  },
+
   // Field names — referenced by the backend via {t: "fields.x"} parameters.
   fields: {
     username: 'Username',

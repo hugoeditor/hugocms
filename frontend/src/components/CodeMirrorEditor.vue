@@ -97,7 +97,27 @@ function replaceAll(text) {
   if (!view) return
   view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } })
 }
-defineExpose({ exec, replaceAll })
+// Der aktuell markierte Text (leer, wenn nichts markiert ist) — die
+// Werkzeugleiste belegt damit z. B. den Link-Text vor.
+function selectionText() {
+  if (!view) return ''
+  const { from, to } = view.state.selection.main
+  return from === to ? '' : view.state.sliceDoc(from, to)
+}
+
+// Ersetzt die Auswahl (oder fügt an der Cursorposition ein) und setzt den
+// Cursor hinter das Eingefügte.
+function insertSnippet(text) {
+  if (!view) return
+  const { from, to } = view.state.selection.main
+  view.dispatch({
+    changes: { from, to, insert: text },
+    selection: { anchor: from + text.length },
+  })
+  view.focus()
+}
+
+defineExpose({ exec, replaceAll, selectionText, insertSnippet })
 
 // Prüft YAML beim Tippen mit dem yaml-Parser; Fehler und Warnungen tragen
 // Byte-Bereiche (pos), die direkt als Diagnose-Spannen dienen.

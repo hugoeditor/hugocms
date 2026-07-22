@@ -2,12 +2,14 @@
 // Visueller Markdown-Editor (Stufe 4): TipTap mit Markdown-Round-Trip über
 // tiptap-markdown. Erhält/liefert den Markdown-BODY (ohne Front-Matter —
 // das schützt das EditorPanel davor, YAML durch den Editor zu schicken).
-import { computed, onBeforeUnmount, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
+import Link from '@tiptap/extension-link'
 import { Markdown } from 'tiptap-markdown'
 import { useAuthStore } from '../stores/auth'
+import LinkDialog from './LinkDialog.vue'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -78,16 +80,70 @@ function clipPaste(ed) {
     .catch(() => emit('clipboard-denied'))
 }
 
+// Markdown-Links tragen optional einen Titel ([Text](url "Titel")), aus dem
+// Hugo das title-Attribut erzeugt. Die Link-Erweiterung kennt ihn nicht von
+// Haus aus — ohne dieses Attribut ginge er beim Round-Trip verloren.
+const MarkdownLink = Link.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      title: { default: null },
+    }
+  },
+})
+
 const editor = useEditor({
   content: props.modelValue,
   extensions: [
     StarterKit,
+    // Zurückhaltend konfiguriert: keine Automatik, die aus getipptem oder
+    // eingefügtem Text ungefragt einen Link macht — Links entstehen nur über
+    // den Dialog. openOnClick würde im Editor zur Zielseite navigieren.
+    MarkdownLink.configure({ openOnClick: false, autolink: false, linkOnPaste: false }),
     // html:false — vorhandenes Inline-HTML wird nicht gerendert, sondern
     // als Text erhalten; Hugo-Markdown bleibt so unangetastet wie möglich.
     Markdown.configure({ html: false, breaks: false }),
   ],
   onUpdate: ({ editor: ed }) => emit('update:modelValue', currentMarkdown(ed)),
 })
+
+// --- Link einfügen/bearbeiten ---------------------------------------------
+const linkDialog = ref(false)
+const linkInitial = ref({ href: '', text: '', title: '' })
+const linkExisting = ref(false)
+
+function openLinkDialog(ed) {
+  // Steht der Cursor in einem Link, dessen ganze Spanne auswählen — so trägt
+  // der Dialog den vorhandenen Text und das Übernehmen ersetzt den ganzen Link.
+  const inLink = ed.isActive('link')
+  if (inLink) ed.chain().focus().extendMarkRange('link').run()
+  const attrs = ed.getAttributes('link')
+  linkExisting.value = inLink
+  linkInitial.value = {
+    href: attrs.href ?? '',
+    title: attrs.title ?? '',
+    text: selectionText(ed),
+  }
+  linkDialog.value = true
+}
+
+function applyLink({ href, text, title }) {
+  const ed = editor.value
+  if (!ed) return
+  const attrs = { href, title: title === '' ? null : title }
+  const label = text === '' ? href : text
+  ed.chain()
+    .focus()
+    .extendMarkRange('link')
+    .insertContent({ type: 'text', text: label, marks: [{ type: 'link', attrs }] })
+    // Ohne das trüge der direkt danach getippte Text den Link weiter.
+    .unsetMark('link')
+    .run()
+}
+
+function removeLink() {
+  editor.value?.chain().focus().extendMarkRange('link').unsetLink().run()
+}
 
 // Externe Änderungen (Moduswechsel) übernehmen, ohne Cursor-Schleifen.
 watch(
@@ -137,6 +193,9 @@ const tools = computed(() => {
     { icon: 'mdi-format-header-2', label: t('wysiwyg.h2'), active: ed.isActive('heading', { level: 2 }), run: () => ed.chain().focus().toggleHeading({ level: 2 }).run() },
     { icon: 'mdi-format-header-3', label: t('wysiwyg.h3'), active: ed.isActive('heading', { level: 3 }), run: () => ed.chain().focus().toggleHeading({ level: 3 }).run() },
     { divider: true },
+    { icon: 'mdi-link-variant', label: ed.isActive('link') ? t('link.editTitle') : t('link.insertTitle'), active: ed.isActive('link'), run: () => openLinkDialog(ed) },
+    { icon: 'mdi-link-variant-off', label: t('link.remove'), active: false, disabled: !ed.isActive('link'), run: removeLink },
+    { divider: true },
     { icon: 'mdi-format-list-bulleted', label: t('wysiwyg.bulletList'), active: ed.isActive('bulletList'), run: () => ed.chain().focus().toggleBulletList().run() },
     { icon: 'mdi-format-list-numbered', label: t('wysiwyg.orderedList'), active: ed.isActive('orderedList'), run: () => ed.chain().focus().toggleOrderedList().run() },
     { icon: 'mdi-format-quote-close', label: t('wysiwyg.blockquote'), active: ed.isActive('blockquote'), run: () => ed.chain().focus().toggleBlockquote().run() },
@@ -171,6 +230,15 @@ const tools = computed(() => {
     </div>
 
     <EditorContent :editor="editor" class="wysiwyg-content nemo-scroll" />
+
+    <!-- Link im Markdown-Body: Adresse, Text und Titel (siehe MarkdownLink). -->
+    <LinkDialog
+      v-model="linkDialog"
+      :initial="linkInitial"
+      :can-remove="linkExisting"
+      @submit="applyLink"
+      @remove="removeLink"
+    />
   </div>
 </template>
 
@@ -241,6 +309,11 @@ const tools = computed(() => {
 .wysiwyg-content :deep(.ProseMirror h3) {
   margin: 1.1em 0 0.4em;
   line-height: 1.25;
+}
+.wysiwyg-content :deep(.ProseMirror a) {
+  color: var(--mint-green-soft-text);
+  text-decoration: underline;
+  cursor: text; /* openOnClick ist aus — der Link wird bearbeitet, nicht gefolgt */
 }
 .wysiwyg-content :deep(.ProseMirror blockquote) {
   border-left: 3px solid var(--mint-green);

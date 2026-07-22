@@ -975,6 +975,24 @@ export default {
     hr: 'Trennlinie',
   },
 
+  // Link-Dialog (visueller Editor und Quelltext-Editor)
+  link: {
+    insertTitle: 'Link einfügen',
+    editTitle: 'Link bearbeiten',
+    url: 'Adresse (URL)',
+    urlRequired: 'Bitte eine Adresse angeben.',
+    httpsHint: '„https://“ an den Anfang der Adresse setzen',
+    tldHint: '„{0}“ an der Cursorposition einfügen',
+    text: 'Link-Text',
+    textHint: 'Leer lassen, um die Adresse als Text zu verwenden.',
+    title: 'Titel (title-Attribut)',
+    titleHint: 'Erscheint als Kurzhinweis, wenn der Zeiger auf dem Link steht.',
+    insert: 'Einfügen',
+    apply: 'Übernehmen',
+    remove: 'Link entfernen',
+    cancel: 'Abbrechen',
+  },
+
   // Feldnamen — vom Backend über Parameter {t: "fields.x"} referenziert.
   fields: {
     username: 'Benutzername',
