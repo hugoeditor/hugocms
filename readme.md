@@ -7,6 +7,10 @@ Auf DE MACHEN!!
 > [hugoeditor/hugocms (main)](https://github.com/hugoeditor/hugocms/tree/main).
 > Die getestete und freigegebene Fassung liegt fertig gebaut im Repo
 > [hugocms-release](https://github.com/hugoeditor/hugocms-release).
+>
+> ⚠️ **Der Code hier ist unsicher und wird nicht mehr gepflegt.** Von einem
+> weiteren Einsatz wird dringend abgeraten — bestehende Installationen sollten
+> auf die neue Fassung umgestellt werden.
 
 > **Outdated.** This branch (`master`) describes the old version of HugoCMS.
 > HugoCMS has been rewritten from scratch; the new default branch is **`main`**.
@@ -14,6 +18,10 @@ Auf DE MACHEN!!
 > [hugoeditor/hugocms (main)](https://github.com/hugoeditor/hugocms/tree/main).
 > The tested and released version is available pre-built in the
 > [hugocms-release](https://github.com/hugoeditor/hugocms-release) repository.
+>
+> ⚠️ **The code here is insecure and no longer maintained.** Its continued use
+> is strongly discouraged — existing installations should be migrated to the
+> new version.
 
 a standalone CMS with online editor to write Hugo compatible content using Markdown and HTML.
 
