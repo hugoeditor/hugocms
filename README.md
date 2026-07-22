@@ -21,6 +21,13 @@ Mounts erreichbar sind, wird je Webseite über INI-Dateien festgelegt.
 > Mandantenfähigkeit und der Auslieferungsweg (`packaging.sh` / `install.sh`)
 > stehen bereits.
 
+> **Hinweis: Rolling Release.** HugoCMS erscheint fortlaufend, ohne feste
+> Versionssprünge. Die jeweils getestete und freigegebene Fassung liegt
+> **fertig gebaut** im Repo
+> [hugocms-release](https://github.com/hugoeditor/hugocms-release) und ist von
+> dort direkt einsatzfähig. Das vorliegende Repo enthält alles, was zum
+> Entwickeln der App und des Backends von HugoCMS gebraucht wird.
+
 ## Architektur
 
 ```
