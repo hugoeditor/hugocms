@@ -10,6 +10,7 @@ import Link from '@tiptap/extension-link'
 import { Markdown } from 'tiptap-markdown'
 import { useAuthStore } from '../stores/auth'
 import LinkDialog from './LinkDialog.vue'
+import { domainFromText } from '../util/linkSnippet'
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
@@ -111,6 +112,22 @@ const editor = useEditor({
 const linkDialog = ref(false)
 const linkInitial = ref({ href: '', text: '', title: '' })
 const linkExisting = ref(false)
+const linkExternal = ref(false)
+
+// Externer Link: die Adresse steht schon auf „https://“. Der markierte Text
+// füllt alle drei Felder — in der Adresse nur so weit, wie seine Zeichen in
+// einem Rechnernamen zulässig sind (siehe domainFromText).
+function openExternalLinkDialog(ed) {
+  const selection = selectionText(ed).trim()
+  linkExisting.value = false
+  linkExternal.value = true
+  linkInitial.value = {
+    href: 'https://' + domainFromText(selection),
+    text: selection,
+    title: selection,
+  }
+  linkDialog.value = true
+}
 
 function openLinkDialog(ed) {
   // Steht der Cursor in einem Link, dessen ganze Spanne auswählen — so trägt
@@ -119,6 +136,7 @@ function openLinkDialog(ed) {
   if (inLink) ed.chain().focus().extendMarkRange('link').run()
   const attrs = ed.getAttributes('link')
   linkExisting.value = inLink
+  linkExternal.value = false
   linkInitial.value = {
     href: attrs.href ?? '',
     title: attrs.title ?? '',
@@ -194,6 +212,7 @@ const tools = computed(() => {
     { icon: 'mdi-format-header-3', label: t('wysiwyg.h3'), active: ed.isActive('heading', { level: 3 }), run: () => ed.chain().focus().toggleHeading({ level: 3 }).run() },
     { divider: true },
     { icon: 'mdi-link-variant', label: ed.isActive('link') ? t('link.editTitle') : t('link.insertTitle'), active: ed.isActive('link'), run: () => openLinkDialog(ed) },
+    { icon: 'mdi-open-in-new', label: t('link.insertExternalTitle'), active: false, run: () => openExternalLinkDialog(ed) },
     { icon: 'mdi-link-variant-off', label: t('link.remove'), active: false, disabled: !ed.isActive('link'), run: removeLink },
     { divider: true },
     { icon: 'mdi-format-list-bulleted', label: t('wysiwyg.bulletList'), active: ed.isActive('bulletList'), run: () => ed.chain().focus().toggleBulletList().run() },
@@ -236,6 +255,7 @@ const tools = computed(() => {
       v-model="linkDialog"
       :initial="linkInitial"
       :can-remove="linkExisting"
+      :external="linkExternal"
       @submit="applyLink"
       @remove="removeLink"
     />

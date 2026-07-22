@@ -975,6 +975,7 @@ export default {
   // Link dialog (visual editor and source editor)
   link: {
     insertTitle: 'Insert link',
+    insertExternalTitle: 'Insert external link',
     editTitle: 'Edit link',
     url: 'Address (URL)',
     urlRequired: 'Please enter an address.',
@@ -984,6 +985,7 @@ export default {
     textHint: 'Leave empty to use the address as the text.',
     title: 'Title (title attribute)',
     titleHint: 'Shown as a tooltip when the pointer rests on the link.',
+    titleSuggest: 'Suggest a title from the address',
     insert: 'Insert',
     apply: 'Apply',
     remove: 'Remove link',

@@ -978,6 +978,7 @@ export default {
   // Link-Dialog (visueller Editor und Quelltext-Editor)
   link: {
     insertTitle: 'Link einfügen',
+    insertExternalTitle: 'Externen Link einfügen',
     editTitle: 'Link bearbeiten',
     url: 'Adresse (URL)',
     urlRequired: 'Bitte eine Adresse angeben.',
@@ -987,6 +988,7 @@ export default {
     textHint: 'Leer lassen, um die Adresse als Text zu verwenden.',
     title: 'Titel (title-Attribut)',
     titleHint: 'Erscheint als Kurzhinweis, wenn der Zeiger auf dem Link steht.',
+    titleSuggest: 'Titel aus der Adresse vorschlagen',
     insert: 'Einfügen',
     apply: 'Übernehmen',
     remove: 'Link entfernen',

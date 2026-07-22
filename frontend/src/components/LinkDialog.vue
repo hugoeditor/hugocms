@@ -6,6 +6,7 @@
 // Markdown als [Text](Adresse "Titel") — Hugo macht daraus dasselbe Attribut.
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { suggestLinkTitle } from '../util/linkSnippet'
 
 // Endungen, die per Knopfdruck an der Cursorposition landen. Die
 // Länderendungen richten sich nach der Oberflächensprache — für die deutsche
@@ -20,6 +21,9 @@ const props = defineProps({
   initial: { type: Object, default: () => ({}) },
   // Bestehenden Link entfernen anbieten (nur beim Bearbeiten sinnvoll).
   canRemove: { type: Boolean, default: false },
+  // Externer Link: nur für die Überschrift des Dialogs; die Vorbelegung der
+  // Felder bringt der Aufrufer mit.
+  external: { type: Boolean, default: false },
 })
 const emit = defineEmits(['update:modelValue', 'submit', 'remove'])
 const { t, locale } = useI18n()
@@ -75,6 +79,18 @@ watch(
 
 const hrefError = computed(() => (touched.value && href.value.trim() === '' ? t('link.urlRequired') : ''))
 
+const heading = computed(() => {
+  if (props.canRemove) return t('link.editTitle')
+  return props.external ? t('link.insertExternalTitle') : t('link.insertTitle')
+})
+
+// Titelvorschlag aus der Adresse — bewusst nur auf Zuruf, damit ein selbst
+// eingetragener Titel nicht überschrieben wird.
+function suggestTitle() {
+  const suggestion = suggestLinkTitle(href.value)
+  if (suggestion !== '') title.value = suggestion
+}
+
 function close() {
   emit('update:modelValue', false)
 }
@@ -103,13 +119,11 @@ function remove() {
     @update:model-value="(v) => { if (!v) close() }"
   >
     <v-card>
-      <v-card-title class="text-h6">
-        {{ canRemove ? t('link.editTitle') : t('link.insertTitle') }}
-      </v-card-title>
+      <v-card-title class="text-h6">{{ heading }}</v-card-title>
       <v-card-text>
         <!-- Schnelleingabe: das Schema an den Anfang, die Endungen an die
              Cursorposition. -->
-        <div class="d-flex flex-wrap ga-2 mb-2">
+        <div class="d-flex flex-wrap ga-2 mb-5">
           <v-btn
             size="x-small"
             variant="tonal"
@@ -153,6 +167,8 @@ function remove() {
           class="mb-3"
           @keyup.enter="submit"
         />
+        <!-- Der Vorschlag stammt allein aus der Adresse (die Zielseite wird
+             nicht abgerufen) und ist als Ausgangspunkt gedacht. -->
         <v-text-field
           v-model="title"
           :label="t('link.title')"
@@ -161,7 +177,22 @@ function remove() {
           density="compact"
           persistent-hint
           @keyup.enter="submit"
-        />
+        >
+          <template #append-inner>
+            <v-tooltip :text="t('link.titleSuggest')" location="bottom">
+              <template #activator="{ props: tip }">
+                <v-btn
+                  v-bind="tip"
+                  icon="mdi-lightbulb-auto-outline"
+                  variant="text"
+                  size="x-small"
+                  :aria-label="t('link.titleSuggest')"
+                  @click="suggestTitle"
+                />
+              </template>
+            </v-tooltip>
+          </template>
+        </v-text-field>
       </v-card-text>
       <v-card-actions>
         <v-btn v-if="canRemove" variant="text" color="warning" @click="remove">

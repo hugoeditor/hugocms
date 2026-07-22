@@ -12,7 +12,7 @@ import WysiwygEditor from './WysiwygEditor.vue'
 import FrontMatterPanel from './FrontMatterPanel.vue'
 import FrontMatterDialog from './FrontMatterDialog.vue'
 import LinkDialog from './LinkDialog.vue'
-import { htmlLink, markdownLink } from '../util/linkSnippet'
+import { htmlLink, markdownLink, domainFromText } from '../util/linkSnippet'
 import HugoConfigEditor from './settings/HugoConfigEditor.vue'
 import { useTransientError } from '../util/transientError'
 import { useConfirm } from '../util/confirm'
@@ -212,9 +212,25 @@ const supportsLink = computed(() => isMarkdown.value || isHtml.value)
 
 const linkDialog = ref(false)
 const linkInitial = ref({ href: '', text: '', title: '' })
+const linkExternal = ref(false)
 
 function openLinkDialog() {
+  linkExternal.value = false
   linkInitial.value = { href: '', text: editorRef.value?.selectionText() ?? '', title: '' }
+  linkDialog.value = true
+}
+
+// Externer Link: die Adresse steht schon auf „https://“. Der markierte Text
+// füllt alle drei Felder — in der Adresse nur so weit, wie seine Zeichen in
+// einem Rechnernamen zulässig sind (siehe domainFromText).
+function openExternalLinkDialog() {
+  const selection = (editorRef.value?.selectionText() ?? '').trim()
+  linkExternal.value = true
+  linkInitial.value = {
+    href: 'https://' + domainFromText(selection),
+    text: selection,
+    title: selection,
+  }
   linkDialog.value = true
 }
 
@@ -253,6 +269,7 @@ const tools = computed(() => [
   ...(supportsLink.value ? [
     { divider: true },
     { name: 'insertLink', icon: 'mdi-link-variant', label: t('link.insertTitle'), action: openLinkDialog },
+    { name: 'insertExternalLink', icon: 'mdi-open-in-new', label: t('link.insertExternalTitle'), action: openExternalLinkDialog },
   ] : []),
   { divider: true },
   { name: 'openSearchPanel', icon: 'mdi-magnify', label: t('editor.search') },
@@ -678,7 +695,7 @@ onBeforeUnmount(() => {
     <FrontMatterDialog v-model="fmDialog" :fields="fmFields" @apply="applyFrontMatter" />
 
     <!-- Link in den Quelltext einfügen (HTML- oder Markdown-Syntax). -->
-    <LinkDialog v-model="linkDialog" :initial="linkInitial" @submit="insertLink" />
+    <LinkDialog v-model="linkDialog" :initial="linkInitial" :external="linkExternal" @submit="insertLink" />
 
     <!-- Beim Speichern fragen, ob lastmod aktualisiert werden soll (nur, solange
          [user] update_lastmod nicht gesetzt ist). -->
