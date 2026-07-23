@@ -159,6 +159,17 @@ export default {
       'Verzeichnisse (eines je Zeile), die der SEO-Bericht nur bei DIESER Webseite überspringt — für Ordner, die es nur hier gibt. Was für alle Webseiten gelten soll, gehört in die Konfiguration.',
     excludeFilesHint:
       'Einzelne Dateien (public-relativer Pfad, eine je Zeile), die der Bericht nur bei dieser Webseite überspringt. Anders als oben werden hier ganze Dateipfade exakt verglichen, keine Verzeichnisse.',
+    improveSection: 'Automatische Verbesserung',
+    improveHint:
+      'Der Cron-Verbesserer legt seine Ergebnisse sonst als Entwurf zur Freigabe ab. Im Automatikmodus terminiert er jeden Entwurf gleich selbst — zu einem zufälligen Zeitpunkt im Tagesfenster. So gehen verbesserte Seiten verteilt live statt alle auf einmal.',
+    improveAuto: 'Entwürfe automatisch terminieren',
+    improveWindowStart: 'Fenster ab',
+    improveWindowEnd: 'Fenster bis',
+    improveWindowInvalid: 'Das Ende muss nach dem Beginn liegen — sonst gilt wieder 07:00 bis 16:00.',
+    improvePerDay: 'Seiten pro Tag',
+    improvePerDayHint: 'Höchstzahl der Freigaben je Tag (1–50). Das Fenster wird in ebenso viele Abschnitte geteilt; je Abschnitt geht eine Seite live.',
+    improvePerDayCapped: 'Das Fenster umfasst nur {0} Minuten — mehr als {1} Freigaben pro Tag haben darin keinen Platz. Der Rest wandert auf die Folgetage.',
+    timeInvalid: 'Bitte als Uhrzeit angeben, z. B. 07:00.',
   },
 
   // Hinweise anstelle gesperrter Pro-Funktionen. Sie werden nicht ausgeblendet,
@@ -971,6 +982,9 @@ export default {
     requeue: 'Wieder aufnehmen',
     filterAll: 'Alle',
     filterToImprove: 'Zu verbessern',
+    autoSchedule: 'Automatisch terminieren',
+    autoScheduleOn: 'Der Cron verbessert diese Seiten und terminiert jeden Entwurf selbst — bis zu {0} pro Tag, zufällig zwischen {1} und {2} Uhr.',
+    autoScheduleOff: 'Der Cron legt seine Ergebnisse als Entwurf zur Freigabe ab. Zeitfenster und Tagesmenge stehen in den Projekteinstellungen.',
     filterImproved: 'Verbessert',
     deleteTitle: 'Prüfergebnis löschen',
     deleteConfirm: 'Das gespeicherte Ergebnis für „{0}“ löschen?',

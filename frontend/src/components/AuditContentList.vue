@@ -7,6 +7,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuditContentStore } from '../stores/auditContent'
 import { useAssistantStore } from '../stores/assistant'
+import { useAuthStore } from '../stores/auth'
 import { useConfirm } from '../util/confirm'
 import { errorText } from '../i18n/apiMessage'
 import { useTransientError } from '../util/transientError'
@@ -14,8 +15,24 @@ import { useTransientError } from '../util/transientError'
 const { t, locale } = useI18n()
 const store = useAuditContentStore()
 const assistant = useAssistantStore()
+const auth = useAuthStore()
 const confirm = useConfirm()
 const error = useTransientError()
+
+// Automatische Terminierung ein-/ausschalten. Der Schalter schreibt nur dieses
+// eine Feld; Fenster und Tagesmenge bleiben, wie sie in den Projekteinstellungen
+// stehen.
+const autoBusy = ref(false)
+async function toggleAuto(value) {
+  autoBusy.value = true
+  try {
+    await auth.setImproveAuto(!!value)
+  } catch (e) {
+    error.value = errorText(t, e)
+  } finally {
+    autoBusy.value = false
+  }
+}
 
 // Abgeleitete Sichten: alle / zu verbessern (Score < 100 und noch nicht
 // verbessert) / bereits verbessert. Kombiniert mit dem Namensfilter.
@@ -154,6 +171,32 @@ async function remove(page) {
         />
       </div>
 
+      <!-- Automatikmodus des Cron-Verbesserers: Er arbeitet genau diese Liste
+           ab, deshalb steht der Schalter hier. Fenster und Tagesmenge werden in
+           den Projekteinstellungen festgelegt. -->
+      <div v-if="mode === 'toImprove'" class="cql-auto">
+        <v-switch
+          :model-value="auth.improve.auto"
+          :label="$t('contentQuality.autoSchedule')"
+          :loading="autoBusy"
+          :disabled="autoBusy"
+          color="primary"
+          density="compact"
+          hide-details
+          @update:model-value="toggleAuto"
+        />
+        <p class="cql-auto-hint">
+          <!-- effectivePerDay statt perDay: Passt die eingestellte Menge nicht
+               ins Fenster, ist die tatsächliche kleiner — hier soll die wahre
+               Zahl stehen, nicht die gewünschte. -->
+          {{ auth.improve.auto
+            ? $t('contentQuality.autoScheduleOn', [
+                auth.improve.effectivePerDay ?? auth.improve.perDay,
+                auth.improve.windowStart, auth.improve.windowEnd])
+            : $t('contentQuality.autoScheduleOff') }}
+        </p>
+      </div>
+
       <div v-if="!filtered.length" class="nemo-empty">
         <v-icon icon="mdi-file-search-outline" size="56" class="nemo-empty-icon" />
         <p>{{ $t('contentQuality.noMatches') }}</p>
@@ -262,6 +305,17 @@ async function remove(page) {
   padding: 8px 10px;
   background: var(--mint-content);
   border-bottom: 1px solid var(--mint-border);
+}
+/* Schalter für die automatische Terminierung — sitzt unter der Filterleiste,
+   direkt über der Liste, die der Cron abarbeitet. */
+.cql-auto {
+  padding: 4px 10px 8px;
+  border-bottom: 1px solid var(--mint-border);
+}
+.cql-auto-hint {
+  font-size: 0.78rem;
+  opacity: 0.7;
+  margin: 2px 0 0;
 }
 .cql-list { background: transparent; }
 .cql-row { cursor: pointer; border-bottom: 1px solid var(--mint-border); }

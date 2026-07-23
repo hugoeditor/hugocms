@@ -159,6 +159,17 @@ export default {
       'Directories (one per line) that the SEO report skips for THIS website only — for folders that exist only here. Anything that should apply to all websites belongs in the configuration.',
     excludeFilesHint:
       'Individual files (public-relative path, one per line) that the report skips for this website only. Unlike above, whole file paths are matched exactly, not directories.',
+    improveSection: 'Automatic improvement',
+    improveHint:
+      'Otherwise the cron improver leaves its results as drafts awaiting approval. In automatic mode it schedules every draft itself — at a random time within the daily window. Improved pages then go live spread out instead of all at once.',
+    improveAuto: 'Schedule drafts automatically',
+    improveWindowStart: 'Window from',
+    improveWindowEnd: 'Window until',
+    improveWindowInvalid: 'The end must be after the start — otherwise 07:00 to 16:00 applies again.',
+    improvePerDay: 'Pages per day',
+    improvePerDayHint: 'Maximum releases per day (1–50). The window is split into that many sections; one page goes live per section.',
+    improvePerDayCapped: 'The window spans only {0} minutes — more than {1} releases per day do not fit into it. The rest moves to the following days.',
+    timeInvalid: 'Please enter a time, e.g. 07:00.',
   },
 
   // Notices shown in place of locked Pro features. They are not hidden, so it
@@ -968,6 +979,9 @@ export default {
     requeue: 'Re-queue',
     filterAll: 'All',
     filterToImprove: 'To improve',
+    autoSchedule: 'Schedule automatically',
+    autoScheduleOn: 'The cron improves these pages and schedules every draft itself — up to {0} per day, at random between {1} and {2}.',
+    autoScheduleOff: 'The cron leaves its results as drafts awaiting approval. Time window and daily amount are in the project settings.',
     filterImproved: 'Improved',
     deleteTitle: 'Delete check result',
     deleteConfirm: 'Delete the stored result for “{0}”?',

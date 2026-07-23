@@ -1,0 +1,213 @@
+# Cron-Jobs einrichten
+
+In diesem Verzeichnis liegen drei Skripte, die HugoCMS über die Kommandozeile
+ausführt. Sie sind **nur über die CLI aufrufbar** — ein Aufruf über den Browser
+endet mit HTTP 403. Eine Web-Anmeldung gibt es dabei nicht; wer das Skript
+starten darf, entscheidet der Server.
+
+| Skript | Zweck | Pro-Lizenz |
+|---|---|---|
+| `cron-build.php` | Baut die Webseite mit Hugo und veröffentlicht fällige Freigaben | nein |
+| `cron-improve.php` | Verbessert geprüfte Content-Dateien per KI | ja |
+| `cron-healthcheck.php` | SEO-Gesundheitscheck, meldet Probleme per E-Mail | ja |
+
+## Gemeinsame Voraussetzungen
+
+**PHP-Pfad.** In der Crontab immer den vollen Pfad zum PHP-Programm angeben;
+`php` allein steht dort meist nicht im Suchpfad. Auf vielen Shared Hostern gibt
+es eine eigene CLI-Version (`/usr/bin/php8.3`, `/opt/php/8.3/bin/php` o. ä.).
+
+**`--host` bei den Pro-Skripten.** Die Pro-Lizenz ist an die Domain gebunden und
+wird sonst aus `$_SERVER['HTTP_HOST']` gelesen — im CLI gibt es keinen Host.
+`cron-improve.php` und `cron-healthcheck.php` brauchen deshalb zwingend
+`--host=example.com` mit genau der Domain, für die der Lizenzschlüssel
+ausgestellt wurde. Fehlt sie, endet der Lauf mit Code 2.
+
+**`--mounts` bei mehreren Webseiten.** Ohne Angabe gilt `backend/mounts.ini`.
+Betreibt eine Installation mehrere Webseiten, hat jede ihre eigene Datei unter
+`backend/mounts/<hash>.ini` — dort stehen Mounts, `[hugo]`, `[license]` und die
+Einstellungen der automatischen Verbesserung. Der Dateiname ist ein Hash aus
+Domain und Endpunkt-Verzeichnis; am einfachsten liest man ihn aus dem
+vorhandenen Verzeichnis ab (`ls backend/mounts/`). **Je Webseite ein eigener
+Crontab-Eintrag** mit dem passenden `--mounts` und `--host`.
+
+**Protokoll.** Alle drei Skripte erzwingen `logLevel=info`, damit auch
+erfolgreiche Läufe in `backend/log/hugocms.log` erscheinen — ein stiller Cron
+bliebe sonst unsichtbar. Im Systemstatus der Anwendung sind die Einträge unter
+„Protokoll" einsehbar; dort zeigt der Abschnitt „Cron-Aufgaben" außerdem, wann
+jede Aufgabe zuletzt lief und ob sie überfällig ist.
+
+**Exit-Codes.** `0` Erfolg · `1` Laufzeitfehler · `2` Aufruffehler (fehlende
+Konfiguration, fehlendes `--host`).
+
+## 1. `cron-build.php` — bauen und veröffentlichen
+
+Baut die Webseite wie der „Veröffentlichen"-Knopf. Vor jedem Build werden
+fällige terminierte Freigaben in ihre Live-Datei geschrieben.
+
+```cron
+*/15 * * * *  /usr/bin/php /pfad/backend/cli/cron-build.php --mounts=/pfad/backend/mounts.ini --quiet
+```
+
+Optionen: `--mounts=<datei>`, `--quiet` (bei Erfolg keine Ausgabe).
+
+Hugo läuft bewusst **ohne** `--buildFuture` und `--buildDrafts`: Seiten mit
+künftigem `publishDate` oder `draft: true` bleiben unveröffentlicht. Minify,
+Zielordner und `--cleanDestinationDir` stammen aus der `[hugo]`-Konfiguration.
+
+> **Der Build-Takt bestimmt die Genauigkeit jeder Terminierung.** Eine Freigabe,
+> die für 08:22 Uhr vorgemerkt ist, geht erst beim nächsten Build **nach** diesem
+> Zeitpunkt online. Bei einem stündlichen Build kann das bis zu eine Stunde
+> dauern, bei einem täglichen bis zu einem Tag. Alle 15 Minuten ist ein guter
+> Kompromiss.
+
+## 2. `cron-improve.php` — automatische Verbesserung
+
+Nimmt sich die nächsten geprüften Content-Dateien mit einer Bewertung unter 100,
+die noch nicht verbessert wurden, und lässt den KI-Assistenten sie überarbeiten.
+
+```cron
+0 3 * * *  /usr/bin/php /pfad/backend/cli/cron-improve.php --host=example.com --limit=3
+```
+
+Optionen:
+
+- `--host=<domain>` — **Pflicht** (Lizenzbindung)
+- `--mounts=<datei>` — Mount-Konfiguration der Webseite
+- `--limit=<N>` — Dateien je Lauf (Standard 1). Bestimmt den API-Verbrauch.
+- `--locale=<de|en>` — Sprache der KI-Anweisung (Standard `de`)
+- `--dry-run` — zeigt nur, welche Dateien an der Reihe wären: kein API-Aufruf,
+  kein Schreiben, keine Lizenz nötig (dann entfällt auch `--host`)
+
+Der Cron **prüft nicht selbst** — er verbessert nur bereits geprüfte Dateien.
+Die Prüfung wird in der Anwendung ausgelöst (SEO-Check → Inhaltsprüfung). Nach
+der Verbesserung gilt eine Datei als erledigt und fällt aus der Arbeitsliste;
+eine automatische Neuprüfung findet bewusst nicht statt. Dateien mit einem
+offenen Freigabe-Entwurf werden übersprungen, damit kein Lauf einen wartenden
+Vorschlag überschreibt.
+
+### Die Besonderheit: Automatikmodus
+
+Standardmäßig legt der Verbesserer sein Ergebnis als **Entwurf zur Freigabe** ab
+— jemand sieht ihn sich an und gibt ihn frei. Im **Automatikmodus** terminiert
+der Cron jeden Entwurf stattdessen gleich selbst, zu einem zufälligen Zeitpunkt
+innerhalb eines Tagesfensters. Verbesserte Seiten gehen dann verteilt live statt
+alle auf einmal.
+
+Eingeschaltet wird er in der Anwendung: SEO-Check → Inhaltsprüfung → „Zu
+verbessern" → Schalter *Automatisch terminieren*. Fenster und Tagesmenge stehen
+in den Projekteinstellungen. In der Mount-Konfiguration sieht das so aus:
+
+```ini
+[improve]
+auto = true
+window_start = "07:00"
+window_end = "16:00"
+per_day = 3
+```
+
+Die Uhrzeiten sind **Serverzeit**, nicht die des Browsers. Läuft der Server in
+einer anderen Zeitzone, entsprechend umrechnen.
+
+**Wie die Termine verteilt werden:** Das Fenster wird in so viele gleich große
+Abschnitte geteilt, wie Seiten pro Tag erlaubt sind. Jede Seite bekommt einen
+eigenen Abschnitt und darin eine zufällige Minute aus dessen mittlerer Hälfte —
+so liegen zwei Freigaben nie dicht beieinander. Bei 07:00–16:00 und 3 Seiten:
+
+| Abschnitt | Zeitraum | möglicher Zeitpunkt |
+|---|---|---|
+| 1 | 07:00–10:00 | 08:22 |
+| 2 | 10:00–13:00 | 11:09 |
+| 3 | 13:00–16:00 | 15:02 |
+
+Ist ein Tag voll, wandern weitere Entwürfe auf die Folgetage; heute bereits
+vergangene Abschnitte werden übersprungen.
+
+**Was dabei zu beachten ist:**
+
+- **`--limit` und `per_day` sind zwei verschiedene Dinge.** `--limit` steuert,
+  wie viele Dateien ein Lauf *bearbeitet* (und damit die API-Kosten), `per_day`,
+  wie viele davon pro Tag *live gehen*. Ist `--limit` dauerhaft größer als
+  `per_day`, wächst die Warteschlange terminierter Entwürfe.
+- **`cron-build.php` muss laufen.** Ohne ihn passiert zum Termin nichts — der
+  Build ist es, der die Datei austauscht. Ein feiner verteilter Terminplan als
+  der Build-Takt bringt keinen Gewinn.
+- **Zu enges Fenster.** Passen weniger Minuten ins Fenster als Freigaben
+  gewünscht sind, kürzt der Server die Tagesmenge stillschweigend auf die Zahl
+  der Minuten; der Rest wandert auf Folgetage. Die Projekteinstellungen warnen
+  davor, und die Anwendung zeigt stets die tatsächliche Menge.
+- **Rückstau.** Die Suche nach einem freien Platz reicht 90 Tage voraus. Findet
+  sie keinen, bleibt der Entwurf offen zur Freigabe und das Protokoll meldet:
+  „Automatische Terminierung: kein freier Platz in den nächsten 90 Tagen …".
+- Probeläufe (`--dry-run`) schreiben keinen Herzschlag und verfälschen die
+  Takt-Schätzung im Systemstatus nicht.
+
+## 3. `cron-healthcheck.php` — Gesundheitscheck der Webseite
+
+Führt den SEO-Audit über den vorhandenen `public/`-Ordner aus und schickt eine
+E-Mail, sobald der Bericht Fehler **oder** Warnungen enthält. Bloße Hinweise
+lösen keine Benachrichtigung aus.
+
+```cron
+0 6 * * *  /usr/bin/php /pfad/backend/cli/cron-healthcheck.php --host=example.com
+```
+
+Optionen: `--host=<domain>` (Pflicht), `--mounts=<datei>`, `--dry-run` (führt
+den Audit aus, versendet aber keine E-Mail und braucht keine Lizenz).
+
+Der Check **baut nicht selbst** — er prüft den vorhandenen Stand. Fehlt
+`public/`, meldet er `AUDIT-NO-BUILD-OUTPUT`. Für einen frischen Stand
+`cron-build.php` vorher laufen lassen (getrennte Einträge, siehe unten).
+
+Der Versand läuft über einen eigenen SMTP-Client; Zugang, Absender und Empfänger
+stehen in der `[mail]`-Sektion der `hugocms.ini`. Sind Probleme zu melden, aber
+`[mail]` fehlt, endet der Lauf mit einem Fehler statt still zu bleiben. Ob der
+SMTP-Zugang funktioniert, lässt sich im Systemstatus mit „Prüfen" feststellen,
+ohne auf den Ernstfall zu warten.
+
+## Vollständiges Beispiel
+
+Eine Webseite, Automatikmodus aktiv:
+
+```cron
+# Alle 15 Minuten bauen — veröffentlicht zugleich fällige Freigaben
+*/15 * * * *  /usr/bin/php /var/www/backend/cli/cron-build.php --quiet
+
+# Nachts drei Seiten verbessern (die Termine vergibt der Automatikmodus)
+0 3 * * *     /usr/bin/php /var/www/backend/cli/cron-improve.php --host=example.com --limit=3
+
+# Morgens der Gesundheitscheck, nach dem ersten Build des Tages
+30 6 * * *    /usr/bin/php /var/www/backend/cli/cron-healthcheck.php --host=example.com
+```
+
+Zwei Webseiten auf derselben Installation:
+
+```cron
+*/15 * * * *  /usr/bin/php /var/www/backend/cli/cron-build.php --mounts=/var/www/backend/mounts/a1b2….ini --quiet
+*/15 * * * *  /usr/bin/php /var/www/backend/cli/cron-build.php --mounts=/var/www/backend/mounts/c3d4….ini --quiet
+0 3 * * *     /usr/bin/php /var/www/backend/cli/cron-improve.php --host=kunde-a.example.com --mounts=/var/www/backend/mounts/a1b2….ini --limit=3
+0 4 * * *     /usr/bin/php /var/www/backend/cli/cron-improve.php --host=kunde-b.example.com --mounts=/var/www/backend/mounts/c3d4….ini --limit=3
+```
+
+## Vor dem Eintragen prüfen
+
+Jedes Skript einmal von Hand starten — so fallen falsche Pfade und fehlende
+Rechte sofort auf, statt still im Cron zu verschwinden:
+
+```sh
+/usr/bin/php /pfad/backend/cli/cron-improve.php --dry-run
+/usr/bin/php /pfad/backend/cli/cron-healthcheck.php --dry-run
+```
+
+Diese beiden Probeläufe verändern nichts: kein API-Aufruf, kein Schreiben, kein
+E-Mail-Versand. Sie melden nur, was sie vorfinden — und ob Konfiguration und
+Pfade stimmen.
+
+`cron-build.php` kennt keinen Probelauf; ein Aufruf **baut die Webseite
+tatsächlich** und veröffentlicht dabei fällige Freigaben. Das ist derselbe
+Vorgang wie ein Klick auf „Veröffentlichen", also normalerweise unbedenklich —
+nur wenn `--cleanDestinationDir` konfiguriert ist, sollte man wissen, dass der
+Zielordner dabei von allem befreit wird, was Hugo nicht selbst erzeugt.
+
+Nach den ersten echten Läufen zeigt der Systemstatus unter „Cron-Aufgaben", ob
+sie ankommen, wie oft sie laufen und ob eine überfällig ist.

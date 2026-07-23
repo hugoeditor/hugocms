@@ -43,6 +43,16 @@ use HugoCMS\FileManager\Exception\ApiException;
  * {@see Config}) — nichts wird dadurch wieder eingeschlossen.
  *   exclude_prefixes (optional) Kommaliste public-relativer Verzeichnis-Präfixe.
  *   exclude_files    (optional) Kommaliste einzelner public-relativer Dateien.
+ *
+ * Reservierte Sektion [improve] (kein Mount): Automatikmodus des Cron-
+ * Verbesserers (cron-improve.php). Ist er an, wird jeder erzeugte Entwurf
+ * gleich terminiert — zu einem zufälligen Zeitpunkt im angegebenen Tagesfenster
+ * und höchstens per_day Stück je Tag. So gehen verbesserte Seiten verteilt live
+ * statt alle auf einmal.
+ *   auto         (optional) true schaltet den Automatikmodus ein. Standard: aus.
+ *   window_start (optional) Beginn des Fensters, „HH:MM“ Serverzeit. Standard 07:00.
+ *   window_end   (optional) Ende des Fensters, „HH:MM“. Standard 16:00.
+ *   per_day      (optional) Höchstzahl Freigaben je Tag (1–50). Standard 3.
  */
 final class MountConfig
 {
@@ -52,6 +62,15 @@ final class MountConfig
     private const PAGESPEED_SECTION = 'pagespeed';
     private const LIVE_ANALYSIS_SECTION = 'live_analysis';
     private const SEO_REPORT_SECTION = 'seo_report';
+    private const IMPROVE_SECTION = 'improve';
+
+    /** Vorgaben des Automatikmodus, wenn die [improve]-Sektion fehlt. */
+    private const IMPROVE_DEFAULTS = [
+        'auto' => false,
+        'windowStart' => '07:00',
+        'windowEnd' => '16:00',
+        'perDay' => 3,
+    ];
 
     /**
      * @return array{
@@ -61,6 +80,7 @@ final class MountConfig
      *   pagespeed: ?string,
      *   liveAnalysis: ?string,
      *   seoReport: array{excludePrefixes: list<string>, excludeFiles: list<string>},
+     *   improve: array{auto: bool, windowStart: string, windowEnd: string, perDay: int},
      *   warnings: list<array{key: string, params: list<mixed>}>
      * }
      */
@@ -82,6 +102,7 @@ final class MountConfig
         $pagespeed = null;
         $liveAnalysis = null;
         $seoReport = ['excludePrefixes' => [], 'excludeFiles' => []];
+        $improve = self::IMPROVE_DEFAULTS;
         $warnings = [];
 
         foreach ($raw as $name => $section) {
@@ -141,6 +162,12 @@ final class MountConfig
                 continue;
             }
 
+            // Automatikmodus des Cron-Verbesserers (optional, pro Webseite).
+            if (strtolower((string) $name) === self::IMPROVE_SECTION) {
+                $improve = self::improveSection($section);
+                continue;
+            }
+
             $path = isset($section['path']) ? trim((string) $section['path']) : '';
             if ($path === '') {
                 throw new ApiException('ECONFIG', 500, 'MOUNTS-PATH-REQUIRED', [(string) $name]);
@@ -175,8 +202,69 @@ final class MountConfig
             'pagespeed' => $pagespeed,
             'liveAnalysis' => $liveAnalysis,
             'seoReport' => $seoReport,
+            'improve' => $improve,
             'warnings' => $warnings,
         ];
+    }
+
+    /**
+     * Liest die [improve]-Sektion: Automatikmodus des Cron-Verbesserers samt
+     * Veröffentlichungsfenster und Tagesmenge. Fehlerhafte Werte fallen still
+     * auf die Vorgabe zurück — eine unbrauchbare Uhrzeit darf die Webseite nicht
+     * unbenutzbar machen.
+     *
+     * @param array<string, mixed> $section
+     * @return array{auto: bool, windowStart: string, windowEnd: string, perDay: int}
+     */
+    private static function improveSection(array $section): array
+    {
+        $start = self::normalizeTime((string) ($section['window_start'] ?? ''), self::IMPROVE_DEFAULTS['windowStart']);
+        $end = self::normalizeTime((string) ($section['window_end'] ?? ''), self::IMPROVE_DEFAULTS['windowEnd']);
+        // Ein Fenster, das nicht vorwärts läuft, ergibt keinen Sinn — dann die
+        // Vorgabe, statt später eine leere Auswahl zu erzeugen.
+        if (self::minutesOf($end) <= self::minutesOf($start)) {
+            $start = self::IMPROVE_DEFAULTS['windowStart'];
+            $end = self::IMPROVE_DEFAULTS['windowEnd'];
+        }
+
+        $perDay = (int) ($section['per_day'] ?? self::IMPROVE_DEFAULTS['perDay']);
+
+        return [
+            // NICHT (bool) casten: Der Wert kommt als Zeichenkette aus der INI
+            // („false“, „0“, „off“), und jede nicht leere Zeichenkette wäre
+            // true — der Schalter ließe sich nie ausschalten. FILTER_VALIDATE_
+            // BOOLEAN versteht alle üblichen Schreibweisen, auch von Hand
+            // eingetragene.
+            'auto' => filter_var($section['auto'] ?? false, FILTER_VALIDATE_BOOLEAN),
+            'windowStart' => $start,
+            'windowEnd' => $end,
+            // Obergrenze als Schutz vor Vertippern (300 Freigaben am Tag wären
+            // kein „natürliches Wachstum“ mehr, sondern eine Flut).
+            'perDay' => max(1, min(50, $perDay)),
+        ];
+    }
+
+    /** „7:5“ → „07:05“; ungültige Angaben ergeben $fallback. */
+    private static function normalizeTime(string $value, string $fallback): string
+    {
+        if (preg_match('/^\s*(\d{1,2})\s*:\s*(\d{1,2})\s*$/', $value, $m) !== 1) {
+            return $fallback;
+        }
+        $h = (int) $m[1];
+        $i = (int) $m[2];
+        if ($h > 23 || $i > 59) {
+            return $fallback;
+        }
+
+        return sprintf('%02d:%02d', $h, $i);
+    }
+
+    /** Minuten seit Mitternacht einer bereits normalisierten „HH:MM“-Angabe. */
+    private static function minutesOf(string $time): int
+    {
+        [$h, $i] = array_map('intval', explode(':', $time));
+
+        return $h * 60 + $i;
     }
 
     /**

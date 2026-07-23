@@ -38,6 +38,10 @@ export const useAuthStore = defineStore('auth', {
     liveAnalysisUrl: '', // gespeicherte Live-Analyse-Adresse (Mount-Konfig)
     siteUrlDetected: '', // aus der Hugo-baseURL erkannte Adresse (Vorbelegung, geteilt)
     review: false, // gestaffelte Veröffentlichung: Entwürfe zur Freigabe (Hugo-Projekt)
+    // Automatikmodus des Cron-Verbesserers dieser Webseite ([improve] der
+    // Mount-Konfiguration): Ist `auto` an, terminiert der Cron jeden erzeugten
+    // Entwurf gleich selbst — zufällig im Tagesfenster, höchstens perDay je Tag.
+    improve: { auto: false, windowStart: '07:00', windowEnd: '16:00', perDay: 3, effectivePerDay: 3 },
     // Warum eine gesperrte Funktion nicht nutzbar ist:
     // { git|audit|auditContent|pagespeed|liveAnalysis|speech:
     //   { available: bool, blockers: ['pro'|'project'|'aiKey'|'service'] } }.
@@ -91,10 +95,19 @@ export const useAuthStore = defineStore('auth', {
       this.liveAnalysisUrl = data.liveAnalysisUrl ?? ''
       this.siteUrlDetected = data.siteUrlDetected ?? ''
       this.review = data.review ?? false
+      this.improve = data.improve ?? { auto: false, windowStart: '07:00', windowEnd: '16:00', perDay: 3, effectivePerDay: 3 }
       this.features = data.features ?? {}
       this.siteHost = data.siteHost ?? ''
       setCsrfToken(data.csrf)
       this.ready = true
+    },
+
+    // Schaltet die automatische Terminierung des Cron-Verbesserers um. Fenster
+    // und Tagesmenge bleiben unverändert (die stehen in den Projekteinstellungen).
+    async setImproveAuto(enabled) {
+      const data = await api.post('improveauto', { enabled })
+      this.improve = data.improve ?? this.improve
+      return this.improve
     },
 
     // Aktiviert eine Pro-Lizenz (Schlüssel an den Host gebunden). Danach den

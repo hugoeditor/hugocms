@@ -61,3 +61,32 @@
 .v-alert.nemo-alert {
   flex: 0 0 auto;
 }
+
+/* Schalter und Kontrollkästchen im AUS-Zustand sichtbar machen.
+ *
+ * Vuetify bildet die Schalterspur aus `surface-variant` bei 60 % Deckkraft.
+ * In diesem Theme ist das #f4f4f3 (Panel-Grau) — auf dem weißen Inhaltsbereich
+ * praktisch unsichtbar, der Schalter wirkte wie gar nicht vorhanden. Spur und
+ * Knauf bekommen darum eigene, kontrastreiche Farben; der EIN-Zustand
+ * (.v-selection-control--dirty) bleibt unangetastet, damit die Akzentfarbe
+ * weiterhin greift. */
+.v-switch .v-selection-control:not(.v-selection-control--dirty) .v-switch__track {
+  background-color: var(--mint-border-strong);
+  opacity: 1;
+}
+.v-switch .v-selection-control:not(.v-selection-control--dirty) .v-switch__thumb {
+  background-color: var(--mint-content);
+  /* Als inset-Schatten statt Rahmen: Der Knauf behält seine 20 px, das Layout
+     verschiebt sich beim Umschalten nicht. */
+  box-shadow:
+    inset 0 0 0 1px var(--mint-border-strong),
+    0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+/* Leeres Kontrollkästchen: Vuetify zeichnet es mit gedämpfter Deckkraft, was
+   auf hellem Grund zu blass ist. */
+.v-checkbox .v-selection-control:not(.v-selection-control--dirty) .v-selection-control__input,
+.v-checkbox-btn:not(.v-selection-control--dirty) .v-selection-control__input {
+  color: var(--mint-text-muted);
+  opacity: 1;
+}
