@@ -162,7 +162,6 @@ export default {
   },
 
   license: {
-    open: 'License',
     title: 'Pro license',
     intro: 'The Pro edition unlocks Git versioning. The license applies per website and is bound to its domain.',
     edition: 'Edition',
@@ -179,6 +178,76 @@ export default {
     activate: 'Activate',
     activated: 'License saved.',
     activatedPro: 'Pro edition activated.',
+  },
+
+  // System status — the state of THIS installation (license, credentials, cron
+  // jobs). Not to be confused with the website health check (SEO audit).
+  status: {
+    open: 'Status',
+    title: 'System status',
+    pro: 'Pro',
+    proRequired: 'This feature requires a valid Pro license — without one it will not run, even if the credentials are correct.',
+    license: {
+      heading: 'License',
+      licensedTo: 'Licensed to {0} · {1}',
+      invalidForDomain: 'A key is stored but is not valid for {0}.',
+      none: 'No license key stored.',
+      change: 'Change',
+    },
+    keys: {
+      heading: 'Credentials',
+      hint: 'Whether a credential is stored is known immediately. Whether it works only shows once the service is asked.',
+      verify: 'Check',
+      verified: 'Credential confirmed.',
+      failed: 'The service rejected the credential.',
+      notVerifiable: 'Not checkable — any test request would be a real run against the quota.',
+      missing: 'Not stored.',
+      present: 'Stored.',
+      quotaUsage: '{0} of {1} used',
+      quotaRemaining: '{0} left',
+      quotaUnlimited: 'Quota: unlimited',
+      quotaExceeded: 'Quota exhausted — blocked until next month.',
+      models: 'Models: {0} (assistant), {1} (cron)',
+      mailTarget: '{0} · notifications to {1}',
+      ai: 'AI assistant (Anthropic)',
+      service: 'Live analysis and speech input',
+      pagespeed: 'PageSpeed (Google)',
+      mail: 'Email delivery (SMTP)',
+    },
+    cron: {
+      heading: 'Cron jobs',
+      hint: 'Shows what actually runs on this hosting — every job records its own run. The interval is estimated from recent runs.',
+      noProject: 'Without a Hugo project this website has no cron jobs.',
+      job: {
+        build: 'Build website',
+        improve: 'Improve content',
+        healthcheck: 'Website health check',
+      },
+      never: 'Never run',
+      neverHint: 'Never run here — most likely no cron entry is set up.',
+      ok: 'Running',
+      failed: 'Last run failed',
+      overdue: 'Overdue — the last run is much further back than the usual interval.',
+      lastRun: 'Last run {0} ({1})',
+      lastSuccess: 'Last successful run: {0}',
+      hourly: 'hourly',
+      daily: 'daily',
+      weekly: 'weekly',
+      everyMinutes: 'every {0} min',
+      everyHours: 'every {0} h',
+      everyDays: 'every {0} days',
+    },
+    tasks: {
+      heading: 'Waiting for the next run',
+      scheduled: 'Scheduled releases',
+      scheduledHint: 'These versions are approved and go live at the given time — the next build after that swaps the file.',
+      noneScheduled: 'No scheduled releases.',
+      dueNow: 'Due',
+      improve: 'Files to improve',
+      improveHint: 'The improver\'s backlog, in processing order. Each run handles as many files as --limit specifies.',
+      noneImprove: 'No files queued for improvement.',
+      checkedAt: 'Checked on {0}',
+    },
   },
 
   repo: {
@@ -569,12 +638,12 @@ export default {
 
   // Voice input (Pro service) in the configuration form.
   speechConfig: {
-    section: 'seo-success service',
+    section: 'Live analysis and speech input',
     url: 'Service URL',
-    urlHint: 'Base address of the seo-success service (Pro) — one key for voice input and live analysis. Default: https://api.hugocms.com/',
+    urlHint: 'Base address of the service (Pro) — one key for live analysis and speech input. Default: https://api.hugocms.com/',
     key: 'API key',
     keyHintSet: 'A key is stored. Leave empty to keep it; entering one replaces it.',
-    keyHintUnset: 'No key stored yet. Without a key, voice input and live analysis stay disabled.',
+    keyHintUnset: 'No key stored yet. Without a key, live analysis and speech input stay disabled.',
   },
 
   pagespeedConfig: {
@@ -740,6 +809,7 @@ export default {
     noData: 'No entries',
     close: 'Close',
     back: 'Back',
+    refresh: 'Refresh',
   },
 
   // Staged publishing: review queue of pending drafts.
@@ -1073,7 +1143,7 @@ export default {
     'PAGESPEED-REQUEST-FAILED': 'The PageSpeed measurement failed ({0}).',
     'PAGESPEED-QUOTA-EXCEEDED': 'The PageSpeed quota is exhausted. Your own Google API key raises the limit.',
     'PAGESPEED-AUTH-FAILED': 'Google rejected the API key ({0}).',
-    'SERVICE-NOT-CONFIGURED': 'The seo-success service is not configured.',
+    'SERVICE-NOT-CONFIGURED': 'The service for live analysis and speech input is not configured.',
     'ANALYZE-URL-INVALID': 'Please provide a valid public address (http:// or https://).',
     'ANALYZE-URL-FORBIDDEN': 'This address is not allowed (internal/private addresses are blocked).',
     'ANALYZE-URL-MISSING': 'The address to check is missing.',

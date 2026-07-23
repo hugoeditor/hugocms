@@ -8,6 +8,7 @@ use HugoCMS\FileManager\Audit\AuditMailReport;
 use HugoCMS\FileManager\Audit\AuditService;
 use HugoCMS\FileManager\Audit\ContentQualityService;
 use HugoCMS\FileManager\Auth\AuthInterface;
+use HugoCMS\FileManager\Cron\Heartbeat;
 use HugoCMS\FileManager\Exception\ApiException;
 use HugoCMS\FileManager\Review\FrontMatter;
 use HugoCMS\FileManager\Review\ReviewStore;
@@ -425,6 +426,8 @@ final class Connector
                 'account' => $this->cmdAccount($request),
                 'license' => $this->cmdLicense(),
                 'activate' => $this->cmdActivate($request),
+                'status' => $this->cmdStatus(),
+                'statuscheck' => $this->cmdStatusCheck(),
                 'help' => $this->cmdHelp($request),
                 'gitstatus' => $this->cmdGitStatus(),
                 'gitlog' => $this->cmdGitLog($request),
@@ -1074,7 +1077,73 @@ final class Connector
      */
     public function buildSite(): array
     {
-        return $this->runHugoBuild();
+        return $this->withCronHeartbeat(
+            'build',
+            fn (): array => $this->runHugoBuild(),
+            // Ein Hugo-Lauf mit exitCode != 0 wirft nicht, ist für den Cron aber
+            // sehr wohl ein Fehlschlag — sonst meldete der Status „erfolgreich“,
+            // während die Webseite seit Tagen nicht mehr gebaut wird.
+            static fn (array $r): array => [
+                (bool) ($r['success'] ?? false),
+                sprintf('Hugo beendet mit Code %d', (int) ($r['exitCode'] ?? 0)),
+            ],
+        );
+    }
+
+    /**
+     * Speicher der Cron-Herzschläge dieser Webseite. null ohne Hugo-Projekt —
+     * dann gibt es für diese Webseite auch keine Cron-Aufgaben.
+     */
+    private function cronHeartbeat(): ?Heartbeat
+    {
+        if ($this->hugo === null) {
+            return null;
+        }
+
+        return new Heartbeat(__DIR__ . '/../var/cron/' . sha1((string) $this->hugo['source']));
+    }
+
+    /**
+     * Führt einen Cron-Einstieg aus und vermerkt den Lauf im Herzschlag — auch
+     * dann, wenn er mit einer Ausnahme endet (der Fehler gehört gerade in den
+     * Status). Die Ausnahme wird unverändert weitergereicht, das CLI-Skript
+     * behandelt sie wie bisher. Probeläufe rufen diese Hülle NICHT auf: sie
+     * verändern nichts und dürfen den Takt nicht verfälschen.
+     *
+     * @param \Closure(): array<string, mixed>          $run       der eigentliche Lauf
+     * @param \Closure(array<string, mixed>): array{0: bool, 1: string} $summarize Erfolg + Kurztext
+     * @return array<string, mixed>
+     */
+    private function withCronHeartbeat(string $job, \Closure $run, \Closure $summarize): array
+    {
+        $startedAt = gmdate('c');
+        $start = hrtime(true);
+        try {
+            $result = $run();
+        } catch (Throwable $e) {
+            $this->cronHeartbeat()?->record(
+                $job,
+                false,
+                '',
+                $e instanceof ApiException ? $e->errorCode() . ' – ' . $e->getMessage() : $e->getMessage(),
+                (hrtime(true) - $start) / 1e9,
+                $startedAt,
+            );
+
+            throw $e;
+        }
+
+        [$success, $summary] = $summarize($result);
+        $this->cronHeartbeat()?->record(
+            $job,
+            $success,
+            $summary,
+            null,
+            (hrtime(true) - $start) / 1e9,
+            $startedAt,
+        );
+
+        return $result;
     }
 
     /**
@@ -1576,11 +1645,24 @@ final class Connector
             throw new ApiException('ECONFIG', 409, 'SPEECH-NO-KEY');
         }
 
-        $info = (new SeoSuccessClient($url, $key))->verify();
+        return self::normalizeServiceInfo((new SeoSuccessClient($url, $key))->verify());
+    }
 
+    /**
+     * Bringt die Antwort von /v1/verify in die Form, die der Client erwartet.
+     * Gemeinsam genutzt von {@see cmdServiceVerify()} (Konfigurationsdialog,
+     * Kontingentanzeige der Live-Analyse) und {@see cmdStatusCheck()}
+     * (Systemstatus) — beide sollen dieselben Zahlen zeigen.
+     *
+     * @param array<string, mixed> $info
+     * @return array{valid: bool, name: string, quotaLimit: ?int, quotaUsed: ?float, quotaRemaining: ?float, quotaExceeded: bool}
+     */
+    private static function normalizeServiceInfo(array $info): array
+    {
         return [
             'valid' => true,
             'name' => (string) ($info['name'] ?? ''),
+            // quotaLimit === null bedeutet beim Dienst „unbegrenzt“ — nicht 0.
             'quotaLimit' => isset($info['quotaLimit']) ? (int) $info['quotaLimit'] : null,
             'quotaUsed' => isset($info['quotaUsed']) ? (float) $info['quotaUsed'] : null,
             'quotaRemaining' => isset($info['quotaRemaining']) ? (float) $info['quotaRemaining'] : null,
@@ -2060,6 +2142,29 @@ final class Connector
      */
     public function improveNextContent(int $limit = 1, ?string $locale = null, bool $dryRun = false): array
     {
+        if ($dryRun) {
+            return $this->runImproveBatch($limit, $locale, true);
+        }
+
+        return $this->withCronHeartbeat(
+            'improve',
+            fn (): array => $this->runImproveBatch($limit, $locale, false),
+            static fn (array $r): array => [true, sprintf(
+                '%d Kandidaten, %d verarbeitet',
+                (int) ($r['candidates'] ?? 0),
+                count($r['processed'] ?? []),
+            )],
+        );
+    }
+
+    /**
+     * Der eigentliche Verbesserungslauf hinter {@see improveNextContent()} —
+     * ohne Herzschlag, damit der Probelauf den Cron-Takt nicht verfälscht.
+     *
+     * @return array<string, mixed>
+     */
+    private function runImproveBatch(int $limit, ?string $locale, bool $dryRun): array
+    {
         if ($this->hugo === null) {
             throw new ApiException('ECONFIG', 409, 'AUDIT-NO-PROJECT');
         }
@@ -2119,6 +2224,30 @@ final class Connector
      * @return array{summary: array<string,int>, pagesScanned: int, problems: bool, mailed: bool, dryRun: bool, reportId: ?string}
      */
     public function runHealthCheck(bool $dryRun = false): array
+    {
+        if ($dryRun) {
+            return $this->runHealthCheckBatch(true);
+        }
+
+        return $this->withCronHeartbeat(
+            'healthcheck',
+            fn (): array => $this->runHealthCheckBatch(false),
+            static fn (array $r): array => [true, sprintf(
+                '%d Seiten, %d Fehler / %d Warnungen',
+                (int) ($r['pagesScanned'] ?? 0),
+                (int) ($r['summary']['error'] ?? 0),
+                (int) ($r['summary']['warning'] ?? 0),
+            )],
+        );
+    }
+
+    /**
+     * Der eigentliche Gesundheitscheck hinter {@see runHealthCheck()} — ohne
+     * Herzschlag, damit der Probelauf den Cron-Takt nicht verfälscht.
+     *
+     * @return array{summary: array<string,int>, pagesScanned: int, problems: bool, mailed: bool, dryRun: bool, reportId: ?string}
+     */
+    private function runHealthCheckBatch(bool $dryRun): array
     {
         if ($this->hugo === null) {
             throw new ApiException('ECONFIG', 409, 'AUDIT-NO-PROJECT');
@@ -2787,6 +2916,166 @@ final class Connector
         $this->requireAuth();
 
         return $this->license()->info();
+    }
+
+    /**
+     * status — Systemstatus dieser Webseite: welche Schlüssel hinterlegt sind,
+     * welche Lizenz gilt, welche Cron-Aufgaben laufen und was diese demnächst
+     * abzuarbeiten haben. Rein lokal: kein Aufruf nach außen, damit die Ansicht
+     * sofort steht. Die Schlüssel selbst verlassen den Server nie — nur, ob
+     * einer hinterlegt ist (siehe {@see cmdStatusCheck()} für die Netzprüfung).
+     */
+    private function cmdStatus(): array
+    {
+        $this->requireAuth();
+
+        return [
+            'keys' => [
+                // Der KI-Schlüssel trägt beide Modelle: das interaktive und das
+                // des Cron-Verbesserers (sie dürfen sich unterscheiden).
+                'ai' => [
+                    'configured' => $this->ai['apiKey'] !== null,
+                    'model' => $this->ai['model'],
+                    'modelCron' => $this->ai['modelCron'],
+                ],
+                'service' => [
+                    'configured' => $this->services['serviceKey'] !== null,
+                    'url' => $this->services['serviceUrl'],
+                ],
+                // PageSpeed lässt sich nicht folgenlos prüfen — jeder Testaufruf
+                // wäre ein echter Lauf gegen das Kontingent. Nur „hinterlegt“.
+                'pagespeed' => [
+                    'configured' => $this->services['pagespeedKey'] !== null,
+                    'verifiable' => false,
+                ],
+                'mail' => [
+                    'configured' => (bool) $this->mail['configured'],
+                    'host' => $this->mail['host'],
+                    'to' => $this->mail['to'],
+                ],
+            ],
+            'license' => $this->license()->info(),
+            'cron' => $this->cronHeartbeat()?->all() ?? [],
+            'tasks' => $this->pendingCronTasks(),
+        ];
+    }
+
+    /**
+     * Was die Cron-Aufgaben demnächst abzuarbeiten haben. Zwei getrennte
+     * Warteschlangen: terminierte Freigaben (der nächste Build tauscht sie ein,
+     * sobald ihr Zeitpunkt erreicht ist) und der Arbeitsvorrat des
+     * KI-Verbesserers. Ohne Hugo-Projekt gibt es beides nicht.
+     *
+     * @return array{scheduled: list<array<string, mixed>>, improve: list<array<string, mixed>>}
+     */
+    private function pendingCronTasks(): array
+    {
+        if ($this->hugo === null) {
+            return ['scheduled' => [], 'improve' => []];
+        }
+
+        // Terminierte Freigaben, nächster Termin zuerst — das ist die
+        // Reihenfolge, in der sie live gehen.
+        $scheduled = [];
+        foreach ($this->reviewStore()->list() as $draft) {
+            $publishAt = $draft['publishAt'] ?? null;
+            if (!is_string($publishAt) || $publishAt === '') {
+                continue; // wartet auf Freigabe, nicht auf den Cron
+            }
+            $scheduled[] = [
+                'key' => (string) ($draft['key'] ?? ''),
+                'mount' => $draft['mount'] ?? '',
+                'rel' => $draft['rel'] ?? '',
+                'publishAt' => $publishAt,
+                'origin' => $draft['origin'] ?? 'user',
+                'author' => $draft['author'] ?? null,
+                'due' => strtotime($publishAt) !== false && strtotime($publishAt) <= time(),
+            ];
+        }
+        usort($scheduled, static fn (array $a, array $b): int => strcmp((string) $a['publishAt'], (string) $b['publishAt']));
+
+        // Arbeitsvorrat des Verbesserers in genau der Reihenfolge, in der der
+        // Cron ihn abarbeitet (pendingImproveList), damit die Anzeige der
+        // tatsächlichen Bearbeitung entspricht.
+        $improve = array_map(
+            static fn (array $e): array => [
+                'mount' => $e['mount'] ?? '',
+                'rel' => $e['rel'] ?? '',
+                'score' => $e['score'] ?? null,
+                'checkedAt' => $e['checkedAt'] ?? null,
+            ],
+            $this->pendingImproveList(),
+        );
+
+        return ['scheduled' => $scheduled, 'improve' => $improve];
+    }
+
+    /**
+     * statuscheck — prüft die hinterlegten Zugänge tatsächlich gegen ihren
+     * Dienst (Knopf „Schlüssel prüfen“ im Systemstatus). Bewusst getrennt von
+     * {@see cmdStatus()}: Jede Prüfung ist ein Aufruf nach außen, den niemand
+     * ungefragt bei jedem Öffnen auslösen soll.
+     *
+     * Ein fehlgeschlagener Einzelcheck ist KEIN Fehler des Befehls — genau das
+     * ist ja das Ergebnis. Jeder Eintrag trägt deshalb seinen eigenen Status.
+     */
+    private function cmdStatusCheck(): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+
+        return [
+            'ai' => $this->probe(
+                $this->ai['apiKey'] !== null,
+                fn () => (new AnthropicClient((string) $this->ai['apiKey']))->ping(),
+            ),
+            // Ohne Dienst-Adresse gibt es nichts zu fragen — dann gilt der
+            // Zugang als nicht konfiguriert, nicht als fehlerhaft. Die Antwort
+            // trägt Kontingent und Verbrauch, die der Status mit anzeigt.
+            'service' => $this->probe(
+                $this->services['serviceKey'] !== null && $this->services['serviceUrl'] !== null,
+                fn (): array => self::normalizeServiceInfo((new SeoSuccessClient(
+                    (string) $this->services['serviceUrl'],
+                    (string) $this->services['serviceKey'],
+                ))->verify()),
+            ),
+            'mail' => $this->probe(
+                (bool) $this->mail['configured'],
+                fn () => $this->buildMailer()->verify(),
+            ),
+        ];
+    }
+
+    /**
+     * Führt eine einzelne Zugangsprüfung aus und übersetzt sie in einen
+     * Statuseintrag. Nicht konfiguriert → 'skipped'; Ausnahme → 'error' samt
+     * Fehlerschlüssel, den der Client übersetzt.
+     *
+     * Liefert die Prüfung ein Array, reist es als `info` mit — so kann ein
+     * Dienst über das bloße „erreichbar“ hinaus etwas mitteilen (der
+     * seo-success-Dienst etwa Kontingent und Verbrauch).
+     *
+     * @return array{status: string, key: ?string, message: ?string, info: ?array<string, mixed>}
+     */
+    private function probe(bool $configured, \Closure $check): array
+    {
+        if (!$configured) {
+            return ['status' => 'skipped', 'key' => null, 'message' => null, 'info' => null];
+        }
+        try {
+            $info = $check();
+
+            return [
+                'status' => 'ok',
+                'key' => null,
+                'message' => null,
+                'info' => is_array($info) ? $info : null,
+            ];
+        } catch (ApiException $e) {
+            return ['status' => 'error', 'key' => $e->messageKey(), 'message' => $e->getMessage(), 'info' => null];
+        } catch (Throwable $e) {
+            return ['status' => 'error', 'key' => null, 'message' => $e->getMessage(), 'info' => null];
+        }
     }
 
     /**

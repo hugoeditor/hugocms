@@ -44,6 +44,50 @@ final class Mailer
      */
     public function send(string $to, string $subject, string $body): void
     {
+        $fp = $this->connect();
+
+        try {
+            $this->command($fp, 'MAIL FROM:<' . self::addr($this->from) . '>', 250);
+            // 251 = „nicht lokal, wird weitergeleitet" gilt ebenfalls als Erfolg.
+            $this->command($fp, 'RCPT TO:<' . self::addr($to) . '>', [250, 251]);
+            $this->command($fp, 'DATA', 354);
+
+            $data = $this->buildMessage($to, $subject, $body);
+            $this->write($fp, $data . "\r\n.\r\n");
+            $this->expect($fp, 250);
+
+            // QUIT tolerant: die Nachricht ist bereits angenommen.
+            $this->write($fp, "QUIT\r\n");
+        } finally {
+            @fclose($fp);
+        }
+    }
+
+    /**
+     * Prüft den SMTP-Zugang, ohne eine Nachricht zu verschicken: Verbindung,
+     * Begrüßung, ggf. STARTTLS und Anmeldung, dann QUIT. Für den Systemstatus —
+     * so fällt ein falsches Passwort auf, bevor der Gesundheitscheck etwas zu
+     * melden hat. Wirft dieselben MAIL-*-Codes wie {@see send()}.
+     */
+    public function verify(): void
+    {
+        $fp = $this->connect();
+        // QUIT tolerant: Ob der Server ihn quittiert, ändert am Ergebnis nichts.
+        @fwrite($fp, "QUIT\r\n");
+        @fclose($fp);
+    }
+
+    // --- SMTP-Ablauf -------------------------------------------------------
+
+    /**
+     * Baut die Verbindung bis einschließlich Anmeldung auf und liefert den
+     * offenen Socket. Gemeinsame Vorstufe von {@see send()} und {@see verify()};
+     * der Aufrufer schließt ihn.
+     *
+     * @return resource
+     */
+    private function connect()
+    {
         $remote = ($this->security === 'ssl' ? 'ssl://' : '') . $this->host;
         $fp = @fsockopen($remote, $this->port, $errno, $errstr, (float) $this->timeout);
         if ($fp === false) {
@@ -67,24 +111,14 @@ final class Mailer
             if ($this->user !== null) {
                 $this->authLogin($fp);
             }
-
-            $this->command($fp, 'MAIL FROM:<' . self::addr($this->from) . '>', 250);
-            // 251 = „nicht lokal, wird weitergeleitet" gilt ebenfalls als Erfolg.
-            $this->command($fp, 'RCPT TO:<' . self::addr($to) . '>', [250, 251]);
-            $this->command($fp, 'DATA', 354);
-
-            $data = $this->buildMessage($to, $subject, $body);
-            $this->write($fp, $data . "\r\n.\r\n");
-            $this->expect($fp, 250);
-
-            // QUIT tolerant: die Nachricht ist bereits angenommen.
-            $this->write($fp, "QUIT\r\n");
-        } finally {
+        } catch (\Throwable $e) {
             @fclose($fp);
-        }
-    }
 
-    // --- SMTP-Ablauf -------------------------------------------------------
+            throw $e;
+        }
+
+        return $fp;
+    }
 
     /** EHLO mit lokalem Hostnamen; verlangt eine 250er-Antwort. */
     private function ehlo($fp): void

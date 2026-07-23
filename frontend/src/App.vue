@@ -27,6 +27,8 @@ import { useAssistantStore } from './stores/assistant'
 import { useHelpStore } from './stores/help'
 import { useAuditContentStore } from './stores/auditContent'
 import { useReviewStore } from './stores/review'
+import { useStatusStore } from './stores/status'
+import StatusView from './components/StatusView.vue'
 import LanguageSwitcher from './components/LanguageSwitcher.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import { useConfirm } from './util/confirm'
@@ -69,6 +71,7 @@ const assistant = useAssistantStore()
 const help = useHelpStore()
 const auditContent = useAuditContentStore()
 const review = useReviewStore()
+const status = useStatusStore()
 const error = ref(null)
 const fatalError = ref(null)
 const warningsVisible = ref(false)
@@ -185,6 +188,10 @@ async function loadMounts() {
   if (auth.review) {
     review.fetch().catch(() => {})
   }
+  // Ebenso den Systemstatus: Nur so kann das Warnzeichen an der
+  // Werkzeugschiene auf eine stehende Cron-Aufgabe hinweisen, bevor jemand
+  // die Ansicht überhaupt öffnet. Rein lokal ermittelt, kein Aufruf nach außen.
+  status.fetch().catch(() => {})
 }
 
 // Anfangsprüfung (whoami) — läuft vor dem Login. Schlägt sie fehl, ist es ein
@@ -228,12 +235,14 @@ async function logout() {
 async function leaveEditorThen(action) {
   if (files.dirty && !(await confirmDiscard())) return
   // Offene Überlagerungen schließen, sonst blieben sie über der neu gewählten
-  // Ansicht (Dateimanager, Papierkorb, SEO-Audit) liegen: die Hilfe und der
-  // Qualitätsbericht (ContentQualityView) — beide haben einen höheren z-index
-  // als die Dateiliste und würden sie sonst verdecken.
+  // Ansicht (Dateimanager, Papierkorb, SEO-Audit) liegen: die Hilfe, der
+  // Qualitätsbericht (ContentQualityView), die Freigabe-Warteschlange und der
+  // Systemstatus — sie alle haben einen höheren z-index als die Dateiliste und
+  // würden sie sonst verdecken.
   help.close()
   auditContent.closeDialog()
   review.closeQueue()
+  status.close()
   if (files.openFile) files.closeFile()
   action()
 }
@@ -268,6 +277,15 @@ function openReviewQueue() {
     return
   }
   leaveEditorThen(() => review.openQueue())
+}
+
+// Systemstatus öffnen/schließen — Umschalter wie die übrigen Overlays.
+function openStatusView() {
+  if (status.open) {
+    status.close()
+    return
+  }
+  leaveEditorThen(() => status.openView())
 }
 
 // --- Hugo aufrufen (Veröffentlichen) ---------------------------------------
@@ -342,6 +360,8 @@ function selectTrash() {
 
 function onLicenseActivated() {
   notice.value = auth.isPro ? t('license.activatedPro') : t('license.activated')
+  // Der Systemstatus zeigt die Lizenz — nach dem Aktivieren nachladen.
+  if (status.open) status.fetch()
 }
 
 function onAccountChanged() {
@@ -650,19 +670,21 @@ async function build() {
                 </template>
               </v-tooltip>
 
-              <!-- Pro-Lizenz aktivieren/anzeigen (pro Webseite; sichtbar, sobald
-                   eine Mount-Konfiguration geladen ist) -->
-              <v-tooltip v-if="auth.licensable" :text="$t('license.open')" location="right" :disabled="!toolbarCollapsed">
+              <!-- Systemstatus: Lizenz, Zugänge, Cron-Aufgaben und deren
+                   Warteschlange. Enthält auch die Lizenzaktivierung, die
+                   früher einen eigenen Eintrag hatte. -->
+              <v-tooltip :text="$t('status.title')" location="right" :disabled="!toolbarCollapsed">
                 <template #activator="{ props }">
                   <button
                     v-bind="props"
                     type="button"
                     class="nemo-tool-btn"
-                    :class="{ 'nemo-tool-btn--pro': auth.isPro }"
-                    @click="licenseOpen = true"
+                    :class="{ active: status.open }"
+                    @click="openStatusView"
                   >
-                    <v-icon :icon="auth.isPro ? 'mdi-license' : 'mdi-key-outline'" size="20" />
-                    <span class="nemo-tool-label">{{ $t('license.open') }}</span>
+                    <v-icon icon="mdi-heart-pulse" size="20" />
+                    <span v-if="status.hasProblem" class="nemo-tool-badge nemo-tool-badge--alert">!</span>
+                    <span class="nemo-tool-label">{{ $t('status.open') }}</span>
                   </button>
                 </template>
               </v-tooltip>
@@ -791,6 +813,9 @@ async function build() {
             <!-- Freigabe-Warteschlange (gestaffelte Veröffentlichung): Overlay
                  über dem Dateimanager, aus der Werkzeugschiene geöffnet. -->
             <ReviewQueueView />
+            <!-- Systemstatus: Lizenz, Zugänge, Cron-Aufgaben. Die
+                 Lizenzaktivierung öffnet von hier aus den bestehenden Dialog. -->
+            <StatusView @activate-license="licenseOpen = true" />
             <!-- Hilfe-/Wissensdatenbank: Überlagerung mit Zurück-Button, öffnet
                  z. B. aus einem SEO-Audit-Fund die ausführliche Erklärung. -->
             <HelpView />
@@ -1080,6 +1105,11 @@ async function build() {
   font-size: 0.72rem;
   line-height: 18px;
   text-align: center;
+}
+/* Warnvariante: eine Cron-Aufgabe steht oder ein Zugang antwortet nicht. */
+.nemo-tool-badge--alert {
+  background: var(--mint-danger, #c62828);
+  font-weight: 700;
 }
 /* Icon-Schiene (eingeklappt/schmal): Zähler als kleines Eck-Abzeichen über dem
    Icon. Im Textfluss würde er den zentrierten Inhalt über die schmale Schiene

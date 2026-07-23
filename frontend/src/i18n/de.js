@@ -162,7 +162,6 @@ export default {
   },
 
   license: {
-    open: 'Lizenz',
     title: 'Pro-Lizenz',
     intro: 'Die Pro-Edition schaltet die Git-Versionierung frei. Die Lizenz gilt pro Webseite und ist an deren Domain gebunden.',
     edition: 'Edition',
@@ -179,6 +178,76 @@ export default {
     activate: 'Aktivieren',
     activated: 'Lizenz gespeichert.',
     activatedPro: 'Pro-Edition aktiviert.',
+  },
+
+  // Systemstatus — Zustand DIESER Installation (Lizenz, Zugänge, Cron-Aufgaben).
+  // Nicht zu verwechseln mit dem Gesundheitscheck der Webseite (SEO-Audit).
+  status: {
+    open: 'Status',
+    title: 'Systemstatus',
+    pro: 'Pro',
+    proRequired: 'Diese Funktion setzt eine gültige Pro-Lizenz voraus — ohne sie läuft sie nicht, auch wenn die Zugangsdaten stimmen.',
+    license: {
+      heading: 'Lizenz',
+      licensedTo: 'Lizenziert für {0} · {1}',
+      invalidForDomain: 'Ein Schlüssel ist hinterlegt, gilt aber nicht für {0}.',
+      none: 'Kein Lizenzschlüssel hinterlegt.',
+      change: 'Ändern',
+    },
+    keys: {
+      heading: 'Zugänge',
+      hint: 'Ob ein Zugang hinterlegt ist, steht sofort fest. Ob er auch funktioniert, verrät erst eine Anfrage an den jeweiligen Dienst.',
+      verify: 'Prüfen',
+      verified: 'Zugang bestätigt.',
+      failed: 'Der Dienst hat den Zugang abgelehnt.',
+      notVerifiable: 'Nicht prüfbar — jede Testanfrage wäre ein echter Lauf gegen das Kontingent.',
+      missing: 'Nicht hinterlegt.',
+      present: 'Hinterlegt.',
+      quotaUsage: '{0} von {1} verbraucht',
+      quotaRemaining: '{0} übrig',
+      quotaUnlimited: 'Kontingent: unbegrenzt',
+      quotaExceeded: 'Kontingent erschöpft — bis zum nächsten Monat gesperrt.',
+      models: 'Modelle: {0} (Assistent), {1} (Cron)',
+      mailTarget: '{0} · Benachrichtigung an {1}',
+      ai: 'KI-Assistent (Anthropic)',
+      service: 'Live-Analyse und Spracheingabe',
+      pagespeed: 'PageSpeed (Google)',
+      mail: 'E-Mail-Versand (SMTP)',
+    },
+    cron: {
+      heading: 'Cron-Aufgaben',
+      hint: 'Zeigt, was auf diesem Hosting tatsächlich läuft — jede Aufgabe vermerkt ihren Lauf selbst. Der Takt ist aus den letzten Läufen geschätzt.',
+      noProject: 'Ohne Hugo-Projekt gibt es für diese Webseite keine Cron-Aufgaben.',
+      job: {
+        build: 'Webseite bauen',
+        improve: 'Inhalte verbessern',
+        healthcheck: 'Gesundheitscheck der Webseite',
+      },
+      never: 'Nie gelaufen',
+      neverHint: 'Hier noch nie gelaufen — vermutlich ist kein Cron-Eintrag eingerichtet.',
+      ok: 'Läuft',
+      failed: 'Letzter Lauf fehlgeschlagen',
+      overdue: 'Überfällig — der letzte Lauf liegt deutlich länger zurück als der übliche Takt.',
+      lastRun: 'Zuletzt {0} ({1})',
+      lastSuccess: 'Letzter erfolgreicher Lauf: {0}',
+      hourly: 'stündlich',
+      daily: 'täglich',
+      weekly: 'wöchentlich',
+      everyMinutes: 'alle {0} Min.',
+      everyHours: 'alle {0} Std.',
+      everyDays: 'alle {0} Tage',
+    },
+    tasks: {
+      heading: 'Wartet auf den nächsten Lauf',
+      scheduled: 'Terminierte Freigaben',
+      scheduledHint: 'Diese Fassungen sind freigegeben und gehen zum genannten Zeitpunkt live — der nächste Build danach tauscht die Datei aus.',
+      noneScheduled: 'Keine terminierten Freigaben.',
+      dueNow: 'Fällig',
+      improve: 'Zu verbessernde Dateien',
+      improveHint: 'Arbeitsvorrat des Verbesserers, in der Reihenfolge der Bearbeitung. Je Lauf werden so viele Dateien bearbeitet, wie --limit vorgibt.',
+      noneImprove: 'Keine Dateien zur Verbesserung vorgemerkt.',
+      checkedAt: 'Geprüft am {0}',
+    },
   },
 
   repo: {
@@ -570,12 +639,12 @@ export default {
 
   // Spracheingabe (Pro-Dienst) im Konfigurationsformular.
   speechConfig: {
-    section: 'seo-success-Dienst',
+    section: 'Live-Analyse und Spracheingabe',
     url: 'Dienst-URL',
-    urlHint: 'Basis-Adresse des seo-success-Dienstes (Pro) — ein Schlüssel für Spracheingabe und Live-Analyse. Standard: https://api.hugocms.com/',
+    urlHint: 'Basis-Adresse des Dienstes (Pro) — ein Schlüssel für Live-Analyse und Spracheingabe. Standard: https://api.hugocms.com/',
     key: 'API-Schlüssel',
     keyHintSet: 'Ein Schlüssel ist hinterlegt. Leer lassen, um ihn beizubehalten; Eingabe ersetzt ihn.',
-    keyHintUnset: 'Noch kein Schlüssel hinterlegt. Ohne Schlüssel bleiben Spracheingabe und Live-Analyse deaktiviert.',
+    keyHintUnset: 'Noch kein Schlüssel hinterlegt. Ohne Schlüssel bleiben Live-Analyse und Spracheingabe deaktiviert.',
   },
 
   pagespeedConfig: {
@@ -743,6 +812,7 @@ export default {
     noData: 'Keine Einträge',
     close: 'Schließen',
     back: 'Zurück',
+    refresh: 'Aktualisieren',
   },
 
   // Gestaffelte Veröffentlichung: Freigabe-Warteschlange offener Entwürfe.
@@ -1079,7 +1149,7 @@ export default {
     'PAGESPEED-REQUEST-FAILED': 'Die PageSpeed-Messung ist fehlgeschlagen ({0}).',
     'PAGESPEED-QUOTA-EXCEEDED': 'Das PageSpeed-Kontingent ist erschöpft. Ein eigener Google-API-Schlüssel erhöht das Limit.',
     'PAGESPEED-AUTH-FAILED': 'Google hat den API-Schlüssel abgelehnt ({0}).',
-    'SERVICE-NOT-CONFIGURED': 'Der seo-success-Dienst ist nicht konfiguriert.',
+    'SERVICE-NOT-CONFIGURED': 'Der Dienst für Live-Analyse und Spracheingabe ist nicht konfiguriert.',
     'ANALYZE-URL-INVALID': 'Bitte eine gültige öffentliche Adresse angeben (http:// oder https://).',
     'ANALYZE-URL-FORBIDDEN': 'Diese Adresse ist nicht erlaubt (interne/private Adressen sind gesperrt).',
     'ANALYZE-URL-MISSING': 'Es fehlt die zu prüfende Adresse.',
