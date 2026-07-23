@@ -607,34 +607,36 @@ async function build() {
                 </template>
               </v-tooltip>
 
-              <!-- Repository (Git) — Pro-Funktion, nur bei gültiger Lizenz und
-                   konfiguriertem Hugo-Projekt (dort liegt das Repository). -->
-              <v-tooltip v-if="auth.git" :text="$t('repo.open')" location="right" :disabled="!toolbarCollapsed">
+              <!-- Repository (Git) — Pro-Funktion. Bleibt auch ohne Lizenz
+                   sichtbar; der Dialog erklärt dann, was sie leistet. -->
+              <v-tooltip :text="auth.git ? $t('repo.open') : $t('pro.locked')" location="right" :disabled="!toolbarCollapsed">
                 <template #activator="{ props }">
                   <button
                     v-bind="props"
                     type="button"
                     class="nemo-tool-btn"
+                    :class="{ 'nemo-tool-btn--locked': !auth.git }"
                     @click="repositoryOpen = true"
                   >
                     <v-icon icon="mdi-source-branch" size="20" />
+                    <v-icon v-if="!auth.git" icon="mdi-lock-outline" size="12" class="nemo-tool-lock" />
                     <span class="nemo-tool-label">{{ $t('repo.open') }}</span>
                   </button>
                 </template>
               </v-tooltip>
 
-              <!-- SEO-Audit — Pro-Funktion, nur bei gültiger Lizenz und
-                   konfiguriertem Hugo-Projekt (public/ und content/). -->
-              <v-tooltip v-if="auth.audit" :text="$t('audit.open')" location="right" :disabled="!toolbarCollapsed">
+              <!-- SEO-Audit — Pro-Funktion, ebenfalls sichtbar ohne Lizenz. -->
+              <v-tooltip :text="auth.audit ? $t('audit.open') : $t('pro.locked')" location="right" :disabled="!toolbarCollapsed">
                 <template #activator="{ props }">
                   <button
                     v-bind="props"
                     type="button"
                     class="nemo-tool-btn"
-                    :class="{ active: files.auditMode }"
+                    :class="{ active: files.auditMode, 'nemo-tool-btn--locked': !auth.audit }"
                     @click="openAuditView"
                   >
                     <v-icon icon="mdi-clipboard-search-outline" size="20" />
+                    <v-icon v-if="!auth.audit" icon="mdi-lock-outline" size="12" class="nemo-tool-lock" />
                     <span class="nemo-tool-label">{{ $t('audit.open') }}</span>
                   </button>
                 </template>
@@ -807,7 +809,7 @@ async function build() {
                  Arbeitsbereich (wie der Editor). Klare Trennung vom
                  Dateimanager; ein geöffneter Editor (z-index höher) legt sich
                  zusätzlich darüber. -->
-            <AuditView v-if="files.auditMode" />
+            <AuditView v-if="files.auditMode" @activate-license="licenseOpen = true" />
             <EditorPanel ref="editorPanelRef" />
             <!-- LLM-Content-Qualität: Overlay-Ansicht (z-index zwischen Editor
                  und Hilfe), geöffnet aus dem Editor, dem Kontextmenü der
@@ -888,10 +890,10 @@ async function build() {
 
     <!-- Pro-Lizenz aktivieren · Git-Versionierung (Pro-Funktion) -->
     <LicenseDialog v-model="licenseOpen" @activated="onLicenseActivated" />
-    <RepositoryDialog v-model="repositoryOpen" />
+    <RepositoryDialog v-model="repositoryOpen" @activate-license="licenseOpen = true" />
 
     <!-- KI-Assistent (rechtes Seitenpanel) -->
-    <AssistantPanel v-if="auth.ai.enabled" />
+    <AssistantPanel v-if="auth.ai.enabled" @activate-license="licenseOpen = true" />
 
     <v-snackbar :model-value="!!error" color="error" @update:model-value="error = null">
       {{ error }}
@@ -1111,6 +1113,18 @@ async function build() {
   line-height: 18px;
   text-align: center;
 }
+/* Gesperrte Pro-Funktion: sichtbar, aber zurückgenommen — mit kleinem Schloss
+   am Symbol. Der Klick öffnet die Ansicht, die den Hinweis zeigt. */
+.nemo-tool-btn--locked { opacity: 0.6; }
+/* Sitzt unten rechts am Werkzeugsymbol (Knopf ist position: relative,
+   Symbol 20 px ab 8 px Innenabstand). */
+.nemo-tool-lock {
+  position: absolute;
+  top: 20px;
+  left: 19px;
+  opacity: 0.9;
+}
+
 /* Warnvariante: eine Cron-Aufgabe steht oder ein Zugang antwortet nicht. */
 .nemo-tool-badge--alert {
   background: var(--mint-danger, #c62828);

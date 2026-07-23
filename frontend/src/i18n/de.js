@@ -161,6 +161,77 @@ export default {
       'Einzelne Dateien (public-relativer Pfad, eine je Zeile), die der Bericht nur bei dieser Webseite überspringt. Anders als oben werden hier ganze Dateipfade exakt verglichen, keine Verzeichnisse.',
   },
 
+  // Hinweise anstelle gesperrter Pro-Funktionen. Sie werden nicht ausgeblendet,
+  // damit erkennbar bleibt, was die Pro-Variante leistet.
+  pro: {
+    activate: 'Pro-Lizenz aktivieren',
+    needsLicense: 'Benötigt eine gültige Pro-Lizenz für diese Domain.',
+    locked: 'Pro-Funktion — noch nicht freigeschaltet',
+    blocker: {
+      project: 'Zusätzlich nötig: ein konfiguriertes Hugo-Projekt (Quell- und Zielordner).',
+      aiKey: 'Zusätzlich nötig: ein KI-Schlüssel in den Einstellungen.',
+      service: 'Zusätzlich nötig: der Dienst für Live-Analyse und Spracheingabe in den Einstellungen.',
+    },
+    feature: {
+      git: {
+        title: 'Versionierung mit Git',
+        intro: 'Sichert jeden Bearbeitungsstand der Webseite und macht Änderungen nachvollziehbar und umkehrbar.',
+        points: [
+          'Änderungen als Commit sichern — mit Nachricht und Zeitpunkt',
+          'Verlauf einsehen und Unterschiede zwischen Ständen vergleichen',
+          'Versehentliche Änderungen auf einen früheren Stand zurücksetzen',
+          'Stände an ein entferntes Repository übertragen',
+        ],
+      },
+      audit: {
+        title: 'SEO-Check der Webseite',
+        intro: 'Prüft die fertig gebaute Webseite gegen rund 45 Regeln und zeigt jeden Fund mit Erklärung und Quelldatei.',
+        points: [
+          'Titel, Meta-Description, Überschriften, Bilder und Open-Graph-Felder',
+          'Tote interne Links und Seiten, die weder verlinkt noch in der Sitemap stehen',
+          'Ähnliche Adressen, die als Dublette gelten könnten',
+          'Die letzten zehn Läufe bleiben erhalten — Vorher/Nachher vergleichbar',
+        ],
+      },
+      auditContent: {
+        title: 'Inhaltsprüfung per KI',
+        intro: 'Beurteilt einzelne Seiten inhaltlich — Verständlichkeit, Vollständigkeit, Aufbau — und schlägt Verbesserungen vor.',
+        points: [
+          'Qualitätsurteil mit Punktwert je Seite',
+          'Konkrete Vorschläge statt allgemeiner Ratschläge',
+          'Verbesserung auf Knopfdruck durch den Assistenten',
+          'Automatisch per Cron: Der Verbesserer arbeitet die schwächsten Seiten nacheinander ab',
+        ],
+      },
+      pagespeed: {
+        title: 'PageSpeed-Check',
+        intro: 'Misst die veröffentlichte Webseite mit Google PageSpeed Insights — dieselben Werte, die auch die Suchmaschine sieht.',
+        points: [
+          'Bewertung für Mobilgerät und Desktop',
+          'Kern-Web-Vitalwerte (LCP, CLS, INP)',
+          'Verlauf der Messungen je Webseite',
+        ],
+      },
+      liveAnalysis: {
+        title: 'Live-Analyse',
+        intro: 'Prüft die tatsächlich veröffentlichte Webseite über den Analysedienst — nicht die lokalen Dateien, sondern das, was Besucher sehen.',
+        points: [
+          'Crawlt die Live-Adresse und meldet Funde je Seite',
+          'Verlauf früherer Läufe zum Vergleich',
+          'Bericht als Datei ausgeben',
+        ],
+      },
+      speech: {
+        title: 'Spracheingabe',
+        intro: 'Diktieren statt tippen: Aufnahme im Browser, der Dienst wandelt sie in Text um.',
+        points: [
+          'Text für den KI-Assistenten einsprechen',
+          'Der erkannte Text lässt sich vor dem Senden noch ändern',
+        ],
+      },
+    },
+  },
+
   license: {
     title: 'Pro-Lizenz',
     intro: 'Die Pro-Edition schaltet die Git-Versionierung frei. Die Lizenz gilt pro Webseite und ist an deren Domain gebunden.',

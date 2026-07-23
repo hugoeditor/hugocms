@@ -38,6 +38,13 @@ export const useAuthStore = defineStore('auth', {
     liveAnalysisUrl: '', // gespeicherte Live-Analyse-Adresse (Mount-Konfig)
     siteUrlDetected: '', // aus der Hugo-baseURL erkannte Adresse (Vorbelegung, geteilt)
     review: false, // gestaffelte Veröffentlichung: Entwürfe zur Freigabe (Hugo-Projekt)
+    // Warum eine gesperrte Funktion nicht nutzbar ist:
+    // { git|audit|auditContent|pagespeed|liveAnalysis|speech:
+    //   { available: bool, blockers: ['pro'|'project'|'aiKey'|'service'] } }.
+    // Pro-Funktionen werden NICHT mehr ausgeblendet — die Ansichten zeigen
+    // stattdessen einen Hinweis (ProGate), der erklärt, was die Funktion kann
+    // und was ihr noch fehlt.
+    features: {},
     // Rechnername der Hugo-baseURL (z. B. dev.opensourceerp.dev) — benennt die
     // Webseite im Browser-Tab. Leer, wenn das Projekt keine baseURL führt.
     siteHost: '',
@@ -46,6 +53,16 @@ export const useAuthStore = defineStore('auth', {
   getters: {
     // Pro-Edition freigeschaltet (gültige, host-gebundene Lizenz).
     isPro: (state) => state.license.edition === 'pro',
+    // Offene Voraussetzungen einer Funktion (leer = nutzbar). Unbekannte
+    // Funktionsnamen gelten als nutzbar, damit ein älteres Backend ohne
+    // features-Feld nichts sperrt.
+    blockers: (state) => (feature) => state.features?.[feature]?.blockers ?? [],
+    // true, wenn der Funktion NUR die Pro-Lizenz fehlt — dann genügt ein
+    // Lizenzschlüssel, und der Hinweis darf das ohne Einschränkung sagen.
+    onlyNeedsPro: (state) => (feature) => {
+      const b = state.features?.[feature]?.blockers ?? []
+      return b.length === 1 && b[0] === 'pro'
+    },
   },
 
   actions: {
@@ -74,6 +91,7 @@ export const useAuthStore = defineStore('auth', {
       this.liveAnalysisUrl = data.liveAnalysisUrl ?? ''
       this.siteUrlDetected = data.siteUrlDetected ?? ''
       this.review = data.review ?? false
+      this.features = data.features ?? {}
       this.siteHost = data.siteHost ?? ''
       setCsrfToken(data.csrf)
       this.ready = true

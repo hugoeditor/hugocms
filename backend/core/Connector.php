@@ -632,7 +632,51 @@ final class Connector
             // Projekt. Keine Pro-Bindung — der Entwurf-Modus ist eine allgemeine
             // Sicherheitsfunktion (auch der Editor-Button nutzt ihn).
             'review' => $this->hugo !== null,
+            // Warum eine Funktion (noch) nicht nutzbar ist. Die Flags oben sagen
+            // nur ob — für den Pro-Hinweis muss der Client aber wissen, ob die
+            // Lizenz fehlt oder eine andere Voraussetzung. Siehe featureMatrix().
+            'features' => $this->featureMatrix(),
         ];
+    }
+
+    /**
+     * Zustand jeder gesperrten Funktion: nutzbar ja/nein und, falls nein, WAS
+     * fehlt. `blockers` listet alle offenen Voraussetzungen (nicht nur die
+     * erste), damit der Client ehrlich anzeigen kann, was eine Aktivierung der
+     * Pro-Lizenz allein noch nicht löst.
+     *
+     * Werte in `blockers`: 'pro' (keine gültige Lizenz für diese Domain),
+     * 'project' (kein Hugo-Projekt konfiguriert), 'aiKey' (kein [ai] api_key),
+     * 'service' (Dienst für Live-Analyse/Spracheingabe nicht konfiguriert).
+     *
+     * @return array<string, array{available: bool, blockers: list<string>}>
+     */
+    private function featureMatrix(): array
+    {
+        $pro = $this->license()->isPro();
+        $project = $this->hugo !== null;
+        $aiKey = $this->ai['apiKey'] !== null;
+        $service = $this->services['serviceKey'] !== null && $this->services['serviceUrl'] !== null;
+
+        // Voraussetzungen je Funktion, in der Reihenfolge, in der sie dem
+        // Benutzer genannt werden — die Lizenz zuerst, denn sie ist der Grund,
+        // aus dem die Funktion überhaupt beworben wird.
+        $needs = [
+            'git' => ['pro' => $pro, 'project' => $project],
+            'audit' => ['pro' => $pro, 'project' => $project],
+            'auditContent' => ['pro' => $pro, 'project' => $project, 'aiKey' => $aiKey],
+            'pagespeed' => ['pro' => $pro, 'project' => $project],
+            'liveAnalysis' => ['pro' => $pro, 'project' => $project, 'service' => $service],
+            'speech' => ['pro' => $pro, 'service' => $service],
+        ];
+
+        $out = [];
+        foreach ($needs as $feature => $conditions) {
+            $blockers = array_keys(array_filter($conditions, static fn (bool $met): bool => !$met));
+            $out[$feature] = ['available' => $blockers === [], 'blockers' => array_values($blockers)];
+        }
+
+        return $out;
     }
 
     private function cmdLogin(array $request): array

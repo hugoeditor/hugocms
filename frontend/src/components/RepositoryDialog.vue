@@ -3,13 +3,19 @@ import { computed, ref, watch } from 'vue'
 import { useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
 import { useRepoStore } from '../stores/repo'
+import { useAuthStore } from '../stores/auth'
+import ProGate from './ProGate.vue'
 import { errorText } from '../i18n/apiMessage'
 import { useConfirm } from '../util/confirm'
 
 const { t } = useI18n()
 const { smAndDown } = useDisplay()
 const repo = useRepoStore()
+const auth = useAuthStore()
 const confirm = useConfirm()
+
+// Die Lizenzaktivierung liegt in App.vue — von hier nur angestoßen.
+const emit = defineEmits(['activate-license'])
 
 // Sichtbarkeit als v-model (Vue 3.4+). Ein Knopf in der Titelleiste öffnet.
 const model = defineModel({ type: Boolean, default: false })
@@ -27,9 +33,11 @@ const error = ref(null)
 // Ergebnis einer Schreibaktion (Commit/Push/Reset): { ok, key, output }.
 const action = ref(null)
 
-// Beim Öffnen Status und Verlauf laden.
+// Beim Öffnen Status und Verlauf laden — es sei denn, die Funktion ist gar
+// nicht freigeschaltet: Dann zeigt der Dialog nur den Pro-Hinweis, und ein
+// Ladeversuch liefe bloß in ein PRO-REQUIRED des Servers.
 watch(model, async (open) => {
-  if (!open) return
+  if (!open || !auth.git) return
   error.value = null
   action.value = null
   message.value = ''
@@ -202,6 +210,7 @@ const busy = computed(() => committing.value || pushing.value || resetting.value
         {{ $t('repo.title') }}
         <v-spacer />
         <v-btn
+          v-if="auth.git"
           icon="mdi-refresh"
           variant="text"
           size="small"
@@ -212,7 +221,13 @@ const busy = computed(() => committing.value || pushing.value || resetting.value
       </v-card-title>
 
       <v-card-text style="max-height: 70vh">
-        <v-skeleton-loader v-if="loading && !repo.status" type="article" />
+        <!-- Ohne Freischaltung nur der Hinweis, was Git hier leisten würde. -->
+        <ProGate
+          v-if="!auth.git"
+          feature="git"
+          @activate="model = false; emit('activate-license')"
+        />
+        <v-skeleton-loader v-else-if="loading && !repo.status" type="article" />
         <template v-else>
           <!-- Status -->
           <div v-if="repo.status" class="d-flex align-center flex-wrap mb-3" style="gap: 8px">

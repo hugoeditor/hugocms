@@ -161,6 +161,77 @@ export default {
       'Individual files (public-relative path, one per line) that the report skips for this website only. Unlike above, whole file paths are matched exactly, not directories.',
   },
 
+  // Notices shown in place of locked Pro features. They are not hidden, so it
+  // stays visible what the Pro variant offers.
+  pro: {
+    activate: 'Activate Pro license',
+    needsLicense: 'Requires a valid Pro license for this domain.',
+    locked: 'Pro feature — not unlocked yet',
+    blocker: {
+      project: 'Also required: a configured Hugo project (source and destination folder).',
+      aiKey: 'Also required: an AI key in the settings.',
+      service: 'Also required: the service for live analysis and speech input in the settings.',
+    },
+    feature: {
+      git: {
+        title: 'Versioning with Git',
+        intro: 'Records every state of the website and makes changes traceable and reversible.',
+        points: [
+          'Save changes as a commit — with message and timestamp',
+          'Browse the history and compare differences between states',
+          'Roll accidental changes back to an earlier state',
+          'Push states to a remote repository',
+        ],
+      },
+      audit: {
+        title: 'SEO check of the website',
+        intro: 'Checks the built website against about 45 rules and shows every finding with an explanation and its source file.',
+        points: [
+          'Titles, meta descriptions, headings, images and Open Graph fields',
+          'Broken internal links and pages neither linked nor listed in the sitemap',
+          'Similar addresses that could be taken as duplicates',
+          'The last ten runs are kept — before/after stays comparable',
+        ],
+      },
+      auditContent: {
+        title: 'Content review by AI',
+        intro: 'Judges individual pages on substance — clarity, completeness, structure — and suggests improvements.',
+        points: [
+          'Quality verdict with a score per page',
+          'Concrete suggestions instead of general advice',
+          'Improvement at the push of a button via the assistant',
+          'Automatic via cron: the improver works through the weakest pages one by one',
+        ],
+      },
+      pagespeed: {
+        title: 'PageSpeed check',
+        intro: 'Measures the published website with Google PageSpeed Insights — the same values the search engine sees.',
+        points: [
+          'Score for mobile and desktop',
+          'Core Web Vitals (LCP, CLS, INP)',
+          'History of measurements per website',
+        ],
+      },
+      liveAnalysis: {
+        title: 'Live analysis',
+        intro: 'Checks the actually published website via the analysis service — not the local files, but what visitors see.',
+        points: [
+          'Crawls the live address and reports findings per page',
+          'History of earlier runs for comparison',
+          'Export the report as a file',
+        ],
+      },
+      speech: {
+        title: 'Speech input',
+        intro: 'Dictate instead of typing: record in the browser, the service turns it into text.',
+        points: [
+          'Speak text for the AI assistant',
+          'The recognised text can still be edited before sending',
+        ],
+      },
+    },
+  },
+
   license: {
     title: 'Pro license',
     intro: 'The Pro edition unlocks Git versioning. The license applies per website and is bound to its domain.',

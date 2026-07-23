@@ -2,7 +2,7 @@
 // SEO-Audit-Vollbildansicht (Pro-Funktion). Startet Läufe, zeigt den Bericht
 // gruppiert nach Kategorie und Schweregrad und springt aus einem Fund zur
 // editierbaren Hugo-Quelldatei. Aufbau wie die Papierkorb-Ansicht (TrashView).
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuditStore } from '../stores/audit'
 import { useAuditContentStore } from '../stores/auditContent'
@@ -17,6 +17,10 @@ import AuditIssueTable from './AuditIssueTable.vue'
 import AuditContentList from './AuditContentList.vue'
 import PageSpeedPanel from './PageSpeedPanel.vue'
 import LiveAnalysisPanel from './LiveAnalysisPanel.vue'
+import ProGate from './ProGate.vue'
+
+// Die Lizenzaktivierung liegt in App.vue (LicenseDialog) — von hier angestoßen.
+const emit = defineEmits(['activate-license'])
 
 const { t, locale } = useI18n()
 const audit = useAuditStore()
@@ -27,9 +31,20 @@ const help = useHelpStore()
 const confirm = useConfirm()
 const error = useTransientError()
 
-// Reiter: SEO-Bericht (Standard) oder LLM-Content-Qualität. Der zweite Reiter
-// erscheint nur, wenn freigeschaltet (Pro + KI-Schlüssel).
+// Reiter: SEO-Bericht (Standard), LLM-Content-Qualität, PageSpeed, Live-Analyse.
+// Alle bleiben sichtbar, auch ohne Freischaltung — der Inhalt zeigt dann den
+// Pro-Hinweis statt der Ansicht.
 const tab = ref('report')
+
+// Funktionsname des gewählten Reiters, wenn dieser NICHT freigeschaltet ist —
+// sonst null. Steuert, ob der Inhalt durch den Pro-Hinweis ersetzt wird.
+const lockedTab = computed(() => {
+  if (tab.value === 'content' && !auth.auditContent) return 'auditContent'
+  if (tab.value === 'pagespeed' && !auth.pagespeed) return 'pagespeed'
+  if (tab.value === 'live' && !auth.liveAnalysis) return 'liveAnalysis'
+  if (tab.value === 'report' && !auth.audit) return 'audit'
+  return null
+})
 
 // Klick auf die Problembeschreibung: ausführliche Hilfe zur Regel öffnen. Die
 // HelpView legt sich als Überlagerung über den Bericht; beim Schließen erscheint
@@ -63,6 +78,9 @@ watch(searchInput, (v) => {
 onBeforeUnmount(() => clearTimeout(searchTimer))
 
 onMounted(async () => {
+  // Ohne Freischaltung nichts laden: Der Bericht-Reiter zeigt dann den
+  // Pro-Hinweis, und jeder Abruf liefe in ein PRO-REQUIRED des Servers.
+  if (!auth.audit) return
   try {
     await audit.fetchRuns()
     if (!audit.current && audit.runs.length) {
@@ -161,21 +179,35 @@ function runLabel(run) {
       <span class="audit-title">{{ $t('audit.title') }}</span>
     </div>
 
-    <!-- Reiter: nur, wenn neben dem Bericht mindestens eine weitere Ansicht
-         freigeschaltet ist (Content-Prüfung oder PageSpeed) — sonst gibt es nur
-         den Bericht und eine Reiterleiste wäre überflüssig. -->
-    <div v-if="auth.auditContent || auth.pagespeed || auth.liveAnalysis" class="audit-tabs nemo-noselect">
+    <!-- Reiter immer vollständig: Auch nicht freigeschaltete Ansichten bleiben
+         sichtbar (mit Schloss) und zeigen im Inhalt, was sie leisten würden. -->
+    <div class="audit-tabs nemo-noselect">
       <button class="audit-tab" :class="{ active: tab === 'report' }" @click="tab = 'report'">
         <v-icon icon="mdi-clipboard-search-outline" size="16" class="mr-1" />{{ $t('audit.tabReport') }}
       </button>
-      <button v-if="auth.auditContent" class="audit-tab" :class="{ active: tab === 'content' }" @click="tab = 'content'">
+      <button
+        class="audit-tab"
+        :class="{ active: tab === 'content', locked: !auth.auditContent }"
+        @click="tab = 'content'"
+      >
         <v-icon icon="mdi-text-search" size="16" class="mr-1" />{{ $t('contentQuality.title') }}
+        <v-icon v-if="!auth.auditContent" icon="mdi-lock-outline" size="12" class="ml-1" />
       </button>
-      <button v-if="auth.pagespeed" class="audit-tab" :class="{ active: tab === 'pagespeed' }" @click="tab = 'pagespeed'">
+      <button
+        class="audit-tab"
+        :class="{ active: tab === 'pagespeed', locked: !auth.pagespeed }"
+        @click="tab = 'pagespeed'"
+      >
         <v-icon icon="mdi-speedometer" size="16" class="mr-1" />{{ $t('pagespeed.tab') }}
+        <v-icon v-if="!auth.pagespeed" icon="mdi-lock-outline" size="12" class="ml-1" />
       </button>
-      <button v-if="auth.liveAnalysis" class="audit-tab" :class="{ active: tab === 'live' }" @click="tab = 'live'">
+      <button
+        class="audit-tab"
+        :class="{ active: tab === 'live', locked: !auth.liveAnalysis }"
+        @click="tab = 'live'"
+      >
         <v-icon icon="mdi-radar" size="16" class="mr-1" />{{ $t('liveAnalysis.tab') }}
+        <v-icon v-if="!auth.liveAnalysis" icon="mdi-lock-outline" size="12" class="ml-1" />
       </button>
     </div>
 
@@ -295,8 +327,17 @@ function runLabel(run) {
     </div>
 
     <div class="nemo-content nemo-scroll">
+      <!-- Gesperrter Reiter: statt der Ansicht der Hinweis, was sie leistet.
+           Die Panels laden beim Einhängen Daten — sie dürfen hier gar nicht
+           erst erzeugt werden. -->
+      <ProGate
+        v-if="lockedTab"
+        :feature="lockedTab"
+        @activate="emit('activate-license')"
+      />
+
       <!-- Reiter „Content-Qualität": Liste der geprüften Seiten -->
-      <AuditContentList v-if="tab === 'content'" />
+      <AuditContentList v-else-if="tab === 'content'" />
 
       <!-- Reiter „PageSpeed": Geschwindigkeitsmessung der Live-Adresse -->
       <PageSpeedPanel v-else-if="tab === 'pagespeed'" />
@@ -432,6 +473,9 @@ function runLabel(run) {
   cursor: pointer;
 }
 .audit-tab:hover { color: var(--mint-text); }
+/* Nicht freigeschalteter Reiter: anwählbar, aber zurückgenommen — sein Inhalt
+   erklärt, was die Funktion leistet. */
+.audit-tab.locked { opacity: 0.6; }
 .audit-tab.active {
   background: var(--mint-content);
   border-color: var(--mint-border);

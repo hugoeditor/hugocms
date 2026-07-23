@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 import { useAssistantStore } from '../stores/assistant'
 import { useFilesStore } from '../stores/files'
+import ProGate from './ProGate.vue'
 import { errorText } from '../i18n/apiMessage'
 import { lineDiff } from '../util/lineDiff'
 import { flushEditor } from '../util/editorBridge'
@@ -42,6 +43,9 @@ const scroller = ref(null)
 // freigeschaltet ist (auth.speech) UND der Browser Aufnahme unterstützt.
 const { supported: voiceSupported, recording: voiceRecording, start: startVoice, stop: stopVoice } = useVoiceInput()
 const transcribing = ref(false)
+// Hinweisdialog, wenn die Spracheingabe nicht freigeschaltet ist.
+const voiceGateOpen = ref(false)
+const emit = defineEmits(['activate-license'])
 
 // Sprachaufnahme umschalten: erster Klick startet, zweiter beendet und
 // transkribiert. Der erkannte Text wird an die aktuelle Eingabe angehängt,
@@ -393,16 +397,22 @@ watch(
           @keydown.enter.exact.prevent="submit"
         >
           <template #append-inner>
+            <!-- Der Knopf bleibt auch ohne Freischaltung sichtbar (sofern der
+                 Browser aufnehmen kann): Ein Klick erklärt dann, was die
+                 Spracheingabe leistet, statt sie stillschweigend zu verbergen. -->
             <v-btn
-              v-if="voiceSupported && auth.speech"
+              v-if="voiceSupported"
               :icon="voiceRecording ? 'mdi-stop' : 'mdi-microphone'"
               :color="voiceRecording ? 'error' : undefined"
               variant="text"
               size="small"
+              :class="{ 'assistant-locked': !auth.speech }"
               :loading="transcribing"
               :disabled="assistant.busy"
-              :title="voiceRecording ? $t('assistant.voiceStop') : $t('assistant.voiceRecord')"
-              @click="toggleVoice"
+              :title="!auth.speech
+                ? $t('pro.feature.speech.title')
+                : (voiceRecording ? $t('assistant.voiceStop') : $t('assistant.voiceRecord'))"
+              @click="auth.speech ? toggleVoice() : (voiceGateOpen = true)"
             />
             <v-btn icon="mdi-send" variant="text" size="small" :disabled="assistant.busy || !input.trim()" @click="submit" />
           </template>
@@ -410,9 +420,26 @@ watch(
       </div>
     </div>
   </v-navigation-drawer>
+
+  <!-- Spracheingabe nicht freigeschaltet: Hinweis als kleiner Dialog — im
+       schmalen Eingabebereich wäre für einen eingebetteten Kasten kein Platz. -->
+  <v-dialog v-model="voiceGateOpen" width="560">
+    <v-card class="pa-2">
+      <v-card-text>
+        <ProGate feature="speech" dense @activate="voiceGateOpen = false; emit('activate-license')" />
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn variant="text" @click="voiceGateOpen = false">{{ $t('common.close') }}</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
 </template>
 
 <style scoped>
+/* Spracheingabe ohne Freischaltung: sichtbar, aber zurückgenommen. */
+.assistant-locked { opacity: 0.5; }
+
 /* Drawer-Höhe an die per VisualViewport gemessene, tatsächlich sichtbare Höhe
    binden (--assistant-vh, vom Script gesetzt). Das berücksichtigt auf echten
    Geräten die dynamische Adressleiste UND die Bildschirmtastatur — anders als
