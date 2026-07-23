@@ -1,25 +1,17 @@
-# HugoCMS – Dateimanager
+# HugoCMS – Management für statisch generierte Webseiten
 
-Ein webbasierter Dateimanager zum Pflegen von Hugo-Webseiten. Backend in PHP
-(ohne Composer), Frontend mit Vue 3, Vuetify 3 und Vite. Eine Installation
-verwaltet **mehrere Webseiten** (Mandantenfähigkeit); welche Verzeichnisse als
-Mounts erreichbar sind, wird je Webseite über INI-Dateien festgelegt.
+Ein webbasiertes Managementsystem, in dem Inhalte einer Webseite erstellt,
+geprüft und veröffentlicht werden. Der Schwerpunkt liegt auf
+**Suchmaschinen-Optimierung**: ein regelbasierter SEO-Check untersucht das
+gebaute Projekt und meldet jeden Fund samt Regel-Erklärung, und die **eingebaute
+KI** bewertet einzelne Inhalte, verbessert sie auf Wunsch direkt und arbeitet als
+Assistent im gesamten Projekt.
 
-> **Stand: Stufe 4.** Anmeldung, Mounts, Verzeichnisse auflisten, Textdateien
-> lesen/speichern (mit Konfliktschutz); anlegen, umbenennen, kopieren,
-> verschieben, löschen, Mehrfachauswahl, Kontextmenü; Upload (Drag-and-Drop),
-> Download, Bildvorschauen, Bildbetrachter, Symbolansicht; visueller
-> Markdown-Editor (TipTap), Papierkorb-Verwaltung (Wiederherstellen/Leeren),
-> CSRF-Schutz, rekursive Suche. Optionaler **KI-Assistent** (Claude) mit Zugriff
-> auf die Mounts, Editor-Anbindung und drei Schreibmodi. Optionale
-> **Pro-Version**, je Webseite über einen Lizenzschlüssel freigeschaltet:
-> Git-Versionierung, **SEO-Check** des gebauten Projekts und **Content-Qualität**
-> (KI-Prüfung einzelner Inhaltsdateien mit direkter **KI-Verbesserung**, auch per
-> Cron). Konfiguration und
-> Anmeldedaten lassen sich im laufenden Betrieb über die Oberfläche ändern.
-> Mehrbenutzer mit Rollen folgt (Stufe 5).
-> Mandantenfähigkeit und der Auslieferungsweg (`packaging.sh` / `install.sh`)
-> stehen bereits.
+Technisch basiert das System auf [Hugo](https://gohugo.io), einem Webseitengenerator, der aus Markdown-Dateien statische Webseiten erzeugt. Das Backend ist in PHP geschrieben (ohne Composer), das Frontend mit Vue 3, Vuetify 3 und Vite. Eine Installation verwaltet **mehrere Webseiten** pro Hosting (Mandantenfähigkeit); welche Verzeichnisse als Mounts erreichbar sind, wird je Webseite flexibel über INI-Dateien festgelegt.
+
+> **Was bereits fertig ist und was noch aussteht**, steht in
+> [ENTWICKLUNGSSTAND.md](ENTWICKLUNGSSTAND.md) — diese README beschreibt die
+> Funktionsweise, nicht den Fortschritt.
 
 > **Hinweis: Rolling Release.** HugoCMS erscheint fortlaufend, ohne feste
 > Versionssprünge. Die jeweils getestete und freigegebene Fassung liegt
@@ -398,9 +390,9 @@ Grundlage der KI-Verbesserung (siehe „SEO-Check & Content-Qualität").
 Im `confirm`-Modus zeigt das Panel vor dem Schreiben eine Vorschau: bei einer
 bestehenden Datei einen zeilenweisen Diff, bei einer neuen Datei den Inhalt.
 
-**Editor- und Dateimanager-Anbindung.** Der Assistent erhält bei jedem Zug den
+**Editor- und Dateiverwaltungs-Anbindung.** Der Assistent erhält bei jedem Zug den
 Kontext der Oberfläche: die im **Editor** geöffnete Datei (für „diese Datei")
-und das im **Dateimanager** angezeigte Verzeichnis (Zielort für „eine neue
+und das in der **Dateiverwaltung** angezeigte Verzeichnis (Zielort für „eine neue
 Datei" ohne Pfadangabe). Ungespeicherte Editor-Änderungen werden vor dem Zug
 automatisch gesichert; ändert der Assistent die offene Datei, lädt der Editor
 das Ergebnis sofort neu.
@@ -419,10 +411,10 @@ die Datei, greift die allgemeine Konventionserkennung.
 Die **Pro-Version** schaltet je Webseite über einen Lizenzschlüssel zusätzliche
 Funktionen frei:
 
-- **Git-Versionierung** des Hugo-Projekts,
-- **SEO-Check** des gebauten Projekts (Bericht mit Funden je Regel),
+- **SEO-Check** des gebauten Projekts (regelbasierter Bericht mit Funden je Regel),
 - **Content-Qualität** — KI-Prüfung einzelner Inhaltsdateien samt direkter
-  **KI-Verbesserung** (auch per Cron).
+  **KI-Verbesserung** (auch per Cron),
+- **Git-Versionierung** des Hugo-Projekts.
 
 Voraussetzung für alle Pro-Funktionen ist eine gültige, domaingebundene Lizenz
 (siehe Lizenzmodell) und ein konfiguriertes **Hugo-Projekt** der Webseite
@@ -715,14 +707,7 @@ Client:
   Das einmalige Einrichtungs-Setup (vor Existenz der `hugocms.ini`) läuft ohne
   Token, da dort noch keine schützenswerte Sitzung besteht.
 
-## Nächste Stufen
+## Entwicklungsstand
 
-- ~~**Stufe 2:** anlegen, umbenennen, kopieren, verschieben, löschen (in den
-  Papierkorb), Mehrfachauswahl, Kontextmenü.~~ ✓ umgesetzt
-- ~~**Stufe 3:** Upload (Drag-and-Drop), Download, Bildvorschauen (GD),
-  Bildbetrachter, Kachelansicht.~~ ✓ umgesetzt (Bildvorschauen brauchen die
-  PHP-Erweiterung GD; ohne GD wird das Originalbild unverkleinert geliefert)
-- ~~**Stufe 4:** TipTap-Markdown-Editor (visuell, mit Front-Matter-Schutz),
-  Papierkorb-Verwaltung (Wiederherstellen/Leeren), CSRF-Token, Suche.~~
-  ✓ umgesetzt
-- **Stufe 5:** Mehrbenutzer mit Rollen.
+Welche Funktionen fertig sind und was noch aussteht, steht in
+[ENTWICKLUNGSSTAND.md](ENTWICKLUNGSSTAND.md).
