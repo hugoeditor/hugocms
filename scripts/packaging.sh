@@ -127,7 +127,7 @@ cat > "$PKG/app/.htaccess" <<'HT'
         Header set Cache-Control "no-cache"
     </Files>
     <FilesMatch "\.(js|css|woff2?|ttf|eot|svg|png|jpe?g|gif|webp|avif|ico)$">
-        Header set Cache-Control "public, max-age=31536000, immutable"
+        Header set Cache-Control "public, max-age=0, must-revalidate"
     </FilesMatch>
 </IfModule>
 HT
