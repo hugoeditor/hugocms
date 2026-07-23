@@ -243,6 +243,11 @@ async function leaveEditorThen(action) {
   auditContent.closeDialog()
   review.closeQueue()
   status.close()
+  // Auch den SEO-Check verlassen: Er ist keine Überlagerung, sondern ein
+  // Modus der Hauptansicht — bliebe er gesetzt, zeigte die Werkzeugschiene ihn
+  // weiter als aktiv, und sein nächster Klick würde ihn abschalten statt ihn zu
+  // zeigen. Die Orte und der Papierkorb tun dasselbe bereits im files-Store.
+  files.leaveAudit()
   if (files.openFile) files.closeFile()
   action()
 }
