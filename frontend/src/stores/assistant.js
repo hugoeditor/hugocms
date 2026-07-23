@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { api } from '../api/client'
+import { useReviewStore } from './review'
 
 // Fehlermeldungen des Assistenten blenden sich nach dieser Frist selbst aus
 // (analog zu util/transientError). Ein modul-weiter Timer genügt, da es je
@@ -170,6 +171,13 @@ export const useAssistantStore = defineStore('assistant', {
       this.pending = data.pending ?? null
       this.actions = Array.isArray(data.actions) ? data.actions : []
       this.aborted = data.aborted ?? false
+      // Ging ein Schreibvorgang als Freigabe-Entwurf ab (Modus auto, der Server
+      // markiert die Aktion mit draft), zählt die Werkzeugschiene einen Entwurf
+      // mehr — Liste nachladen. Gilt für alle Wege in apply(): Gespräch,
+      // bestätigte Aktion und den Verbesserungslauf aus der Content-Liste.
+      if (this.actions.some((a) => a.draft)) {
+        useReviewStore().fetch().catch(() => {})
+      }
     },
 
     // Spracheingabe (Pro): nimmt ein aufgenommenes Audio-Blob, schickt es als

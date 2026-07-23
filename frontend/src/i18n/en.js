@@ -766,9 +766,11 @@ export default {
     conflictMessage: 'The live file has changed since this draft was created. Overwrite it with the draft?',
     conflictConfirm: 'Overwrite',
     origin: {
-      ai: 'AI assistant',
-      cron: 'Cron (automatic)',
-      user: 'Manual',
+      ai: 'Edited by the AI assistant',
+      cron: 'Edited by the AI cron job',
+      // {0} is the signed-in user; without a name `someone` applies.
+      user: 'Edited by {0}',
+      someone: 'a user',
     },
   },
 

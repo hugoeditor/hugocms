@@ -1277,16 +1277,22 @@ final class Connector
      * Legt einen Freigabe-Entwurf für die Datei (mount/rel) ab: hält den
      * vollständigen Vorschlag fest, ohne die Live-Datei zu berühren. Ein bereits
      * offener Entwurf derselben Datei wird ersetzt.
+     *
+     * `author` hält fest, wer den Entwurf ausgelöst hat — beim manuellen Entwurf
+     * und beim interaktiven Assistenten der angemeldete Benutzer, im Cron null
+     * (dort gibt es keine Session). Der Client beschriftet damit die Herkunft.
      */
     private function stashDraft(Mount $mount, string $rel, string $abs, string $content, string $origin, ?string $model = null): void
     {
         $exists = is_file($abs);
+        $user = $this->auth->currentUser();
         $this->reviewStore()->put([
             'key' => ReviewStore::keyFor($mount->name(), $rel),
             'mount' => $mount->name(),
             'rel' => $rel,
             'fileId' => $this->resolver->encodeId($mount->name(), $rel),
             'origin' => $origin,
+            'author' => is_string($user['name'] ?? null) ? (string) $user['name'] : null,
             'isNew' => !$exists,
             'proposedContent' => $content,
             'baseMtime' => $exists ? (int) (filemtime($abs) ?: 0) : null,

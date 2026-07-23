@@ -122,7 +122,11 @@ final class AssistantService
 
             [$resultText, $isError] = $this->executeTool($name, $input);
             if (!$isError && in_array($name, self::WRITE_TOOLS, true)) {
-                $actions[] = ['tool' => $name, 'path' => (string) ($input['path'] ?? '')];
+                $actions[] = [
+                    'tool' => $name,
+                    'path' => (string) ($input['path'] ?? ''),
+                    'draft' => $this->isDraftWrite($name),
+                ];
             }
             $messages[] = ['role' => 'user', 'content' => [
                 $this->toolResult((string) $toolUse['id'], $resultText, $isError),
@@ -136,6 +140,16 @@ final class AssistantService
         $messages[] = ['role' => 'assistant', 'content' => [['type' => 'text', 'text' => $note]]];
 
         return $this->result($messages, $note, $actions, null, true);
+    }
+
+    /**
+     * true, wenn dieser Schreibvorgang als Freigabe-Entwurf statt live gelandet
+     * ist (gestaffelte Veröffentlichung). Der Client frischt daraufhin die
+     * Warteschlange auf; nur write_file geht über den Entwurfs-Weg.
+     */
+    private function isDraftWrite(string $tool): bool
+    {
+        return $tool === 'write_file' && $this->draftSink !== null;
     }
 
     /** Hinweistext, wenn die Schrittgrenze eines Zugs erreicht wurde. */
@@ -162,7 +176,11 @@ final class AssistantService
             $input = is_array($toolUse['input'] ?? null) ? $toolUse['input'] : [];
             [$resultText, $isError] = $this->executeTool($name, $input);
             if (!$isError) {
-                $actions[] = ['tool' => $name, 'path' => (string) ($input['path'] ?? '')];
+                $actions[] = [
+                    'tool' => $name,
+                    'path' => (string) ($input['path'] ?? ''),
+                    'draft' => $this->isDraftWrite($name),
+                ];
             }
         } else {
             $resultText = 'Der Benutzer hat diese Aktion abgelehnt. Frage nach, wie du fortfahren sollst.';

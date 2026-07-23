@@ -769,9 +769,11 @@ export default {
     conflictMessage: 'Die Live-Datei wurde seit dem Erstellen des Entwurfs verändert. Mit dem Entwurf überschreiben?',
     conflictConfirm: 'Überschreiben',
     origin: {
-      ai: 'KI-Assistent',
-      cron: 'Cron (automatisch)',
-      user: 'Manuell',
+      ai: 'Bearbeitet von dem KI-Assistenten',
+      cron: 'Bearbeitet durch den KI-Cron-Job',
+      // {0} ist der angemeldete Benutzer; ohne Namen greift `someone`.
+      user: 'Bearbeitet von {0}',
+      someone: 'einem Benutzer',
     },
   },
 

@@ -13,6 +13,7 @@ import { useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
 import { useReviewStore } from '../stores/review'
 import { useFilesStore } from '../stores/files'
+import { useAuthStore } from '../stores/auth'
 import { errorText } from '../i18n/apiMessage'
 import { lineDiff } from '../util/lineDiff'
 import { useConfirm } from '../util/confirm'
@@ -21,6 +22,7 @@ const { t, locale } = useI18n()
 const { smAndDown } = useDisplay()
 const store = useReviewStore()
 const files = useFilesStore()
+const auth = useAuthStore()
 const confirm = useConfirm()
 
 // Zeilenweiser Diff Original → Vorschlag. Bei neuen Seiten (kein Original) und
@@ -114,6 +116,15 @@ async function discard(key) {
 
 const ORIGIN_ICON = { ai: 'mdi-creation', cron: 'mdi-clock-outline', user: 'mdi-account-outline' }
 
+// Beschriftung der Entwurfs-Herkunft. Bei einem manuellen Entwurf steht der
+// Name des Verfassers (Feld `author`). Entwürfe aus der Zeit vor diesem Feld
+// führen ihn nicht — dann der angemeldete Benutzer (bei Einzelbenutzer-Betrieb
+// dieselbe Person), sonst eine neutrale Umschreibung.
+function originLabel(draft) {
+  const name = draft?.author || auth.user?.name || t('review.origin.someone')
+  return t('review.origin.' + (draft?.origin || 'user'), [name])
+}
+
 function formatDate(iso) {
   if (!iso) return ''
   const d = new Date(iso)
@@ -166,7 +177,7 @@ async function toSource() {
           <template v-else-if="store.current">
             <div class="d-flex align-center mb-3 text-body-2 text-medium-emphasis">
               <v-icon :icon="ORIGIN_ICON[store.current.origin] || 'mdi-file-outline'" size="16" class="mr-1" />
-              <span>{{ $t('review.origin.' + (store.current.origin || 'user')) }}</span>
+              <span>{{ originLabel(store.current) }}</span>
               <span v-if="store.current.isNew" class="ml-2">· {{ $t('review.newPage') }}</span>
               <span v-if="store.current.createdAt" class="ml-2">· {{ formatDate(store.current.createdAt) }}</span>
               <span v-if="store.current.model" class="ml-2">· {{ store.current.model }}</span>
@@ -231,7 +242,7 @@ async function toSource() {
                 </v-chip>
               </v-list-item-title>
               <v-list-item-subtitle>
-                {{ $t('review.origin.' + (d.origin || 'user')) }}
+                {{ originLabel(d) }}
                 <span v-if="d.isNew"> · {{ $t('review.newPage') }}</span>
                 <span v-if="d.createdAt"> · {{ formatDate(d.createdAt) }}</span>
               </v-list-item-subtitle>

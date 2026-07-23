@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { api } from '../api/client'
 import { ensureFrontMatter } from '../util/frontMatterTemplate'
+import { useReviewStore } from './review'
 
 const MARKDOWN_RE = /\.(md|markdown)$/i
 
@@ -482,6 +483,10 @@ export const useFilesStore = defineStore('files', {
       if (!this.openFile) return
       await api.post('reviewsave', { target: this.openFile.id, content })
       this.dirty = false
+      // Das Abzeichen der Werkzeugschiene zählt die offenen Entwürfe — nach dem
+      // Ablegen nachladen, sonst bliebe es bis zum nächsten Öffnen der
+      // Warteschlange stehen. Ein Fehler darf das Speichern nicht entwerten.
+      useReviewStore().fetch().catch(() => {})
     },
 
     closeFile() {
