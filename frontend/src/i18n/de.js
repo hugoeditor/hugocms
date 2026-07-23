@@ -248,6 +248,17 @@ export default {
       noneImprove: 'Keine Dateien zur Verbesserung vorgemerkt.',
       checkedAt: 'Geprüft am {0}',
     },
+    log: {
+      heading: 'Protokoll',
+      show: 'Anzeigen',
+      hide: 'Ausblenden',
+      problemsOnly: 'Nur Warnungen und Fehler',
+      more: 'Mehr Zeilen laden',
+      truncated: 'nur die letzten {0} Zeilen',
+      empty: 'Das Protokoll ist leer.',
+      noProblems: 'Keine Warnungen oder Fehler im gezeigten Ausschnitt.',
+      noFile: 'Keine Logdatei vorhanden — es wurde noch nichts protokolliert, oder das Log geht ins Server-Fehlerlog.',
+    },
   },
 
   repo: {

@@ -14,6 +14,12 @@ export const useStatusStore = defineStore('status', {
     // Ergebnis von `statuscheck`: { ai|service|mail: {status, key, message} }.
     checks: null,
     checking: false,
+    // Protokoll (`statuslog`): { file, exists, size, mtime, truncated, lines }.
+    // Wird erst geladen, wenn die Ansicht es aufklappt — es ist der mit Abstand
+    // umfangreichste Teil der Antwort.
+    log: null,
+    logLoading: false,
+    logLines: 200,
   }),
 
   getters: {
@@ -64,6 +70,21 @@ export const useStatusStore = defineStore('status', {
         this.error = e
       } finally {
         this.checking = false
+      }
+    },
+
+    // Letzte Zeilen der Logdatei. `lines` erhöht bei Bedarf den Ausschnitt
+    // („mehr anzeigen“); der Server deckelt ihn auf 2000.
+    async fetchLog(lines = null) {
+      if (lines) this.logLines = lines
+      this.error = null
+      this.logLoading = true
+      try {
+        this.log = await api.get('statuslog', { lines: this.logLines })
+      } catch (e) {
+        this.error = e
+      } finally {
+        this.logLoading = false
       }
     },
   },

@@ -428,6 +428,7 @@ final class Connector
                 'activate' => $this->cmdActivate($request),
                 'status' => $this->cmdStatus(),
                 'statuscheck' => $this->cmdStatusCheck(),
+                'statuslog' => $this->cmdStatusLog($request),
                 'help' => $this->cmdHelp($request),
                 'gitstatus' => $this->cmdGitStatus(),
                 'gitlog' => $this->cmdGitLog($request),
@@ -3044,6 +3045,25 @@ final class Connector
                 fn () => $this->buildMailer()->verify(),
             ),
         ];
+    }
+
+    /**
+     * statuslog — die letzten Zeilen der Logdatei für die Protokollansicht im
+     * Systemstatus. Der Pfad kommt ausschließlich aus der Konfiguration
+     * ([log] file); der Client kann nur bestimmen, WIE VIELE Zeilen er sehen
+     * will — es gibt bewusst keinen Dateiparameter.
+     *
+     * Gezeigt wird nur die aktuelle Datei, nicht die rotierten Stände: Der
+     * Systemstatus soll den jüngsten Verlauf zeigen, kein Archiv durchsuchbar
+     * machen.
+     */
+    private function cmdStatusLog(array $request): array
+    {
+        $this->requireAuth();
+
+        $lines = (int) ($request['lines'] ?? 200);
+
+        return $this->logger->tail($lines);
     }
 
     /**

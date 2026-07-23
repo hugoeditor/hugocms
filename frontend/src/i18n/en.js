@@ -248,6 +248,17 @@ export default {
       noneImprove: 'No files queued for improvement.',
       checkedAt: 'Checked on {0}',
     },
+    log: {
+      heading: 'Log',
+      show: 'Show',
+      hide: 'Hide',
+      problemsOnly: 'Warnings and errors only',
+      more: 'Load more lines',
+      truncated: 'last {0} lines only',
+      empty: 'The log is empty.',
+      noFile: 'No log file — nothing has been logged yet, or logging goes to the server error log.',
+      noProblems: 'No warnings or errors in the shown excerpt.',
+    },
   },
 
   repo: {

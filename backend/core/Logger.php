@@ -71,6 +71,90 @@ final class Logger
         ]);
     }
 
+    /**
+     * Liest die letzten $maxLines Zeilen der aktuellen Logdatei — für die
+     * Protokollansicht im Systemstatus. Liest blockweise von hinten, damit auch
+     * ein hochgesetztes max_bytes den Speicher nicht sprengt.
+     *
+     * Die Zeilen kommen in Dateireihenfolge (älteste zuerst) und bereits
+     * zerlegt: Zeitstempel, Stufe und Text. Zeilen, die dem Format nicht
+     * entsprechen (Fortsetzungen eines Stacktrace etwa), tragen level = null
+     * und den Rohtext — sie gehen nicht verloren.
+     *
+     * @return array{file: ?string, exists: bool, size: int, mtime: ?int, truncated: bool, lines: list<array{time: ?string, level: ?string, text: string}>}
+     */
+    public function tail(int $maxLines = 200): array
+    {
+        $maxLines = max(1, min(2000, $maxLines));
+        $out = [
+            'file' => $this->file,
+            'exists' => false,
+            'size' => 0,
+            'mtime' => null,
+            'truncated' => false,
+            'lines' => [],
+        ];
+        if ($this->file === null || !is_file($this->file) || !is_readable($this->file)) {
+            return $out;
+        }
+
+        $size = (int) (@filesize($this->file) ?: 0);
+        $out['exists'] = true;
+        $out['size'] = $size;
+        $out['mtime'] = @filemtime($this->file) ?: null;
+
+        $fp = @fopen($this->file, 'rb');
+        if ($fp === false) {
+            return $out;
+        }
+
+        // Von hinten in 8-KiB-Schritten lesen, bis genug Zeilenumbrüche
+        // zusammengekommen sind oder der Dateianfang erreicht ist.
+        $chunk = 8192;
+        $pos = $size;
+        $buffer = '';
+        $found = 0;
+        while ($pos > 0 && $found <= $maxLines) {
+            $read = (int) min($chunk, $pos);
+            $pos -= $read;
+            fseek($fp, $pos);
+            $part = (string) fread($fp, $read);
+            $buffer = $part . $buffer;
+            $found = substr_count($buffer, "\n");
+        }
+        fclose($fp);
+        $out['truncated'] = $pos > 0;
+
+        $lines = preg_split('/\R/', trim($buffer, "\r\n")) ?: [];
+        if (count($lines) > $maxLines) {
+            $lines = array_slice($lines, -$maxLines);
+            $out['truncated'] = true;
+        }
+
+        foreach ($lines as $line) {
+            $out['lines'][] = self::parseLine($line);
+        }
+
+        return $out;
+    }
+
+    /**
+     * Zerlegt eine Logzeile im Format „[Y-m-d H:i:s] STUFE: Text“. Passt das
+     * Muster nicht, gilt die ganze Zeile als Text ohne Stufe.
+     *
+     * @return array{time: ?string, level: ?string, text: string}
+     */
+    private static function parseLine(string $line): array
+    {
+        if (preg_match('/^\[([^\]]+)\]\s+([A-Z]+):\s*(.*)$/s', $line, $m) === 1
+            && isset(self::LEVELS[strtolower($m[2])])
+        ) {
+            return ['time' => $m[1], 'level' => strtolower($m[2]), 'text' => $m[3]];
+        }
+
+        return ['time' => null, 'level' => null, 'text' => $line];
+    }
+
     public function log(string $level, string $message, array $context = []): void
     {
         if ((self::LEVELS[$level] ?? 3) < $this->threshold) {

@@ -5,7 +5,7 @@
 // prüft die Anwendung, jener die veröffentlichten Seiten.
 //
 // Als Overlay-Ansicht wie ReviewQueueView/AuditView (nicht als v-dialog).
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useStatusStore } from '../stores/status'
 import { useAuthStore } from '../stores/auth'
@@ -133,6 +133,42 @@ const quotaColor = computed(() => {
   if (q.exceeded || q.percent >= 90) return 'error'
   return q.percent >= 75 ? 'warning' : 'success'
 })
+
+// --- Protokoll --------------------------------------------------------------
+// Erst auf Wunsch geladen: Es ist der umfangreichste Teil und für den
+// Überblick über Lizenz, Zugänge und Cron nicht nötig.
+const logOpen = ref(false)
+// Nur Warnungen und Fehler zeigen — im Normalbetrieb die interessante Teilmenge.
+const logProblemsOnly = ref(false)
+
+function toggleLog() {
+  logOpen.value = !logOpen.value
+  if (logOpen.value && !store.log) store.fetchLog()
+}
+
+// Neueste zuerst: In einer Statusansicht interessiert das zuletzt Passierte.
+const logLines = computed(() => {
+  const lines = store.log?.lines ?? []
+  const filtered = logProblemsOnly.value
+    ? lines.filter((l) => l.level === 'error' || l.level === 'warning')
+    : lines
+  return [...filtered].reverse()
+})
+
+const LOG_LEVEL_COLOR = {
+  error: 'text-error',
+  warning: 'text-warning',
+  info: 'text-medium-emphasis',
+  debug: 'text-disabled',
+}
+
+// Dateigröße lesbar machen (die Rotation greift standardmäßig bei 1 MiB).
+function formatBytes(n) {
+  if (!n) return '0 B'
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KiB`
+  return `${(n / 1024 / 1024).toFixed(1)} MiB`
+}
 
 function scoreColor(score) {
   if (score == null) return 'grey'
@@ -395,6 +431,85 @@ function scoreColor(score) {
               <v-chip :color="scoreColor(i.score)" size="x-small" variant="tonal" label>{{ i.score }}</v-chip>
             </div>
           </section>
+
+          <!-- Protokoll: die letzten Zeilen der Logdatei. Eingeklappt, bis
+               jemand sie sehen will — geladen wird erst dann. -->
+          <section class="st-card">
+            <h2 class="st-card-title">
+              <v-icon icon="mdi-text-box-outline" size="18" />
+              {{ $t('status.log.heading') }}
+              <v-spacer />
+              <v-btn
+                size="small"
+                variant="tonal"
+                :prepend-icon="logOpen ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+                @click="toggleLog"
+              >
+                {{ logOpen ? $t('status.log.hide') : $t('status.log.show') }}
+              </v-btn>
+            </h2>
+
+            <template v-if="logOpen">
+              <div class="st-log-bar">
+                <v-checkbox-btn
+                  v-model="logProblemsOnly"
+                  :label="$t('status.log.problemsOnly')"
+                  density="compact"
+                  hide-details
+                />
+                <v-spacer />
+                <v-btn
+                  size="small"
+                  variant="text"
+                  prepend-icon="mdi-refresh"
+                  :loading="store.logLoading"
+                  @click="store.fetchLog()"
+                >
+                  {{ $t('common.refresh') }}
+                </v-btn>
+              </div>
+
+              <div v-if="store.logLoading && !store.log" class="d-flex justify-center py-6">
+                <v-progress-circular indeterminate color="primary" size="28" />
+              </div>
+
+              <template v-else-if="store.log">
+                <p class="st-hint">
+                  <template v-if="store.log.exists">
+                    {{ store.log.file }} · {{ formatBytes(store.log.size) }}
+                    <template v-if="store.log.truncated"> · {{ $t('status.log.truncated', [store.logLines]) }}</template>
+                  </template>
+                  <template v-else>{{ $t('status.log.noFile') }}</template>
+                </p>
+
+                <div v-if="store.log.exists && !logLines.length" class="text-medium-emphasis py-2">
+                  {{ logProblemsOnly ? $t('status.log.noProblems') : $t('status.log.empty') }}
+                </div>
+                <div v-else-if="logLines.length" class="st-log">
+                  <div v-for="(l, n) in logLines" :key="n" class="st-log-line">
+                    <span v-if="l.time" class="st-log-time">{{ l.time }}</span>
+                    <span v-if="l.level" class="st-log-level" :class="LOG_LEVEL_COLOR[l.level]">
+                      {{ l.level.toUpperCase() }}
+                    </span>
+                    <span class="st-log-text">{{ l.text }}</span>
+                  </div>
+                </div>
+
+                <!-- Nur anbieten, solange der Server nicht schon alles geliefert
+                     hat (er deckelt bei 2000 Zeilen). -->
+                <div v-if="store.log.truncated && store.logLines < 2000" class="mt-2">
+                  <v-btn
+                    size="small"
+                    variant="text"
+                    :loading="store.logLoading"
+                    @click="store.fetchLog(Math.min(2000, store.logLines * 5))"
+                  >
+                    {{ $t('status.log.more') }}
+                  </v-btn>
+                </div>
+              </template>
+            </template>
+          </section>
         </template>
       </div>
     </div>
@@ -500,6 +615,37 @@ function scoreColor(score) {
   margin-top: 2px;
   overflow-wrap: anywhere;
 }
+
+/* Protokollansicht: fester Zeichensatz, eigener Scrollbereich, damit die
+   Statusansicht darüber nicht endlos wächst. */
+.st-log-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.st-log {
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid var(--mint-border);
+  border-radius: var(--mint-radius);
+  background: var(--mint-content);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+.st-log-line {
+  display: flex;
+  gap: 8px;
+  padding: 1px 8px;
+  border-bottom: 1px solid var(--mint-border);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.st-log-line:last-child { border-bottom: none; }
+.st-log-time { flex: 0 0 auto; opacity: 0.55; }
+.st-log-level { flex: 0 0 auto; min-width: 62px; font-weight: 700; }
+.st-log-text { flex: 1 1 auto; min-width: 0; }
 
 /* Kontingentanzeige des Dienstes (nur nach einer Prüfung sichtbar). */
 .st-quota {
