@@ -112,6 +112,15 @@ The two Pro scripts can be run as a harmless trial — they change nothing:
     /usr/bin/php /path/backend/cli/cron-improve.php --dry-run
     /usr/bin/php /path/backend/cli/cron-healthcheck.php --dry-run
 
+The trial run needs neither `--host` nor an INI argument: it calls nothing
+license-bound, so `--host` is only required for the real run. The `hugocms.ini`
+is never an argument anyway (the file next to the script always applies), and
+`--mounts` defaults to `backend/mounts.ini`.
+
+Only with **multiple websites** should the trial run be given the matching mount
+file too — the same one the real cron uses (`--mounts=…/mounts/<hash>.ini`) — so
+it previews the right backlog.
+
 Afterwards the system status shows under **Cron jobs** whether the real runs are
 arriving. A detailed version with all options is in the `README.md` in the
 `backend/cli/` directory.

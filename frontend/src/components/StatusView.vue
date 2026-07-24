@@ -422,6 +422,14 @@ function scoreColor(score) {
                 <div v-else-if="c.seen && !c.success && c.lastSuccessAt" class="st-row-check text-medium-emphasis">
                   {{ $t('status.cron.lastSuccess', [formatDate(c.lastSuccessAt)]) }}
                 </div>
+                <!-- Überfällig als Textzeile — nicht nur im Tooltip der Ampel,
+                     damit die Warnung auch auf dem Smartphone (ohne Hover)
+                     sichtbar ist. Nur wenn der letzte Lauf erfolgreich war;
+                     ein Fehlschlag wird oben bereits gemeldet. -->
+                <div v-else-if="c.overdue" class="st-row-check text-warning">
+                  <v-icon icon="mdi-clock-alert-outline" size="14" />
+                  {{ $t('status.cron.overdue') }}
+                </div>
               </div>
               <!-- Pausenzustand — immer sichtbar, ob pausiert oder nicht.
                    Geändert wird er nicht hier, sondern in den Projekteinstellungen

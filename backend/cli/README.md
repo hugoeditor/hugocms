@@ -232,6 +232,24 @@ Diese beiden Probeläufe verändern nichts: kein API-Aufruf, kein Schreiben, kei
 E-Mail-Versand. Sie melden nur, was sie vorfinden — und ob Konfiguration und
 Pfade stimmen.
 
+**Der Probelauf braucht weder `--host` noch eine INI-Angabe.** Er ruft nichts
+Lizenzpflichtiges auf (die Lizenzprüfung wird übersprungen), deshalb ist
+`--host` nur für den echten Lauf Pflicht, nicht für `--dry-run`. Die
+`hugocms.ini` ist ohnehin nie ein Argument — es gilt immer die Datei neben dem
+Skript (`backend/hugocms.ini`). Und `--mounts` hat eine Vorgabe
+(`backend/mounts.ini`), sodass ein Probelauf ohne Argumente die Standard-Webseite
+vorschaut.
+
+**Ausnahme Mehrfach-Sites:** Läuft die Installation mit mehreren Webseiten
+(`backend/mounts/<hash>.ini` je Domain), zeigt `--dry-run` ohne `--mounts` die
+Standard-`mounts.ini` — also womöglich die falsche Seite. Dann dieselbe
+Mount-Datei angeben, die auch der echte Cron nutzt, damit der Probelauf den
+richtigen Vorrat vorschaut:
+
+```sh
+/usr/bin/php /pfad/backend/cli/cron-improve.php --dry-run --mounts=/pfad/backend/mounts/<hash>.ini
+```
+
 `cron-build.php` kennt keinen Probelauf; ein Aufruf **baut die Webseite
 tatsächlich** und veröffentlicht dabei fällige Freigaben. Das ist derselbe
 Vorgang wie ein Klick auf „Veröffentlichen", also normalerweise unbedenklich —

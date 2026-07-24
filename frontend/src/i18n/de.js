@@ -756,6 +756,9 @@ export default {
     refreshModelsUnavailable: 'Zum Abfragen der Modell-Liste erst einen API-Schlüssel speichern',
     writeMode: 'Schreibmodus',
     writeModeHint: 'Wie der Assistent mit Datei-Änderungen umgeht.',
+    forceThinking: 'Adaptives Thinking erzwingen (Assistent)',
+    forceThinkingCron: 'Adaptives Thinking erzwingen (Cron-Verbesserer)',
+    forceThinkingHint: 'Sendet adaptives Thinking auch an Modelle, die der Server noch nicht kennt — getrennt für Assistenten-Modell und Cron-Modell. Bekannte Modelle regelt der Server selbst; hier nur einschalten, wenn ein neu eingetragenes Modell es kann. Kann es das Modell doch nicht, meldet der Aufruf einen Fehler — dann wieder ausschalten. Die Content-Qualitätsprüfung nutzt kein Thinking und hat deshalb keinen Schalter.',
   },
 
   // Spracheingabe (Pro-Dienst) im Konfigurationsformular.

@@ -74,7 +74,7 @@ final class Connector
      * models: in der INI hinterlegte Auswahlliste der Oberfläche (leer = die
      * fest verdrahtete Liste des Clients gilt).
      *
-     * @var array{apiKey: ?string, model: string, modelCron: string, modelAudit: string, writeMode: string, models: list<string>}
+     * @var array{apiKey: ?string, model: string, modelCron: string, modelAudit: string, writeMode: string, forceThinking: bool, forceThinkingCron: bool, models: list<string>}
      */
     private array $ai = [
         'apiKey' => null,
@@ -82,6 +82,8 @@ final class Connector
         'modelCron' => 'claude-opus-4-8',
         'modelAudit' => 'claude-opus-4-8',
         'writeMode' => 'confirm',
+        'forceThinking' => false,
+        'forceThinkingCron' => false,
         'models' => [],
     ];
 
@@ -1519,11 +1521,14 @@ final class Connector
      * Werkzeug get_file_report wird nur eingehängt, wenn Pro-Lizenz und
      * Hugo-Projekt vorliegen (sonst gibt es keinen Audit-/Content-Bericht).
      */
-    private function assistantService(?string $writeModeOverride = null, ?string $modelOverride = null, string $draftOrigin = 'ai'): AssistantService
+    private function assistantService(?string $writeModeOverride = null, ?string $modelOverride = null, string $draftOrigin = 'ai', ?bool $forceThinkingOverride = null): AssistantService
     {
         // Interaktiver Assistent nutzt `model`; der Cron-Verbesserer reicht sein
         // eigenes Modell (`model_cron`) als Override durch.
         $model = $modelOverride ?? $this->ai['model'];
+        // Thinking-Erzwingung folgt demselben Slot: interaktiv `forceThinking`,
+        // der Cron reicht `forceThinkingCron` als Override durch.
+        $forceThinking = $forceThinkingOverride ?? (bool) $this->ai['forceThinking'];
         // get_file_report und der Bearbeitungs-Vermerk brauchen beide das
         // Content-Qualitäts-Feature (Pro-Lizenz + Hugo-Projekt).
         $contentAware = $this->hugo !== null && $this->license()->isPro();
@@ -1553,6 +1558,7 @@ final class Connector
             $fileReport,
             $onWrite,
             $draftSink,
+            $forceThinking,
         );
     }
 
@@ -2417,6 +2423,8 @@ final class Connector
                 static fn (array $e): array => [
                     'path' => (string) ($e['mount'] ?? '') . '/' . (string) ($e['rel'] ?? ''),
                     'score' => $e['score'] ?? null,
+                    // Ohne Prüfung vorgemerkt (kein Score) — für die Anzeige.
+                    'queued' => (bool) ($e['queued'] ?? false),
                     'written' => false,
                 ],
                 array_slice($work, 0, $limit),
@@ -2425,7 +2433,7 @@ final class Connector
             return ['candidates' => count($work), 'dryRun' => true, 'processed' => $preview];
         }
 
-        $service = $this->assistantService('auto', $this->ai['modelCron'], 'cron');
+        $service = $this->assistantService('auto', $this->ai['modelCron'], 'cron', (bool) $this->ai['forceThinkingCron']);
         $processed = [];
         foreach (array_slice($work, 0, $limit) as $entry) {
             $mount = (string) ($entry['mount'] ?? '');
@@ -2900,6 +2908,11 @@ final class Connector
             'aiModelAudit' => $raw['ai']['model_audit'] ?? '',
             'aiWriteMode'  => $raw['ai']['write_mode'] ?? 'confirm',
             'aiWriteModes' => self::AI_WRITE_MODES,
+            // Adaptives Thinking erzwingen (sonst entscheidet die Positivliste) —
+            // getrennt für Assistent und Cron-Verbesserer, für neu eingetragene,
+            // noch unbekannte Modelle.
+            'aiForceThinking' => filter_var($raw['ai']['force_thinking'] ?? false, FILTER_VALIDATE_BOOLEAN),
+            'aiForceThinkingCron' => filter_var($raw['ai']['force_thinking_cron'] ?? false, FILTER_VALIDATE_BOOLEAN),
             // Hinterlegte Modell-Auswahl (leer = der Client nutzt seine eigene
             // Liste). Der Aktualisieren-Knopf im Dialog füllt sie über /aimodels.
             'aiModels'     => Config::normalizeModels($raw['ai']['models'] ?? ''),
@@ -2983,6 +2996,14 @@ final class Connector
             $aiSection['model_audit'] = $aiModelAudit;
         }
         $aiSection['write_mode'] = $aiWriteMode;
+        // Adaptives Thinking erzwingen — je Slot, nur schreiben, wenn an (INI
+        // schlank halten; Config::aiSection() liest fehlend als aus).
+        if (filter_var($request['aiForceThinking'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            $aiSection['force_thinking'] = 'true';
+        }
+        if (filter_var($request['aiForceThinkingCron'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            $aiSection['force_thinking_cron'] = 'true';
+        }
         // Die abgerufene Modell-Liste gehört nicht ins Formular; sie wird hier
         // aus dem Bestand übernommen, sonst löschte jedes Speichern sie.
         $existingModels = Config::normalizeModels($existingAi['models'] ?? '');

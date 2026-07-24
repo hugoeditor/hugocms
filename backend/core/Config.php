@@ -302,7 +302,16 @@ final class Config
      * leer = die fest verdrahtete Liste des Clients gilt. Der Aktualisieren-
      * Knopf im Konfigurationsdialog schreibt hierher, was /v1/models liefert.
      *
-     * @return array{apiKey: ?string, model: string, modelCron: string, modelAudit: string, writeMode: string, models: list<string>}
+     * `force_thinking` / `force_thinking_cron` erzwingen adaptives Thinking für
+     * den interaktiven Assistenten (`model`) bzw. den Cron-Verbesserer
+     * (`model_cron`) — getrennt, weil dort verschiedene Modelle stehen können.
+     * Standard aus: dann entscheidet die Positivliste in AssistantService,
+     * welche Modelle es können. Wer ein neues, noch unbekanntes Modell einträgt,
+     * das adaptives Thinking kann, schaltet das hier ein (schlägt das Modell es
+     * doch aus, gibt es einen Fehler und man nimmt es wieder heraus). `model_audit`
+     * hat keinen Schalter — die Content-Qualitätsprüfung nutzt kein Thinking.
+     *
+     * @return array{apiKey: ?string, model: string, modelCron: string, modelAudit: string, writeMode: string, forceThinking: bool, forceThinkingCron: bool, models: list<string>}
      */
     private static function aiSection(mixed $section): array
     {
@@ -322,6 +331,10 @@ final class Config
             'modelCron' => $modelCron,
             'modelAudit' => $modelAudit,
             'writeMode' => $writeMode,
+            // Config schreibt Werte gequotet ("false") — deshalb filter_var,
+            // sonst wäre der String "false" wahr.
+            'forceThinking' => filter_var($section['force_thinking'] ?? false, FILTER_VALIDATE_BOOLEAN),
+            'forceThinkingCron' => filter_var($section['force_thinking_cron'] ?? false, FILTER_VALIDATE_BOOLEAN),
             'models' => self::normalizeModels($section['models'] ?? ''),
         ];
     }

@@ -62,6 +62,12 @@ if (!is_file($mountsFile)) {
     fwrite(STDERR, "Fehler: Mount-Konfiguration nicht gefunden ($mountsFile).\n");
     exit(2);
 }
+// Mount-Pfad kanonisieren: Das Speicherverzeichnis der Berichte/Entwürfe leitet
+// sich aus dem Hugo-Quellpfad ab (sha1), und der hängt am Verzeichnis der
+// Mount-Datei. Ein relativer --mounts ergäbe sonst einen anderen String als der
+// Web-Zugang (absoluter Pfad) — der Cron fände die dort angelegten Einträge
+// nicht. realpath macht relativen und absoluten Aufruf deckungsgleich.
+$mountsFile = realpath($mountsFile) ?: $mountsFile;
 
 // logLevel=info erzwingen (statt der Voreinstellung aus der hugocms.ini):
 // So landen auch erfolgreiche Läufe ("Hugo-Lauf erfolgreich") in hugocms.log,

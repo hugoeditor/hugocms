@@ -47,6 +47,10 @@ final class AssistantService
      *        write_file NICHT in der Datei, sondern als Entwurf zur Freigabe;
      *        die Live-Datei bleibt unangetastet. Aufruf mit
      *        (Mount, rel, abs, content). onWrite entfällt dann.
+     * @param bool $forceAdaptiveThinking Erzwingt adaptives Thinking auch für
+     *        Modelle außerhalb der Positivliste (globale Einstellung [ai]
+     *        force_thinking). Für ein Modell, das es doch nicht kann, lehnt die
+     *        API dann mit einem Fehler ab.
      */
     public function __construct(
         private readonly AnthropicClient $client,
@@ -57,6 +61,7 @@ final class AssistantService
         private readonly ?\Closure $fileReport = null,
         private readonly ?\Closure $onWrite = null,
         private readonly ?\Closure $draftSink = null,
+        private readonly bool $forceAdaptiveThinking = false,
     ) {
     }
 
@@ -82,17 +87,24 @@ final class AssistantService
         }
 
         for ($step = 0; $step < self::MAX_STEPS; $step++) {
-            $response = $this->client->createMessage([
+            $payload = [
                 'model' => $this->model,
                 'max_tokens' => self::MAX_TOKENS,
                 'system' => $system,
                 'messages' => $messages,
                 'tools' => $tools,
-                'thinking' => ['type' => 'adaptive'],
                 // Höchstens ein Werkzeug pro Antwort — vereinfacht den
                 // Bestätigungsablauf (immer genau eine pending Aktion).
                 'tool_choice' => ['type' => 'auto', 'disable_parallel_tool_use' => true],
-            ]);
+            ];
+            // Adaptives Thinking gibt es erst ab der 4.6-Generation. Ältere
+            // Modelle (z. B. das günstige claude-haiku-4-5 als model_cron)
+            // lehnen den Parameter mit einem 400 ab — deshalb nur setzen, wenn
+            // das gewählte Modell es kann.
+            if ($this->supportsAdaptiveThinking($this->model)) {
+                $payload['thinking'] = ['type' => 'adaptive'];
+            }
+            $response = $this->client->createMessage($payload);
 
             $content = is_array($response['content'] ?? null) ? $response['content'] : [];
             // Den Assistenten-Block UNVERÄNDERT übernehmen (inkl. thinking-
@@ -140,6 +152,32 @@ final class AssistantService
         $messages[] = ['role' => 'assistant', 'content' => [['type' => 'text', 'text' => $note]]];
 
         return $this->result($messages, $note, $actions, null, true);
+    }
+
+    /**
+     * Kann das Modell adaptives Thinking (thinking.type=adaptive)? Das gibt es
+     * erst ab der 4.6-Generation (Opus 4.6/4.7/4.8, Sonnet 5/4.6, Fable/Mythos 5);
+     * ältere Modelle und die Haiku-Reihe lehnen den Parameter mit einem 400 ab.
+     * Konservativ per Positivliste — unbekannte Modelle senden kein thinking.
+     * Die globale Einstellung [ai] force_thinking übergeht die Liste und erzwingt
+     * es für jedes Modell (für neu eingetragene Modelle, die es können).
+     */
+    private function supportsAdaptiveThinking(string $model): bool
+    {
+        if ($this->forceAdaptiveThinking) {
+            return true;
+        }
+        $m = strtolower($model);
+        // Haiku kann es (noch) nicht — auch nicht 4.5.
+        if (str_contains($m, 'haiku')) {
+            return false;
+        }
+        foreach (['opus-4-6', 'opus-4-7', 'opus-4-8', 'sonnet-5', 'sonnet-4-6', 'fable-5', 'mythos-5'] as $family) {
+            if (str_contains($m, $family)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

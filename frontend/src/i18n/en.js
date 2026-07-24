@@ -755,6 +755,9 @@ export default {
     refreshModelsUnavailable: 'Save an API key first to fetch the model list',
     writeMode: 'Write mode',
     writeModeHint: 'How the assistant handles file changes.',
+    forceThinking: 'Force adaptive thinking (assistant)',
+    forceThinkingCron: 'Force adaptive thinking (cron improver)',
+    forceThinkingHint: 'Sends adaptive thinking to models the server does not yet know — separately for the assistant model and the cron model. Known models are handled by the server itself; turn this on only when a newly added model supports it. If the model does not, the call reports an error — then turn it off again. The content quality check uses no thinking and therefore has no toggle.',
   },
 
   // Voice input (Pro service) in the configuration form.

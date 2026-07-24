@@ -28,6 +28,11 @@ const aiModel = ref('claude-opus-4-8')
 const aiModelCron = ref('')
 const aiModelAudit = ref('')
 const aiWriteMode = ref('confirm')
+// Erzwingt adaptives Thinking auch für Modelle außerhalb der Positivliste des
+// Servers (für neu eingetragene, noch unbekannte Modelle, die es können) —
+// getrennt für Assistent (model) und Cron-Verbesserer (model_cron).
+const aiForceThinking = ref(false)
+const aiForceThinkingCron = ref(false)
 const aiConfigured = ref(false)
 // Auswahlliste: aus der hugocms.ini ([ai] models), sonst die mitgelieferte
 // Liste. Der Aktualisieren-Knopf neben der Abschnitts-Überschrift ersetzt sie
@@ -144,6 +149,8 @@ watch(model, async (open) => {
     aiModelCron.value = cfg.aiModelCron || ''
     aiModelAudit.value = cfg.aiModelAudit || ''
     aiWriteMode.value = cfg.aiWriteMode || 'confirm'
+    aiForceThinking.value = cfg.aiForceThinking === true
+    aiForceThinkingCron.value = cfg.aiForceThinkingCron === true
     aiConfigured.value = !!cfg.aiConfigured
     // Hinterlegte Liste bevorzugen; ohne Eintrag bleibt die mitgelieferte.
     aiModels.value = cfg.aiModels?.length ? cfg.aiModels : AI_MODELS
@@ -191,6 +198,8 @@ async function submit() {
       aiModelCron: aiModelCron.value, // leer = wie Assistenten-Modell
       aiModelAudit: aiModelAudit.value,
       aiWriteMode: aiWriteMode.value,
+      aiForceThinking: aiForceThinking.value,
+      aiForceThinkingCron: aiForceThinkingCron.value,
       speechKey: speechKey.value, // leer = unverändert
       speechUrl: speechUrl.value,
       pagespeedKey: pagespeedKey.value, // leer = unverändert
@@ -378,6 +387,23 @@ async function submit() {
             variant="outlined"
             density="comfortable"
           />
+          <v-switch
+            v-model="aiForceThinking"
+            :label="$t('aiConfig.forceThinking')"
+            color="primary"
+            density="compact"
+            hide-details
+            class="mt-2"
+          />
+          <v-switch
+            v-model="aiForceThinkingCron"
+            :label="$t('aiConfig.forceThinkingCron')"
+            color="primary"
+            density="compact"
+            hide-details
+            class="mb-1"
+          />
+          <div class="text-caption text-medium-emphasis mb-2">{{ $t('aiConfig.forceThinkingHint') }}</div>
 
           <v-divider class="my-3" />
           <div :ref="registerSection('speech')" class="text-subtitle-2 mb-2">{{ $t('speechConfig.section') }}</div>

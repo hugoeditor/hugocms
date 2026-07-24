@@ -121,6 +121,15 @@ dabei nichts:
     /usr/bin/php /pfad/backend/cli/cron-improve.php --dry-run
     /usr/bin/php /pfad/backend/cli/cron-healthcheck.php --dry-run
 
+Der Probelauf braucht weder `--host` noch eine INI-Angabe: Er ruft nichts
+Lizenzpflichtiges auf, deshalb ist `--host` nur für den echten Lauf Pflicht. Die
+`hugocms.ini` ist ohnehin nie ein Argument (es gilt immer die Datei neben dem
+Skript), und `--mounts` hat die Vorgabe `backend/mounts.ini`.
+
+Nur bei **mehreren Webseiten** sollte auch der Probelauf die passende Mount-Datei
+bekommen — dieselbe, die der echte Cron nutzt (`--mounts=…/mounts/<hash>.ini`) —,
+damit er den richtigen Vorrat vorschaut.
+
 Danach zeigt der Systemstatus unter **Cron-Aufgaben**, ob die echten Läufe
 ankommen. Eine ausführliche Fassung mit allen Optionen liegt als `README.md`
 im Verzeichnis `backend/cli/`.

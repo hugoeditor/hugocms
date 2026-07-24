@@ -61,6 +61,12 @@ if (!is_file($mountsFile)) {
     fwrite(STDERR, "Fehler: Mount-Konfiguration nicht gefunden ($mountsFile).\n");
     exit(2);
 }
+// Mount-Pfad kanonisieren: Das Speicherverzeichnis der Berichte/Entwürfe leitet
+// sich aus dem Hugo-Quellpfad ab (sha1), und der hängt am Verzeichnis der
+// Mount-Datei. Ein relativer --mounts ergäbe sonst einen anderen String als der
+// Web-Zugang (absoluter Pfad) — der Cron fände die dort angelegten Einträge
+// nicht. realpath macht relativen und absoluten Aufruf deckungsgleich.
+$mountsFile = realpath($mountsFile) ?: $mountsFile;
 
 // Die Lizenzprüfung liest die Domäne aus $_SERVER['HTTP_HOST'] (SiteKey::host).
 // Im CLI gibt es keinen Host — hier den lizenzierten Domainnamen setzen.
@@ -102,7 +108,9 @@ if ($dryRun) {
         count($processed),
     ));
     foreach ($processed as $p) {
-        fwrite(STDOUT, sprintf("  %s (Score %s)\n", $p['path'] ?? '?', (string) ($p['score'] ?? '?')));
+        // Vorgemerkte Dateien haben keinen Score — das klar ausweisen.
+        $mark = !empty($p['queued']) ? 'vorgemerkt, ohne Prüfung' : ('Score ' . (string) ($p['score'] ?? '?'));
+        fwrite(STDOUT, sprintf("  %s (%s)\n", $p['path'] ?? '?', $mark));
     }
     exit(0);
 }
