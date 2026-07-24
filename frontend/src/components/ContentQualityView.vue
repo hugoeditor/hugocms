@@ -180,42 +180,57 @@ function openHelp(ruleId) {
           {{ errorText(t, store.error) }}
         </v-alert>
 
-        <!-- Ergebnis -->
-        <template v-else-if="verdict">
-          <div class="d-flex align-center mb-3">
-            <v-avatar :color="scoreColor(verdict.score)" size="56" class="mr-4">
-              <span class="text-h6">{{ verdict.score ?? '–' }}</span>
-            </v-avatar>
-            <div>
-              <div class="text-caption text-medium-emphasis">{{ $t('contentQuality.score') }}</div>
-              <v-chip
-                v-if="verdict.readability?.rating"
-                :color="RATING_COLOR[verdict.readability.rating] || 'default'"
-                size="small"
-                variant="flat"
-                label
-              >
-                {{ $t('contentQuality.readability.' + verdict.readability.rating) }}
-              </v-chip>
-            </div>
-          </div>
-
-          <p v-if="verdict.summary" class="mb-2">{{ verdict.summary }}</p>
-          <p v-if="verdict.readability?.note" class="text-body-2 text-medium-emphasis mb-4">
-            {{ verdict.readability.note }}
-          </p>
-
-          <!-- Funde -->
-          <template v-if="findings.length">
-            <div class="text-subtitle-2 mb-2">{{ $t('contentQuality.findings') }}</div>
-            <div v-for="(f, i) in findings" :key="'f' + i" class="cq-finding mb-2">
-              <AuditSeverityChip :severity="f.severity" size="x-small" />
-              <div class="ml-2">
-                <div class="font-weight-medium">{{ f.title }}</div>
-                <div class="text-body-2 text-medium-emphasis">{{ f.detail }}</div>
+        <!-- Ergebnis (geprüft) ODER Vormerkung ohne Prüfung -->
+        <template v-else-if="entry">
+          <!-- Qualitätsurteil nur, wenn geprüft. -->
+          <template v-if="verdict">
+            <div class="d-flex align-center mb-3">
+              <v-avatar :color="scoreColor(verdict.score)" size="56" class="mr-4">
+                <span class="text-h6">{{ verdict.score ?? '–' }}</span>
+              </v-avatar>
+              <div>
+                <div class="text-caption text-medium-emphasis">{{ $t('contentQuality.score') }}</div>
+                <v-chip
+                  v-if="verdict.readability?.rating"
+                  :color="RATING_COLOR[verdict.readability.rating] || 'default'"
+                  size="small"
+                  variant="flat"
+                  label
+                >
+                  {{ $t('contentQuality.readability.' + verdict.readability.rating) }}
+                </v-chip>
               </div>
             </div>
+
+            <p v-if="verdict.summary" class="mb-2">{{ verdict.summary }}</p>
+            <p v-if="verdict.readability?.note" class="text-body-2 text-medium-emphasis mb-4">
+              {{ verdict.readability.note }}
+            </p>
+
+            <!-- Funde -->
+            <template v-if="findings.length">
+              <div class="text-subtitle-2 mb-2">{{ $t('contentQuality.findings') }}</div>
+              <div v-for="(f, i) in findings" :key="'f' + i" class="cq-finding mb-2">
+                <AuditSeverityChip :severity="f.severity" size="x-small" />
+                <div class="ml-2">
+                  <div class="font-weight-medium">{{ f.title }}</div>
+                  <div class="text-body-2 text-medium-emphasis">{{ f.detail }}</div>
+                </div>
+              </div>
+            </template>
           </template>
+
+          <!-- Ohne Prüfung vorgemerkt: Hinweis statt Urteil. -->
+          <v-alert
+            v-else
+            type="info"
+            density="compact"
+            variant="tonal"
+            class="mb-2"
+            prepend-icon="mdi-playlist-plus"
+          >
+            {{ $t('contentQuality.queuedNote') }}
+          </v-alert>
 
           <!-- Vorschläge (vom Benutzer editierbar) -->
           <div class="d-flex align-center mt-4 mb-1">
@@ -308,9 +323,14 @@ function openHelp(ruleId) {
           </template>
 
           <div class="text-caption text-medium-emphasis mt-4">
-            {{ $t('contentQuality.checkedAt', [formatDate(entry.checkedAt)]) }}
-            <template v-if="entry.model"> · {{ entry.model }}</template>
-            <span v-if="entry.truncated"> · {{ $t('contentQuality.truncated') }}</span>
+            <template v-if="entry.checkedAt">
+              {{ $t('contentQuality.checkedAt', [formatDate(entry.checkedAt)]) }}
+              <template v-if="entry.model"> · {{ entry.model }}</template>
+              <span v-if="entry.truncated"> · {{ $t('contentQuality.truncated') }}</span>
+            </template>
+            <template v-else-if="entry.queuedAt">
+              {{ $t('contentQuality.queuedAt', [formatDate(entry.queuedAt)]) }}
+            </template>
           </div>
           <v-chip
             v-if="entry.improvedAt"

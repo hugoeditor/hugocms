@@ -492,6 +492,7 @@ final class Connector
                 'auditcontentget' => $this->cmdAuditContentGet($request),
                 'auditcontentreport' => $this->cmdAuditContentReport($request),
                 'auditcontentrequeue' => $this->cmdAuditContentRequeue($request),
+                'auditcontentqueue' => $this->cmdAuditContentQueue($request),
                 'auditcontentupdate' => $this->cmdAuditContentUpdate($request),
                 'auditcontentdelete' => $this->cmdAuditContentDelete($request),
                 'reviewsave' => $this->cmdReviewSave($request),
@@ -2585,7 +2586,8 @@ final class Connector
         return array_values(array_filter(
             $this->contentQualityStore()->list(),
             static fn (array $e): bool => empty($e['improvedAt'])
-                && is_numeric($e['score'] ?? null) && $e['score'] < 100
+                // Vorgemerkt (ohne Prüfung eingereiht) ODER geprüft mit Score < 100.
+                && (!empty($e['queued']) || (is_numeric($e['score'] ?? null) && $e['score'] < 100))
                 && ($e['sourceMissing'] ?? false) === false
                 && !isset($pendingKeys[ReviewStore::keyFor((string) ($e['mount'] ?? ''), (string) ($e['rel'] ?? ''))]),
         ));
@@ -4023,6 +4025,49 @@ final class Connector
         $key = $this->requireParam($request, 'key');
 
         return $this->withContentFileId($service->requeue($key));
+    }
+
+    /**
+     * Merkt eine oder mehrere Content-Dateien zur KI-Verbesserung vor — OHNE den
+     * kostenpflichtigen Qualitäts-Check. Optionale Freitext-Anweisung an die KI
+     * wird jeder Datei mitgegeben. Danach stehen die Dateien unter „zu
+     * verbessern" und werden vom Cron-Verbesserer (oder auf Knopfdruck)
+     * bearbeitet. Nicht auflösbare/lesbare Dateien werden einzeln gemeldet, ohne
+     * den ganzen Aufruf scheitern zu lassen.
+     *
+     * @return array{queued: int, failed: list<array{id: string, error: ?string}>, pages: list<array<string, mixed>>}
+     */
+    private function cmdAuditContentQueue(array $request): array
+    {
+        $service = $this->contentQuality();
+        $this->requireMethod('POST');
+
+        $ids = $request['ids'] ?? null;
+        if (!is_array($ids) || $ids === []) {
+            throw ApiException::badRequest('PARAM-MISSING', ['ids']);
+        }
+        $instruction = is_string($request['instruction'] ?? null) ? $request['instruction'] : null;
+
+        $queued = 0;
+        $failed = [];
+        foreach ($ids as $id) {
+            if (!is_string($id) || $id === '') {
+                continue;
+            }
+            try {
+                $service->queueForImprovement($id, $instruction);
+                $queued++;
+            } catch (ApiException $e) {
+                $failed[] = ['id' => $id, 'error' => $e->messageKey() ?? $e->errorCode()];
+            }
+        }
+        $this->logger->info(sprintf('Zur KI-Verbesserung vorgemerkt: %d Datei(en), %d fehlgeschlagen.', $queued, count($failed)));
+
+        return [
+            'queued' => $queued,
+            'failed' => $failed,
+            'pages' => array_map(fn (array $e): array => $this->withContentFileId($e), $service->list()),
+        ];
     }
 
     /**

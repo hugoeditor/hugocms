@@ -38,9 +38,14 @@ async function toggleAuto(value) {
 // verbessert) / bereits verbessert. Kombiniert mit dem Namensfilter.
 const mode = ref('toImprove') // 'all' | 'toImprove' | 'improved' — Standard: zu verbessern
 
+// „zu verbessern" umfasst geprüfte Seiten mit Score < 100 UND ohne Prüfung
+// vorgemerkte Seiten (queued) — beide noch nicht verbessert.
+function toImproveable(p) {
+  return !p.improvedAt && (p.queued || (p.score != null && p.score < 100))
+}
 function inMode(p) {
   if (mode.value === 'improved') return !!p.improvedAt
-  if (mode.value === 'toImprove') return !p.improvedAt && p.score != null && p.score < 100
+  if (mode.value === 'toImprove') return toImproveable(p)
   return true
 }
 
@@ -61,7 +66,7 @@ const counts = computed(() => {
   let improved = 0
   for (const p of store.checked) {
     if (p.improvedAt) improved++
-    else if (p.score != null && p.score < 100) toImprove++
+    else if (toImproveable(p)) toImprove++
   }
   return { all: store.checked.length, toImprove, improved }
 })
@@ -225,13 +230,32 @@ async function remove(page) {
           @click="openDetail(page)"
         >
         <template #prepend>
-          <v-chip :color="scoreColor(page.score)" size="small" variant="flat" label class="mr-3">
+          <!-- Vorgemerkt (ohne Prüfung): Symbol statt Score. Sonst der Score. -->
+          <v-chip
+            v-if="page.queued && page.score == null"
+            color="grey"
+            size="small"
+            variant="tonal"
+            label
+            class="mr-3"
+            :title="$t('contentQuality.queuedNote')"
+          >
+            <v-icon icon="mdi-playlist-plus" size="16" />
+          </v-chip>
+          <v-chip v-else :color="scoreColor(page.score)" size="small" variant="flat" label class="mr-3">
             {{ page.score ?? '–' }}
           </v-chip>
         </template>
 
         <v-list-item-title class="d-flex align-center">
           <span class="text-truncate">{{ page.title || page.rel }}</span>
+          <v-icon
+            v-if="page.hasInstruction"
+            icon="mdi-message-text-outline"
+            size="14"
+            class="ml-2 text-medium-emphasis"
+            :title="$t('contentQuality.hasInstruction')"
+          />
           <v-chip
             v-if="page.improvedAt"
             color="success"
@@ -264,7 +288,11 @@ async function remove(page) {
             {{ $t('contentQuality.stale') }}
           </v-chip>
         </v-list-item-title>
-        <v-list-item-subtitle>{{ page.rel }} · {{ formatDate(page.checkedAt) }}</v-list-item-subtitle>
+        <v-list-item-subtitle>
+          {{ page.rel }} ·
+          <template v-if="page.checkedAt">{{ formatDate(page.checkedAt) }}</template>
+          <template v-else-if="page.queuedAt">{{ $t('contentQuality.queuedAtShort', [formatDate(page.queuedAt)]) }}</template>
+        </v-list-item-subtitle>
 
         <template #append>
           <v-btn

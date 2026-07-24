@@ -8,6 +8,7 @@ import { formatSize, formatDate, iconFor } from '../util/format'
 import { errorText } from '../i18n/apiMessage'
 import ImageViewer from './ImageViewer.vue'
 import ImageEditor from './ImageEditor.vue'
+import QueueImproveDialog from './QueueImproveDialog.vue'
 import { useTransientError } from '../util/transientError'
 import { useAiGate } from '../util/aiGate'
 
@@ -17,6 +18,7 @@ const auditContent = useAuditContentStore()
 const assistant = useAssistantStore()
 const requireAi = useAiGate() // KI-Zugangsschranke (Hinweis + Konfiguration)
 const error = useTransientError() // blendet sich nach kurzer Zeit selbst aus
+const notice = useTransientError() // Erfolgsmeldung (grün), ebenfalls selbstlöschend
 
 // Markdown-Content-Datei (für die LLM-Content-Prüfung im Kontextmenü).
 function isMarkdown(entry) {
@@ -24,6 +26,28 @@ function isMarkdown(entry) {
 }
 
 const entries = computed(() => files.visibleEntries)
+
+// Ausgewählte Markdown-Dateien (IDs) für das Vormerken zur KI-Verbesserung.
+// Die Auswahl liegt immer im aktuellen Verzeichnis, also reichen die sichtbaren
+// Einträge als Quelle.
+const markdownSelection = computed(() => {
+  const ids = new Set(files.selectedIds)
+  return entries.value.filter((e) => ids.has(e.id) && isMarkdown(e)).map((e) => e.id)
+})
+
+// Dialog zum Vormerken (Anweisung an die KI).
+const queueDialog = reactive({ open: false })
+async function confirmQueue(instruction) {
+  const ids = markdownSelection.value
+  queueDialog.open = false
+  if (!ids.length) return
+  try {
+    const { queued } = await auditContent.queue(ids, instruction)
+    notice.value = t('contentQuality.queuedToast', [queued])
+  } catch (e) {
+    error.value = errorText(t, e)
+  }
+}
 
 function typeLabel(entry) {
   if (entry.type === 'dir') return t('files.typeFolder')
@@ -98,6 +122,17 @@ function buildItems(entry) {
         label: t('contentQuality.improve'),
         action: async () => {
           if (await requireAi()) assistant.improve(entry.id, locale.value)
+        },
+      })
+    }
+    // Mit KI später verbessern (ohne kostenpflichtigen Check): für eine ODER
+    // mehrere ausgewählte Markdown-Dateien. Öffnet den Anweisungs-Dialog.
+    if (markdownSelection.value.length) {
+      items.push({
+        icon: 'mdi-playlist-plus',
+        label: t('ctx.queueImprove'),
+        action: async () => {
+          if (await requireAi()) queueDialog.open = true
         },
       })
     }
@@ -315,6 +350,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
       <v-alert v-if="error" type="error" density="compact" class="ma-2 nemo-alert" tile closable @click:close="error = null">
         {{ error }}
       </v-alert>
+      <v-alert v-if="notice" type="success" density="compact" class="ma-2 nemo-alert" tile closable @click:close="notice = null">
+        {{ notice }}
+      </v-alert>
 
       <div
         class="nemo-content nemo-scroll nemo-noselect"
@@ -514,6 +552,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 
     <!-- Bild-Editor -->
     <ImageEditor />
+
+    <!-- Zur KI-Verbesserung vormerken (Anweisung an die KI) -->
+    <QueueImproveDialog
+      v-model="queueDialog.open"
+      :count="markdownSelection.length"
+      @confirm="confirmQueue"
+    />
   </section>
 </template>
 

@@ -86,8 +86,10 @@ final class ContentQualityService
     }
 
     /**
-     * Metadaten aller geprüften Seiten dieser Webseite, neueste zuerst (ohne die
-     * ausführlichen Findings/Vorschläge).
+     * Metadaten aller geprüften und aller vorgemerkten Seiten dieser Webseite,
+     * neueste zuerst (ohne die ausführlichen Findings/Vorschläge). Vorgemerkte
+     * Seiten (queued) wurden ohne Qualitätsprüfung zur Verbesserung eingereiht;
+     * ihnen fehlt das Verdikt (score = null).
      *
      * @return list<array<string, mixed>>
      */
@@ -104,12 +106,18 @@ final class ContentQualityService
             // Veraltet-Erkennung: aktuellen Prüf-Hash der Quelle mit dem
             // gespeicherten vergleichen. null = Quelle fehlt/nicht lesbar.
             $current = $this->currentBodyHash($entry['mount'] ?? null, $entry['rel'] ?? null);
+            // Sortier-/Anzeigezeitpunkt: Prüfung, sonst Vormerkung.
+            $when = $entry['checkedAt'] ?? ($entry['queuedAt'] ?? null);
             $out[] = [
                 'key' => $entry['key'] ?? basename($path, '.json'),
                 'mount' => $entry['mount'] ?? null,
                 'rel' => $entry['rel'] ?? null,
                 'title' => $entry['title'] ?? null,
                 'checkedAt' => $entry['checkedAt'] ?? null,
+                'queuedAt' => $entry['queuedAt'] ?? null,
+                // true, wenn ohne Prüfung zur Verbesserung vorgemerkt.
+                'queued' => (bool) ($entry['queued'] ?? false),
+                'hasInstruction' => trim((string) ($entry['userInstruction'] ?? '')) !== '',
                 'model' => $entry['model'] ?? null,
                 'contentHash' => $entry['contentHash'] ?? null,
                 'score' => $verdict['score'] ?? null,
@@ -118,11 +126,70 @@ final class ContentQualityService
                 'stale' => $current !== null && $current !== ($entry['contentHash'] ?? null),
                 'improvedAt' => $entry['improvedAt'] ?? null,
                 'improveModel' => $entry['improveModel'] ?? null,
+                'sortAt' => $when,
             ];
         }
-        usort($out, static fn (array $a, array $b): int => strcmp((string) ($b['checkedAt'] ?? ''), (string) ($a['checkedAt'] ?? '')));
+        usort($out, static fn (array $a, array $b): int => strcmp((string) ($b['sortAt'] ?? ''), (string) ($a['sortAt'] ?? '')));
 
         return $out;
+    }
+
+    /**
+     * Merkt eine Content-Datei zur KI-Verbesserung vor — OHNE den
+     * kostenpflichtigen Qualitäts-Check. Danach erscheint sie unter „zu
+     * verbessern" und wird vom Cron-Verbesserer (oder auf Knopfdruck)
+     * bearbeitet. Eine optionale Freitext-Anweisung wird der KI mitgegeben
+     * ({@see userInstruction}).
+     *
+     * Ist bereits ein Eintrag vorhanden (schon geprüft oder vorgemerkt), bleibt
+     * er erhalten: Der Verbesserungs-Vermerk wird gelöscht (wieder eingereiht),
+     * die Anweisung — falls angegeben — gesetzt und `queued` markiert, damit die
+     * Datei unabhängig vom Score in der Arbeitsliste steht. Andernfalls entsteht
+     * ein neuer, prüfungsloser Eintrag ohne Verdikt.
+     *
+     * @return array<string, mixed> der abgelegte Eintrag
+     */
+    public function queueForImprovement(string $fileId, ?string $userInstruction): array
+    {
+        $r = $this->resolver->resolve($fileId, true);
+        $read = $this->files->readText($r['mount'], $r['abs']);
+        [$title, $body] = self::prepareBody((string) $read['content']);
+        $title ??= (string) $read['name'];
+
+        $mountName = $r['mount']->name();
+        $key = sha1($mountName . ':' . $r['rel']);
+
+        $instruction = $userInstruction !== null ? trim($userInstruction) : '';
+        $instruction = $instruction === '' ? null : mb_substr($instruction, 0, 4000);
+
+        $entry = $this->read($this->pathFor($key));
+        if ($entry === null) {
+            // Neuer, prüfungsloser Eintrag.
+            $entry = [
+                'key' => $key,
+                'mount' => $mountName,
+                'rel' => $r['rel'],
+                'title' => $title,
+                'checkedAt' => null,
+                'model' => null,
+                'contentHash' => sha1($body),
+                'verdict' => null,
+            ];
+        }
+        // In jedem Fall: als vorgemerkt markieren, Verbesserungs-Vermerk lösen.
+        $entry['queued'] = true;
+        $entry['queuedAt'] = gmdate('c');
+        $entry['improvedAt'] = null;
+        $entry['improveModel'] = null;
+        // Anweisung nur überschreiben, wenn eine übergeben wurde — eine vorhandene
+        // Anweisung soll ein leeres Feld nicht versehentlich löschen.
+        if ($instruction !== null) {
+            $entry['userInstruction'] = $instruction;
+        }
+
+        $this->persist($key, $entry);
+
+        return $entry;
     }
 
     /**

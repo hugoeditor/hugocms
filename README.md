@@ -509,6 +509,16 @@ Jede vom Assistenten geschriebene Datei wird als „verbessert" vermerkt; die
 Arbeitsliste „Zu verbessern" (Score < 100 und noch nicht verbessert) leitet sich
 daraus ab. Ein Eintrag lässt sich über „Wieder aufnehmen" erneut aufnehmen.
 
+**Ohne Prüfung vormerken (Check überspringen).** Über das Kontextmenü „Mit KI
+später verbessern" lassen sich eine oder mehrere Markdown-Dateien direkt in die
+Liste „Zu verbessern" aufnehmen — **ohne** den kostenpflichtigen Qualitäts-Check
+(Befehl `auditcontentqueue`). Vorher kann der Benutzer eine Anweisung an die KI
+mitgeben; sie ist mit einem sinnvollen Vorschlag vorausgefüllt und lässt sich
+über Bausteine ergänzen. Der so entstandene Eintrag trägt kein Qualitätsurteil
+(Score leer), sondern nur die Anweisung (`userInstruction`); der
+Cron-Verbesserer arbeitet ihn wie einen geprüften Eintrag ab und befolgt die
+Anweisung vorrangig.
+
 **Cron (automatische Verbesserung).** Das CLI-Werkzeug
 `backend/cli/cron-improve.php` verbessert die nächsten Dateien dieser
 Arbeitsliste automatisch — im Schreibmodus `auto`, ohne Bestätigung:
@@ -641,6 +651,7 @@ eindeutig zu genau einer Webpräsenz. Zwei Folgen für den Mehrfach-Betrieb:
 | `auditcontentget` | GET | `key`                               | **Pro:** gespeichertes Prüfergebnis einer Datei        |
 | `auditcontentreport`| GET | `key`                             | **Pro:** Gesamt-Bericht (Qualität + zugehörige SEO-Funde) |
 | `auditcontentrequeue`| POST | `key`                           | **Pro:** „Wieder aufnehmen" (Verbesserungs-Vermerk löschen) |
+| `auditcontentqueue`| POST | `ids` (Datei-IDs), `instruction`?  | **Pro:** Dateien ohne Prüfung zur Verbesserung vormerken (mit KI-Anweisung) |
 | `auditcontentdelete`| POST | `key`                            | **Pro:** ein Prüfergebnis löschen                      |
 | `reviewsave`| POST   | `target` (ID), `content`             | Inhalt als Freigabe-Entwurf ablegen (nicht live)     |
 | `reviewlist`| GET    | –                                    | offene Entwürfe der Warteschlange auflisten            |

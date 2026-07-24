@@ -97,6 +97,16 @@ export const useAuditContentStore = defineStore('auditContent', {
       await this.fetchChecked()
     },
 
+    // Merkt eine oder mehrere Dateien zur KI-Verbesserung vor — OHNE den
+    // kostenpflichtigen Qualitäts-Check. Optionale Anweisung an die KI wird jeder
+    // Datei mitgegeben. Aktualisiert die Liste aus der Antwort. Liefert die
+    // Zusammenfassung { queued, failed }.
+    async queue(ids, instruction = '') {
+      const data = await api.post('auditcontentqueue', { ids, instruction })
+      this.checked = data.pages ?? this.checked
+      return { queued: data.queued ?? 0, failed: data.failed ?? [] }
+    },
+
     // Löscht ein gespeichertes Ergebnis.
     async remove(key) {
       await api.post('auditcontentdelete', { key })
