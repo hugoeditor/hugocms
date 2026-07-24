@@ -49,6 +49,28 @@ Ein übliches Beispiel für eine Webseite:
     # Morgens der Gesundheitscheck
     30 6 * * *    /usr/bin/php /pfad/backend/cli/cron-healthcheck.php --host=example.com
 
+Ein Aufruf betrifft immer nur **eine** Webseite — es gibt keinen Lauf über alle
+Projekte hinweg. Bei mehreren Webseiten bekommt daher jede eigene Einträge mit
+ihrer Mount-Datei (`--mounts=…/mounts/<hash>.ini`); die beiden Pro-Skripte
+zusätzlich mit ihrer jeweils lizenzierten Domain (`--host`). Beispiel für zwei
+Webseiten:
+
+    # Webseite 1 (eins.example.com)
+    */15 * * * *  /usr/bin/php /pfad/backend/cli/cron-build.php       --mounts=/pfad/backend/mounts/<hash1>.ini --quiet
+    0 3 * * *     /usr/bin/php /pfad/backend/cli/cron-improve.php     --mounts=/pfad/backend/mounts/<hash1>.ini --host=eins.example.com --limit=3
+    30 6 * * *    /usr/bin/php /pfad/backend/cli/cron-healthcheck.php --mounts=/pfad/backend/mounts/<hash1>.ini --host=eins.example.com
+
+    # Webseite 2 (zwei.example.com)
+    */15 * * * *  /usr/bin/php /pfad/backend/cli/cron-build.php       --mounts=/pfad/backend/mounts/<hash2>.ini --quiet
+    0 3 * * *     /usr/bin/php /pfad/backend/cli/cron-improve.php     --mounts=/pfad/backend/mounts/<hash2>.ini --host=zwei.example.com --limit=3
+    30 6 * * *    /usr/bin/php /pfad/backend/cli/cron-healthcheck.php --mounts=/pfad/backend/mounts/<hash2>.ini --host=zwei.example.com
+
+Diese Zeilen muss man nicht von Hand zusammenstellen: Das Skript
+`bin/crontab-entries.sh` im Release-Verzeichnis gibt sie für alle eingerichteten
+Webseiten fertig aus — Mount-Pfad, Host und Lizenzstatus liest es aus den
+Mount-Dateien. Es ändert die Crontab nicht, sondern gibt nur die Zeilen aus;
+prüfen und dann übernehmen (`crontab -e`).
+
 ## Aufgaben pausieren
 
 Jede der drei Aufgaben lässt sich pro Webseite pausieren, ohne die Crontab des

@@ -213,13 +213,34 @@ Eine Webseite, Automatikmodus aktiv:
 30 6 * * *    /usr/bin/php /var/www/backend/cli/cron-healthcheck.php --host=example.com
 ```
 
-Zwei Webseiten auf derselben Installation:
+Zwei Webseiten auf derselben Installation — ein Aufruf betrifft immer nur eine
+Webseite (kein Lauf über alle Projekte), deshalb je Domain eigene Einträge mit
+`--mounts` und (bei den Pro-Skripten) `--host`:
 
 ```cron
-*/15 * * * *  /usr/bin/php /var/www/backend/cli/cron-build.php --mounts=/var/www/backend/mounts/a1b2….ini --quiet
-*/15 * * * *  /usr/bin/php /var/www/backend/cli/cron-build.php --mounts=/var/www/backend/mounts/c3d4….ini --quiet
-0 3 * * *     /usr/bin/php /var/www/backend/cli/cron-improve.php --host=kunde-a.example.com --mounts=/var/www/backend/mounts/a1b2….ini --limit=3
-0 4 * * *     /usr/bin/php /var/www/backend/cli/cron-improve.php --host=kunde-b.example.com --mounts=/var/www/backend/mounts/c3d4….ini --limit=3
+# Kunde A (kunde-a.example.com)
+*/15 * * * *  /usr/bin/php /var/www/backend/cli/cron-build.php       --mounts=/var/www/backend/mounts/a1b2….ini --quiet
+0 3 * * *     /usr/bin/php /var/www/backend/cli/cron-improve.php     --mounts=/var/www/backend/mounts/a1b2….ini --host=kunde-a.example.com --limit=3
+30 6 * * *    /usr/bin/php /var/www/backend/cli/cron-healthcheck.php --mounts=/var/www/backend/mounts/a1b2….ini --host=kunde-a.example.com
+
+# Kunde B (kunde-b.example.com)
+*/15 * * * *  /usr/bin/php /var/www/backend/cli/cron-build.php       --mounts=/var/www/backend/mounts/c3d4….ini --quiet
+0 4 * * *     /usr/bin/php /var/www/backend/cli/cron-improve.php     --mounts=/var/www/backend/mounts/c3d4….ini --host=kunde-b.example.com --limit=3
+40 6 * * *    /usr/bin/php /var/www/backend/cli/cron-healthcheck.php --mounts=/var/www/backend/mounts/c3d4….ini --host=kunde-b.example.com
+```
+
+**Zeilen automatisch erzeugen.** Diese Einträge muss man nicht von Hand
+zusammenstellen: Das Skript `bin/crontab-entries.sh` im Release-Repo (neben
+`install.sh`/`update.sh`) gibt sie für alle eingerichteten Webseiten fertig aus.
+Mount-Pfad, Host (aus dem Kopfkommentar der Mount-Datei) und Lizenzstatus
+(`[license] key`) liest es selbst; die Pro-Zeilen erscheinen nur für Webseiten
+mit Lizenz, die Läufe werden je Seite zeitlich versetzt. Es ändert die Crontab
+nicht, sondern gibt nur aus — prüfen und dann übernehmen:
+
+```sh
+bin/crontab-entries.sh              # Zeilen anzeigen
+bin/crontab-entries.sh --limit=5    # --limit der Verbesserung setzen (Standard 3)
+bin/crontab-entries.sh --php=/usr/bin/php8.2   # PHP-Pfad vorgeben
 ```
 
 ## Vor dem Eintragen prüfen

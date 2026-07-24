@@ -46,6 +46,27 @@ A common example for a single website:
     # Health check in the morning
     30 6 * * *    /usr/bin/php /path/backend/cli/cron-healthcheck.php --host=example.com
 
+Each invocation only ever covers **one** website — there is no run across all
+projects. With several websites, each therefore gets its own entries with its
+mount file (`--mounts=…/mounts/<hash>.ini`); the two Pro scripts also with their
+respective licensed domain (`--host`). Example for two websites:
+
+    # Website 1 (one.example.com)
+    */15 * * * *  /usr/bin/php /path/backend/cli/cron-build.php       --mounts=/path/backend/mounts/<hash1>.ini --quiet
+    0 3 * * *     /usr/bin/php /path/backend/cli/cron-improve.php     --mounts=/path/backend/mounts/<hash1>.ini --host=one.example.com --limit=3
+    30 6 * * *    /usr/bin/php /path/backend/cli/cron-healthcheck.php --mounts=/path/backend/mounts/<hash1>.ini --host=one.example.com
+
+    # Website 2 (two.example.com)
+    */15 * * * *  /usr/bin/php /path/backend/cli/cron-build.php       --mounts=/path/backend/mounts/<hash2>.ini --quiet
+    0 3 * * *     /usr/bin/php /path/backend/cli/cron-improve.php     --mounts=/path/backend/mounts/<hash2>.ini --host=two.example.com --limit=3
+    30 6 * * *    /usr/bin/php /path/backend/cli/cron-healthcheck.php --mounts=/path/backend/mounts/<hash2>.ini --host=two.example.com
+
+You don't have to assemble these lines by hand: the `bin/crontab-entries.sh`
+script in the release directory prints them ready-made for every configured
+website — it reads the mount path, host, and license status from the mount
+files. It does not change the crontab, it only prints the lines; review, then
+apply them (`crontab -e`).
+
 ## Pausing tasks
 
 Each of the three tasks can be paused per website without touching the host's
