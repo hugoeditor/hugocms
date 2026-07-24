@@ -11,7 +11,8 @@ nach dem Schema
 
     <sektion>/<id>.<sprache>.md
 
-- **sektion** – Themenbereich, z. B. `audit` (später `editor`, `general`, …).
+- **sektion** – Themenbereich, z. B. `audit` (SEO-Regeln) oder `system`
+  (Anwendung, etwa `system/cron` zur Crontab-Einrichtung).
 - **id** – eindeutige Kennung. Bei Audit-Regeln ist das die Regel-ID
   (`issue.ruleId`), z. B. `title.too_short`. Erlaubt: `a–z 0–9 . _ -`.
 - **sprache** – `de` oder `en`. Fehlt die gewünschte Sprache, zeigt der Client

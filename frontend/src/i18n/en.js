@@ -298,6 +298,7 @@ export default {
     },
     cron: {
       heading: 'Cron jobs',
+      help: 'Help: setting up cron jobs',
       hint: 'Shows what actually runs on this hosting — every job records its own run. The interval is estimated from recent runs.',
       noProject: 'Without a Hugo project this website has no cron jobs.',
       job: {

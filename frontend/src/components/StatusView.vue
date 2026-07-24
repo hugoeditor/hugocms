@@ -9,12 +9,14 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useStatusStore } from '../stores/status'
 import { useAuthStore } from '../stores/auth'
+import { useHelpStore } from '../stores/help'
 import { errorText } from '../i18n/apiMessage'
 import { useConfirm } from '../util/confirm'
 
 const { t, locale } = useI18n()
 const store = useStatusStore()
 const auth = useAuthStore()
+const help = useHelpStore()
 const confirm = useConfirm()
 
 // Die Lizenzaktivierung lebt weiterhin im LicenseDialog (App.vue) — von hier
@@ -359,6 +361,18 @@ function scoreColor(score) {
             <h2 class="st-card-title">
               <v-icon icon="mdi-clock-outline" size="18" />
               {{ $t('status.cron.heading') }}
+              <v-spacer />
+              <!-- Hilfe zur Crontab-Einrichtung (wie die README). Öffnet die
+                   Wissensdatenbank als Überlagerung; Schließen kehrt hierher
+                   zurück. -->
+              <v-btn
+                icon="mdi-help-circle-outline"
+                variant="text"
+                size="small"
+                density="comfortable"
+                :title="$t('status.cron.help')"
+                @click="help.open('system', 'cron', locale)"
+              />
             </h2>
             <p class="st-hint">{{ $t('status.cron.hint') }}</p>
 

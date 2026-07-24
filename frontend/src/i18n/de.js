@@ -298,6 +298,7 @@ export default {
     },
     cron: {
       heading: 'Cron-Aufgaben',
+      help: 'Hilfe: Cron-Aufgaben einrichten',
       hint: 'Zeigt, was auf diesem Hosting tatsächlich läuft — jede Aufgabe vermerkt ihren Lauf selbst. Der Takt ist aus den letzten Läufen geschätzt.',
       noProject: 'Ohne Hugo-Projekt gibt es für diese Webseite keine Cron-Aufgaben.',
       job: {
