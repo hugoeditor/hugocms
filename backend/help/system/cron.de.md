@@ -62,15 +62,24 @@ Ist der **Build** pausiert, gehen terminierte Freigaben nicht live — die
 Freigabe-Warteschlange weist darauf hin. Ist der **Verbesserer** pausiert, wird
 die Liste „zu verbessern" nicht abgearbeitet.
 
-## Automatischer Commit nach der Veröffentlichung (Pro)
+## Automatischer Commit beim Build (Pro)
 
-Ist das Quellverzeichnis ein Git-Repository, kann der Cron-Build nach dem
-Einspielen fälliger Freigaben automatisch einen Commit anlegen. Das schaltet man
-in den **Projekteinstellungen** unter „Automatischer Commit" ein; dort steht auch
-die Nachricht (mit einem sinnvollen Vorschlag als Vorgabe), an die das Datum
-angehängt wird. Übernommen werden — wie beim Commit von Hand — alle offenen
-Änderungen im Quellverzeichnis. Setzt eine gültige Pro-Lizenz voraus; scheitert
-der Commit, bricht der Build nicht ab, sondern vermerkt es nur im Protokoll.
+Ist das Quellverzeichnis ein Git-Repository, kann der Cron-Build automatisch
+Commits anlegen. Das schaltet man in den **Projekteinstellungen** unter
+„Automatisch committen" ein; ein Schalter, zwei Nachrichten (jeweils mit einem
+sinnvollen Vorschlag als Vorgabe, an die das Datum angehängt wird):
+
+- **Vor dem Build** sichert der Cron offene, noch unversionierte Änderungen im
+  Quellverzeichnis mit der ersten Nachricht — aber nur, wenn welche vorliegen.
+  Diese Prüfung läuft bei jedem Cron-Build-Lauf, auch ohne fällige Freigabe.
+- **Nach der Veröffentlichung** fälliger Freigaben folgt der zweite Commit mit
+  der Nachricht für die Veröffentlichung.
+
+Die Trennung sorgt dafür, dass der Veröffentlichungs-Commit nur die publizierten
+Dateien enthält und verstreute Direktbearbeitungen nicht mit hineinrutschen.
+Übernommen werden — wie beim Commit von Hand — alle offenen Änderungen im
+Quellverzeichnis. Setzt eine gültige Pro-Lizenz voraus; scheitert ein Commit,
+bricht der Build nicht ab, sondern vermerkt es nur im Protokoll.
 
 ## Die Besonderheit: automatische Verbesserung
 

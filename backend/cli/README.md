@@ -79,9 +79,13 @@ Zielordner und `--cleanDestinationDir` stammen aus der `[hugo]`-Konfiguration.
 
 **Automatischer Commit (optional, Pro).** Ist in den Projekteinstellungen der
 Auto-Commit aktiviert und das Quellverzeichnis ein Git-Repository, legt der Lauf
-nach dem Einspielen fälliger Freigaben einen Commit an (`git add -A`, wie der
-manuelle Commit — also alle offenen Änderungen). Die Nachricht kommt aus der
-`[git]`-Sektion der Mount-Konfiguration, das Datum wird angehängt. Ein
+zwei Commits an (`git add -A`, wie der manuelle Commit — also alle offenen
+Änderungen): **vor** dem Build werden offene, noch unversionierte Änderungen
+gesichert (`commit_message_pending`, nur wenn welche vorliegen — die Prüfung
+läuft bei jedem Lauf), **nach** dem Einspielen fälliger Freigaben folgt der
+Veröffentlichungs-Commit (`commit_message`). So bleibt Letzterer auf die
+publizierten Dateien beschränkt. Die Nachrichten kommen aus der
+`[git]`-Sektion der Mount-Konfiguration, das Datum wird jeweils angehängt. Ein
 fehlgeschlagener Commit bricht den Build nicht ab, er wird nur protokolliert.
 
 > **Der Build-Takt bestimmt die Genauigkeit jeder Terminierung.** Eine Freigabe,

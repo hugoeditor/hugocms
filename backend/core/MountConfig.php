@@ -69,8 +69,13 @@ use HugoCMS\FileManager\Exception\ApiException;
  * Quellverzeichnis ein Git-Repository, legt der Cron nach dem Einspielen fälliger
  * Freigaben einen Commit an; an die Nachricht wird das Datum angehängt. Setzt die
  * Pro-Lizenz voraus (Git ist eine Pro-Funktion).
- *   auto_commit    (optional) true schaltet den Auto-Commit ein. Standard: aus.
- *   commit_message (optional) Nachricht (ohne Datum). Standard: siehe unten.
+ * Zusätzlich sichert der Cron VOR dem Build offene (noch unversionierte)
+ * Änderungen im Quellverzeichnis mit einer eigenen Nachricht, sofern welche
+ * vorliegen — so bleibt der Veröffentlichungs-Commit auf die publizierten
+ * Dateien beschränkt. Beides hängt am selben Schalter auto_commit.
+ *   auto_commit            (optional) true schaltet den Auto-Commit ein. Standard: aus.
+ *   commit_message         (optional) Nachricht nach der Veröffentlichung (ohne Datum). Standard: siehe unten.
+ *   commit_message_pending (optional) Nachricht für offene Änderungen vor dem Build (ohne Datum). Standard: siehe unten.
  */
 final class MountConfig
 {
@@ -86,6 +91,9 @@ final class MountConfig
 
     /** Vorgeschlagene Commit-Nachricht, wenn keine konfiguriert ist. */
     public const string GIT_COMMIT_MESSAGE_DEFAULT = 'Automatische Veröffentlichung terminierter Freigaben';
+
+    /** Vorgeschlagene Nachricht für den Vorab-Commit offener Änderungen. */
+    public const string GIT_COMMIT_MESSAGE_PENDING_DEFAULT = 'Offene Änderungen vor dem Build gesichert';
 
     /** Obergrenze der Commit-Nachricht (vor dem Datum), damit sie handhabbar bleibt. */
     private const int GIT_MESSAGE_MAX = 200;
@@ -111,7 +119,7 @@ final class MountConfig
      *   seoReport: array{excludePrefixes: list<string>, excludeFiles: list<string>},
      *   improve: array{auto: bool, windowStart: string, windowEnd: string, perDay: int, skipWeekends: bool},
      *   cron: array{pauseBuild: bool, pauseImprove: bool, pauseHealthcheck: bool},
-     *   git: array{autoCommit: bool, commitMessage: string},
+     *   git: array{autoCommit: bool, commitMessage: string, commitMessagePending: string},
      *   warnings: list<array{key: string, params: list<mixed>}>
      * }
      */
@@ -135,7 +143,11 @@ final class MountConfig
         $seoReport = ['excludePrefixes' => [], 'excludeFiles' => []];
         $improve = self::IMPROVE_DEFAULTS;
         $cron = ['pauseBuild' => false, 'pauseImprove' => false, 'pauseHealthcheck' => false];
-        $git = ['autoCommit' => false, 'commitMessage' => self::GIT_COMMIT_MESSAGE_DEFAULT];
+        $git = [
+            'autoCommit' => false,
+            'commitMessage' => self::GIT_COMMIT_MESSAGE_DEFAULT,
+            'commitMessagePending' => self::GIT_COMMIT_MESSAGE_PENDING_DEFAULT,
+        ];
         $warnings = [];
 
         foreach ($raw as $name => $section) {
@@ -211,15 +223,21 @@ final class MountConfig
                 continue;
             }
 
-            // Automatischer Commit nach der Veröffentlichung (optional, pro Webseite).
+            // Automatischer Commit nach der Veröffentlichung (optional, pro Webseite)
+            // sowie der Vorab-Commit offener Änderungen — beide am selben Schalter.
             if (strtolower((string) $name) === self::GIT_SECTION) {
                 $message = trim((string) ($section['commit_message'] ?? ''));
                 if ($message === '') {
                     $message = self::GIT_COMMIT_MESSAGE_DEFAULT;
                 }
+                $pending = trim((string) ($section['commit_message_pending'] ?? ''));
+                if ($pending === '') {
+                    $pending = self::GIT_COMMIT_MESSAGE_PENDING_DEFAULT;
+                }
                 $git = [
                     'autoCommit' => filter_var($section['auto_commit'] ?? false, FILTER_VALIDATE_BOOLEAN),
                     'commitMessage' => mb_substr($message, 0, self::GIT_MESSAGE_MAX),
+                    'commitMessagePending' => mb_substr($pending, 0, self::GIT_MESSAGE_MAX),
                 ];
                 continue;
             }

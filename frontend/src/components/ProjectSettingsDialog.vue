@@ -44,6 +44,9 @@ const pauseHealthcheck = ref(false)
 // die Pro-Lizenz gilt (auth.git). Das Datum hängt der Server an die Nachricht.
 const autoCommit = ref(false)
 const commitMessage = ref('')
+// Zweite Nachricht: Vorab-Commit offener Änderungen vor dem Build (gleicher
+// Schalter autoCommit).
+const commitMessagePending = ref('')
 const gitRepo = ref(false)
 // Auto-Commit ist nur einstellbar, wenn Git nutzbar (Pro + Projekt) UND das
 // Quellverzeichnis ein Repository ist.
@@ -100,6 +103,7 @@ watch(model, async (open) => {
     pauseHealthcheck.value = !!cfg.pauseHealthcheck
     autoCommit.value = !!cfg.autoCommit
     commitMessage.value = cfg.commitMessage ?? ''
+    commitMessagePending.value = cfg.commitMessagePending ?? ''
     gitRepo.value = !!cfg.gitRepo
   } catch (e) {
     error.value = errorText(t, e)
@@ -134,6 +138,7 @@ async function submit() {
       pauseHealthcheck: pauseHealthcheck.value,
       autoCommit: autoCommit.value,
       commitMessage: commitMessage.value,
+      commitMessagePending: commitMessagePending.value,
     })
     // Der Schalter in der Liste „zu verbessern“ liest denselben Zustand aus
     // whoami — nach dem Speichern nachziehen.
@@ -359,6 +364,19 @@ async function submit() {
             counter="200"
             maxlength="200"
             :hint="$t('projectConfig.commitMessageHint')"
+            persistent-hint
+            class="mb-2"
+          />
+          <v-text-field
+            v-model="commitMessagePending"
+            :label="$t('projectConfig.commitMessagePending')"
+            :disabled="!gitCommitAvailable || !autoCommit"
+            prepend-inner-icon="mdi-message-arrow-right-outline"
+            variant="outlined"
+            density="comfortable"
+            counter="200"
+            maxlength="200"
+            :hint="$t('projectConfig.commitMessagePendingHint')"
             persistent-hint
           />
 

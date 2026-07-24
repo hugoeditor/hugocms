@@ -58,14 +58,23 @@ If the **build** is paused, scheduled releases do not go live — the review que
 points this out. If the **improver** is paused, the “to improve” list is not
 processed.
 
-## Automatic commit after publishing (Pro)
+## Automatic commit during the build (Pro)
 
-If the source directory is a Git repository, the cron build can create a commit
-automatically after applying due releases. Enable it in the **project settings**
-under “Automatic commit”; the message (pre-filled with a sensible suggestion)
-lives there too, and the date is appended to it. As with a manual commit, it
-includes all pending changes in the source directory. Requires a valid Pro
-license; if the commit fails, the build does not abort — it is only logged.
+If the source directory is a Git repository, the cron build can create commits
+automatically. Enable it in the **project settings** under “Commit
+automatically”; one toggle, two messages (each pre-filled with a sensible
+suggestion, and the date is appended):
+
+- **Before the build**, the cron secures pending, still-uncommitted changes in
+  the source directory with the first message — but only if any exist. This
+  check runs on every cron build, even without a due release.
+- **After publishing** due releases, the second commit follows with the
+  publication message.
+
+The split keeps the publication commit limited to the published files, so stray
+direct edits do not slip in. As with a manual commit, it includes all pending
+changes in the source directory. Requires a valid Pro license; if a commit
+fails, the build does not abort — it is only logged.
 
 ## The special part: automatic improvement
 

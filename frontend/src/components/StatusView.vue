@@ -12,6 +12,12 @@ import { useAuthStore } from '../stores/auth'
 import { useHelpStore } from '../stores/help'
 import { errorText } from '../i18n/apiMessage'
 import { useConfirm } from '../util/confirm'
+import { buildNumber } from '../util/version'
+
+// Version/Copyright — früher ein eigener Dialog (Klick auf die Marke), jetzt
+// hier ganz oben im Systemstatus. URLs sprachunabhängig.
+const HUGOCMS_URL = 'https://hugocms.com/'
+const COMPANY_URL = 'https://inter-data.de/'
 
 const { t, locale } = useI18n()
 const store = useStatusStore()
@@ -236,6 +242,24 @@ function scoreColor(score) {
 
     <div class="st-content nemo-scroll">
       <div class="st-inner">
+        <!-- Version und Copyright — früher der eigene Versionsdialog (Klick auf
+             die Marke), jetzt hier ganz oben. Steht unabhängig von den Statusdaten
+             und bleibt auch während des Ladens sichtbar. -->
+        <div class="st-about">
+          <v-icon icon="mdi-folder-multiple-outline" color="primary" size="22" />
+          <div class="st-about-text">
+            <div class="st-about-line">
+              <span class="st-about-name">{{ $t('app.title') }}</span>
+              <span class="st-about-build">{{ $t('version.build') }} {{ buildNumber }}</span>
+            </div>
+            <div class="st-about-credit">
+              <a :href="HUGOCMS_URL" target="_blank" rel="noopener noreferrer">{{ $t('app.title') }}</a>
+              {{ $t('version.copyright') }}
+              <a :href="COMPANY_URL" target="_blank" rel="noopener noreferrer">{{ $t('version.company') }}</a>
+            </div>
+          </div>
+        </div>
+
         <v-alert v-if="store.error" type="error" density="comfortable" class="mb-4">
           {{ errorText(t, store.error) }}
         </v-alert>
@@ -667,6 +691,32 @@ function scoreColor(score) {
 /* Volle Breite wie die übrigen Overlay-Ansichten (Freigabe, SEO-Audit) — keine
    zentrierte Spalte, die links und rechts breite Ränder stehen ließe. */
 .st-inner { max-width: none; margin: 0; padding: 12px 12px 24px; }
+
+/* Version/Copyright ganz oben (ersetzt den früheren Versionsdialog). */
+.st-about {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--mint-border);
+}
+.st-about-text { min-width: 0; }
+.st-about-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.st-about-name { font-weight: 600; font-size: 0.95rem; }
+.st-about-build { font-size: 0.8rem; color: var(--mint-text-muted); }
+.st-about-credit {
+  font-size: 0.78rem;
+  color: var(--mint-text-muted);
+  margin-top: 2px;
+}
+.st-about-credit a { color: var(--mint-green); text-decoration: none; }
+.st-about-credit a:hover { text-decoration: underline; }
 
 /* Weg zu den Projekteinstellungen unter der Cron-Liste: Hinweis links, Knopf
    rechts. */

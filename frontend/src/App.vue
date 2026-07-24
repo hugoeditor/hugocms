@@ -33,12 +33,6 @@ import LanguageSwitcher from './components/LanguageSwitcher.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import { useConfirm } from './util/confirm'
 import { useAiGate, aiGateState } from './util/aiGate'
-import { buildNumber } from './util/version'
-
-// Ziel-URLs der Links im Versionsdialog (sprachunabhängig).
-const HUGOCMS_URL = 'https://hugocms.com/'
-const COMPANY_URL = 'https://inter-data.de/'
-
 // Adresse der veröffentlichten Webseite: die Domain-Wurzel, unter der HugoCMS
 // läuft (die erzeugte public/ wird dort ausgeliefert). Konstant pro Seitenaufruf.
 const siteUrl = window.location.origin
@@ -333,7 +327,6 @@ watch(
   },
 )
 const accountOpen = ref(false)
-const versionOpen = ref(false)
 const licenseOpen = ref(false)
 const repositoryOpen = ref(false)
 const notice = ref(null) // kurze Erfolgsmeldung (Snackbar)
@@ -495,14 +488,15 @@ async function build() {
             </template>
           </v-tooltip>
 
-          <!-- Marke: Klick auf Symbol oder Titel öffnet die Versionsinfo. -->
-          <v-tooltip :text="$t('version.open')" location="bottom">
+          <!-- Marke: Klick auf Symbol oder Titel öffnet den Systemstatus (dort
+               steht seit dem Wegfall des Versionsdialogs auch die Version). -->
+          <v-tooltip :text="$t('status.title')" location="bottom">
             <template #activator="{ props }">
               <button
                 v-bind="props"
                 type="button"
                 class="nemo-brand-btn nemo-noselect"
-                @click="versionOpen = true"
+                @click="openStatusView"
               >
                 <v-icon icon="mdi-folder-multiple-outline" size="20" class="nemo-brand-icon" />
                 <span class="nemo-title d-none d-md-inline">{{ $t('app.title') }}</span>
@@ -872,31 +866,6 @@ async function build() {
       </v-card>
     </v-dialog>
 
-    <!-- Versionsinfo (Klick auf Marke in der Titelleiste) -->
-    <v-dialog v-model="versionOpen" width="380">
-      <v-card>
-        <v-card-title class="d-flex align-center text-subtitle-1">
-          <v-icon icon="mdi-folder-multiple-outline" color="primary" class="mr-2" />
-          {{ $t('version.title') }}
-        </v-card-title>
-        <v-card-text>
-          <div class="d-flex justify-space-between align-center">
-            <span class="text-medium-emphasis">{{ $t('version.build') }}</span>
-            <span class="text-h6 font-weight-medium">{{ buildNumber }}</span>
-          </div>
-          <div class="text-caption text-medium-emphasis mt-4 nemo-version-credit">
-            <a :href="HUGOCMS_URL" target="_blank" rel="noopener noreferrer">{{ $t('app.title') }}</a>
-            {{ $t('version.copyright') }}
-            <a :href="COMPANY_URL" target="_blank" rel="noopener noreferrer">{{ $t('version.company') }}</a>
-          </div>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn variant="text" @click="versionOpen = false">{{ $t('app.close') }}</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-
     <!-- Konfiguration im laufenden Betrieb ändern -->
     <ReconfigureDialog v-model="reconfigureOpen" @saved="onReconfigured" />
     <ProjectSettingsDialog
@@ -1021,12 +990,6 @@ async function build() {
   cursor: pointer;
 }
 .nemo-brand-btn:hover .nemo-title { text-decoration: underline; }
-/* Links in der Versionsinfo (HugoCMS, Inter-Data) im Akzentgrün. */
-.nemo-version-credit a {
-  color: var(--mint-green);
-  text-decoration: none;
-}
-.nemo-version-credit a:hover { text-decoration: underline; }
 .nemo-title {
   font-weight: 600;
   font-size: 0.95rem;

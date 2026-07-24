@@ -156,14 +156,19 @@ final class Connector
     private array $cronPause = ['pauseBuild' => false, 'pauseImprove' => false, 'pauseHealthcheck' => false];
 
     /**
-     * Automatischer Commit nach der zeitgesteuerten Veröffentlichung, aus der
+     * Automatischer Commit rund um die zeitgesteuerte Veröffentlichung, aus der
      * [git]-Sektion der Mount-Konfiguration (pro Webseite). Ist `autoCommit` an
      * und das Quellverzeichnis ein Repository, committet der Cron nach dem
-     * Einspielen fälliger Freigaben mit `commitMessage` (+ Datum).
+     * Einspielen fälliger Freigaben mit `commitMessage` (+ Datum) und sichert
+     * VOR dem Build offene Änderungen mit `commitMessagePending` (+ Datum).
      *
-     * @var array{autoCommit: bool, commitMessage: string}
+     * @var array{autoCommit: bool, commitMessage: string, commitMessagePending: string}
      */
-    private array $gitAuto = ['autoCommit' => false, 'commitMessage' => MountConfig::GIT_COMMIT_MESSAGE_DEFAULT];
+    private array $gitAuto = [
+        'autoCommit' => false,
+        'commitMessage' => MountConfig::GIT_COMMIT_MESSAGE_DEFAULT,
+        'commitMessagePending' => MountConfig::GIT_COMMIT_MESSAGE_PENDING_DEFAULT,
+    ];
 
     /**
      * Wie weit die automatische Terminierung nach einem freien Platz sucht.
@@ -1195,6 +1200,12 @@ final class Connector
         return $this->withCronHeartbeat(
             'build',
             function () use ($force): array {
+                // Vor allem anderen: offene (noch unversionierte) Änderungen im
+                // Quellverzeichnis sichern, damit sie NICHT im späteren
+                // Veröffentlichungs-Commit landen. Läuft bei jedem Cron-Lauf,
+                // auch ohne fällige Freigabe (dann bleibt es beim Vorab-Commit).
+                $committedPending = $this->maybeCommitPending();
+
                 // Fällige Freigaben anwenden und daran messen, ob der Build sich
                 // lohnt. Ein Fehler beim Anwenden darf einen erzwungenen Build
                 // nicht verhindern (dann wird trotzdem gebaut).
@@ -1208,12 +1219,13 @@ final class Connector
                 if (!$force && $applied === []) {
                     $this->logger->info('Cron-Build übersprungen — keine fälligen Freigaben.');
 
-                    return ['skipped' => true, 'applied' => 0];
+                    return ['skipped' => true, 'applied' => 0, 'committedPending' => $committedPending];
                 }
 
                 // Freigaben sind bereits angewendet — nicht erneut anwenden.
                 $result = $this->runHugoBuild(false);
                 $result['applied'] = count($applied);
+                $result['committedPending'] = $committedPending;
 
                 // Optionaler Commit nach der Veröffentlichung: nur wenn wirklich
                 // Freigaben eingespielt wurden (ein reiner --force-Build ohne
@@ -1229,8 +1241,27 @@ final class Connector
             // nicht, ist für den Cron aber ein Fehlschlag — sonst meldete der
             // Status „erfolgreich“, während die Webseite nicht mehr gebaut wird.
             static function (array $r): array {
+                // Ein Commit, der lief, aber nicht zustande kam (z. B. fehlende
+                // git-Identität), macht den Lauf NICHT zum Fehlschlag — der
+                // Hugo-Build ist ja gelungen. Er wird aber im Statustext
+                // sichtbar gemacht, nicht nur im Log. Voraussetzung ist ein
+                // ausdrückliches success=false; ein nicht versuchter Commit
+                // (sauberer Arbeitsbaum, kein Repo, Schalter aus) liefert null.
+                $commitNote = '';
+                if (isset($r['committedPending']['success']) && $r['committedPending']['success'] === false) {
+                    $commitNote .= '; Vorab-Commit fehlgeschlagen (siehe Log)';
+                }
+                if (isset($r['committed']['success']) && $r['committed']['success'] === false) {
+                    $commitNote .= '; Veröffentlichungs-Commit fehlgeschlagen (siehe Log)';
+                }
+
                 if (!empty($r['skipped'])) {
-                    return [true, 'Übersprungen — keine fälligen Freigaben'];
+                    $note = 'Übersprungen — keine fälligen Freigaben';
+                    if (!empty($r['committedPending']['success'])) {
+                        $note .= '; offene Änderungen committet';
+                    }
+
+                    return [true, $note . $commitNote];
                 }
 
                 return [
@@ -1239,7 +1270,7 @@ final class Connector
                         '%d Freigabe(n), Hugo Code %d',
                         (int) ($r['applied'] ?? 0),
                         (int) ($r['exitCode'] ?? 0),
-                    ),
+                    ) . $commitNote,
                 ];
             },
         );
@@ -1247,18 +1278,58 @@ final class Connector
 
     /**
      * Legt nach der zeitgesteuerten Veröffentlichung optional einen Commit an
-     * (Schalter [git] auto_commit). Voraussetzung: gültige Pro-Lizenz (Git ist
-     * eine Pro-Funktion) und ein Git-Repository im Quellverzeichnis. Fehlt eine
-     * Voraussetzung oder scheitert der Commit, wird das nur protokolliert — der
-     * Build darf daran nie scheitern.
-     *
-     * `git add -A` übernimmt ALLE offenen Änderungen im Arbeitsbaum (wie der
-     * manuelle Commit), nicht nur die eben veröffentlichten Dateien. An die
-     * konfigurierte Nachricht wird das Datum (Serverzeit) angehängt.
+     * (Schalter [git] auto_commit). Ein reiner Build ohne fällige Freigaben
+     * ruft dies nicht auf.
      *
      * @return ?array{success: bool, sha: ?string}
      */
     private function maybeAutoCommit(): ?array
+    {
+        // Nach der Veröffentlichung wird ein Commit erwartet — „nichts zu
+        // committen“ deshalb NICHT stillschweigend überspringen (skipWhenClean
+        // = false), damit ein echtes Problem sichtbar wird.
+        return $this->runAutoCommit(
+            (string) $this->gitAuto['commitMessage'],
+            MountConfig::GIT_COMMIT_MESSAGE_DEFAULT,
+            false,
+        );
+    }
+
+    /**
+     * Sichert VOR dem Build offene (noch unversionierte) Änderungen im
+     * Quellverzeichnis mit eigener Nachricht — nur wenn welche vorliegen, sonst
+     * still. So bleibt der spätere Veröffentlichungs-Commit auf die publizierten
+     * Dateien beschränkt und verstreute Direktbearbeitungen werden zeitnah
+     * versioniert. Hängt am selben Schalter [git] auto_commit.
+     *
+     * @return ?array{success: bool, sha: ?string}
+     */
+    private function maybeCommitPending(): ?array
+    {
+        // Läuft bei jedem Cron-Build (alle 15 Min.) — bei sauberem Arbeitsbaum
+        // still überspringen (skipWhenClean = true), sonst würde das Log mit
+        // „nichts zu committen“ zulaufen.
+        return $this->runAutoCommit(
+            (string) $this->gitAuto['commitMessagePending'],
+            MountConfig::GIT_COMMIT_MESSAGE_PENDING_DEFAULT,
+            true,
+        );
+    }
+
+    /**
+     * Gemeinsamer Auto-Commit. Voraussetzung: Schalter an, gültige Pro-Lizenz
+     * (Git ist eine Pro-Funktion) und ein Git-Repository im Quellverzeichnis.
+     * Fehlt eine Voraussetzung oder scheitert der Commit, wird das nur
+     * protokolliert — der Build darf daran nie scheitern.
+     *
+     * `git add -A` übernimmt ALLE offenen Änderungen im Arbeitsbaum (wie der
+     * manuelle Commit). An die Nachricht wird das Datum (Serverzeit) angehängt.
+     * $skipWhenClean = true committet nur, wenn der Arbeitsbaum überhaupt
+     * offene Änderungen hat (sonst still ohne Log).
+     *
+     * @return ?array{success: bool, sha: ?string}
+     */
+    private function runAutoCommit(string $message, string $fallback, bool $skipWhenClean): ?array
     {
         if (empty($this->gitAuto['autoCommit']) || $this->hugo === null) {
             return null;
@@ -1270,15 +1341,21 @@ final class Connector
         }
 
         $source = (string) $this->hugo['source'];
-        $message = trim((string) $this->gitAuto['commitMessage']);
+        $message = trim($message);
         if ($message === '') {
-            $message = MountConfig::GIT_COMMIT_MESSAGE_DEFAULT;
+            $message = $fallback;
         }
         // Datum anhängen (Serverzeit, wie die übrigen Cron-Zeiten).
         $message .= ' — ' . date('Y-m-d H:i');
 
         try {
-            $res = (new GitService($source))->commit($message);
+            $git = new GitService($source);
+            // Vorab-Commit nur bei wirklich offenen Änderungen — ein sauberer
+            // Arbeitsbaum ist hier der Normalfall und kein Ereignis fürs Log.
+            if ($skipWhenClean && !empty($git->status()['clean'])) {
+                return null;
+            }
+            $res = $git->commit($message);
         } catch (Throwable $e) {
             // Etwa GIT-NOT-A-REPO: kein Repository → nichts zu committen.
             $this->logger->info('Auto-Commit übersprungen: ' . $e->getMessage());
@@ -3224,6 +3301,7 @@ final class Connector
             // Automatischer Commit nach der Veröffentlichung.
             'autoCommit' => (bool) $this->gitAuto['autoCommit'],
             'commitMessage' => (string) $this->gitAuto['commitMessage'],
+            'commitMessagePending' => (string) $this->gitAuto['commitMessagePending'],
             // Ist die Quelle ein Git-Repository? Für den Hinweis im Formular.
             'gitRepo' => $this->sourceIsGitRepo(),
         ];
@@ -3317,10 +3395,12 @@ final class Connector
     private function gitSectionFrom(array $request): array
     {
         $message = trim((string) ($request['commitMessage'] ?? ''));
+        $pending = trim((string) ($request['commitMessagePending'] ?? ''));
 
         return [
             'auto_commit' => !empty($request['autoCommit']) ? 'true' : 'false',
             'commit_message' => $message === '' ? MountConfig::GIT_COMMIT_MESSAGE_DEFAULT : $message,
+            'commit_message_pending' => $pending === '' ? MountConfig::GIT_COMMIT_MESSAGE_PENDING_DEFAULT : $pending,
         ];
     }
 
