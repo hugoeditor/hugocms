@@ -154,6 +154,16 @@ final class Connector
     private array $cronPause = ['pauseBuild' => false, 'pauseImprove' => false, 'pauseHealthcheck' => false];
 
     /**
+     * Automatischer Commit nach der zeitgesteuerten Veröffentlichung, aus der
+     * [git]-Sektion der Mount-Konfiguration (pro Webseite). Ist `autoCommit` an
+     * und das Quellverzeichnis ein Repository, committet der Cron nach dem
+     * Einspielen fälliger Freigaben mit `commitMessage` (+ Datum).
+     *
+     * @var array{autoCommit: bool, commitMessage: string}
+     */
+    private array $gitAuto = ['autoCommit' => false, 'commitMessage' => MountConfig::GIT_COMMIT_MESSAGE_DEFAULT];
+
+    /**
      * Wie weit die automatische Terminierung nach einem freien Platz sucht.
      * Bei kleiner Tagesmenge und großem Rückstau wandern Freigaben weit nach
      * vorn; irgendwo muss die Suche enden, sonst liefe sie bei erschöpftem
@@ -359,6 +369,8 @@ final class Connector
         $this->improve = $config['improve'];
         // Pausenschalter der drei Cron-Skripte.
         $this->cronPause = $config['cron'];
+        // Automatischer Commit nach der Veröffentlichung.
+        $this->gitAuto = $config['git'];
         foreach ($config['warnings'] as $warning) {
             $this->addSetupWarning($warning['key'], $warning['params']);
         }
@@ -1200,6 +1212,13 @@ final class Connector
                 $result = $this->runHugoBuild(false);
                 $result['applied'] = count($applied);
 
+                // Optionaler Commit nach der Veröffentlichung: nur wenn wirklich
+                // Freigaben eingespielt wurden (ein reiner --force-Build ohne
+                // fällige Freigaben löst keinen Commit aus).
+                if ($applied !== []) {
+                    $result['committed'] = $this->maybeAutoCommit();
+                }
+
                 return $result;
             },
             // Übersprungen gilt als erfolgreicher Lauf (der Cron hat geprüft und
@@ -1221,6 +1240,59 @@ final class Connector
                 ];
             },
         );
+    }
+
+    /**
+     * Legt nach der zeitgesteuerten Veröffentlichung optional einen Commit an
+     * (Schalter [git] auto_commit). Voraussetzung: gültige Pro-Lizenz (Git ist
+     * eine Pro-Funktion) und ein Git-Repository im Quellverzeichnis. Fehlt eine
+     * Voraussetzung oder scheitert der Commit, wird das nur protokolliert — der
+     * Build darf daran nie scheitern.
+     *
+     * `git add -A` übernimmt ALLE offenen Änderungen im Arbeitsbaum (wie der
+     * manuelle Commit), nicht nur die eben veröffentlichten Dateien. An die
+     * konfigurierte Nachricht wird das Datum (Serverzeit) angehängt.
+     *
+     * @return ?array{success: bool, sha: ?string}
+     */
+    private function maybeAutoCommit(): ?array
+    {
+        if (empty($this->gitAuto['autoCommit']) || $this->hugo === null) {
+            return null;
+        }
+        if (!$this->license()->isPro()) {
+            $this->logger->warning('Auto-Commit übersprungen — Git ist eine Pro-Funktion, aber keine gültige Lizenz vorhanden.');
+
+            return null;
+        }
+
+        $source = (string) $this->hugo['source'];
+        $message = trim((string) $this->gitAuto['commitMessage']);
+        if ($message === '') {
+            $message = MountConfig::GIT_COMMIT_MESSAGE_DEFAULT;
+        }
+        // Datum anhängen (Serverzeit, wie die übrigen Cron-Zeiten).
+        $message .= ' — ' . date('Y-m-d H:i');
+
+        try {
+            $res = (new GitService($source))->commit($message);
+        } catch (Throwable $e) {
+            // Etwa GIT-NOT-A-REPO: kein Repository → nichts zu committen.
+            $this->logger->info('Auto-Commit übersprungen: ' . $e->getMessage());
+
+            return null;
+        }
+
+        if (!empty($res['success'])) {
+            $this->logger->info(sprintf('Auto-Commit %s: %s', substr((string) ($res['sha'] ?? ''), 0, 7), $message));
+        } else {
+            // Häufigster Fall ohne Fehler: „nichts zu committen“. Als Warnung mit
+            // Git-Ausgabe, damit ein echtes Problem (fehlende git-Identität)
+            // sichtbar wird.
+            $this->logger->warning('Auto-Commit nicht angelegt: ' . trim((string) ($res['output'] ?? '')));
+        }
+
+        return ['success' => (bool) ($res['success'] ?? false), 'sha' => $res['sha'] ?? null];
     }
 
     /**
@@ -3126,7 +3198,25 @@ final class Connector
             'pauseBuild' => (bool) $this->cronPause['pauseBuild'],
             'pauseImprove' => (bool) $this->cronPause['pauseImprove'],
             'pauseHealthcheck' => (bool) $this->cronPause['pauseHealthcheck'],
+            // Automatischer Commit nach der Veröffentlichung.
+            'autoCommit' => (bool) $this->gitAuto['autoCommit'],
+            'commitMessage' => (string) $this->gitAuto['commitMessage'],
+            // Ist die Quelle ein Git-Repository? Für den Hinweis im Formular.
+            'gitRepo' => $this->sourceIsGitRepo(),
         ];
+    }
+
+    /** true, wenn das Hugo-Quellverzeichnis ein Git-Arbeitsbaum ist. */
+    private function sourceIsGitRepo(): bool
+    {
+        if ($this->hugo === null) {
+            return false;
+        }
+        try {
+            return (new GitService((string) $this->hugo['source']))->isRepository();
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     /**
@@ -3150,10 +3240,12 @@ final class Connector
         $seoSection = self::seoReportSection($request);
         $improveSection = $this->improveSectionFrom($request);
         $cronSection = $this->cronSectionFrom($request);
+        $gitSection = $this->gitSectionFrom($request);
         Config::updateSections($this->mountsPath, [
             'seo_report' => $seoSection,
             'improve' => $improveSection,
             'cron' => $cronSection,
+            'git' => $gitSection,
         ]);
         // Für den weiteren Verlauf DIESES Requests sofort wirksam (der Audit
         // liest die Ausschlüsse aus dem Connector, nicht erneut aus der Datei).
@@ -3162,9 +3254,11 @@ final class Connector
             'excludeFiles' => Config::normalizeExcludeFiles($seoSection['exclude_files'] ?? ''),
         ];
         $this->reloadImprove();
-        // Auch den Pausenzustand für DIESEN Request nachziehen, sonst meldete
-        // ein direkt folgendes projectconfig/whoami noch die alten Werte.
-        $this->cronPause = MountConfig::load($this->mountsPath)['cron'];
+        // Pausenzustand und Auto-Commit für DIESEN Request nachziehen, sonst
+        // meldete ein direkt folgendes projectconfig/whoami noch die alten Werte.
+        $reloaded = MountConfig::load($this->mountsPath);
+        $this->cronPause = $reloaded['cron'];
+        $this->gitAuto = $reloaded['git'];
         $this->logger->info('Projekteinstellungen aktualisiert (projectreconfigure).');
 
         return ['ok' => true];
@@ -3186,6 +3280,24 @@ final class Connector
             'pause_build' => !empty($request['pauseBuild']) ? 'true' : 'false',
             'pause_improve' => !empty($request['pauseImprove']) ? 'true' : 'false',
             'pause_healthcheck' => !empty($request['pauseHealthcheck']) ? 'true' : 'false',
+        ];
+    }
+
+    /**
+     * Baut die [git]-Sektion aus den Formularfeldern (Auto-Commit nach der
+     * Veröffentlichung). Leere Nachricht → Vorgabe, damit die Datei ablesbar
+     * bleibt. Prüfung und Kürzung übernimmt MountConfig beim Lesen.
+     *
+     * @param array<string, mixed> $request
+     * @return array<string, string>
+     */
+    private function gitSectionFrom(array $request): array
+    {
+        $message = trim((string) ($request['commitMessage'] ?? ''));
+
+        return [
+            'auto_commit' => !empty($request['autoCommit']) ? 'true' : 'false',
+            'commit_message' => $message === '' ? MountConfig::GIT_COMMIT_MESSAGE_DEFAULT : $message,
         ];
     }
 

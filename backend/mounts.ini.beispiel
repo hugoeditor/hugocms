@@ -140,3 +140,15 @@ label = Medien
 ;pause_build = false
 ;pause_improve = false
 ;pause_healthcheck = false
+
+; Reservierte Sektion [git] (KEIN Mount): automatischer Commit nach der
+; zeitgesteuerten Veröffentlichung (cron-build.php). Ist auto_commit an und das
+; Quellverzeichnis ein Git-Repository, legt der Cron nach dem Einspielen fälliger
+; Freigaben einen Commit an; an die Nachricht wird das Datum (Serverzeit)
+; angehängt. Setzt die Pro-Lizenz voraus (Git ist eine Pro-Funktion). Der Client
+; pflegt diese Sektion über die Projekteinstellungen.
+;   auto_commit    true schaltet den Auto-Commit ein. Standard: aus.
+;   commit_message Nachricht ohne Datum. Leer = Vorgabe.
+;[git]
+;auto_commit = true
+;commit_message = "Automatische Veröffentlichung terminierter Freigaben"

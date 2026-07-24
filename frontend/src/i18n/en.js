@@ -176,6 +176,13 @@ export default {
     pauseBuild: 'Pause building the website',
     pauseImprove: 'Pause improving content',
     pauseHealthcheck: 'Pause health check',
+    gitSection: 'Automatic commit',
+    gitHint: 'Creates a Git commit automatically after the scheduled publication (cron build). As with a manual commit, it includes all pending changes in the source directory.',
+    gitNeedsPro: 'Git is a Pro feature. Without a valid license for this domain, no commit is created.',
+    gitNoRepo: 'The source directory is not a Git repository — auto-commit would have no effect.',
+    autoCommit: 'Commit after publishing',
+    commitMessage: 'Commit message',
+    commitMessageHint: 'The date (server time) is appended automatically.',
     timeInvalid: 'Please enter a time, e.g. 07:00.',
   },
 

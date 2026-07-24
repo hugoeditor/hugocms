@@ -39,6 +39,16 @@ const pauseBuild = ref(false)
 const pauseImprove = ref(false)
 const pauseHealthcheck = ref(false)
 
+// Automatischer Commit nach der zeitgesteuerten Veröffentlichung (cron-build).
+// Nur wirksam, wenn das Quellverzeichnis ein Git-Repository ist (gitRepo) und
+// die Pro-Lizenz gilt (auth.git). Das Datum hängt der Server an die Nachricht.
+const autoCommit = ref(false)
+const commitMessage = ref('')
+const gitRepo = ref(false)
+// Auto-Commit ist nur einstellbar, wenn Git nutzbar (Pro + Projekt) UND das
+// Quellverzeichnis ein Repository ist.
+const gitCommitAvailable = computed(() => auth.git && gitRepo.value)
+
 // „HH:MM“ mit Stunde 0–23 und Minute 0–59. Ungültiges würde der Server auf die
 // Vorgabe zurückfallen lassen — besser, es fällt schon im Formular auf.
 const TIME_RE = /^([01]?\d|2[0-3]):[0-5]\d$/
@@ -88,6 +98,9 @@ watch(model, async (open) => {
     pauseBuild.value = !!cfg.pauseBuild
     pauseImprove.value = !!cfg.pauseImprove
     pauseHealthcheck.value = !!cfg.pauseHealthcheck
+    autoCommit.value = !!cfg.autoCommit
+    commitMessage.value = cfg.commitMessage ?? ''
+    gitRepo.value = !!cfg.gitRepo
   } catch (e) {
     error.value = errorText(t, e)
   } finally {
@@ -119,6 +132,8 @@ async function submit() {
       pauseBuild: pauseBuild.value,
       pauseImprove: pauseImprove.value,
       pauseHealthcheck: pauseHealthcheck.value,
+      autoCommit: autoCommit.value,
+      commitMessage: commitMessage.value,
     })
     // Der Schalter in der Liste „zu verbessern“ liest denselben Zustand aus
     // whoami — nach dem Speichern nachziehen.
@@ -299,6 +314,52 @@ async function submit() {
             color="warning"
             density="compact"
             hide-details
+          />
+
+          <!-- Automatischer Commit nach der zeitgesteuerten Veröffentlichung.
+               Nur einstellbar, wenn Git nutzbar (Pro) und das Quellverzeichnis
+               ein Repository ist. -->
+          <v-divider class="my-4" />
+          <div class="text-subtitle-2 mb-1">{{ $t('projectConfig.gitSection') }}</div>
+          <div class="text-caption text-medium-emphasis mb-2">{{ $t('projectConfig.gitHint') }}</div>
+          <v-alert
+            v-if="!auth.git"
+            type="info"
+            density="compact"
+            variant="tonal"
+            class="mb-2"
+          >
+            {{ $t('projectConfig.gitNeedsPro') }}
+          </v-alert>
+          <v-alert
+            v-else-if="!gitRepo"
+            type="info"
+            density="compact"
+            variant="tonal"
+            class="mb-2"
+          >
+            {{ $t('projectConfig.gitNoRepo') }}
+          </v-alert>
+          <v-switch
+            v-model="autoCommit"
+            :label="$t('projectConfig.autoCommit')"
+            :disabled="!gitCommitAvailable"
+            color="primary"
+            density="compact"
+            hide-details
+            class="mb-2"
+          />
+          <v-text-field
+            v-model="commitMessage"
+            :label="$t('projectConfig.commitMessage')"
+            :disabled="!gitCommitAvailable || !autoCommit"
+            prepend-inner-icon="mdi-message-text-outline"
+            variant="outlined"
+            density="comfortable"
+            counter="200"
+            maxlength="200"
+            :hint="$t('projectConfig.commitMessageHint')"
+            persistent-hint
           />
 
           <v-alert v-if="error" type="error" density="compact" class="mt-2">{{ error }}</v-alert>

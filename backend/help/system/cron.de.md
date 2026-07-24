@@ -13,7 +13,8 @@ starten — nicht über den Browser.
 - **Webseite bauen** (`cron-build.php`) — veröffentlicht fällige terminierte
   Freigaben und baut die Webseite mit Hugo. Gebaut wird nur, wenn tatsächlich
   eine Freigabe fällig war; sonst wird der Lauf übersprungen (mit `--force` immer
-  bauen). Keine Pro-Lizenz nötig.
+  bauen). Keine Pro-Lizenz nötig. Optional (Projekteinstellungen, Pro) legt der
+  Lauf danach einen Git-Commit an — siehe unten.
 - **Inhalte verbessern** (`cron-improve.php`) — lässt die KI geprüfte Seiten
   überarbeiten. Pro-Funktion.
 - **Gesundheitscheck** (`cron-healthcheck.php`) — prüft die veröffentlichte
@@ -60,6 +61,16 @@ die Pause aufgehoben wird.
 Ist der **Build** pausiert, gehen terminierte Freigaben nicht live — die
 Freigabe-Warteschlange weist darauf hin. Ist der **Verbesserer** pausiert, wird
 die Liste „zu verbessern" nicht abgearbeitet.
+
+## Automatischer Commit nach der Veröffentlichung (Pro)
+
+Ist das Quellverzeichnis ein Git-Repository, kann der Cron-Build nach dem
+Einspielen fälliger Freigaben automatisch einen Commit anlegen. Das schaltet man
+in den **Projekteinstellungen** unter „Automatischer Commit" ein; dort steht auch
+die Nachricht (mit einem sinnvollen Vorschlag als Vorgabe), an die das Datum
+angehängt wird. Übernommen werden — wie beim Commit von Hand — alle offenen
+Änderungen im Quellverzeichnis. Setzt eine gültige Pro-Lizenz voraus; scheitert
+der Commit, bricht der Build nicht ab, sondern vermerkt es nur im Protokoll.
 
 ## Die Besonderheit: automatische Verbesserung
 

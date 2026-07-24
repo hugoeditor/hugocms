@@ -250,10 +250,17 @@ final class GitService
     // --- Intern ------------------------------------------------------------
 
     /** Stellt sicher, dass das Verzeichnis ein Git-Arbeitsbaum ist. */
-    private function assertRepo(): void
+    /** true, wenn das Verzeichnis ein Git-Arbeitsbaum ist (ohne zu werfen). */
+    public function isRepository(): bool
     {
         $res = $this->run(['rev-parse', '--is-inside-work-tree']);
-        if ($res['exit'] !== 0 || trim($res['output']) !== 'true') {
+
+        return $res['exit'] === 0 && trim($res['output']) === 'true';
+    }
+
+    private function assertRepo(): void
+    {
+        if (!$this->isRepository()) {
             throw new ApiException('EGIT', 409, 'GIT-NOT-A-REPO', [$this->repoDir]);
         }
     }

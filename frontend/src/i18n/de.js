@@ -176,6 +176,13 @@ export default {
     pauseBuild: 'Webseite bauen pausieren',
     pauseImprove: 'Inhalte verbessern pausieren',
     pauseHealthcheck: 'Gesundheitscheck pausieren',
+    gitSection: 'Automatischer Commit',
+    gitHint: 'Legt nach der zeitgesteuerten Veröffentlichung (Cron-Build) automatisch einen Git-Commit an. Übernommen werden — wie beim manuellen Commit — alle offenen Änderungen im Quellverzeichnis.',
+    gitNeedsPro: 'Git ist eine Pro-Funktion. Ohne gültige Lizenz für diese Domain wird kein Commit angelegt.',
+    gitNoRepo: 'Das Quellverzeichnis ist kein Git-Repository — der Auto-Commit bliebe ohne Wirkung.',
+    autoCommit: 'Nach der Veröffentlichung committen',
+    commitMessage: 'Commit-Nachricht',
+    commitMessageHint: 'Das Datum (Serverzeit) wird automatisch angehängt.',
     timeInvalid: 'Bitte als Uhrzeit angeben, z. B. 07:00.',
   },
 

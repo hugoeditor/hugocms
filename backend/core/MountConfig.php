@@ -63,6 +63,14 @@ use HugoCMS\FileManager\Exception\ApiException;
  *   pause_build       (optional) true pausiert cron-build.php. Standard: aus.
  *   pause_improve     (optional) true pausiert cron-improve.php. Standard: aus.
  *   pause_healthcheck (optional) true pausiert cron-healthcheck.php. Standard: aus.
+ *
+ * Reservierte Sektion [git] (kein Mount): automatischer Commit nach der
+ * zeitgesteuerten Veröffentlichung (cron-build.php). Ist auto_commit an und das
+ * Quellverzeichnis ein Git-Repository, legt der Cron nach dem Einspielen fälliger
+ * Freigaben einen Commit an; an die Nachricht wird das Datum angehängt. Setzt die
+ * Pro-Lizenz voraus (Git ist eine Pro-Funktion).
+ *   auto_commit    (optional) true schaltet den Auto-Commit ein. Standard: aus.
+ *   commit_message (optional) Nachricht (ohne Datum). Standard: siehe unten.
  */
 final class MountConfig
 {
@@ -74,6 +82,13 @@ final class MountConfig
     private const SEO_REPORT_SECTION = 'seo_report';
     private const IMPROVE_SECTION = 'improve';
     private const CRON_SECTION = 'cron';
+    private const GIT_SECTION = 'git';
+
+    /** Vorgeschlagene Commit-Nachricht, wenn keine konfiguriert ist. */
+    public const string GIT_COMMIT_MESSAGE_DEFAULT = 'Automatische Veröffentlichung terminierter Freigaben';
+
+    /** Obergrenze der Commit-Nachricht (vor dem Datum), damit sie handhabbar bleibt. */
+    private const int GIT_MESSAGE_MAX = 200;
 
     /** Vorgaben des Automatikmodus, wenn die [improve]-Sektion fehlt. */
     private const IMPROVE_DEFAULTS = [
@@ -96,6 +111,7 @@ final class MountConfig
      *   seoReport: array{excludePrefixes: list<string>, excludeFiles: list<string>},
      *   improve: array{auto: bool, windowStart: string, windowEnd: string, perDay: int, skipWeekends: bool},
      *   cron: array{pauseBuild: bool, pauseImprove: bool, pauseHealthcheck: bool},
+     *   git: array{autoCommit: bool, commitMessage: string},
      *   warnings: list<array{key: string, params: list<mixed>}>
      * }
      */
@@ -119,6 +135,7 @@ final class MountConfig
         $seoReport = ['excludePrefixes' => [], 'excludeFiles' => []];
         $improve = self::IMPROVE_DEFAULTS;
         $cron = ['pauseBuild' => false, 'pauseImprove' => false, 'pauseHealthcheck' => false];
+        $git = ['autoCommit' => false, 'commitMessage' => self::GIT_COMMIT_MESSAGE_DEFAULT];
         $warnings = [];
 
         foreach ($raw as $name => $section) {
@@ -194,6 +211,19 @@ final class MountConfig
                 continue;
             }
 
+            // Automatischer Commit nach der Veröffentlichung (optional, pro Webseite).
+            if (strtolower((string) $name) === self::GIT_SECTION) {
+                $message = trim((string) ($section['commit_message'] ?? ''));
+                if ($message === '') {
+                    $message = self::GIT_COMMIT_MESSAGE_DEFAULT;
+                }
+                $git = [
+                    'autoCommit' => filter_var($section['auto_commit'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                    'commitMessage' => mb_substr($message, 0, self::GIT_MESSAGE_MAX),
+                ];
+                continue;
+            }
+
             $path = isset($section['path']) ? trim((string) $section['path']) : '';
             if ($path === '') {
                 throw new ApiException('ECONFIG', 500, 'MOUNTS-PATH-REQUIRED', [(string) $name]);
@@ -230,6 +260,7 @@ final class MountConfig
             'seoReport' => $seoReport,
             'improve' => $improve,
             'cron' => $cron,
+            'git' => $git,
             'warnings' => $warnings,
         ];
     }

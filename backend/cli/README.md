@@ -77,6 +77,13 @@ Hugo läuft bewusst **ohne** `--buildFuture` und `--buildDrafts`: Seiten mit
 künftigem `publishDate` oder `draft: true` bleiben unveröffentlicht. Minify,
 Zielordner und `--cleanDestinationDir` stammen aus der `[hugo]`-Konfiguration.
 
+**Automatischer Commit (optional, Pro).** Ist in den Projekteinstellungen der
+Auto-Commit aktiviert und das Quellverzeichnis ein Git-Repository, legt der Lauf
+nach dem Einspielen fälliger Freigaben einen Commit an (`git add -A`, wie der
+manuelle Commit — also alle offenen Änderungen). Die Nachricht kommt aus der
+`[git]`-Sektion der Mount-Konfiguration, das Datum wird angehängt. Ein
+fehlgeschlagener Commit bricht den Build nicht ab, er wird nur protokolliert.
+
 > **Der Build-Takt bestimmt die Genauigkeit jeder Terminierung.** Eine Freigabe,
 > die für 08:22 Uhr vorgemerkt ist, geht erst beim nächsten Build **nach** diesem
 > Zeitpunkt online. Bei einem stündlichen Build kann das bis zu eine Stunde

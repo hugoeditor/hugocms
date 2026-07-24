@@ -12,7 +12,8 @@ under `backend/cli/` and can be started **there only** — not through the brows
 - **Build website** (`cron-build.php`) — publishes any scheduled releases that
   have come due and builds the site with Hugo. It builds only when a release was
   actually due; otherwise the run is skipped (use `--force` to always build). No
-  Pro license required.
+  Pro license required. Optionally (project settings, Pro) the run then creates a
+  Git commit — see below.
 - **Improve content** (`cron-improve.php`) — lets the AI revise reviewed pages.
   Pro feature.
 - **Health check** (`cron-healthcheck.php`) — checks the published website and
@@ -56,6 +57,15 @@ stays in place and takes effect again as soon as the pause is lifted.
 If the **build** is paused, scheduled releases do not go live — the review queue
 points this out. If the **improver** is paused, the “to improve” list is not
 processed.
+
+## Automatic commit after publishing (Pro)
+
+If the source directory is a Git repository, the cron build can create a commit
+automatically after applying due releases. Enable it in the **project settings**
+under “Automatic commit”; the message (pre-filled with a sensible suggestion)
+lives there too, and the date is appended to it. As with a manual commit, it
+includes all pending changes in the source directory. Requires a valid Pro
+license; if the commit fails, the build does not abort — it is only logged.
 
 ## The special part: automatic improvement
 
