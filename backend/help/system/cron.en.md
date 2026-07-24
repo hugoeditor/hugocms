@@ -65,7 +65,8 @@ then go live spread across the day rather than all at once.
 
 Automatic mode is switched on in the app: **SEO check → Content review → To
 improve**, using the *Schedule automatically* toggle there. The time window
-(e.g. 07:00 to 16:00) and the amount per day are set in the **project settings**.
+(e.g. 07:00 to 16:00), the amount per day, and optionally excluding Saturday and
+Sunday are set in the **project settings**.
 
 How the schedule is distributed: the window is split into as many sections as
 pages are allowed per day. Each page gets its own section and a random time
@@ -77,7 +78,12 @@ Keep in mind:
 - **The build interval sets the precision.** A release marked for 08:22 goes
   live only at the next build **after** that time. Without a regular
   `cron-build.php` nothing happens at the scheduled moment.
-- **The times are server time**, not your browser's.
+- **The times are server time**, not your browser's. This also applies to the
+  weekend exclusion: whether a day counts as Saturday or Sunday depends on the
+  server's time zone.
+- **Exclude weekends** (on by default): nothing is scheduled on Saturdays and
+  Sundays; releases move to the next weekday. Can be turned off in the project
+  settings if you want to publish on weekends too.
 - **A too-narrow window.** If fewer minutes fit in the window than releases are
   wanted, the daily amount is quietly capped; the rest moves to the following
   days. The project settings warn about this.

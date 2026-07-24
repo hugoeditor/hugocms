@@ -202,11 +202,13 @@ async function remove(page) {
           <!-- effectivePerDay statt perDay: Passt die eingestellte Menge nicht
                ins Fenster, ist die tatsächliche kleiner — hier soll die wahre
                Zahl stehen, nicht die gewünschte. -->
-          {{ auth.improve.auto
-            ? $t('contentQuality.autoScheduleOn', [
-                auth.improve.effectivePerDay ?? auth.improve.perDay,
-                auth.improve.windowStart, auth.improve.windowEnd])
-            : $t('contentQuality.autoScheduleOff') }}
+          <template v-if="auth.improve.auto">
+            {{ $t('contentQuality.autoScheduleOn', [
+              auth.improve.effectivePerDay ?? auth.improve.perDay,
+              auth.improve.windowStart, auth.improve.windowEnd]) }}
+            <template v-if="auth.improve.skipWeekends"> {{ $t('contentQuality.autoScheduleNoWeekend') }}</template>
+          </template>
+          <template v-else>{{ $t('contentQuality.autoScheduleOff') }}</template>
         </p>
       </div>
 

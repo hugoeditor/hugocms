@@ -118,12 +118,15 @@ label = Medien
 ;   auto         true schaltet den Automatikmodus ein. Standard: aus.
 ;   window_start Beginn des Fensters, „HH:MM“ Serverzeit. Standard 07:00.
 ;   window_end   Ende des Fensters, „HH:MM“. Standard 16:00.
-;   per_day      Höchstzahl Freigaben je Tag (1–50). Standard 3.
+;   per_day       Höchstzahl Freigaben je Tag (1–50). Standard 3.
+;   skip_weekends Samstag und Sonntag ausnehmen (Serverzeit). Standard: an —
+;                 zum Terminieren auch am Wochenende ausdrücklich false setzen.
 ;[improve]
 ;auto = true
 ;window_start = "07:00"
 ;window_end = "16:00"
 ;per_day = 3
+;skip_weekends = true
 
 ; Reservierte Sektion [cron] (KEIN Mount): Pausenschalter der drei Cron-Skripte
 ; DIESER Webseite. Ist ein Schalter true, prüft das zugehörige Skript das beim

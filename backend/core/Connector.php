@@ -139,9 +139,9 @@ final class Connector
      * jeden erzeugten Entwurf gleich selbst — zufällig verteilt im Tagesfenster,
      * höchstens `perDay` Stück je Tag.
      *
-     * @var array{auto: bool, windowStart: string, windowEnd: string, perDay: int}
+     * @var array{auto: bool, windowStart: string, windowEnd: string, perDay: int, skipWeekends: bool}
      */
-    private array $improve = ['auto' => false, 'windowStart' => '07:00', 'windowEnd' => '16:00', 'perDay' => 3];
+    private array $improve = ['auto' => false, 'windowStart' => '07:00', 'windowEnd' => '16:00', 'perDay' => 3, 'skipWeekends' => true];
 
     /**
      * Pausenschalter der drei Cron-Skripte aus der [cron]-Sektion der
@@ -2593,9 +2593,14 @@ final class Connector
             $taken[date('Y-m-d', $ts)][$index] = true;
         }
 
+        $skipWeekends = !empty($this->improve['skipWeekends']);
         $now = time();
         for ($day = 0; $day < self::AUTO_SCHEDULE_HORIZON_DAYS; $day++) {
             $dayStart = strtotime("+{$day} day", $now);
+            // Samstag (6) und Sonntag (0) auf Wunsch überspringen (Serverzeit).
+            if ($skipWeekends && in_array((int) date('w', $dayStart), [0, 6], true)) {
+                continue;
+            }
             $key = date('Y-m-d', $dayStart);
             for ($slot = 0; $slot < $perDay; $slot++) {
                 if (isset($taken[$key][$slot])) {
@@ -3069,6 +3074,7 @@ final class Connector
             'improveWindowStart' => (string) $this->improve['windowStart'],
             'improveWindowEnd' => (string) $this->improve['windowEnd'],
             'improvePerDay' => (int) $this->improve['perDay'],
+            'improveSkipWeekends' => (bool) $this->improve['skipWeekends'],
             // Was im Fenster tatsächlich Platz hat (siehe improveSlotPlan).
             'improveEffectivePerDay' => $this->improveSlotPlan()['perDay'],
             // Pausenschalter der drei Cron-Skripte.
@@ -3157,12 +3163,16 @@ final class Connector
         }
 
         $enabled = (bool) ($request['enabled'] ?? false);
+        // Nur `auto` ändern; die übrigen Felder wörtlich aus dem aktuellen Stand
+        // übernehmen, damit der Schalter Fenster, Menge und Wochenend-Ausnahme
+        // nicht versehentlich zurücksetzt.
         Config::updateSections($this->mountsPath, [
             'improve' => [
                 'auto' => $enabled ? 'true' : 'false',
                 'window_start' => (string) $this->improve['windowStart'],
                 'window_end' => (string) $this->improve['windowEnd'],
                 'per_day' => (string) (int) $this->improve['perDay'],
+                'skip_weekends' => $this->improve['skipWeekends'] ? 'true' : 'false',
             ],
         ]);
         $this->reloadImprove();
@@ -3190,6 +3200,7 @@ final class Connector
             'window_start' => trim((string) ($request['improveWindowStart'] ?? '')),
             'window_end' => trim((string) ($request['improveWindowEnd'] ?? '')),
             'per_day' => (string) (int) ($request['improvePerDay'] ?? 3),
+            'skip_weekends' => !empty($request['improveSkipWeekends']) ? 'true' : 'false',
         ];
     }
 

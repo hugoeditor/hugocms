@@ -41,7 +41,7 @@ export const useAuthStore = defineStore('auth', {
     // Automatikmodus des Cron-Verbesserers dieser Webseite ([improve] der
     // Mount-Konfiguration): Ist `auto` an, terminiert der Cron jeden erzeugten
     // Entwurf gleich selbst — zufällig im Tagesfenster, höchstens perDay je Tag.
-    improve: { auto: false, windowStart: '07:00', windowEnd: '16:00', perDay: 3, effectivePerDay: 3 },
+    improve: { auto: false, windowStart: '07:00', windowEnd: '16:00', perDay: 3, effectivePerDay: 3, skipWeekends: true },
     // Pausenzustand der drei Cron-Skripte ([cron] der Mount-Konfiguration).
     // Die Views zeigen daraus einen Hinweis, wenn die zuständige Aufgabe
     // ausgesetzt ist — die Freigabe-Warteschlange bei pausiertem Build, die
@@ -100,7 +100,7 @@ export const useAuthStore = defineStore('auth', {
       this.liveAnalysisUrl = data.liveAnalysisUrl ?? ''
       this.siteUrlDetected = data.siteUrlDetected ?? ''
       this.review = data.review ?? false
-      this.improve = data.improve ?? { auto: false, windowStart: '07:00', windowEnd: '16:00', perDay: 3, effectivePerDay: 3 }
+      this.improve = data.improve ?? { auto: false, windowStart: '07:00', windowEnd: '16:00', perDay: 3, effectivePerDay: 3, skipWeekends: true }
       this.cronPause = data.cronPause ?? { pauseBuild: false, pauseImprove: false, pauseHealthcheck: false }
       this.features = data.features ?? {}
       this.siteHost = data.siteHost ?? ''

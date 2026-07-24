@@ -52,7 +52,9 @@ use HugoCMS\FileManager\Exception\ApiException;
  *   auto         (optional) true schaltet den Automatikmodus ein. Standard: aus.
  *   window_start (optional) Beginn des Fensters, „HH:MM“ Serverzeit. Standard 07:00.
  *   window_end   (optional) Ende des Fensters, „HH:MM“. Standard 16:00.
- *   per_day      (optional) Höchstzahl Freigaben je Tag (1–50). Standard 3.
+ *   per_day       (optional) Höchstzahl Freigaben je Tag (1–50). Standard 3.
+ *   skip_weekends (optional) Samstag und Sonntag von der Terminierung ausnehmen
+ *                 (Serverzeit). Standard: an — zum Abschalten ausdrücklich false.
  *
  * Reservierte Sektion [cron] (kein Mount): Pausenschalter der drei Cron-Skripte
  * dieser Webseite. Ist ein Schalter an, prüft das zugehörige CLI-Skript das beim
@@ -79,6 +81,9 @@ final class MountConfig
         'windowStart' => '07:00',
         'windowEnd' => '16:00',
         'perDay' => 3,
+        // Vorgabe an, solange nichts in der INI steht — Freigaben am Wochenende
+        // sind meist unerwünscht, das soll ohne Zutun gelten.
+        'skipWeekends' => true,
     ];
 
     /**
@@ -89,7 +94,7 @@ final class MountConfig
      *   pagespeed: ?string,
      *   liveAnalysis: ?string,
      *   seoReport: array{excludePrefixes: list<string>, excludeFiles: list<string>},
-     *   improve: array{auto: bool, windowStart: string, windowEnd: string, perDay: int},
+     *   improve: array{auto: bool, windowStart: string, windowEnd: string, perDay: int, skipWeekends: bool},
      *   cron: array{pauseBuild: bool, pauseImprove: bool, pauseHealthcheck: bool},
      *   warnings: list<array{key: string, params: list<mixed>}>
      * }
@@ -236,7 +241,7 @@ final class MountConfig
      * unbenutzbar machen.
      *
      * @param array<string, mixed> $section
-     * @return array{auto: bool, windowStart: string, windowEnd: string, perDay: int}
+     * @return array{auto: bool, windowStart: string, windowEnd: string, perDay: int, skipWeekends: bool}
      */
     private static function improveSection(array $section): array
     {
@@ -263,6 +268,10 @@ final class MountConfig
             // Obergrenze als Schutz vor Vertippern (300 Freigaben am Tag wären
             // kein „natürliches Wachstum“ mehr, sondern eine Flut).
             'perDay' => max(1, min(50, $perDay)),
+            // Samstag und Sonntag von der Terminierung ausnehmen. Fehlt der
+            // Schlüssel (auch bei sonst vorhandener [improve]-Sektion), gilt die
+            // Vorgabe „an“ — abschalten nur mit einem ausdrücklichen false.
+            'skipWeekends' => filter_var($section['skip_weekends'] ?? true, FILTER_VALIDATE_BOOLEAN),
         ];
     }
 

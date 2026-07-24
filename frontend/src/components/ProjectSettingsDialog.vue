@@ -31,6 +31,7 @@ const improveAuto = ref(false)
 const improveWindowStart = ref('07:00')
 const improveWindowEnd = ref('16:00')
 const improvePerDay = ref(3)
+const improveSkipWeekends = ref(true)
 
 // Pausenschalter der drei Cron-Skripte. Dieselben Einstellungen lassen sich im
 // Systemstatus direkt umlegen; hier stehen sie der Vollständigkeit halber.
@@ -83,6 +84,7 @@ watch(model, async (open) => {
     improveWindowStart.value = cfg.improveWindowStart ?? '07:00'
     improveWindowEnd.value = cfg.improveWindowEnd ?? '16:00'
     improvePerDay.value = cfg.improvePerDay ?? 3
+    improveSkipWeekends.value = !!cfg.improveSkipWeekends
     pauseBuild.value = !!cfg.pauseBuild
     pauseImprove.value = !!cfg.pauseImprove
     pauseHealthcheck.value = !!cfg.pauseHealthcheck
@@ -113,6 +115,7 @@ async function submit() {
       improveWindowStart: improveWindowStart.value,
       improveWindowEnd: improveWindowEnd.value,
       improvePerDay: improvePerDay.value,
+      improveSkipWeekends: improveSkipWeekends.value,
       pauseBuild: pauseBuild.value,
       pauseImprove: pauseImprove.value,
       pauseHealthcheck: pauseHealthcheck.value,
@@ -255,6 +258,18 @@ async function submit() {
           >
             {{ $t('projectConfig.improvePerDayCapped', [windowMinutes, effectivePerDay]) }}
           </v-alert>
+          <v-switch
+            v-model="improveSkipWeekends"
+            :label="$t('projectConfig.improveSkipWeekends')"
+            :disabled="!improveAuto"
+            color="primary"
+            density="compact"
+            hide-details
+            class="mt-2"
+          />
+          <div class="text-caption text-medium-emphasis">
+            {{ $t('projectConfig.improveSkipWeekendsHint') }}
+          </div>
 
           <!-- Cron-Aufgaben pausieren. Der Systemstatus verweist zum Umstellen
                hierher; ein pausiertes Skript prüft das beim Start und tut

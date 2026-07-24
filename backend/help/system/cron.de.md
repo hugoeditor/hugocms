@@ -69,8 +69,8 @@ alle auf einmal.
 
 Eingeschaltet wird der Automatikmodus in der Anwendung: **SEO-Check →
 Inhaltsprüfung → Zu verbessern**, dort der Schalter *Automatisch terminieren*.
-Zeitfenster (z. B. 07:00 bis 16:00 Uhr) und Menge pro Tag stehen in den
-**Projekteinstellungen**.
+Zeitfenster (z. B. 07:00 bis 16:00 Uhr), Menge pro Tag und – auf Wunsch – das
+Ausnehmen von Samstag und Sonntag stehen in den **Projekteinstellungen**.
 
 So verteilt der Automatikmodus die Termine: Das Fenster wird in so viele
 Abschnitte geteilt, wie Seiten pro Tag erlaubt sind. Jede Seite bekommt einen
@@ -83,7 +83,13 @@ Zu beachten:
 - **Der Build-Takt bestimmt die Genauigkeit.** Eine für 08:22 Uhr vorgemerkte
   Freigabe geht erst beim nächsten Build **nach** diesem Zeitpunkt online. Ohne
   regelmäßigen `cron-build.php` passiert zum Termin nichts.
-- **Die Uhrzeiten sind Serverzeit**, nicht die des eigenen Browsers.
+- **Die Uhrzeiten sind Serverzeit**, nicht die des eigenen Browsers. Das gilt
+  auch für die Wochenend-Ausnahme: Ob ein Tag als Samstag oder Sonntag zählt,
+  richtet sich nach der Zeitzone des Servers.
+- **Wochenenden ausnehmen** (Vorgabe an): An Samstagen und Sonntagen wird nichts
+  terminiert; die Freigaben rücken auf den nächsten Werktag. In den
+  Projekteinstellungen abschaltbar, wenn auch am Wochenende veröffentlicht
+  werden soll.
 - **Zu enges Fenster.** Passen weniger Minuten ins Fenster als Freigaben
   gewünscht sind, wird die Tagesmenge stillschweigend gekürzt; der Rest wandert
   auf die Folgetage. Die Projekteinstellungen warnen davor.
