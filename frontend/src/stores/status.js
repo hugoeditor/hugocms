@@ -14,12 +14,15 @@ export const useStatusStore = defineStore('status', {
     // Ergebnis von `statuscheck`: { ai|service|mail: {status, key, message} }.
     checks: null,
     checking: false,
-    // Protokoll (`statuslog`): { file, exists, size, mtime, truncated, lines }.
-    // Wird erst geladen, wenn die Ansicht es aufklappt — es ist der mit Abstand
-    // umfangreichste Teil der Antwort.
+    // Protokoll (`statuslog`): { file, index, exists, size, mtime, truncated,
+    // lines, archives }. Wird erst geladen, wenn die Ansicht es aufklappt — es
+    // ist der mit Abstand umfangreichste Teil der Antwort.
     log: null,
     logLoading: false,
     logLines: 200,
+    // Gewählter Stand: 0 die aktuelle Datei, N > 0 der rotierte Stand „.N“.
+    logIndex: 0,
+    logRotating: false,
   }),
 
   getters: {
@@ -73,18 +76,42 @@ export const useStatusStore = defineStore('status', {
       }
     },
 
-    // Letzte Zeilen der Logdatei. `lines` erhöht bei Bedarf den Ausschnitt
-    // („mehr anzeigen“); der Server deckelt ihn auf 2000.
-    async fetchLog(lines = null) {
+    // Letzte Zeilen eines Logstands. `lines` erhöht bei Bedarf den Ausschnitt
+    // („mehr anzeigen“); der Server deckelt ihn auf 2000. `index` wählt den
+    // Stand (0 aktuell, N > 0 rotiert) — beim Wechsel wird der Ausschnitt
+    // wieder auf den Anfangswert gesetzt.
+    async fetchLog(lines = null, index = null) {
+      if (index !== null && index !== this.logIndex) {
+        this.logIndex = index
+        this.logLines = 200
+      }
       if (lines) this.logLines = lines
       this.error = null
       this.logLoading = true
       try {
-        this.log = await api.get('statuslog', { lines: this.logLines })
+        this.log = await api.get('statuslog', { lines: this.logLines, index: this.logIndex })
       } catch (e) {
         this.error = e
       } finally {
         this.logLoading = false
+      }
+    },
+
+    // Rotiert die Logdatei sofort (Befehl `statuslogrotate`) und lädt danach
+    // wieder die frische aktuelle Datei. Der laufende Stand wandert dabei ins
+    // Archiv (.1), der älteste Stand fällt weg.
+    async rotateLog() {
+      this.error = null
+      this.logRotating = true
+      try {
+        await api.post('statuslogrotate', {})
+        this.logIndex = 0
+        this.logLines = 200
+        await this.fetchLog()
+      } catch (e) {
+        this.error = e
+      } finally {
+        this.logRotating = false
       }
     },
   },

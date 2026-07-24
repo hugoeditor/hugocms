@@ -340,6 +340,13 @@ export default {
       empty: 'Das Protokoll ist leer.',
       noProblems: 'Keine Warnungen oder Fehler im gezeigten Ausschnitt.',
       noFile: 'Keine Logdatei vorhanden — es wurde noch nichts protokolliert, oder das Log geht ins Server-Fehlerlog.',
+      fileLabel: 'Stand',
+      current: 'Aktuell',
+      archive: 'Rotiert #{0}',
+      rotate: 'Jetzt rotieren',
+      rotateConfirmTitle: 'Protokoll rotieren',
+      rotateConfirmMessage: 'Der laufende Stand wandert ins Archiv, ein neues Protokoll beginnt. Der älteste rotierte Stand wird dabei gelöscht.',
+      rotateAction: 'Rotieren',
     },
   },
 

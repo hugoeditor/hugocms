@@ -340,6 +340,13 @@ export default {
       empty: 'The log is empty.',
       noFile: 'No log file — nothing has been logged yet, or logging goes to the server error log.',
       noProblems: 'No warnings or errors in the shown excerpt.',
+      fileLabel: 'File',
+      current: 'Current',
+      archive: 'Rotated #{0}',
+      rotate: 'Rotate now',
+      rotateConfirmTitle: 'Rotate log',
+      rotateConfirmMessage: 'The current log moves to the archive and a fresh log begins. The oldest rotated file is deleted in the process.',
+      rotateAction: 'Rotate',
     },
   },
 

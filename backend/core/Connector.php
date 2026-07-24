@@ -450,6 +450,7 @@ final class Connector
                 'status' => $this->cmdStatus(),
                 'statuscheck' => $this->cmdStatusCheck(),
                 'statuslog' => $this->cmdStatusLog($request),
+                'statuslogrotate' => $this->cmdStatusLogRotate(),
                 'help' => $this->cmdHelp($request),
                 'gitstatus' => $this->cmdGitStatus(),
                 'gitlog' => $this->cmdGitLog($request),
@@ -3364,22 +3365,38 @@ final class Connector
     }
 
     /**
-     * statuslog — die letzten Zeilen der Logdatei für die Protokollansicht im
-     * Systemstatus. Der Pfad kommt ausschließlich aus der Konfiguration
-     * ([log] file); der Client kann nur bestimmen, WIE VIELE Zeilen er sehen
-     * will — es gibt bewusst keinen Dateiparameter.
+     * statuslog — die letzten Zeilen eines Logstands für die Protokollansicht
+     * im Systemstatus. Der Basispfad kommt ausschließlich aus der Konfiguration
+     * ([log] file); der Client bestimmt nur, WIE VIELE Zeilen (`lines`) und
+     * WELCHEN Stand (`index`) er sehen will — 0 die aktuelle Datei, N > 0 den
+     * rotierten Stand „.N“. Freie Pfade sind bewusst ausgeschlossen.
      *
-     * Gezeigt wird nur die aktuelle Datei, nicht die rotierten Stände: Der
-     * Systemstatus soll den jüngsten Verlauf zeigen, kein Archiv durchsuchbar
-     * machen.
+     * Der Antwort liegt unter `archives` die Liste der vorhandenen Stände bei,
+     * damit das Auswahlfeld ohne zweiten Aufruf gefüllt ist.
      */
     private function cmdStatusLog(array $request): array
     {
         $this->requireAuth();
 
         $lines = (int) ($request['lines'] ?? 200);
+        $index = (int) ($request['index'] ?? 0);
 
-        return $this->logger->tail($lines);
+        $out = $this->logger->tail($lines, $index);
+        $out['archives'] = $this->logger->archives();
+
+        return $out;
+    }
+
+    /**
+     * statuslogrotate — rotiert die Logdatei auf ausdrücklichen Wunsch sofort,
+     * unabhängig von der Größenschwelle. Der laufende Stand wandert zur .1, die
+     * älteren rücken nach, der älteste fällt weg (siehe Logger::rotate).
+     */
+    private function cmdStatusLogRotate(): array
+    {
+        $this->requireAuth();
+
+        return ['rotated' => $this->logger->rotate()];
     }
 
     /**

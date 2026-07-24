@@ -23,6 +23,7 @@ bin/hugo/
 # Sitzungen / temporär
 *.log
 backend/log/*.log
+backend/log/*.log.*
 backend/var/sessions/
 backend/var/audit/
 backend/var/audit-content/

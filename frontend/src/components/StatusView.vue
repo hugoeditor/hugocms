@@ -10,10 +10,12 @@ import { useI18n } from 'vue-i18n'
 import { useStatusStore } from '../stores/status'
 import { useAuthStore } from '../stores/auth'
 import { errorText } from '../i18n/apiMessage'
+import { useConfirm } from '../util/confirm'
 
 const { t, locale } = useI18n()
 const store = useStatusStore()
 const auth = useAuthStore()
+const confirm = useConfirm()
 
 // Die Lizenzaktivierung lebt weiterhin im LicenseDialog (App.vue) — von hier
 // wird sie nur angestoßen, seit der eigene Werkzeugschienen-Eintrag entfallen ist.
@@ -144,6 +146,34 @@ const logProblemsOnly = ref(false)
 function toggleLog() {
   logOpen.value = !logOpen.value
   if (logOpen.value && !store.log) store.fetchLog()
+}
+
+// Auswahlfeld über die vorhandenen Logstände: die aktuelle Datei (Index 0)
+// und die rotierten Stände. Jeder Eintrag trägt Größe und — bei rotierten
+// Ständen — den Zeitpunkt der Rotation, damit sich der richtige finden lässt.
+const archiveItems = computed(() =>
+  (store.log?.archives ?? []).map((a) => {
+    const label = a.index === 0 ? t('status.log.current') : t('status.log.archive', [a.index])
+    const meta = [formatBytes(a.size)]
+    if (a.index !== 0 && a.mtime) meta.push(formatDate(a.mtime * 1000))
+    return { value: a.index, title: `${label} · ${meta.join(' · ')}` }
+  }),
+)
+
+function selectArchive(index) {
+  if (index !== store.logIndex) store.fetchLog(null, index)
+}
+
+// Sofortige Rotation — der laufende Stand wandert ins Archiv, der älteste
+// fällt weg. Klein, aber unumkehrbar, daher mit kurzer Rückfrage.
+async function rotateLog() {
+  const ok = await confirm({
+    title: t('status.log.rotateConfirmTitle'),
+    message: t('status.log.rotateConfirmMessage'),
+    confirmText: t('status.log.rotateAction'),
+    cancelText: t('common.cancel'),
+  })
+  if (ok) await store.rotateLog()
 }
 
 // Neueste zuerst: In einer Statusansicht interessiert das zuletzt Passierte.
@@ -456,8 +486,33 @@ function scoreColor(score) {
                   :label="$t('status.log.problemsOnly')"
                   density="compact"
                   hide-details
+                  class="st-log-check"
                 />
                 <v-spacer />
+                <!-- Auswahl des Stands: erst sinnvoll, sobald es neben der
+                     aktuellen Datei auch rotierte Stände gibt. Rechts vor den
+                     Aktionsknöpfen. -->
+                <v-select
+                  v-if="archiveItems.length > 1"
+                  :model-value="store.logIndex"
+                  :items="archiveItems"
+                  :label="$t('status.log.fileLabel')"
+                  density="compact"
+                  variant="outlined"
+                  hide-details
+                  class="st-log-select"
+                  :menu-props="{ class: 'st-log-menu' }"
+                  @update:model-value="selectArchive"
+                />
+                <v-btn
+                  size="small"
+                  variant="text"
+                  prepend-icon="mdi-file-rotate-left-outline"
+                  :loading="store.logRotating"
+                  @click="rotateLog"
+                >
+                  {{ $t('status.log.rotate') }}
+                </v-btn>
                 <v-btn
                   size="small"
                   variant="text"
@@ -623,6 +678,36 @@ function scoreColor(score) {
   align-items: center;
   gap: 12px;
   margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+/* Auswahl des Logstands: schmal halten, damit sie die Leiste nicht sprengt. */
+.st-log-select {
+  flex: 0 0 auto;
+  width: 170px;
+}
+/* Schrift im Feld verkleinern: das schwebende Label (.v-label) und der
+   angezeigte gewählte Eintrag (.v-select__selection-text). Beide rendert
+   Vuetify in der Kindkomponente — daher :deep(). Die Einträge im aufgeklappten
+   Menü sind NICHT erfasst; sie werden per Teleport an den App-Rand gehängt und
+   liegen außerhalb dieser Komponente. */
+.st-log-select :deep(.v-label),
+.st-log-select :deep(.v-select__selection-text) {
+  font-size: 0.87rem;
+}
+/* Checkbox nicht schrumpfen lassen: In der flex-Leiste würde sie sonst auf
+   schmalen Smartphones von Auswahlfeld und Knöpfen zusammengedrückt, bis das
+   Label Zeichen für Zeichen senkrecht umbricht. flex-shrink: 0 hält sie auf
+   Inhaltsbreite; ist kein Platz, wandert sie dank flex-wrap als Ganzes in eine
+   eigene Zeile. */
+.st-log-check {
+  flex: 0 0 auto;
+}
+/* Label der „Nur Warnungen und Fehler“-Checkbox verkleinern. Das Label rendert
+   Vuetify als .v-label in der Kindkomponente — ohne :deep() käme die scoped
+   Regel dort nicht an. nowrap verhindert zusätzlich den senkrechten Umbruch. */
+.st-log-check :deep(.v-label) {
+  font-size: 0.87rem;
+  white-space: nowrap;
 }
 .st-log {
   max-height: 420px;
@@ -692,5 +777,17 @@ function scoreColor(score) {
   font-size: 0.78rem;
   opacity: 0.6;
   font-variant-numeric: tabular-nums;
+}
+</style>
+
+<!-- Zweiter, NICHT scoped Style-Block: nur für das aufgeklappte Menü des
+     Auswahlfelds. Das Menü hängt Vuetify per Teleport an den App-Rand, außerhalb
+     dieser Komponente — scoped Regeln (auch mit :deep()) greifen dort nicht.
+     Die eigene Klasse st-log-menu (über :menu-props gesetzt) grenzt die Regel
+     wieder auf genau dieses Menü ein, sodass sie trotz globaler Reichweite
+     nichts anderes trifft. -->
+<style>
+.st-log-menu .v-list-item-title {
+  font-size: 0.87rem;
 }
 </style>

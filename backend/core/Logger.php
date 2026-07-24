@@ -72,38 +72,45 @@ final class Logger
     }
 
     /**
-     * Liest die letzten $maxLines Zeilen der aktuellen Logdatei — für die
+     * Liest die letzten $maxLines Zeilen einer Logdatei — für die
      * Protokollansicht im Systemstatus. Liest blockweise von hinten, damit auch
      * ein hochgesetztes max_bytes den Speicher nicht sprengt.
+     *
+     * $index wählt den Stand: 0 die aktuelle Datei, N > 0 den rotierten Stand
+     * „.N“ (.1 der jüngste). So lässt sich über das Auswahlfeld auch im Archiv
+     * blättern.
      *
      * Die Zeilen kommen in Dateireihenfolge (älteste zuerst) und bereits
      * zerlegt: Zeitstempel, Stufe und Text. Zeilen, die dem Format nicht
      * entsprechen (Fortsetzungen eines Stacktrace etwa), tragen level = null
      * und den Rohtext — sie gehen nicht verloren.
      *
-     * @return array{file: ?string, exists: bool, size: int, mtime: ?int, truncated: bool, lines: list<array{time: ?string, level: ?string, text: string}>}
+     * @return array{file: ?string, index: int, exists: bool, size: int, mtime: ?int, truncated: bool, lines: list<array{time: ?string, level: ?string, text: string}>}
      */
-    public function tail(int $maxLines = 200): array
+    public function tail(int $maxLines = 200, int $index = 0): array
     {
         $maxLines = max(1, min(2000, $maxLines));
+        $index = max(0, $index);
+        $target = $this->pathForIndex($index);
         $out = [
-            'file' => $this->file,
+            'file' => $target,
+            'index' => $index,
             'exists' => false,
             'size' => 0,
             'mtime' => null,
             'truncated' => false,
             'lines' => [],
         ];
-        if ($this->file === null || !is_file($this->file) || !is_readable($this->file)) {
+        if ($target === null || !is_file($target) || !is_readable($target)) {
             return $out;
         }
 
-        $size = (int) (@filesize($this->file) ?: 0);
+        $size = (int) (@filesize($target) ?: 0);
         $out['exists'] = true;
         $out['size'] = $size;
-        $out['mtime'] = @filemtime($this->file) ?: null;
+        $out['mtime'] = @filemtime($target) ?: null;
 
-        $fp = @fopen($this->file, 'rb');
+        $fp = @fopen($target, 'rb');
         if ($fp === false) {
             return $out;
         }
@@ -136,6 +143,84 @@ final class Logger
         }
 
         return $out;
+    }
+
+    /**
+     * Vollständiger Pfad eines Standes: Index 0 die aktuelle Datei, N > 0 der
+     * rotierte Stand „.N“. Ohne konfigurierte Datei null.
+     */
+    private function pathForIndex(int $index): ?string
+    {
+        if ($this->file === null) {
+            return null;
+        }
+
+        return $index <= 0 ? $this->file : $this->file . '.' . $index;
+    }
+
+    /**
+     * Listet die Protokollstände: die aktuelle Datei (Index 0) und die
+     * rotierten Stände .1 … .$keep, soweit vorhanden — jüngster zuerst. Für das
+     * Auswahlfeld im Systemstatus.
+     *
+     * Die aktuelle Datei (Index 0) wird immer aufgeführt, auch direkt nach einer
+     * Rotation, wenn sie noch leer ist und der nächste Schreibvorgang sie erst
+     * anlegt — sonst verschwände der Eintrag „Aktuell“ und mit ihm das
+     * Auswahlfeld, obwohl es rotierte Stände gibt. Rotierte Stände erscheinen
+     * nur, wenn sie vorhanden sind.
+     *
+     * @return list<array{index: int, file: string, size: int, mtime: ?int}>
+     */
+    public function archives(): array
+    {
+        if ($this->file === null) {
+            return [];
+        }
+
+        $out = [];
+        for ($i = 0; $i <= $this->keep; $i++) {
+            $path = $this->pathForIndex($i);
+            if ($path === null) {
+                continue;
+            }
+            $exists = is_file($path);
+            if (!$exists && $i !== 0) {
+                continue;
+            }
+            $out[] = [
+                'index' => $i,
+                'file' => $path,
+                'size' => $exists ? (int) (@filesize($path) ?: 0) : 0,
+                'mtime' => $exists ? (@filemtime($path) ?: null) : null,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Rotiert die Logdatei sofort — unabhängig von der Größe und selbst bei
+     * abgeschaltetem max_bytes. Für den Knopf „Jetzt rotieren“ im Systemstatus:
+     * eine ausdrückliche Handlung, kein Automatismus. Der laufende Stand wird
+     * zur .1, die älteren rücken nach, der älteste (.$keep) fällt weg; der
+     * nächste Schreibvorgang legt eine frische Datei an.
+     *
+     * @return bool true, wenn rotiert wurde; false, wenn keine (nicht leere)
+     *              Logdatei zum Rotieren vorlag.
+     */
+    public function rotate(): bool
+    {
+        if ($this->file === null || !is_file($this->file)) {
+            return false;
+        }
+        clearstatcache(false, $this->file);
+        if ((int) (@filesize($this->file) ?: 0) === 0) {
+            return false;
+        }
+
+        $this->shift();
+
+        return true;
     }
 
     /**
@@ -188,11 +273,9 @@ final class Logger
     }
 
     /**
-     * Rotiert die Logdatei, sobald sie $maxBytes erreicht: ältesten Stand
-     * löschen, übrige um eins hochschieben, aktuelles Log zur .1 machen. Danach
-     * legt der Schreibvorgang eine frische Datei an. rename() ist atomar — ein
-     * seltener paralleler Doppelaufruf verliert höchstens einen Altstand, nie
-     * den laufenden Eintrag oder die Datei-Integrität.
+     * Rotiert die Logdatei automatisch, sobald sie $maxBytes erreicht. Die
+     * eigentliche Verschiebung übernimmt shift(); danach legt der
+     * Schreibvorgang eine frische Datei an.
      */
     private function maybeRotate(): void
     {
@@ -202,6 +285,21 @@ final class Logger
         clearstatcache(false, $this->file);
         $size = @filesize($this->file);
         if ($size === false || $size < $this->maxBytes) {
+            return;
+        }
+
+        $this->shift();
+    }
+
+    /**
+     * Schiebt die Stände durch: ältesten (.$keep) löschen, übrige um eins
+     * hochschieben, aktuelles Log zur .1 machen. rename() ist atomar — ein
+     * seltener paralleler Doppelaufruf verliert höchstens einen Altstand, nie
+     * den laufenden Eintrag oder die Datei-Integrität.
+     */
+    private function shift(): void
+    {
+        if ($this->file === null) {
             return;
         }
 
