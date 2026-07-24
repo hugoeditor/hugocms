@@ -5,10 +5,18 @@ declare(strict_types=1);
 /**
  * CLI-Cron: baut die Webseite mit Hugo (wie der „Veröffentlichen"-Knopf, nur
  * ohne Web-Anmeldung). Zweck bei der gestaffelten Veröffentlichung: Ein
- * regelmäßiger Lauf macht freigegebene Seiten sichtbar, sobald ihr publishDate
- * erreicht ist — Hugo läuft bewusst OHNE --buildFuture/--buildDrafts, künftige
- * und als Entwurf markierte Seiten bleiben also bis zum Termin unveröffentlicht.
- * Die Auflösung der Staffelung entspricht dem Cron-Intervall.
+ * regelmäßiger Lauf macht freigegebene Seiten sichtbar, sobald ihr Termin
+ * erreicht ist.
+ *
+ * Standardmäßig wird NUR gebaut, wenn tatsächlich fällige terminierte Freigaben
+ * anfielen — läuft der Cron alle paar Minuten, spart das den Hugo-Lauf, solange
+ * nichts zu veröffentlichen ist. Fiel nichts an, endet der Lauf mit Code 0 und
+ * der Meldung „übersprungen".
+ *
+ * Mit --force wird immer gebaut. Das braucht, wer sich auf Hugos eigenes
+ * Front-Matter-`publishDate` verlässt: Dessen Fälligkeit macht erst ein Build
+ * sichtbar (Hugo läuft OHNE --buildFuture/--buildDrafts), und ein solcher Termin
+ * erzeugt keine „fällige Freigabe" im Sinne der Warteschlange.
  *
  * Minify, Ziel und --cleanDestinationDir stammen aus der [hugo]-Konfiguration —
  * hier werden keine Pfade oder Optionen doppelt gepflegt.
@@ -20,11 +28,13 @@ declare(strict_types=1);
  *   --mounts=<datei>  Mount-Konfiguration der Webseite (Standard: backend/mounts.ini;
  *                     bei Mehrfach-Sites mounts/<hash>.ini). Dort liegt die
  *                     [hugo]-Sektion.
+ *   --force           Immer bauen, auch ohne fällige Freigaben (für Front-Matter-
+ *                     publishDate).
  *   --quiet           Bei Erfolg nichts ausgeben (nur Fehler). Für stille Crons.
  *
  * Keine Pro-Lizenz nötig; es wird nur die Hugo-Konfiguration vorausgesetzt.
- * Beendet mit Code 0 (Build erfolgreich), 1 (Hugo-Fehler bzw. Laufzeitfehler),
- * 2 (Aufruffehler: fehlende Konfiguration).
+ * Beendet mit Code 0 (Build erfolgreich ODER übersprungen), 1 (Hugo-Fehler bzw.
+ * Laufzeitfehler), 2 (Aufruffehler: fehlende Konfiguration).
  */
 
 if (PHP_SAPI !== 'cli') {
@@ -37,9 +47,10 @@ require dirname(__DIR__) . '/core/autoload.php';
 use HugoCMS\FileManager\Connector;
 use HugoCMS\FileManager\Exception\ApiException;
 
-$opts = getopt('', ['mounts::', 'quiet']);
+$opts = getopt('', ['mounts::', 'quiet', 'force']);
 $backendDir = dirname(__DIR__);
 $quiet = isset($opts['quiet']);
+$force = isset($opts['force']);
 $mountsFile = (string) ($opts['mounts'] ?? ($backendDir . '/mounts.ini'));
 
 $configFile = $backendDir . '/hugocms.ini';
@@ -59,7 +70,7 @@ $connector = null;
 try {
     $connector = new Connector(['config' => $configFile, 'logLevel' => 'info']);
     $connector->mountsFromFile($mountsFile);
-    $result = $connector->buildSite();
+    $result = $connector->buildSite($force);
 } catch (ApiException $e) {
     // Selbst abgefangene Ausnahmen lösen den globalen Exception-Handler nicht
     // aus — daher hier ausdrücklich ins Log schreiben, nicht nur auf STDERR.
@@ -81,13 +92,25 @@ if (!empty($result['paused'])) {
     exit(0);
 }
 
+// Keine fälligen Freigaben — nicht gebaut (ohne --force der Normalfall). Kein Fehler.
+if (!empty($result['skipped'])) {
+    if (!$quiet) {
+        fwrite(STDOUT, "Keine fälligen Freigaben — kein Build.\n");
+    }
+    exit(0);
+}
+
 if (empty($result['success'])) {
     fwrite(STDERR, sprintf("Hugo-Lauf fehlgeschlagen (Code %d):\n%s\n", (int) $result['exitCode'], (string) $result['output']));
     exit(1);
 }
 
 if (!$quiet) {
-    fwrite(STDOUT, sprintf("Hugo-Lauf erfolgreich (%.2fs).\n", (float) $result['seconds']));
+    fwrite(STDOUT, sprintf(
+        "Hugo-Lauf erfolgreich (%.2fs, %d fällige Freigabe(n)).\n",
+        (float) $result['seconds'],
+        (int) ($result['applied'] ?? 0),
+    ));
 }
 
 exit(0);

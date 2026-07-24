@@ -9,9 +9,10 @@ see_also: []
 HugoCMS runs three scripts from the command line. They live in the installation
 under `backend/cli/` and can be started **there only** — not through the browser.
 
-- **Build website** (`cron-build.php`) — builds the site with Hugo and, while
-  doing so, publishes any scheduled releases that have come due. No Pro license
-  required.
+- **Build website** (`cron-build.php`) — publishes any scheduled releases that
+  have come due and builds the site with Hugo. It builds only when a release was
+  actually due; otherwise the run is skipped (use `--force` to always build). No
+  Pro license required.
 - **Improve content** (`cron-improve.php`) — lets the AI revise reviewed pages.
   Pro feature.
 - **Health check** (`cron-healthcheck.php`) — checks the published website and
@@ -35,7 +36,7 @@ The scripts are scheduled through the server's crontab. Things to watch:
 
 A common example for a single website:
 
-    # Build every 15 minutes (also publishes due releases)
+    # Check every 15 minutes, build only when releases are due
     */15 * * * *  /usr/bin/php /path/backend/cli/cron-build.php --quiet
 
     # Improve three pages nightly
@@ -77,7 +78,10 @@ Keep in mind:
 
 - **The build interval sets the precision.** A release marked for 08:22 goes
   live only at the next build **after** that time. Without a regular
-  `cron-build.php` nothing happens at the scheduled moment.
+  `cron-build.php` nothing happens at the scheduled moment. The build runs only
+  when a release was due — if you also schedule via Hugo's front-matter
+  `publishDate`, run `cron-build.php --force` so that becomes visible regularly
+  too.
 - **The times are server time**, not your browser's. This also applies to the
   weekend exclusion: whether a day counts as Saturday or Sunday depends on the
   server's time zone.

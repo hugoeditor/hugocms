@@ -10,8 +10,10 @@ HugoCMS führt drei Skripte über die Kommandozeile aus. Sie liegen im
 Installationsverzeichnis unter `backend/cli/` und lassen sich **nur dort**
 starten — nicht über den Browser.
 
-- **Webseite bauen** (`cron-build.php`) — baut die Webseite mit Hugo und
-  veröffentlicht dabei fällige terminierte Freigaben. Keine Pro-Lizenz nötig.
+- **Webseite bauen** (`cron-build.php`) — veröffentlicht fällige terminierte
+  Freigaben und baut die Webseite mit Hugo. Gebaut wird nur, wenn tatsächlich
+  eine Freigabe fällig war; sonst wird der Lauf übersprungen (mit `--force` immer
+  bauen). Keine Pro-Lizenz nötig.
 - **Inhalte verbessern** (`cron-improve.php`) — lässt die KI geprüfte Seiten
   überarbeiten. Pro-Funktion.
 - **Gesundheitscheck** (`cron-healthcheck.php`) — prüft die veröffentlichte
@@ -37,7 +39,7 @@ Die Skripte werden über die Crontab des Servers zeitgesteuert. Wichtig dabei:
 
 Ein übliches Beispiel für eine Webseite:
 
-    # Alle 15 Minuten bauen (veröffentlicht zugleich fällige Freigaben)
+    # Alle 15 Minuten prüfen und nur bei fälligen Freigaben bauen
     */15 * * * *  /usr/bin/php /pfad/backend/cli/cron-build.php --quiet
 
     # Nachts drei Seiten verbessern
@@ -82,7 +84,10 @@ Zu beachten:
 
 - **Der Build-Takt bestimmt die Genauigkeit.** Eine für 08:22 Uhr vorgemerkte
   Freigabe geht erst beim nächsten Build **nach** diesem Zeitpunkt online. Ohne
-  regelmäßigen `cron-build.php` passiert zum Termin nichts.
+  regelmäßigen `cron-build.php` passiert zum Termin nichts. Der Build läuft nur,
+  wenn eine Freigabe fällig war — wer zusätzlich über Hugos Front-Matter-
+  `publishDate` terminiert, ruft `cron-build.php --force` auf, damit auch das
+  regelmäßig sichtbar wird.
 - **Die Uhrzeiten sind Serverzeit**, nicht die des eigenen Browsers. Das gilt
   auch für die Wochenend-Ausnahme: Ob ein Tag als Samstag oder Sonntag zählt,
   richtet sich nach der Zeitzone des Servers.

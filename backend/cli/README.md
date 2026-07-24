@@ -52,14 +52,26 @@ die Pause in der `[cron]`-Sektion der Mount-Konfiguration
 
 ## 1. `cron-build.php` — bauen und veröffentlichen
 
-Baut die Webseite wie der „Veröffentlichen"-Knopf. Vor jedem Build werden
-fällige terminierte Freigaben in ihre Live-Datei geschrieben.
+Baut die Webseite wie der „Veröffentlichen"-Knopf. Zuerst werden fällige
+terminierte Freigaben in ihre Live-Datei geschrieben.
 
 ```cron
 */15 * * * *  /usr/bin/php /pfad/backend/cli/cron-build.php --mounts=/pfad/backend/mounts.ini --quiet
 ```
 
-Optionen: `--mounts=<datei>`, `--quiet` (bei Erfolg keine Ausgabe).
+Optionen: `--mounts=<datei>`, `--force`, `--quiet` (bei Erfolg keine Ausgabe).
+
+**Gebaut wird nur, wenn es etwas zu veröffentlichen gibt.** Fiel keine fällige
+Freigabe an, überspringt der Lauf den Hugo-Aufruf und meldet „Keine fälligen
+Freigaben — kein Build." (Code 0). Bei einem Cron alle paar Minuten spart das die
+allermeisten Läufe. Der Herzschlag im Systemstatus wird trotzdem gesetzt, die
+Aufgabe gilt also weiter als „läuft".
+
+Mit **`--force`** wird immer gebaut. Das braucht, wer Seiten über Hugos eigenes
+Front-Matter-`publishDate` terminiert (nicht über die Freigabe-Warteschlange):
+Ein solcher Termin erzeugt keine „fällige Freigabe", wird also ohne `--force`
+nicht sichtbar. Wer die gestaffelte Veröffentlichung ausschließlich über die
+Warteschlange nutzt, braucht `--force` nicht.
 
 Hugo läuft bewusst **ohne** `--buildFuture` und `--buildDrafts`: Seiten mit
 künftigem `publishDate` oder `draft: true` bleiben unveröffentlicht. Minify,
@@ -180,7 +192,7 @@ ohne auf den Ernstfall zu warten.
 Eine Webseite, Automatikmodus aktiv:
 
 ```cron
-# Alle 15 Minuten bauen — veröffentlicht zugleich fällige Freigaben
+# Alle 15 Minuten prüfen und nur bei fälligen Freigaben bauen
 */15 * * * *  /usr/bin/php /var/www/backend/cli/cron-build.php --quiet
 
 # Nachts drei Seiten verbessern (die Termine vergibt der Automatikmodus)

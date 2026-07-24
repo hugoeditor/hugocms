@@ -1157,15 +1157,21 @@ final class Connector
     }
 
     /**
-     * CLI-Einstieg (Cron): baut die Webseite ohne Web-Authentifizierung. Für die
-     * zeitgesteuerte Veröffentlichung der gestaffelten Freigabe — ein
-     * regelmäßiger Build macht freigegebene Seiten sichtbar, sobald ihr
-     * publishDate erreicht ist (Hugo wird ohne --buildFuture aufgerufen). Keine
-     * Pro-Lizenz nötig; setzt nur die Hugo-Konfiguration voraus.
+     * CLI-Einstieg (Cron): baut die Webseite ohne Web-Authentifizierung. Zweck
+     * ist die zeitgesteuerte Veröffentlichung der gestaffelten Freigabe.
      *
-     * @return array{success: bool, exitCode: int, output: string, seconds: float}
+     * Standardmäßig wird NUR gebaut, wenn tatsächlich fällige terminierte
+     * Freigaben anfielen — läuft der Cron alle paar Minuten, spart das den
+     * Hugo-Lauf, solange nichts zu veröffentlichen ist. Mit $force=true (CLI:
+     * --force) wird immer gebaut; das braucht, wer sich auf Hugos eigenes
+     * Front-Matter-`publishDate` verlässt, dessen Fälligkeit ein Build erst
+     * sichtbar macht (Hugo läuft ohne --buildFuture).
+     *
+     * Keine Pro-Lizenz nötig; setzt nur die Hugo-Konfiguration voraus.
+     *
+     * @return array<string, mixed>
      */
-    public function buildSite(): array
+    public function buildSite(bool $force = false): array
     {
         if (!empty($this->cronPause['pauseBuild'])) {
             return $this->cronPausedResult('build');
@@ -1173,14 +1179,47 @@ final class Connector
 
         return $this->withCronHeartbeat(
             'build',
-            fn (): array => $this->runHugoBuild(),
-            // Ein Hugo-Lauf mit exitCode != 0 wirft nicht, ist für den Cron aber
-            // sehr wohl ein Fehlschlag — sonst meldete der Status „erfolgreich“,
-            // während die Webseite seit Tagen nicht mehr gebaut wird.
-            static fn (array $r): array => [
-                (bool) ($r['success'] ?? false),
-                sprintf('Hugo beendet mit Code %d', (int) ($r['exitCode'] ?? 0)),
-            ],
+            function () use ($force): array {
+                // Fällige Freigaben anwenden und daran messen, ob der Build sich
+                // lohnt. Ein Fehler beim Anwenden darf einen erzwungenen Build
+                // nicht verhindern (dann wird trotzdem gebaut).
+                $applied = [];
+                try {
+                    $applied = $this->applyDueDrafts()['applied'] ?? [];
+                } catch (Throwable $e) {
+                    $this->logger->warning('Fällige Austausche nicht angewendet: ' . $e->getMessage());
+                }
+
+                if (!$force && $applied === []) {
+                    $this->logger->info('Cron-Build übersprungen — keine fälligen Freigaben.');
+
+                    return ['skipped' => true, 'applied' => 0];
+                }
+
+                // Freigaben sind bereits angewendet — nicht erneut anwenden.
+                $result = $this->runHugoBuild(false);
+                $result['applied'] = count($applied);
+
+                return $result;
+            },
+            // Übersprungen gilt als erfolgreicher Lauf (der Cron hat geprüft und
+            // nichts zu tun gefunden). Ein Hugo-Lauf mit exitCode != 0 wirft
+            // nicht, ist für den Cron aber ein Fehlschlag — sonst meldete der
+            // Status „erfolgreich“, während die Webseite nicht mehr gebaut wird.
+            static function (array $r): array {
+                if (!empty($r['skipped'])) {
+                    return [true, 'Übersprungen — keine fälligen Freigaben'];
+                }
+
+                return [
+                    (bool) ($r['success'] ?? false),
+                    sprintf(
+                        '%d Freigabe(n), Hugo Code %d',
+                        (int) ($r['applied'] ?? 0),
+                        (int) ($r['exitCode'] ?? 0),
+                    ),
+                ];
+            },
         );
     }
 
@@ -1262,9 +1301,13 @@ final class Connector
      * kann. Nur die Vorbedingungen (fehlende Konfiguration/Programm/Quelle)
      * werfen eine Ausnahme.
      *
+     * $applyDrafts=false überspringt das Anwenden fälliger Freigaben — für
+     * Aufrufer, die das bereits selbst erledigt haben ({@see buildSite()}, das
+     * daraus erst entscheidet, ob überhaupt gebaut wird).
+     *
      * @return array{success: bool, exitCode: int, output: string, seconds: float}
      */
-    private function runHugoBuild(): array
+    private function runHugoBuild(bool $applyDrafts = true): array
     {
         if ($this->hugo === null) {
             throw new ApiException('ECONFIG', 500, 'HUGO-NOT-CONFIGURED');
@@ -1273,10 +1316,12 @@ final class Connector
         // Fällige terminierte Austausche zuerst anwenden (verzögerter Austausch
         // der gestaffelten Veröffentlichung), damit der Build die neuen Fassungen
         // sieht. Ein Fehler hier darf den Build nicht verhindern.
-        try {
-            $this->applyDueDrafts();
-        } catch (Throwable $e) {
-            $this->logger->warning('Fällige Austausche nicht angewendet: ' . $e->getMessage());
+        if ($applyDrafts) {
+            try {
+                $this->applyDueDrafts();
+            } catch (Throwable $e) {
+                $this->logger->warning('Fällige Austausche nicht angewendet: ' . $e->getMessage());
+            }
         }
 
         if ($this->hugoBin === null) {

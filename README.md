@@ -55,7 +55,7 @@ hugocms-2026/                     # Quell-Repo (Entwicklung)
 │   │   └── Exception/            # ApiException
 │   ├── cli/                      # Kommandozeilen-Werkzeuge
 │   │   ├── cron-improve.php      # Cron: nächste Dateien per KI verbessern (auto)
-│   │   └── cron-build.php        # Cron: Webseite bauen (veröffentlicht terminierte Seiten)
+│   │   └── cron-build.php        # Cron: bei fälligen Freigaben bauen (--force: immer)
 │   ├── custom/                   # custom.php.beispiel (programmatischer Bootstrap)
 │   ├── mounts/                   # host-spezifische mounts/<hash>.ini (je Webseite)
 │   ├── help/                     # Wissensdatenbank (Markdown), u. a. SEO-Regel-Hilfen
@@ -560,14 +560,22 @@ Damit terminierte Austausche auslösen, muss regelmäßig gebaut werden (der Web
 an):
 
 ```bash
-# wendet fällige Austausche an und baut dann (wie der „Veröffentlichen"-Knopf),
-# ohne Web-Anmeldung. Minify/Ziel/Clean stammen aus der [hugo]-Konfiguration.
+# wendet fällige Austausche an und baut, WENN welche fällig waren; sonst wird der
+# Hugo-Lauf übersprungen. Ohne Web-Anmeldung; Minify/Ziel/Clean aus [hugo].
 php backend/cli/cron-build.php --mounts=backend/mounts.ini --quiet
 ```
 
+Der CLI-Build **baut nur, wenn tatsächlich eine terminierte Freigabe fällig war** —
+läuft der Cron alle paar Minuten, spart das den Hugo-Lauf, solange nichts zu
+veröffentlichen ist (Meldung „Keine fälligen Freigaben — kein Build.", Exit 0).
+Mit **`--force`** wird immer gebaut; das braucht, wer zusätzlich über Hugos
+eigenes Front-Matter-`publishDate` terminiert, dessen Fälligkeit keinen
+Warteschlangen-Eintrag erzeugt und erst ein Build sichtbar macht. Der Web-
+„Veröffentlichen"-Knopf baut unabhängig davon immer.
+
 Die Auflösung der Staffelung entspricht dem Cron-Intervall (z. B. alle 15
-Minuten). Exit-Codes: 0 Erfolg, 1 Hugo-/Laufzeitfehler, 2 Aufruffehler. Keine
-Pro-Lizenz nötig.
+Minuten). Exit-Codes: 0 Erfolg (gebaut oder übersprungen), 1 Hugo-/Laufzeitfehler,
+2 Aufruffehler. Keine Pro-Lizenz nötig.
 
 **Zuordnung zur Webseite (Mandantenfähigkeit).** Entwürfe liegen — wie das
 Audit — je Webseite getrennt unter `var/review/<hash(source)>/`, gehasht aus dem
