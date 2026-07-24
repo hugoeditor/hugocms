@@ -8,7 +8,10 @@
 #   │                         Caching der App-Hülle; URL-Pfad via Installationsroutine)
 #   ├── bin/
 #   │     ├── get-hugo.sh          (lädt das Hugo-Binary nach bin/hugo/)
-#   │     └── install.sh           (richtet eine Webseite ein: Kopie + mounts/<hash>.ini)
+#   │     ├── install.sh           (richtet eine Webseite ein: Kopie + mounts/<hash>.ini)
+#   │     ├── update.sh            (erneuert alle Webseiten nach einem Release)
+#   │     ├── crontab-entries.sh   (gibt die Crontab-Zeilen für alle Webseiten aus)
+#   │     └── lib/                 (gemeinsame Bash-Bibliothek: deploy.sh)
 #   │     (hugo/ wird NICHT mitgeliefert — install.sh holt es per get-hugo.sh)
 #   ├── backend/
 #   │     ├── core/                (Kern-Bibliothek inkl. autoload.php + hugocms.php)
