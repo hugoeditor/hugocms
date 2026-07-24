@@ -44,6 +44,18 @@ A common example for a single website:
     # Health check in the morning
     30 6 * * *    /usr/bin/php /path/backend/cli/cron-healthcheck.php --host=example.com
 
+## Pausing tasks
+
+Each of the three tasks can be paused per website without touching the host's
+crontab. This is configured in the **project settings**; the system status shows
+each task's current state and links straight there with a button. When a task is
+paused, its script checks this on startup and does nothing; the crontab entry
+stays in place and takes effect again as soon as the pause is lifted.
+
+If the **build** is paused, scheduled releases do not go live — the review queue
+points this out. If the **improver** is paused, the “to improve” list is not
+processed.
+
 ## The special part: automatic improvement
 
 The improver normally leaves its result as a **draft awaiting approval** —

@@ -108,3 +108,32 @@ label = Medien
 ;[seo_report]
 ;exclude_prefixes = "kampagne/, landingpages/"
 ;exclude_files = "google37dc500bdbcbca59.html"
+
+; Reservierte Sektion [improve] (KEIN Mount): Automatikmodus des Cron-
+; Verbesserers (cron-improve.php) für DIESE Webseite. Ist auto = true, terminiert
+; der Cron jeden erzeugten Entwurf gleich selbst — zu einem zufälligen Zeitpunkt
+; im Tagesfenster, höchstens per_day Stück je Tag. So gehen verbesserte Seiten
+; verteilt live statt alle auf einmal. Der Client pflegt diese Sektion über den
+; Schalter in der Liste „zu verbessern“ und die Projekteinstellungen.
+;   auto         true schaltet den Automatikmodus ein. Standard: aus.
+;   window_start Beginn des Fensters, „HH:MM“ Serverzeit. Standard 07:00.
+;   window_end   Ende des Fensters, „HH:MM“. Standard 16:00.
+;   per_day      Höchstzahl Freigaben je Tag (1–50). Standard 3.
+;[improve]
+;auto = true
+;window_start = "07:00"
+;window_end = "16:00"
+;per_day = 3
+
+; Reservierte Sektion [cron] (KEIN Mount): Pausenschalter der drei Cron-Skripte
+; DIESER Webseite. Ist ein Schalter true, prüft das zugehörige Skript das beim
+; Start und tut nichts — so lässt sich ein Cron-Job aussetzen, ohne die Crontab
+; des Hosters anzufassen. Der Client pflegt diese Sektion über die
+; Kontrollkästchen im Systemstatus und die Projekteinstellungen.
+;   pause_build       true pausiert cron-build.php. Standard: aus.
+;   pause_improve     true pausiert cron-improve.php. Standard: aus.
+;   pause_healthcheck true pausiert cron-healthcheck.php. Standard: aus.
+;[cron]
+;pause_build = false
+;pause_improve = false
+;pause_healthcheck = false

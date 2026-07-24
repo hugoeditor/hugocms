@@ -42,6 +42,11 @@ export const useAuthStore = defineStore('auth', {
     // Mount-Konfiguration): Ist `auto` an, terminiert der Cron jeden erzeugten
     // Entwurf gleich selbst — zufällig im Tagesfenster, höchstens perDay je Tag.
     improve: { auto: false, windowStart: '07:00', windowEnd: '16:00', perDay: 3, effectivePerDay: 3 },
+    // Pausenzustand der drei Cron-Skripte ([cron] der Mount-Konfiguration).
+    // Die Views zeigen daraus einen Hinweis, wenn die zuständige Aufgabe
+    // ausgesetzt ist — die Freigabe-Warteschlange bei pausiertem Build, die
+    // Liste „zu verbessern“ bei pausiertem Verbesserer.
+    cronPause: { pauseBuild: false, pauseImprove: false, pauseHealthcheck: false },
     // Warum eine gesperrte Funktion nicht nutzbar ist:
     // { git|audit|auditContent|pagespeed|liveAnalysis|speech:
     //   { available: bool, blockers: ['pro'|'project'|'aiKey'|'service'] } }.
@@ -96,6 +101,7 @@ export const useAuthStore = defineStore('auth', {
       this.siteUrlDetected = data.siteUrlDetected ?? ''
       this.review = data.review ?? false
       this.improve = data.improve ?? { auto: false, windowStart: '07:00', windowEnd: '16:00', perDay: 3, effectivePerDay: 3 }
+      this.cronPause = data.cronPause ?? { pauseBuild: false, pauseImprove: false, pauseHealthcheck: false }
       this.features = data.features ?? {}
       this.siteHost = data.siteHost ?? ''
       setCsrfToken(data.csrf)

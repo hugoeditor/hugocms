@@ -310,6 +310,17 @@ const editorPanelRef = ref(null)
 const reconfigureOpen = ref(false)
 // Einstellungen nur DIESER Webseite (Mount-Konfiguration).
 const projectSettingsOpen = ref(false)
+// Sektion, zu der der Dialog beim Öffnen scrollen soll (z. B. 'cron' aus dem
+// Systemstatus). Leer = normal von oben.
+const projectSettingsFocus = ref('')
+
+// Projekteinstellungen an einer bestimmten Sektion öffnen (aus dem
+// Systemstatus, wo das Pausieren nur noch hierhin verweist).
+function openProjectSettings(section = '') {
+  projectSettingsFocus.value = section
+  status.close()
+  projectSettingsOpen.value = true
+}
 
 // Eine KI-Funktion hat um das Öffnen der Konfiguration gebeten (Hinweisdialog
 // bestätigt). Flag wieder zurücksetzen und den ReconfigureDialog öffnen.
@@ -819,10 +830,13 @@ async function build() {
             <ContentQualityView />
             <!-- Freigabe-Warteschlange (gestaffelte Veröffentlichung): Overlay
                  über dem Dateimanager, aus der Werkzeugschiene geöffnet. -->
-            <ReviewQueueView />
+            <ReviewQueueView @open-status="openStatusView" />
             <!-- Systemstatus: Lizenz, Zugänge, Cron-Aufgaben. Die
                  Lizenzaktivierung öffnet von hier aus den bestehenden Dialog. -->
-            <StatusView @activate-license="licenseOpen = true" />
+            <StatusView
+              @activate-license="licenseOpen = true"
+              @open-project-settings="openProjectSettings"
+            />
             <!-- Hilfe-/Wissensdatenbank: Überlagerung mit Zurück-Button, öffnet
                  z. B. aus einem SEO-Audit-Fund die ausführliche Erklärung. -->
             <HelpView />
@@ -885,7 +899,11 @@ async function build() {
 
     <!-- Konfiguration im laufenden Betrieb ändern -->
     <ReconfigureDialog v-model="reconfigureOpen" @saved="onReconfigured" />
-    <ProjectSettingsDialog v-model="projectSettingsOpen" @saved="onProjectSettingsSaved" />
+    <ProjectSettingsDialog
+      v-model="projectSettingsOpen"
+      :focus-section="projectSettingsFocus"
+      @saved="onProjectSettingsSaved"
+    />
     <AccountDialog v-model="accountOpen" @changed="onAccountChanged" />
 
     <!-- Pro-Lizenz aktivieren · Git-Versionierung (Pro-Funktion) -->

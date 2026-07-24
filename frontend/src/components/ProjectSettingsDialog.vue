@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 import { errorText } from '../i18n/apiMessage'
@@ -9,7 +9,14 @@ const auth = useAuthStore()
 
 // Sichtbarkeit als v-model (Vue 3.4+). Der Knopf in der Werkzeugschiene öffnet.
 const model = defineModel({ type: Boolean, default: false })
+// Sektion, zu der beim Öffnen gescrollt werden soll (z. B. 'cron' aus dem
+// Systemstatus). Leer = normal von oben.
+const props = defineProps({ focusSection: { type: String, default: '' } })
 const emit = defineEmits(['saved'])
+
+// Verweise auf die scrollbaren Abschnitte, damit sich einer gezielt anspringen
+// lässt. Aktuell nur die Cron-Sektion.
+const cronSectionRef = ref(null)
 
 // SEO-Bericht: Ausschlüsse NUR für diese Webseite, eine je Zeile. Sie ergänzen
 // die globalen aus dem Konfigurationsdialog und die fest verdrahteten; keine
@@ -24,6 +31,12 @@ const improveAuto = ref(false)
 const improveWindowStart = ref('07:00')
 const improveWindowEnd = ref('16:00')
 const improvePerDay = ref(3)
+
+// Pausenschalter der drei Cron-Skripte. Dieselben Einstellungen lassen sich im
+// Systemstatus direkt umlegen; hier stehen sie der Vollständigkeit halber.
+const pauseBuild = ref(false)
+const pauseImprove = ref(false)
+const pauseHealthcheck = ref(false)
 
 // „HH:MM“ mit Stunde 0–23 und Minute 0–59. Ungültiges würde der Server auf die
 // Vorgabe zurückfallen lassen — besser, es fällt schon im Formular auf.
@@ -70,10 +83,22 @@ watch(model, async (open) => {
     improveWindowStart.value = cfg.improveWindowStart ?? '07:00'
     improveWindowEnd.value = cfg.improveWindowEnd ?? '16:00'
     improvePerDay.value = cfg.improvePerDay ?? 3
+    pauseBuild.value = !!cfg.pauseBuild
+    pauseImprove.value = !!cfg.pauseImprove
+    pauseHealthcheck.value = !!cfg.pauseHealthcheck
   } catch (e) {
     error.value = errorText(t, e)
   } finally {
     loading.value = false
+  }
+  // Wurde der Dialog gezielt für eine Sektion geöffnet (aus dem Systemstatus),
+  // nach dem Rendern dorthin scrollen.
+  if (props.focusSection === 'cron') {
+    await nextTick()
+    // ref auf einer Vuetify-Komponente liefert die Instanz — das DOM-Element
+    // steckt in $el; auf einem einfachen Element ist es der Wert selbst.
+    const el = cronSectionRef.value?.$el ?? cronSectionRef.value
+    el?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
   }
 })
 
@@ -88,6 +113,9 @@ async function submit() {
       improveWindowStart: improveWindowStart.value,
       improveWindowEnd: improveWindowEnd.value,
       improvePerDay: improvePerDay.value,
+      pauseBuild: pauseBuild.value,
+      pauseImprove: pauseImprove.value,
+      pauseHealthcheck: pauseHealthcheck.value,
     })
     // Der Schalter in der Liste „zu verbessern“ liest denselben Zustand aus
     // whoami — nach dem Speichern nachziehen.
@@ -227,6 +255,36 @@ async function submit() {
           >
             {{ $t('projectConfig.improvePerDayCapped', [windowMinutes, effectivePerDay]) }}
           </v-alert>
+
+          <!-- Cron-Aufgaben pausieren. Der Systemstatus verweist zum Umstellen
+               hierher; ein pausiertes Skript prüft das beim Start und tut
+               nichts, ohne dass die Crontab des Hosters geändert werden muss. -->
+          <v-divider ref="cronSectionRef" class="my-4" />
+          <div class="text-subtitle-2 mb-1">{{ $t('projectConfig.cronSection') }}</div>
+          <div class="text-caption text-medium-emphasis mb-2">
+            {{ $t('projectConfig.cronHint') }}
+          </div>
+          <v-switch
+            v-model="pauseBuild"
+            :label="$t('projectConfig.pauseBuild')"
+            color="warning"
+            density="compact"
+            hide-details
+          />
+          <v-switch
+            v-model="pauseImprove"
+            :label="$t('projectConfig.pauseImprove')"
+            color="warning"
+            density="compact"
+            hide-details
+          />
+          <v-switch
+            v-model="pauseHealthcheck"
+            :label="$t('projectConfig.pauseHealthcheck')"
+            color="warning"
+            density="compact"
+            hide-details
+          />
 
           <v-alert v-if="error" type="error" density="compact" class="mt-2">{{ error }}</v-alert>
           <div class="text-caption text-medium-emphasis mt-3">{{ $t('projectConfig.note') }}</div>

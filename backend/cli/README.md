@@ -40,6 +40,16 @@ jede Aufgabe zuletzt lief und ob sie überfällig ist.
 **Exit-Codes.** `0` Erfolg · `1` Laufzeitfehler · `2` Aufruffehler (fehlende
 Konfiguration, fehlendes `--host`).
 
+**Pausieren ohne die Crontab anzufassen.** Jede der drei Aufgaben lässt sich pro
+Webseite in den Projekteinstellungen pausieren (der Systemstatus zeigt den
+Zustand an und verweist dorthin). Ist eine Aufgabe pausiert, prüft ihr Skript
+das beim Start, meldet „… ist pausiert — kein Lauf." und endet mit Code 0, ohne
+etwas zu tun. Der Crontab-Eintrag bleibt bestehen; man muss also nicht in die
+Konsole des Hosters, um einen Cron-Job vorübergehend auszusetzen. Hinterlegt ist
+die Pause in der `[cron]`-Sektion der Mount-Konfiguration
+(`pause_build`, `pause_improve`, `pause_healthcheck`). Ein Probelauf
+(`--dry-run`) ignoriert die Pause bewusst — er dient dem Test und ändert nichts.
+
 ## 1. `cron-build.php` — bauen und veröffentlichen
 
 Baut die Webseite wie der „Veröffentlichen"-Knopf. Vor jedem Build werden

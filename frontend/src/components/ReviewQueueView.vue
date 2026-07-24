@@ -25,6 +25,13 @@ const files = useFilesStore()
 const auth = useAuthStore()
 const confirm = useConfirm()
 
+// Wechsel zum Systemstatus (aus dem Build-Pausenhinweis). App.vue schließt
+// dabei die Warteschlange und öffnet die Statusansicht.
+const emit = defineEmits(['open-status'])
+function openStatus() {
+  emit('open-status')
+}
+
 // Zeilenweiser Diff Original → Vorschlag. Bei neuen Seiten (kein Original) und
 // bei zu großen Eingaben fällt die Anzeige auf eine einfache Vorschau zurück.
 const diff = computed(() => {
@@ -167,6 +174,23 @@ async function toSource() {
         <!-- Fehler -->
         <v-alert v-if="store.error" type="error" density="comfortable" class="mb-3">
           {{ errorText(t, store.error) }}
+        </v-alert>
+
+        <!-- Der Build ist pausiert: terminierte Freigaben werden vom Cron-Build
+             live geschaltet — solange er ruht, geht nichts online. Hinweis mit
+             direktem Weg zum Systemstatus, wo sich die Pause aufheben lässt. -->
+        <v-alert
+          v-if="auth.cronPause.pauseBuild"
+          type="warning"
+          density="comfortable"
+          variant="tonal"
+          class="mb-3"
+          prepend-icon="mdi-pause-circle-outline"
+        >
+          {{ $t('review.buildPaused') }}
+          <template #append>
+            <v-btn size="small" variant="text" @click="openStatus">{{ $t('review.toStatus') }}</v-btn>
+          </template>
         </v-alert>
 
         <!-- Diff-Detail eines Entwurfs -->

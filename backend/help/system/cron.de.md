@@ -46,6 +46,19 @@ Ein übliches Beispiel für eine Webseite:
     # Morgens der Gesundheitscheck
     30 6 * * *    /usr/bin/php /pfad/backend/cli/cron-healthcheck.php --host=example.com
 
+## Aufgaben pausieren
+
+Jede der drei Aufgaben lässt sich pro Webseite pausieren, ohne die Crontab des
+Hosters anzufassen. Eingestellt wird das in den **Projekteinstellungen**; der
+Systemstatus zeigt zu jeder Aufgabe den aktuellen Zustand und führt mit einem
+Knopf direkt dorthin. Ist eine Aufgabe pausiert, prüft ihr Skript das beim Start
+und tut nichts; der Crontab-Eintrag bleibt bestehen und greift wieder, sobald
+die Pause aufgehoben wird.
+
+Ist der **Build** pausiert, gehen terminierte Freigaben nicht live — die
+Freigabe-Warteschlange weist darauf hin. Ist der **Verbesserer** pausiert, wird
+die Liste „zu verbessern" nicht abgearbeitet.
+
 ## Die Besonderheit: automatische Verbesserung
 
 Der Verbesserer legt sein Ergebnis normalerweise als **Entwurf zur Freigabe** ab

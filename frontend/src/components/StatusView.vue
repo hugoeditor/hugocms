@@ -21,7 +21,9 @@ const confirm = useConfirm()
 
 // Die Lizenzaktivierung lebt weiterhin im LicenseDialog (App.vue) — von hier
 // wird sie nur angestoßen, seit der eigene Werkzeugschienen-Eintrag entfallen ist.
-const emit = defineEmits(['activate-license'])
+// 'open-project-settings' trägt den Namen der Sektion, zu der der Dialog
+// scrollen soll (hier 'cron') — Pausieren gehört in die Projekteinstellungen.
+const emit = defineEmits(['activate-license', 'open-project-settings'])
 
 // Feste Reihenfolge der Zugänge; `verifiable: false` bedeutet, dass sich der
 // Zugang nicht folgenlos prüfen lässt (PageSpeed: jeder Test kostet Kontingent).
@@ -88,9 +90,11 @@ function intervalText(seconds) {
   return t('status.cron.everyDays', [Math.round(seconds / 86400)])
 }
 
-// Ampel einer Cron-Aufgabe: nie gelaufen (grau), überfällig oder zuletzt
-// gescheitert (rot/orange), sonst in Ordnung.
+// Ampel einer Cron-Aufgabe. Pausiert steht vor allem anderen (dann ist ein
+// ausgesetzter Lauf kein Fehler, sondern gewollt); sonst: nie gelaufen (grau),
+// überfällig oder zuletzt gescheitert (rot/orange), sonst in Ordnung.
 function cronState(c) {
+  if (c.paused) return { color: 'grey', icon: 'mdi-pause-circle-outline', label: t('status.cron.paused') }
   if (!c.seen) return { color: 'grey', icon: 'mdi-minus-circle-outline', label: t('status.cron.never') }
   if (!c.success) return { color: 'error', icon: 'mdi-alert-circle-outline', label: t('status.cron.failed') }
   if (c.overdue) return { color: 'warning', icon: 'mdi-clock-alert-outline', label: t('status.cron.overdue') }
@@ -407,7 +411,11 @@ function scoreColor(score) {
                     <template v-if="c.summary"> · {{ c.summary }}</template>
                   </template>
                 </div>
-                <div v-if="c.error" class="st-row-check text-error">
+                <div v-if="c.paused" class="st-row-check text-medium-emphasis">
+                  <v-icon icon="mdi-pause-circle-outline" size="14" />
+                  {{ $t('status.cron.pausedNote') }}
+                </div>
+                <div v-else-if="c.error" class="st-row-check text-error">
                   <v-icon icon="mdi-alert-circle-outline" size="14" />
                   {{ c.error }}
                 </div>
@@ -415,11 +423,37 @@ function scoreColor(score) {
                   {{ $t('status.cron.lastSuccess', [formatDate(c.lastSuccessAt)]) }}
                 </div>
               </div>
+              <!-- Pausenzustand — immer sichtbar, ob pausiert oder nicht.
+                   Geändert wird er nicht hier, sondern in den Projekteinstellungen
+                   (siehe Knopf unter der Aufgabenliste). -->
+              <v-chip
+                :color="c.paused ? 'warning' : undefined"
+                size="x-small"
+                variant="tonal"
+                label
+                class="mr-2"
+              >
+                {{ c.paused ? $t('status.cron.paused') : $t('status.cron.active') }}
+              </v-chip>
               <v-tooltip :text="cronState(c).label" location="left">
                 <template #activator="{ props }">
                   <v-icon v-bind="props" :icon="cronState(c).icon" :color="cronState(c).color" size="18" />
                 </template>
               </v-tooltip>
+            </div>
+
+            <!-- Pausieren gehört zu den Projekteinstellungen; von hier führt nur
+                 ein Weg dorthin, statt die Einstellung an zwei Stellen zu pflegen. -->
+            <div v-if="store.cron.length" class="st-cron-manage">
+              <span class="st-hint">{{ $t('status.cron.pauseHint') }}</span>
+              <v-btn
+                size="small"
+                variant="tonal"
+                prepend-icon="mdi-folder-cog-outline"
+                @click="emit('open-project-settings', 'cron')"
+              >
+                {{ $t('status.cron.manage') }}
+              </v-btn>
             </div>
           </section>
 
@@ -625,6 +659,18 @@ function scoreColor(score) {
 /* Volle Breite wie die übrigen Overlay-Ansichten (Freigabe, SEO-Audit) — keine
    zentrierte Spalte, die links und rechts breite Ränder stehen ließe. */
 .st-inner { max-width: none; margin: 0; padding: 12px 12px 24px; }
+
+/* Weg zu den Projekteinstellungen unter der Cron-Liste: Hinweis links, Knopf
+   rechts. */
+.st-cron-manage {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--mint-border);
+}
+.st-cron-manage .st-hint { flex: 1 1 auto; margin: 0; }
 
 .st-card {
   border: 1px solid var(--mint-border);

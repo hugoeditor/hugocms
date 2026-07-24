@@ -144,6 +144,16 @@ final class Connector
     private array $improve = ['auto' => false, 'windowStart' => '07:00', 'windowEnd' => '16:00', 'perDay' => 3];
 
     /**
+     * Pausenschalter der drei Cron-Skripte aus der [cron]-Sektion der
+     * Mount-Konfiguration (pro Webseite). Ist ein Schalter an, tut das
+     * zugehörige CLI-Skript beim Start nichts — so lässt sich ein Cron-Job
+     * aussetzen, ohne die Crontab des Hosters zu ändern.
+     *
+     * @var array{pauseBuild: bool, pauseImprove: bool, pauseHealthcheck: bool}
+     */
+    private array $cronPause = ['pauseBuild' => false, 'pauseImprove' => false, 'pauseHealthcheck' => false];
+
+    /**
      * Wie weit die automatische Terminierung nach einem freien Platz sucht.
      * Bei kleiner Tagesmenge und großem Rückstau wandern Freigaben weit nach
      * vorn; irgendwo muss die Suche enden, sonst liefe sie bei erschöpftem
@@ -347,6 +357,8 @@ final class Connector
         $this->seoReportSite = $config['seoReport'];
         // Automatikmodus des Cron-Verbesserers (Fenster + Tagesmenge).
         $this->improve = $config['improve'];
+        // Pausenschalter der drei Cron-Skripte.
+        $this->cronPause = $config['cron'];
         foreach ($config['warnings'] as $warning) {
             $this->addSetupWarning($warning['key'], $warning['params']);
         }
@@ -661,6 +673,10 @@ final class Connector
             // als der eingestellte Wert, und die Oberfläche soll die wahre Zahl
             // nennen, nicht die gewünschte.
             'improve' => $this->improve + ['effectivePerDay' => $this->improveSlotPlan()['perDay']],
+            // Pausenzustand der drei Cron-Skripte. Die Views (Freigabe-
+            // Warteschlange, „zu verbessern“) zeigen daraus einen Hinweis, wenn
+            // die zuständige Aufgabe ausgesetzt ist.
+            'cronPause' => $this->cronPause,
             // Warum eine Funktion (noch) nicht nutzbar ist. Die Flags oben sagen
             // nur ob — für den Pro-Hinweis muss der Client aber wissen, ob die
             // Lizenz fehlt oder eine andere Voraussetzung. Siehe featureMatrix().
@@ -1151,6 +1167,10 @@ final class Connector
      */
     public function buildSite(): array
     {
+        if (!empty($this->cronPause['pauseBuild'])) {
+            return $this->cronPausedResult('build');
+        }
+
         return $this->withCronHeartbeat(
             'build',
             fn (): array => $this->runHugoBuild(),
@@ -1162,6 +1182,21 @@ final class Connector
                 sprintf('Hugo beendet mit Code %d', (int) ($r['exitCode'] ?? 0)),
             ],
         );
+    }
+
+    /**
+     * Einheitliche Antwort eines pausierten Cron-Laufs. Es wird KEIN Herzschlag
+     * vermerkt — der Lauf hat ja nichts getan, und im Systemstatus soll er nicht
+     * als „erfolgreich gelaufen“ erscheinen. Ein Log-Eintrag hält die Pause
+     * fest, damit ein stiller Cron nicht rätselhaft wirkt.
+     *
+     * @return array{paused: true}
+     */
+    private function cronPausedResult(string $job): array
+    {
+        $this->logger->info(sprintf('Cron-Aufgabe „%s“ ist pausiert — kein Lauf.', $job));
+
+        return ['paused' => true];
     }
 
     /**
@@ -2217,7 +2252,12 @@ final class Connector
     public function improveNextContent(int $limit = 1, ?string $locale = null, bool $dryRun = false): array
     {
         if ($dryRun) {
+            // Der Probelauf ändert nichts und bleibt zum Testen auch bei Pause
+            // erlaubt — nur der echte Lauf setzt aus.
             return $this->runImproveBatch($limit, $locale, true);
+        }
+        if (!empty($this->cronPause['pauseImprove'])) {
+            return $this->cronPausedResult('improve');
         }
 
         return $this->withCronHeartbeat(
@@ -2310,6 +2350,9 @@ final class Connector
      */
     public function runHealthCheck(bool $dryRun = false): array
     {
+        if (!$dryRun && !empty($this->cronPause['pauseHealthcheck'])) {
+            return $this->cronPausedResult('healthcheck');
+        }
         if ($dryRun) {
             return $this->runHealthCheckBatch(true);
         }
@@ -3028,6 +3071,10 @@ final class Connector
             'improvePerDay' => (int) $this->improve['perDay'],
             // Was im Fenster tatsächlich Platz hat (siehe improveSlotPlan).
             'improveEffectivePerDay' => $this->improveSlotPlan()['perDay'],
+            // Pausenschalter der drei Cron-Skripte.
+            'pauseBuild' => (bool) $this->cronPause['pauseBuild'],
+            'pauseImprove' => (bool) $this->cronPause['pauseImprove'],
+            'pauseHealthcheck' => (bool) $this->cronPause['pauseHealthcheck'],
         ];
     }
 
@@ -3051,9 +3098,11 @@ final class Connector
 
         $seoSection = self::seoReportSection($request);
         $improveSection = $this->improveSectionFrom($request);
+        $cronSection = $this->cronSectionFrom($request);
         Config::updateSections($this->mountsPath, [
             'seo_report' => $seoSection,
             'improve' => $improveSection,
+            'cron' => $cronSection,
         ]);
         // Für den weiteren Verlauf DIESES Requests sofort wirksam (der Audit
         // liest die Ausschlüsse aus dem Connector, nicht erneut aus der Datei).
@@ -3062,9 +3111,31 @@ final class Connector
             'excludeFiles' => Config::normalizeExcludeFiles($seoSection['exclude_files'] ?? ''),
         ];
         $this->reloadImprove();
+        // Auch den Pausenzustand für DIESEN Request nachziehen, sonst meldete
+        // ein direkt folgendes projectconfig/whoami noch die alten Werte.
+        $this->cronPause = MountConfig::load($this->mountsPath)['cron'];
         $this->logger->info('Projekteinstellungen aktualisiert (projectreconfigure).');
 
         return ['ok' => true];
+    }
+
+    /**
+     * Baut die [cron]-Sektion aus den Formularfeldern der Projekteinstellungen.
+     * Immer vollständig (nie null), damit der Pausenzustand in der Datei
+     * ablesbar bleibt. Der Pausenzustand wird ausschließlich hierüber geändert
+     * (das Kontrollkästchen im Projektformular); der Systemstatus zeigt ihn nur
+     * an und verweist zum Umstellen hierher.
+     *
+     * @param array<string, mixed> $request
+     * @return array<string, string>
+     */
+    private function cronSectionFrom(array $request): array
+    {
+        return [
+            'pause_build' => !empty($request['pauseBuild']) ? 'true' : 'false',
+            'pause_improve' => !empty($request['pauseImprove']) ? 'true' : 'false',
+            'pause_healthcheck' => !empty($request['pauseHealthcheck']) ? 'true' : 'false',
+        ];
     }
 
     /**
@@ -3273,9 +3344,31 @@ final class Connector
                 ],
             ],
             'license' => $this->license()->info(),
-            'cron' => $this->cronHeartbeat()?->all() ?? [],
+            'cron' => $this->cronStatusList(),
             'tasks' => $this->pendingCronTasks(),
         ];
+    }
+
+    /**
+     * Cron-Aufgaben für den Systemstatus: der Herzschlag jeder Aufgabe, ergänzt
+     * um ihren Pausenzustand (für das Kontrollkästchen und die Ampel).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function cronStatusList(): array
+    {
+        $pauseField = [
+            'build' => 'pauseBuild',
+            'improve' => 'pauseImprove',
+            'healthcheck' => 'pauseHealthcheck',
+        ];
+
+        return array_map(function (array $entry) use ($pauseField): array {
+            $field = $pauseField[$entry['job']] ?? null;
+            $entry['paused'] = $field !== null && !empty($this->cronPause[$field]);
+
+            return $entry;
+        }, $this->cronHeartbeat()?->all() ?? []);
     }
 
     /**

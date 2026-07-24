@@ -53,6 +53,14 @@ use HugoCMS\FileManager\Exception\ApiException;
  *   window_start (optional) Beginn des Fensters, „HH:MM“ Serverzeit. Standard 07:00.
  *   window_end   (optional) Ende des Fensters, „HH:MM“. Standard 16:00.
  *   per_day      (optional) Höchstzahl Freigaben je Tag (1–50). Standard 3.
+ *
+ * Reservierte Sektion [cron] (kein Mount): Pausenschalter der drei Cron-Skripte
+ * dieser Webseite. Ist ein Schalter an, prüft das zugehörige CLI-Skript das beim
+ * Start und tut nichts — so lässt sich ein Cron-Job aussetzen, ohne die Crontab
+ * des Hosters anzufassen.
+ *   pause_build       (optional) true pausiert cron-build.php. Standard: aus.
+ *   pause_improve     (optional) true pausiert cron-improve.php. Standard: aus.
+ *   pause_healthcheck (optional) true pausiert cron-healthcheck.php. Standard: aus.
  */
 final class MountConfig
 {
@@ -63,6 +71,7 @@ final class MountConfig
     private const LIVE_ANALYSIS_SECTION = 'live_analysis';
     private const SEO_REPORT_SECTION = 'seo_report';
     private const IMPROVE_SECTION = 'improve';
+    private const CRON_SECTION = 'cron';
 
     /** Vorgaben des Automatikmodus, wenn die [improve]-Sektion fehlt. */
     private const IMPROVE_DEFAULTS = [
@@ -81,6 +90,7 @@ final class MountConfig
      *   liveAnalysis: ?string,
      *   seoReport: array{excludePrefixes: list<string>, excludeFiles: list<string>},
      *   improve: array{auto: bool, windowStart: string, windowEnd: string, perDay: int},
+     *   cron: array{pauseBuild: bool, pauseImprove: bool, pauseHealthcheck: bool},
      *   warnings: list<array{key: string, params: list<mixed>}>
      * }
      */
@@ -103,6 +113,7 @@ final class MountConfig
         $liveAnalysis = null;
         $seoReport = ['excludePrefixes' => [], 'excludeFiles' => []];
         $improve = self::IMPROVE_DEFAULTS;
+        $cron = ['pauseBuild' => false, 'pauseImprove' => false, 'pauseHealthcheck' => false];
         $warnings = [];
 
         foreach ($raw as $name => $section) {
@@ -168,6 +179,16 @@ final class MountConfig
                 continue;
             }
 
+            // Pausenschalter der Cron-Skripte (optional, pro Webseite).
+            if (strtolower((string) $name) === self::CRON_SECTION) {
+                $cron = [
+                    'pauseBuild' => filter_var($section['pause_build'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                    'pauseImprove' => filter_var($section['pause_improve'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                    'pauseHealthcheck' => filter_var($section['pause_healthcheck'] ?? false, FILTER_VALIDATE_BOOLEAN),
+                ];
+                continue;
+            }
+
             $path = isset($section['path']) ? trim((string) $section['path']) : '';
             if ($path === '') {
                 throw new ApiException('ECONFIG', 500, 'MOUNTS-PATH-REQUIRED', [(string) $name]);
@@ -203,6 +224,7 @@ final class MountConfig
             'liveAnalysis' => $liveAnalysis,
             'seoReport' => $seoReport,
             'improve' => $improve,
+            'cron' => $cron,
             'warnings' => $warnings,
         ];
     }

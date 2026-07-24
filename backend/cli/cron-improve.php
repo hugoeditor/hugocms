@@ -88,6 +88,12 @@ try {
     exit(1);
 }
 
+// Im Systemstatus für diese Webseite pausiert (siehe [cron] pause_improve).
+if (!empty($result['paused'])) {
+    fwrite(STDOUT, "Cron-Aufgabe „improve“ ist pausiert — kein Lauf.\n");
+    exit(0);
+}
+
 $processed = $result['processed'] ?? [];
 if ($dryRun) {
     fwrite(STDOUT, sprintf(

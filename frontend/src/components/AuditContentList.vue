@@ -171,6 +171,19 @@ async function remove(page) {
         />
       </div>
 
+      <!-- Der Cron-Verbesserer ist pausiert: Diese Liste wird nicht abgearbeitet,
+           bis er im Systemstatus fortgesetzt wird. -->
+      <v-alert
+        v-if="mode === 'toImprove' && auth.cronPause.pauseImprove"
+        type="warning"
+        density="compact"
+        variant="tonal"
+        class="ma-2 nemo-alert"
+        prepend-icon="mdi-pause-circle-outline"
+      >
+        {{ $t('contentQuality.improvePaused') }}
+      </v-alert>
+
       <!-- Automatikmodus des Cron-Verbesserers: Er arbeitet genau diese Liste
            ab, deshalb steht der Schalter hier. Fenster und Tagesmenge werden in
            den Projekteinstellungen festgelegt. -->

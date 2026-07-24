@@ -92,6 +92,12 @@ try {
     exit(1);
 }
 
+// Im Systemstatus für diese Webseite pausiert (siehe [cron] pause_healthcheck).
+if (!empty($result['paused'])) {
+    fwrite(STDOUT, "Cron-Aufgabe „healthcheck“ ist pausiert — kein Lauf.\n");
+    exit(0);
+}
+
 $summary = $result['summary'] ?? ['error' => 0, 'warning' => 0, 'hint' => 0];
 fwrite(STDOUT, sprintf(
     "Gesundheitscheck: %d Seiten, %d Fehler / %d Warnungen / %d Hinweise.\n",

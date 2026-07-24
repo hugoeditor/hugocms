@@ -72,6 +72,15 @@ try {
     exit(1);
 }
 
+// Im Systemstatus für diese Webseite pausiert (siehe [cron] pause_build) — der
+// Lauf hat bewusst nichts getan. Kein Fehler.
+if (!empty($result['paused'])) {
+    if (!$quiet) {
+        fwrite(STDOUT, "Cron-Aufgabe „build“ ist pausiert — kein Lauf.\n");
+    }
+    exit(0);
+}
+
 if (empty($result['success'])) {
     fwrite(STDERR, sprintf("Hugo-Lauf fehlgeschlagen (Code %d):\n%s\n", (int) $result['exitCode'], (string) $result['output']));
     exit(1);
