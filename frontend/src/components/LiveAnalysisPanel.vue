@@ -155,6 +155,43 @@ const BROWSER_METRICS = [
   { key: 'tti_ms', unit: ' ms' },
 ]
 
+// Diagnose-Kennwerte in Anzeigereihenfolge (Serverantwort, Seitengewicht,
+// DOM-Größe, JS-Ausführungs- und Hauptthread-Zeit). Der Sidecar liefert je
+// Kennwert Wert + lesbare Darstellung; fehlende lässt die Anzeige aus.
+const BROWSER_DIAGNOSTICS = [
+  'server-response-time', 'total-byte-weight', 'dom-size', 'bootup-time', 'mainthread-work-breakdown',
+]
+
+// Vorhandene Diagnose-Kennwerte in fester Reihenfolge, als { key, display }.
+const browserDiagnostics = computed(() => {
+  const diag = live.result?.browser?.diagnostics
+  if (!diag) return []
+  return BROWSER_DIAGNOSTICS
+    .filter((key) => diag[key])
+    .map((key) => ({ key, display: diag[key].display || String(diag[key].value) }))
+})
+
+// Optimierungs-Chancen (bereits nach Wirkung sortiert und gekappt vom Dienst).
+const browserOpportunities = computed(() => live.result?.browser?.opportunities ?? [])
+
+// Kompakte Byte-Angabe (KiB/MiB) für die Verursacher einer Chance.
+function fmtBytes(n) {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return ''
+  if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MiB'
+  if (n >= 1024) return Math.round(n / 1024) + ' KiB'
+  return n + ' B'
+}
+
+// Ersparnis-Text einer Chance: bevorzugt Lighthouses eigene Angabe, sonst aus
+// den Zahlen zusammengesetzt (Zeit und/oder Datenmenge).
+function opportunitySavings(o) {
+  if (o.display) return o.display
+  const parts = []
+  if (o.savings_ms >= 1) parts.push(o.savings_ms + ' ms')
+  if (o.savings_bytes) parts.push(fmtBytes(o.savings_bytes))
+  return parts.join(' · ')
+}
+
 // Export-Adressen (server-seitig, am JSON-Umschlag vorbei). HTML im neuen Tab
 // zum Drucken, CSV als Download. `locale` lokalisiert auch den Bericht selbst
 // (Befundtexte und Beschriftungen) — das leistet nur der Dienst.
@@ -514,6 +551,42 @@ function fmtDate(iso) {
             </div>
           </div>
 
+          <!-- Diagnose-Kennwerte (Serverantwort, Seitengewicht, DOM-Größe …) -->
+          <div v-if="browserDiagnostics.length" class="la-facts la-bmetrics">
+            <div v-for="d in browserDiagnostics" :key="d.key" class="la-fact">
+              <span class="la-fact-k">{{ $t('liveAnalysis.browser.diag.' + d.key) }}</span>
+              {{ d.display }}
+            </div>
+          </div>
+
+          <!-- Optimierungs-Chancen mit Verursachern (aufklappbar) -->
+          <div v-if="browserOpportunities.length" class="la-opps">
+            <div class="la-opps-title">{{ $t('liveAnalysis.browser.oppsTitle') }}</div>
+            <details v-for="o in browserOpportunities" :key="o.id" class="la-opp">
+              <summary class="la-opp-head">
+                <span class="la-opp-title">{{ o.title }}</span>
+                <span v-if="opportunitySavings(o)" class="la-opp-savings">{{ opportunitySavings(o) }}</span>
+              </summary>
+              <ul v-if="o.items?.length" class="la-opp-items">
+                <li v-for="(it, i) in o.items" :key="i" class="la-opp-item">
+                  <span class="la-opp-item-label">{{ it.label }}</span>
+                  <span v-if="it.bytes || it.ms" class="la-opp-item-cost">
+                    <template v-if="it.bytes">{{ fmtBytes(it.bytes) }}</template>
+                    <template v-if="it.ms">{{ it.bytes ? ' · ' : '' }}{{ it.ms }} ms</template>
+                  </span>
+                </li>
+                <li v-if="o.more_items > 0" class="la-opp-more">
+                  {{ $t('liveAnalysis.browser.oppsMore', [o.more_items]) }}
+                </li>
+              </ul>
+            </details>
+          </div>
+
+          <!-- Lauf-Warnungen von Lighthouse (Messung evtl. beeinträchtigt) -->
+          <div v-if="live.result.browser.run_warnings?.length" class="la-warnings">
+            <div v-for="(w, i) in live.result.browser.run_warnings" :key="i" class="la-warning">{{ w }}</div>
+          </div>
+
           <!-- Konkrete Accessibility-Verstöße (der Befund nennt nur den Score) -->
           <div v-if="live.result.browser.accessibility_failures?.length" class="la-a11y">
             <div class="la-a11y-title">
@@ -530,6 +603,9 @@ function fmtDate(iso) {
 
           <div v-if="live.result.browser.lighthouse_version" class="la-muted la-lhver">
             {{ $t('liveAnalysis.browser.version', [live.result.browser.lighthouse_version]) }}
+            <template v-if="live.result.browser.environment?.device">
+              · {{ live.result.browser.environment.device }}<template v-if="live.result.browser.environment.throttling"> · {{ live.result.browser.environment.throttling }}</template>
+            </template>
           </div>
         </template>
       </div>
@@ -734,6 +810,52 @@ function fmtDate(iso) {
 .la-a11y-text { flex: 1 1 auto; color: var(--mint-text); }
 .la-a11y-id { flex: 0 0 auto; font-size: 0.72rem; color: var(--mint-text-muted); }
 .la-lhver { margin-top: 10px; font-size: 0.76rem; }
+
+/* Optimierungs-Chancen (aufklappbar) */
+.la-opps { margin-top: 14px; }
+.la-opps-title { font-size: 0.84rem; font-weight: 600; margin-bottom: 6px; color: var(--mint-text); }
+.la-opp { border-bottom: 1px solid var(--mint-border); }
+.la-opp-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: 0.82rem;
+  cursor: pointer;
+  list-style: none;
+}
+.la-opp-head::-webkit-details-marker { display: none; }
+.la-opp-head::before {
+  content: '▸';
+  flex: 0 0 auto;
+  color: var(--mint-text-muted);
+  font-size: 0.7rem;
+}
+.la-opp[open] > .la-opp-head::before { content: '▾'; }
+.la-opp-title { flex: 1 1 auto; color: var(--mint-text); }
+.la-opp-savings { flex: 0 0 auto; color: var(--mint-text-muted); white-space: nowrap; }
+.la-opp-items { list-style: none; margin: 2px 0 8px; padding: 0 0 0 16px; }
+.la-opp-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 0.76rem;
+}
+.la-opp-item-label { flex: 1 1 auto; word-break: break-all; color: var(--mint-text-muted); }
+.la-opp-item-cost { flex: 0 0 auto; color: var(--mint-text-muted); white-space: nowrap; }
+.la-opp-more { padding: 2px 0; font-size: 0.74rem; color: var(--mint-text-muted); font-style: italic; }
+
+/* Lauf-Warnungen von Lighthouse */
+.la-warnings { margin-top: 12px; }
+.la-warning {
+  padding: 5px 8px;
+  margin-bottom: 4px;
+  font-size: 0.78rem;
+  border-radius: 6px;
+  background: #fdf2e0;
+  color: #c47f17;
+}
 
 .la-export { display: flex; gap: 10px; }
 
