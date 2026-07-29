@@ -1,50 +1,49 @@
 #!/bin/bash
-# crontab-entries.sh — Gibt für ALLE eingerichteten Webseiten die passenden
-# Crontab-Zeilen aus (bauen, verbessern, Gesundheitscheck) — analog zu den
-# Beispielen in der Hilfe (Systemstatus → Cron-Aufgaben) und, wie update.sh,
-# über alle Webseiten in einem Durchgang.
+# crontab-entries.sh — Prints the matching crontab lines for ALL configured
+# sites (build, improve, health check) — analogous to the examples in the help
+# (System status → Cron tasks) and, like update.sh, across all sites in one pass.
 #
-# Hintergrund: Jeder Cron-Aufruf betrifft genau EINE Webseite (kein Lauf über
-# alle Projekte). Bei mehreren Webseiten braucht daher jede eigene Einträge mit
-# ihrer Mount-Datei (--mounts) und — für die Pro-Skripte — ihrer lizenzierten
-# Domain (--host). Dieses Skript liest jede Mount-Datei backend/mounts/<hash>.ini,
-# entnimmt Host (aus dem Kopfkommentar von install.sh) und Lizenzstatus
-# ([license] key) und setzt die Zeilen zusammen.
+# Background: Each cron invocation concerns exactly ONE site (no run across all
+# projects). With multiple sites, each therefore needs its own entries with its
+# mount file (--mounts) and — for the Pro scripts — its licensed domain (--host).
+# This script reads every mount file backend/mounts/<hash>.ini, takes the host
+# (from install.sh's header comment) and the license status ([license] key) and
+# assembles the lines.
 #
-# Das Skript ÄNDERT NICHTS an der Crontab — es gibt die Zeilen nur aus. Prüfen,
-# dann von Hand übernehmen:
-#     bin/crontab-entries.sh                       Zeilen anzeigen
-#     bin/crontab-entries.sh --limit=5             --limit der Verbesserung setzen (Standard 3)
-#     bin/crontab-entries.sh --php=/usr/bin/php8.2  PHP-Pfad vorgeben
-#     bin/crontab-entries.sh > cron.txt            zum Prüfen speichern, dann via 'crontab -e' übernehmen
+# The script does NOT change the crontab — it only prints the lines. Review
+# them, then apply by hand:
+#     bin/crontab-entries.sh                       show lines
+#     bin/crontab-entries.sh --limit=5             set the improve --limit (default 3)
+#     bin/crontab-entries.sh --php=/usr/bin/php8.2  provide the PHP path
+#     bin/crontab-entries.sh > cron.txt            save to review, then apply via 'crontab -e'
 #
-# Zeitplan (je Webseite versetzt, damit nicht alle gleichzeitig laufen):
-#   bauen            alle 15 Minuten (baut nur bei fälligen Freigaben;
-#                    für Hugos Front-Matter-publishDate zusätzlich --force)
-#   verbessern       nachts ~3 Uhr, je Seite um 5 Minuten versetzt (Pro)
-#   Gesundheitscheck morgens ~6 Uhr, ebenso versetzt (Pro)
+# Schedule (staggered per site so they don't all run at once):
+#   build            every 15 minutes (builds only when releases are due;
+#                    for Hugo's front-matter publishDate additionally --force)
+#   improve          nightly ~3am, staggered by 5 minutes per site (Pro)
+#   health check     mornings ~6am, likewise staggered (Pro)
 #
-# Das Skript liegt im bin/ des Release-Repos und ermittelt dessen Wurzel
-# relativ zu sich selbst — das Repo darf an beliebiger Stelle liegen.
+# The script lives in the bin/ of the release repo and determines its root
+# relative to itself — the repo may reside anywhere.
 
 set -euo pipefail
 
-# --- Release-Wurzel relativ zum Skript -------------------------------------
+# --- Release root relative to the script -----------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BACKEND_DIR="$PKG_ROOT/backend"
 MOUNTS_DIR="$BACKEND_DIR/mounts"
 CLI_DIR="$BACKEND_DIR/cli"
 
-# read_ini_value aus derselben Bibliothek wie install.sh/update.sh (kein
-# doppelter INI-Leser). deploy_app wird hier nicht benutzt.
+# read_ini_value from the same library as install.sh/update.sh (no duplicate
+# INI reader). deploy_app is not used here.
 source "$SCRIPT_DIR/lib/deploy.sh"
 
 usage() {
-    sed -n '2,26p' "$0" | sed 's/^#\( \|$\)//'
+    sed -n '2,24p' "$0" | sed 's/^#\( \|$\)//'
 }
 
-# --- Parameter -------------------------------------------------------------
+# --- Parameters ------------------------------------------------------------
 LIMIT=3
 PHP_BIN=""
 for arg in "$@"; do
@@ -52,31 +51,32 @@ for arg in "$@"; do
         --limit=*) LIMIT="${arg#*=}" ;;
         --php=*)   PHP_BIN="${arg#*=}" ;;
         -h|--help) usage; exit 0 ;;
-        *) echo "Unbekannte Option: $arg" >&2; echo "  (bin/crontab-entries.sh --help)" >&2; exit 1 ;;
+        *) echo "Unknown option: $arg" >&2; echo "  (bin/crontab-entries.sh --help)" >&2; exit 1 ;;
     esac
 done
 
 if ! printf '%s' "$LIMIT" | grep -qE '^[1-9][0-9]*$'; then
-    echo "❌ --limit muss eine positive Zahl sein: '$LIMIT'" >&2
+    echo "❌ --limit must be a positive number: '$LIMIT'" >&2
     exit 1
 fi
 
-# PHP-Programm: vorgegeben, sonst aus dem PATH, sonst /usr/bin/php. In der
-# Crontab MUSS der volle Pfad stehen — dort ist der Suchpfad minimal.
+# PHP program: given, otherwise from PATH, otherwise /usr/bin/php. In the crontab
+# the full path MUST be used — the search path is minimal there.
 if [ -z "$PHP_BIN" ]; then
     PHP_BIN="$(command -v php || true)"
     [ -z "$PHP_BIN" ] && PHP_BIN="/usr/bin/php"
 fi
 
-# Host aus dem Kopfkommentar der Mount-Datei lesen. install.sh schreibt dort
-# "; HugoCMS – Mounts für <HOST> (von install.sh erzeugt)."; der Hash im
-# Dateinamen ist nicht umkehrbar, deshalb ist der Kommentar die Quelle.
+# Read the host from the mount file's header comment. install.sh writes there
+# "; HugoCMS – Mounts für <HOST> (von install.sh erzeugt)."; the hash in the
+# filename is not reversible, so the comment is the source. That header line is
+# German by design — it is the parsed contract with the generated mount file.
 read_mount_host() {
     sed -n 's/.*Mounts für \(.*\) (von install\.sh.*/\1/p' "$1" | head -n1
 }
 
-# Eine Crontab-Zeile ausrichten: Zeitplan | php | cli/<skript> | Rest. Der
-# Skriptname wird auf feste Breite gepolstert, damit --mounts untereinander steht.
+# Align one crontab line: schedule | php | cli/<script> | rest. The script name
+# is padded to a fixed width so that --mounts lines up underneath.
 emit() {
     local sched="$1" script="$2" rest="$3"
     printf '%-13s %s %s/%-20s %s\n' "$sched" "$PHP_BIN" "$CLI_DIR" "$script" "$rest"
@@ -85,19 +85,19 @@ emit() {
 shopt -s nullglob
 mounts=("$MOUNTS_DIR"/*.ini)
 if [ "${#mounts[@]}" -eq 0 ]; then
-    echo "# Keine Mount-Dateien in $MOUNTS_DIR — keine Webseite eingerichtet." >&2
+    echo "# No mount files in $MOUNTS_DIR — no site configured." >&2
     exit 0
 fi
 
-# --- Kopf ------------------------------------------------------------------
+# --- Header ----------------------------------------------------------------
 cat <<EOF
 # ===========================================================================
-# HugoCMS – Crontab-Einträge (${#mounts[@]} Webseite(n))
-# Erzeugt von bin/crontab-entries.sh · PHP: $PHP_BIN
+# HugoCMS – Crontab entries (${#mounts[@]} site(s))
+# Generated by bin/crontab-entries.sh · PHP: $PHP_BIN
 #
-# Ein Aufruf betrifft immer nur EINE Webseite. Diese Zeilen prüfen und dann
-# übernehmen (z. B. via 'crontab -e'). Die Pro-Skripte (verbessern,
-# Gesundheitscheck) erscheinen nur für Webseiten mit hinterlegter Lizenz.
+# One invocation always concerns just ONE site. Review these lines and then
+# apply them (e.g. via 'crontab -e'). The Pro scripts (improve, health check)
+# appear only for sites with a stored license.
 # ===========================================================================
 EOF
 
@@ -105,23 +105,23 @@ idx=0
 for f in "${mounts[@]}"; do
     host="$(read_mount_host "$f")"
     license="$(read_ini_value "$f" license key)"
-    min=$(( (idx * 5) % 60 ))   # Pro-Skripte je Seite um 5 Minuten versetzen
+    min=$(( (idx * 5) % 60 ))   # stagger the Pro scripts by 5 minutes per site
     idx=$((idx + 1))
 
     echo ""
     echo "# ── ${host:-$(basename "$f")} ──  ($(basename "$f"))"
 
-    # Bauen: keine Lizenz nötig, für jede Webseite.
+    # Build: no license required, for every site.
     emit "*/15 * * * *" "cron-build.php" "--mounts=$f --quiet"
 
-    # Verbessern und Gesundheitscheck sind Pro — nur mit hinterlegter Lizenz.
+    # Improve and health check are Pro — only with a stored license.
     if [ -z "$license" ]; then
-        echo "#   (keine Lizenz in [license] key — verbessern/Gesundheitscheck übersprungen)"
+        echo "#   (no license in [license] key — improve/health check skipped)"
         continue
     fi
     if [ -z "$host" ]; then
-        echo "#   ⚠ Host nicht aus der Mount-Datei ermittelbar — --host von Hand eintragen:"
-        host="BITTE-DOMAIN-EINTRAGEN"
+        echo "#   ⚠ Host not determinable from the mount file — set --host by hand:"
+        host="PLEASE-SET-DOMAIN"
     fi
 
     emit "$min 3 * * *" "cron-improve.php"     "--mounts=$f --host=$host --limit=$LIMIT"

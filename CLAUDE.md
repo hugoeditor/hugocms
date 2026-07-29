@@ -53,6 +53,15 @@ offensichtlich ist — die ausführliche Funktionsübersicht steht in der README
 - **Sprache**: Kommentare, Commit-Messages und UI-Texte auf klarem Hochdeutsch
   (siehe globale `~/.claude/CLAUDE.md`). Fachbegriffe (Mount, Commit, Cache)
   bleiben.
+- **Shell-Skripte auf Englisch**: Skripte unter `bin/` (und generell alle
+  Shell-Skripte) sind für Profi-Admins gedacht — ihr Kommentar- und Terminal-
+  Ausgabe-Text ist **englisch**. NICHT übersetzt wird der Inhalt, den ein Skript
+  in erzeugte Dateien schreibt: die `label`-Werte und Kommentare der erzeugten
+  `mounts/<hash>.ini` bleiben deutsch (Redakteurs-UI bzw. neben den deutschen
+  `*.ini.beispiel`). Insbesondere ist die Kopfzeile
+  `; HugoCMS – Mounts für <HOST> (von install.sh erzeugt).` ein **geparster
+  Vertrag** (`bin/sites.sh`, `bin/crontab-entries.sh`) und bleibt wörtlich
+  deutsch.
 - **i18n**: jede nutzersichtbare Zeichenkette in `frontend/src/i18n/de.js` UND
   `en.js`. Backend-Fehler tragen nur Codes/Schlüssel; der Client übersetzt.
 - **`*.ini`** ist gitignored (instanzspezifisch); nur `*.ini.beispiel` gehört

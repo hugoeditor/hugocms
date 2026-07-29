@@ -1,58 +1,58 @@
 #!/bin/bash
-# install.sh — Richtet eine HugoCMS-Webseite im Produktivsystem ein.
+# install.sh — Sets up a HugoCMS site on a production system.
 #
-# Aufruf:
-#     bin/install.sh <host> <hugo-publish-ordner>
+# Usage:
+#     bin/install.sh <host> <hugo-publish-directory>
 #
-#   <host>                 Hostname der Webseite OHNE Schema/Port/Pfad,
-#                          z. B. kunde-a.example.com (so wie der Browser ihn
-#                          sendet). Den Endpunkt-Pfad (/cms-api) ergänzt das
-#                          Skript selbst — passend zum Verzeichnisnamen unten.
-#   <hugo-publish-ordner>  Veröffentlichungsverzeichnis von Hugo; hier werden
-#                          edit/ (Frontend) und cms-api/ (Endpunkt) angelegt.
+#   <host>                    Hostname of the site WITHOUT scheme/port/path,
+#                             e.g. kunde-a.example.com (as the browser sends it).
+#                             The script appends the endpoint path (/cms-api)
+#                             itself — matching the directory name below.
+#   <hugo-publish-directory>  Hugo's publish directory; edit/ (frontend) and
+#                             cms-api/ (endpoint) are created here.
 #
-# Wirkung:
-#   1. Erzeugt — falls noch nicht vorhanden — die host-spezifische Mount-Datei
-#        backend/mounts/<hash>.ini   (Hash wie scripts/site-hash.sh)
-#      mit dem gesamten Hugo-Projektverzeichnis als erstem Mount (projekt,
-#      Zugriff auf ALLE Dateien inkl. config.* und Theme) sowie content/,
-#      layouts/ und static/ darin (Elternverzeichnis des Publish-Ordners).
-#      Pfade bei Bedarf anpassen.
-#   2. Richtet die App ohne Symlinks ein — funktioniert damit auch auf Hostings,
-#      deren Webserver Symlinks nicht folgt (z. B. Shared Hosting):
-#        edit/             KOPIE von <hugocms-release>/app  (Frontend, URL /edit/)
-#        cms-api/          (Endpunkt, URL /cms-api/)
-#          └── index.php   (erzeugt; bindet das Release-backend/ per require ein)
-#      Der PHP-Code bleibt im Release-Repo; nur das Frontend wird kopiert.
-#      Die App wird an ZWEI Stellen abgelegt: direkt im Publish-Ordner (sofort
-#      erreichbar) und im Hugo-static-Verzeichnis. Da Hugo static/ bei jedem
-#      Build in den Publish-Ordner spiegelt, übersteht die App so auch ein
-#      'hugo --cleanDestinationDir'. Nach einem Update (git pull im Release-Repo)
-#      das Skript erneut ausführen, damit beide Kopien aktualisiert werden.
+# Effect:
+#   1. Creates — if not already present — the host-specific mount file
+#        backend/mounts/<hash>.ini   (hash as in scripts/site-hash.sh)
+#      with the entire Hugo project directory as the first mount (projekt,
+#      access to ALL files incl. config.* and theme) plus content/, layouts/
+#      and static/ within it (parent directory of the publish directory).
+#      Adjust paths as needed.
+#   2. Sets up the app without symlinks — so it also works on hostings whose
+#      web server does not follow symlinks (e.g. shared hosting):
+#        edit/             COPY of <hugocms-release>/app  (frontend, URL /edit/)
+#        cms-api/          (endpoint, URL /cms-api/)
+#          └── index.php   (generated; includes the release backend/ via require)
+#      The PHP code stays in the release repo; only the frontend is copied.
+#      The app is placed in TWO locations: directly in the publish directory
+#      (immediately reachable) and in the Hugo static/ directory. Because Hugo
+#      mirrors static/ into the publish directory on every build, the app
+#      survives a 'hugo --cleanDestinationDir'. After an update (git pull in the
+#      release repo) run the script again so both copies are refreshed.
 #
-# Das Skript liegt im bin/ des Release-Repos und ermittelt dessen Wurzel
-# relativ zu sich selbst — das Repo darf an beliebiger Stelle liegen.
+# The script lives in the bin/ of the release repo and determines its root
+# relative to itself — the repo may reside anywhere.
 
 set -euo pipefail
 
-# --- Release-Wurzel relativ zum Skript -----------------------------------
+# --- Release root relative to the script ---------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 APP_DIR="$PKG_ROOT/app"
 BACKEND_DIR="$PKG_ROOT/backend"
 MOUNTS_DIR="$BACKEND_DIR/mounts"
 
-# Gemeinsame Auslieferungslogik (deploy_app sowie die Verzeichnisnamen
-# EDIT_DIR/API_DIR/BACKEND_LINK) — dieselbe Quelle wie update.sh, damit
-# Ersteinrichtung und Aktualisierung nicht auseinanderdriften.
+# Shared deployment logic (deploy_app as well as the directory names
+# EDIT_DIR/API_DIR/BACKEND_LINK) — the same source as update.sh, so that initial
+# setup and update do not drift apart.
 source "$SCRIPT_DIR/lib/deploy.sh"
 
-# --- Parameter prüfen ------------------------------------------------------
+# --- Check parameters ------------------------------------------------------
 ARGS=()
 for arg in "$@"; do
     case "$arg" in
         -h|--help)
-            echo "Aufruf: $0 <host> <hugo-publish-ordner>"
+            echo "Usage: $0 <host> <hugo-publish-directory>"
             exit 0
             ;;
         *) ARGS+=("$arg") ;;
@@ -60,71 +60,71 @@ for arg in "$@"; do
 done
 
 if [ "${#ARGS[@]}" -ne 2 ]; then
-    echo "Aufruf: $0 <host> <hugo-publish-ordner>" >&2
-    echo "  z. B. $0 kunde-a.example.com /var/www/kunde-a/public" >&2
+    echo "Usage: $0 <host> <hugo-publish-directory>" >&2
+    echo "  e.g. $0 kunde-a.example.com /var/www/kunde-a/public" >&2
     exit 1
 fi
 
 HOST="${ARGS[0]}"
 PUBLISH="${ARGS[1]}"
 
-# Host grob prüfen: kein Schema, kein Port, kein Pfad, kein Leerzeichen.
+# Rough host check: no scheme, no port, no path, no whitespace.
 if printf '%s' "$HOST" | grep -qE '[/:[:space:]]'; then
-    echo "❌ <host> darf nur den Hostnamen enthalten (kein Schema/Port/Pfad): '$HOST'" >&2
+    echo "❌ <host> must contain only the hostname (no scheme/port/path): '$HOST'" >&2
     exit 1
 fi
 
-# Voraussetzungen: Release-Struktur und Publish-Ordner.
+# Prerequisites: release structure and publish directory.
 for d in "$APP_DIR" "$BACKEND_DIR"; do
     if [ ! -d "$d" ]; then
-        echo "❌ Erwartetes Verzeichnis fehlt: $d" >&2
-        echo "   Liegt install.sh wirklich im bin/ des Release-Repos?" >&2
+        echo "❌ Expected directory missing: $d" >&2
+        echo "   Does install.sh really live in the bin/ of the release repo?" >&2
         exit 1
     fi
 done
 if [ ! -d "$PUBLISH" ]; then
-    echo "❌ Publish-Ordner existiert nicht: $PUBLISH" >&2
+    echo "❌ Publish directory does not exist: $PUBLISH" >&2
     exit 1
 fi
 PUBLISH_ABS="$(cd "$PUBLISH" && pwd)"
 
 echo "========================================="
-echo "HugoCMS - Webseite einrichten"
+echo "HugoCMS - Set up site"
 echo "========================================="
-echo "Release-Repo: $PKG_ROOT"
-echo "Webseite:       $HOST"
-echo "Publish-Ordner: $PUBLISH_ABS"
+echo "Release repo:      $PKG_ROOT"
+echo "Site:              $HOST"
+echo "Publish directory: $PUBLISH_ABS"
 echo ""
 
-# --- 0. Hugo bereitstellen -------------------------------------------------
-# Das Hugo-Binary wird nicht mitausgeliefert (bin/hugo/ ist ignoriert); beim
-# ersten Lauf per get-hugo.sh nachladen.
+# --- 0. Provide Hugo -------------------------------------------------------
+# The Hugo binary is not shipped (bin/hugo/ is ignored); fetch it via
+# get-hugo.sh on first run.
 if [ ! -x "$SCRIPT_DIR/hugo/hugo" ]; then
-    echo "0. Hugo-Binary nicht vorhanden — wird heruntergeladen …"
+    echo "0. Hugo binary not present — downloading …"
     "$SCRIPT_DIR/get-hugo.sh"
     echo ""
 fi
 
-# --- 1. Host-spezifische Mount-Datei (Hugo-Struktur) -----------------------
-# Site-Kennung = Host + Endpunkt-Pfad; Hash identisch zu backend/core/SiteKey.php.
+# --- 1. Host-specific mount file (Hugo structure) --------------------------
+# Site identifier = host + endpoint path; hash identical to backend/core/SiteKey.php.
 SITE_KEY="${HOST}/${API_DIR}"
 HASH="$(printf '%s' "$SITE_KEY" | sha256sum | cut -d' ' -f1)"
 MOUNT_FILE="$MOUNTS_DIR/${HASH}.ini"
 
-# Hugo-Projektverzeichnis = Elternverzeichnis des Publish-Ordners; dort liegen
-# content/, layouts/ und static/. ABSOLUTE Pfade verwenden — relative Pfade in
-# der Mount-Datei gälten sonst relativ zu backend/mounts/, nicht zum Projekt.
+# Hugo project directory = parent directory of the publish directory; content/,
+# layouts/ and static/ live there. Use ABSOLUTE paths — relative paths in the
+# mount file would otherwise be relative to backend/mounts/, not the project.
 HUGO_ROOT="$(dirname "$PUBLISH_ABS")"
 
-# Standard-Sektionen als gemeinsame Quelle für Neuanlage UND Nachrüstung, damit
-# beide Pfade nicht auseinanderdriften. source/destination der [hugo]-Sektion
-# werden wie die Mount-Pfade aus dem Hugo-Projektverzeichnis bzw. dem
-# übergebenen Publish-Ordner abgeleitet.
+# Default sections as a shared source for both creation AND retrofit, so the two
+# paths do not drift apart. source/destination of the [hugo] section are derived
+# — like the mount paths — from the Hugo project directory and the given publish
+# directory. The section labels are the display names in the German CMS client
+# and therefore stay German (see mounts.ini.beispiel).
 
-# Projekt-Mount: das gesamte Hugo-Projektverzeichnis. Ohne accept-Beschränkung,
-# damit der Benutzer auf ALLE Dateien zugreifen kann (config.toml/hugo.yaml,
-# Theme-Ordner u. a.) — nicht nur auf content/layouts/static. Steht bewusst als
-# LETZTER Mount.
+# Project mount: the entire Hugo project directory. Without an accept restriction
+# so the user can access ALL files (config.toml/hugo.yaml, theme directory etc.)
+# — not just content/layouts/static. Deliberately placed as the LAST mount.
 PROJEKT_BLOCK="[projekt]
 path = $HUGO_ROOT
 label = Alle Dateien"
@@ -149,9 +149,9 @@ HUGO_BLOCK="; Hugo-Aufruf für den Veröffentlichen-Knopf (Befehl \"build\"). Da
 source = $HUGO_ROOT
 destination = $PUBLISH_ABS"
 
-# Hängt einen Sektionsblock an die bestehende Mount-Datei an, falls die Sektion
-# fehlt, und legt ein optional angegebenes Verzeichnis an.
-# $1 = Sektionsname, $2 = Sektionsblock, $3 = optionales Verzeichnis.
+# Appends a section block to the existing mount file if the section is missing,
+# and creates an optionally given directory.
+# $1 = section name, $2 = section block, $3 = optional directory.
 append_section_if_missing() {
     local name="$1" block="$2" dir="${3:-}"
     if grep -q "^\[${name}\]" "$MOUNT_FILE"; then
@@ -159,27 +159,27 @@ append_section_if_missing() {
     fi
     [ -n "$dir" ] && mkdir -p "$dir"
     printf '\n%s\n' "$block" >> "$MOUNT_FILE"
-    echo "     [${name}] ergänzt${dir:+  -> $dir}"
+    echo "     [${name}] added${dir:+  -> $dir}"
 }
 
 mkdir -p "$MOUNTS_DIR"
-echo "1. Mount-Konfiguration (Hugo-Projekt: $HUGO_ROOT)"
-echo "   Site-Kennung: $SITE_KEY"
-echo "   Datei:        $MOUNT_FILE"
+echo "1. Mount configuration (Hugo project: $HUGO_ROOT)"
+echo "   Site identifier: $SITE_KEY"
+echo "   File:            $MOUNT_FILE"
 if [ -e "$MOUNT_FILE" ]; then
-    # Bestehende Datei nicht überschreiben (mögliche manuelle Anpassungen),
-    # aber fehlende Standard-Sektionen nachrüsten — z. B. bei Dateien, die eine
-    # ältere install.sh-Version ohne [hugo] erzeugt hat. Vorhandene Sektionen
-    # (auch umbenannte Mounts) bleiben unangetastet.
-    echo "   → existiert bereits; fehlende Standard-Sektionen werden ergänzt."
+    # Do not overwrite an existing file (possible manual adjustments), but
+    # retrofit missing default sections — e.g. for files created by an older
+    # install.sh version without [hugo]. Existing sections (including renamed
+    # mounts) stay untouched.
+    echo "   → already exists; missing default sections will be added."
     append_section_if_missing content "$CONTENT_BLOCK" "$HUGO_ROOT/content"
     append_section_if_missing layouts "$LAYOUTS_BLOCK" "$HUGO_ROOT/layouts"
     append_section_if_missing static  "$STATIC_BLOCK"  "$HUGO_ROOT/static"
     append_section_if_missing projekt "$PROJEKT_BLOCK" "$HUGO_ROOT"
     append_section_if_missing hugo    "$HUGO_BLOCK"
 else
-    # Mount-Zielverzeichnisse sicherstellen — das Backend verweigert Mounts
-    # auf nicht existierende Verzeichnisse.
+    # Ensure the mount target directories — the backend refuses mounts on
+    # non-existent directories.
     mkdir -p "$HUGO_ROOT/content" "$HUGO_ROOT/layouts" "$HUGO_ROOT/static"
     cat > "$MOUNT_FILE" <<EOF
 ; HugoCMS – Mounts für $HOST (von install.sh erzeugt).
@@ -196,64 +196,65 @@ $PROJEKT_BLOCK
 
 $HUGO_BLOCK
 EOF
-    echo "   → erzeugt:  content -> $HUGO_ROOT/content"
+    echo "   → created:  content -> $HUGO_ROOT/content"
     echo "               layouts -> $HUGO_ROOT/layouts"
     echo "               static  -> $HUGO_ROOT/static"
-    echo "               projekt -> $HUGO_ROOT (alle Dateien)"
+    echo "               projekt -> $HUGO_ROOT (all files)"
     echo "               [hugo]  -> source $HUGO_ROOT -> destination $PUBLISH_ABS"
 fi
 echo ""
 
-# --- 1b. Zentralen Hugo-Programmpfad in die hugocms.ini eintragen ----------
-# Das Hugo-Binary wird installationsweit einmal konfiguriert: [hugo] bin in
-# der hugocms.ini. Existiert die Datei bereits (Einrichtung gelaufen) und hat
-# noch keine [hugo]-Sektion, ergänzen wir sie; sonst nur ein Hinweis, da die
-# hugocms.ini erst das Einrichtungs-Setup beim ersten Aufruf erzeugt.
+# --- 1b. Register the central Hugo program path in hugocms.ini -------------
+# The Hugo binary is configured once per installation: [hugo] bin in the
+# hugocms.ini. If the file already exists (setup has run) and has no [hugo]
+# section yet, we add it; otherwise only a hint, since hugocms.ini is created by
+# the setup on first access.
 CONFIG_FILE="$BACKEND_DIR/hugocms.ini"
 HUGO_BIN="$SCRIPT_DIR/hugo/hugo"
-echo "1b. Zentraler Hugo-Programmpfad (hugocms.ini, [hugo] bin)"
+echo "1b. Central Hugo program path (hugocms.ini, [hugo] bin)"
 if [ -f "$CONFIG_FILE" ]; then
     if grep -q '^\[hugo\]' "$CONFIG_FILE"; then
-        echo "    → [hugo]-Sektion vorhanden, bleibt unverändert (bin ggf. prüfen: $HUGO_BIN)."
+        echo "    → [hugo] section present, stays unchanged (verify bin if needed: $HUGO_BIN)."
     else
         printf '\n[hugo]\nbin = %s\n' "$HUGO_BIN" >> "$CONFIG_FILE"
-        echo "    → ergänzt: bin = $HUGO_BIN"
+        echo "    → added: bin = $HUGO_BIN"
     fi
 else
-    echo "    → hugocms.ini fehlt noch (Einrichtung folgt im Browser)."
-    echo "      Danach in die [hugo]-Sektion eintragen:  bin = $HUGO_BIN"
+    echo "    → hugocms.ini not present yet (setup follows in the browser)."
+    echo "      Afterwards add to the [hugo] section:  bin = $HUGO_BIN"
 fi
 echo ""
 
-# --- 2. App einrichten -----------------------------------------------------
-# Ohne Symlinks: Das Frontend wird kopiert, der API-Endpunkt erhält eine
-# erzeugte index.php mit absolutem require auf das Release-backend/. So
-# funktioniert es auch auf Hostings, deren Webserver Symlinks nicht folgt;
-# PHP liest per require ohnehin direkt im Release-Repo.
+# --- 2. Set up the app -----------------------------------------------------
+# Without symlinks: the frontend is copied, the API endpoint gets a generated
+# index.php with an absolute require on the release backend/. This works even on
+# hostings whose web server does not follow symlinks; PHP reads directly in the
+# release repo via require anyway.
 #
-# Die App wird an ZWEI Stellen abgelegt:
-#   • direkt im Publish-Ordner  — sofort erreichbar (vor dem ersten Hugo-Lauf),
-#   • im Hugo-static-Verzeichnis — Hugo spiegelt static/ bei jedem Build in den
-#     Publish-Ordner; dadurch übersteht die App ein 'hugo --cleanDestinationDir'.
-# Nach einem Update (git pull) dieses Skript erneut ausführen, damit beide
-# Kopien aktualisiert werden.
+# The app is placed in TWO locations:
+#   • directly in the publish directory — immediately reachable (before the first
+#     Hugo run),
+#   • in the Hugo static directory — Hugo mirrors static/ into the publish
+#     directory on every build; this way the app survives a
+#     'hugo --cleanDestinationDir'.
+# After an update (git pull) run this script again so both copies are refreshed.
 
-# deploy_app() — legt Frontend (edit/) und API-Endpunkt (cms-api/index.php) im
-# übergebenen Basisverzeichnis ab. Definiert in bin/lib/deploy.sh (oben per
-# `source` eingebunden), damit install.sh und update.sh identisch ausliefern.
+# deploy_app() — places frontend (edit/) and API endpoint (cms-api/index.php) in
+# the given base directory. Defined in bin/lib/deploy.sh (included above via
+# `source`), so install.sh and update.sh deliver identically.
 
-echo "2. App einrichten (Frontend + API-Endpunkt)"
+echo "2. Set up the app (frontend + API endpoint)"
 STATIC_DIR="$HUGO_ROOT/static"
 
 deploy_app "$PUBLISH_ABS"
-echo "   Publish-Ordner: $EDIT_DIR/ + $API_DIR/index.php  ($PUBLISH_ABS)"
+echo "   Publish directory: $EDIT_DIR/ + $API_DIR/index.php  ($PUBLISH_ABS)"
 
 deploy_app "$STATIC_DIR"
-echo "   Hugo-static:    $EDIT_DIR/ + $API_DIR/index.php  ($STATIC_DIR)"
-echo "   → Hugo spiegelt static/ bei jedem Build — die App übersteht damit"
+echo "   Hugo static:       $EDIT_DIR/ + $API_DIR/index.php  ($STATIC_DIR)"
+echo "   → Hugo mirrors static/ on every build — the app thus survives"
 echo "     'hugo --cleanDestinationDir'."
 echo ""
 
 echo "========================================="
-echo "✓ Einrichtung abgeschlossen für $HOST"
+echo "✓ Setup complete for $HOST"
 echo "========================================="
