@@ -1965,7 +1965,7 @@ final class Connector
      * (Systemstatus) — beide sollen dieselben Zahlen zeigen.
      *
      * @param array<string, mixed> $info
-     * @return array{valid: bool, name: string, quotaLimit: ?int, quotaUsed: ?float, quotaRemaining: ?float, quotaExceeded: bool}
+     * @return array{valid: bool, name: string, quotaLimit: ?int, quotaUsed: ?float, quotaRemaining: ?float, quotaExceeded: bool, features: array<string, bool>}
      */
     private static function normalizeServiceInfo(array $info): array
     {
@@ -1977,7 +1977,35 @@ final class Connector
             'quotaUsed' => isset($info['quotaUsed']) ? (float) $info['quotaUsed'] : null,
             'quotaRemaining' => isset($info['quotaRemaining']) ? (float) $info['quotaRemaining'] : null,
             'quotaExceeded' => (bool) ($info['quotaExceeded'] ?? false),
+            // Je Schlüssel freigeschaltete Dienst-Funktionen (z. B. transcribe,
+            // crux). Der Systemstatus listet die aktiven auf.
+            'features' => self::serviceFeatures($info['features'] ?? null),
         ];
+    }
+
+    /**
+     * Reduziert die `features`-Map aus /v1/verify auf boolesche Flags. Der Dienst
+     * meldet sie als key→bool; wir übernehmen jeden bekannten wie unbekannten
+     * Namen, aber nur echte Boolean-Werte. So erscheint eine künftige Funktion
+     * (etwa `crux`) automatisch im Status, sobald der Dienst sie meldet — ohne
+     * hier nachzuziehen.
+     *
+     * @param mixed $features
+     * @return array<string, bool>
+     */
+    private static function serviceFeatures(mixed $features): array
+    {
+        if (!is_array($features)) {
+            return [];
+        }
+        $out = [];
+        foreach ($features as $name => $enabled) {
+            if (is_string($name) && is_bool($enabled)) {
+                $out[$name] = $enabled;
+            }
+        }
+
+        return $out;
     }
 
     /**

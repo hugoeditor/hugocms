@@ -246,6 +246,12 @@ final class SeoSuccessClient
             if ($status === 401) {
                 throw new ApiException('ESPEECH', 502, 'SPEECH-AUTH-FAILED', [$code]);
             }
+            // Spracheingabe ist je Schlüssel schaltbar (transcribe_enabled); der
+            // Dienst antwortet 403 FEATURE-DISABLED, wenn sie nicht freigeschaltet
+            // ist. Eigener Schlüssel für eine klare, handlungsleitende Meldung.
+            if ($status === 403 || $code === 'FEATURE-DISABLED') {
+                throw new ApiException('ESPEECH', 502, 'SPEECH-FEATURE-DISABLED');
+            }
             throw new ApiException('ESPEECH', 502, 'SPEECH-REQUEST-FAILED', [$code]);
         }
 

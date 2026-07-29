@@ -19,7 +19,7 @@ import { buildNumber } from '../util/version'
 const HUGOCMS_URL = 'https://hugocms.com/'
 const COMPANY_URL = 'https://inter-data.de/'
 
-const { t, locale } = useI18n()
+const { t, te, locale } = useI18n()
 const store = useStatusStore()
 const auth = useAuthStore()
 const help = useHelpStore()
@@ -139,6 +139,23 @@ const serviceQuota = computed(() => {
     name: info.name || '',
   }
 })
+
+// Vom Dienst je Schlüssel freigeschaltete Funktionen (transcribe, crux …),
+// sobald eine Prüfung gelaufen ist. Nur die aktiven Namen, sonst leeres Array.
+const serviceFeatures = computed(() => {
+  const info = store.checks?.service?.info
+  if (!info || store.checks.service.status !== 'ok') return null
+  const feats = info.features
+  if (!feats || typeof feats !== 'object') return null
+  return Object.keys(feats).filter((k) => feats[k])
+})
+
+// Anzeigename einer Dienst-Funktion; unbekannte Namen roh durchreichen, damit
+// eine neu hinzukommende Funktion auch ohne Übersetzung sichtbar bleibt.
+function featureLabel(key) {
+  const k = 'status.features.' + key
+  return te(k) ? t(k) : key
+}
 
 // Ab 90 % rot, ab 75 % orange — der Balken soll vor dem Anschlag warnen.
 const quotaColor = computed(() => {
@@ -370,6 +387,14 @@ function scoreColor(score) {
                       {{ $t('status.keys.quotaExceeded') }}
                     </div>
                   </template>
+                </div>
+                <!-- Vom Dienst je Schlüssel freigeschaltete Funktionen -->
+                <div v-if="row.id === 'service' && serviceFeatures" class="st-features">
+                  <span class="st-features-label">{{ $t('status.keys.featuresLabel') }}</span>
+                  <template v-if="serviceFeatures.length">
+                    <span v-for="f in serviceFeatures" :key="f" class="st-feature-chip">{{ featureLabel(f) }}</span>
+                  </template>
+                  <span v-else class="st-features-none">{{ $t('status.keys.featuresNone') }}</span>
                 </div>
                 <div v-else-if="keys[row.id]?.configured && keys[row.id]?.verifiable === false" class="st-row-check text-medium-emphasis">
                   <v-icon icon="mdi-information-outline" size="14" />
@@ -864,6 +889,26 @@ function scoreColor(score) {
   opacity: 0.8;
 }
 .st-quota-rest { white-space: nowrap; }
+
+/* Vom Dienst freigeschaltete Funktionen (transcribe, crux …). */
+.st-features {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 0.78rem;
+  max-width: 420px;
+}
+.st-features-label { opacity: 0.7; }
+.st-feature-chip {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(var(--v-theme-primary), 0.12);
+  color: rgb(var(--v-theme-primary));
+  font-weight: 600;
+}
+.st-features-none { opacity: 0.55; font-style: italic; }
 
 /* Kennzeichnung einer Pro-Funktion. Ohne gültige Lizenz gedämpft und
    durchgestrichen — die Funktion ist dann vorhanden, aber nicht nutzbar. */

@@ -192,6 +192,46 @@ function opportunitySavings(o) {
   return parts.join(' · ')
 }
 
+// CrUX-Felddaten (echte Nutzererfahrung): Core Web Vitals in fester Reihenfolge
+// mit Einheit und Nachkommastellen für die p75-Anzeige. LCP/FCP in Sekunden,
+// INP/TTFB in Millisekunden, CLS einheitenlos.
+const FIELD_METRICS = [
+  { key: 'lcp', unit: 's', factor: 0.001, digits: 2 },
+  { key: 'inp', unit: 'ms', factor: 1, digits: 0 },
+  { key: 'cls', unit: '', factor: 1, digits: 2 },
+  { key: 'fcp', unit: 's', factor: 0.001, digits: 2 },
+  { key: 'ttfb', unit: 'ms', factor: 1, digits: 0 },
+]
+
+// Felddaten-Block, sobald der Dienst ihn liefert (CrUX freigeschaltet). Fehlt
+// er (kein Zentralschlüssel/Feature aus), bleibt er null und die Anzeige leer.
+const fieldData = computed(() => live.result?.browser?.field_data ?? null)
+
+// Vorhandene Metriken einer Ebene (url|origin) in fester Reihenfolge, je Zeile
+// Anzeigekonfiguration + p75/Verteilung. null, wenn die Ebene keine Daten hat
+// (CrUX hatte für dieses Ziel zu wenig Verkehr).
+function fieldLevel(level) {
+  const lvl = fieldData.value?.[level]
+  if (!lvl || typeof lvl.metrics !== 'object' || lvl.metrics === null) return null
+  const rows = FIELD_METRICS
+    .filter((m) => lvl.metrics[m.key])
+    .map((m) => ({ ...m, ...lvl.metrics[m.key] }))
+  return rows.length ? rows : null
+}
+const fieldUrl = computed(() => fieldLevel('url'))
+const fieldOrigin = computed(() => fieldLevel('origin'))
+
+// p75 einer Feldmetrik lesbar: Faktor + Nachkommastellen + Einheit. „—" ohne Wert.
+function fmtFieldValue(row) {
+  if (row.p75 === null || row.p75 === undefined) return '—'
+  return (row.p75 * row.factor).toFixed(row.digits) + (row.unit ? ' ' + row.unit : '')
+}
+
+// Prozentbreite eines Verteilungssegments (Dichte 0..1 → „72%").
+function fieldPct(density) {
+  return Math.round((density || 0) * 100) + '%'
+}
+
 // Export-Adressen (server-seitig, am JSON-Umschlag vorbei). HTML im neuen Tab
 // zum Drucken, CSV als Download. `locale` lokalisiert auch den Bericht selbst
 // (Befundtexte und Beschriftungen) — das leistet nur der Dienst.
@@ -551,6 +591,30 @@ function fmtDate(iso) {
             </div>
           </div>
 
+          <!-- CrUX-Felddaten (echte Nutzererfahrung), sobald CrUX freigeschaltet -->
+          <div v-if="fieldData && fieldData.available" class="la-field">
+            <div class="la-field-title">{{ $t('liveAnalysis.browser.field.title') }}</div>
+            <div class="la-field-legend">
+              <span class="la-cwv-dot good"></span>{{ $t('liveAnalysis.browser.field.good') }}
+              <span class="la-cwv-dot ni"></span>{{ $t('liveAnalysis.browser.field.ni') }}
+              <span class="la-cwv-dot poor"></span>{{ $t('liveAnalysis.browser.field.poor') }}
+            </div>
+            <div v-for="lvl in [{ id: 'url', rows: fieldUrl }, { id: 'origin', rows: fieldOrigin }]" :key="lvl.id">
+              <div v-if="lvl.rows" class="la-field-level">
+                <div class="la-field-level-title">{{ $t('liveAnalysis.browser.field.' + lvl.id) }}</div>
+                <div v-for="row in lvl.rows" :key="row.key" class="la-field-row">
+                  <span class="la-field-k">{{ $t('liveAnalysis.browser.field.metric.' + row.key) }}</span>
+                  <span class="la-field-p75">{{ fmtFieldValue(row) }}</span>
+                  <div class="la-cwv-bar" :title="`${fieldPct(row.good)} · ${fieldPct(row.needs_improvement)} · ${fieldPct(row.poor)}`">
+                    <span class="seg good" :style="{ width: fieldPct(row.good) }"></span>
+                    <span class="seg ni" :style="{ width: fieldPct(row.needs_improvement) }"></span>
+                    <span class="seg poor" :style="{ width: fieldPct(row.poor) }"></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Diagnose-Kennwerte (Serverantwort, Seitengewicht, DOM-Größe …) -->
           <div v-if="browserDiagnostics.length" class="la-facts la-bmetrics">
             <div v-for="d in browserDiagnostics" :key="d.key" class="la-fact">
@@ -810,6 +874,39 @@ function fmtDate(iso) {
 .la-a11y-text { flex: 1 1 auto; color: var(--mint-text); }
 .la-a11y-id { flex: 0 0 auto; font-size: 0.72rem; color: var(--mint-text-muted); }
 .la-lhver { margin-top: 10px; font-size: 0.76rem; }
+
+/* CrUX-Felddaten (echte Nutzererfahrung) */
+.la-field { margin-top: 14px; }
+.la-field-title { font-size: 0.84rem; font-weight: 600; margin-bottom: 4px; color: var(--mint-text); }
+.la-field-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  font-size: 0.72rem;
+  color: var(--mint-text-muted);
+  margin-bottom: 8px;
+}
+.la-cwv-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-left: 10px; }
+.la-cwv-dot:first-child { margin-left: 0; }
+.la-field-level { margin-bottom: 8px; }
+.la-field-level-title { font-size: 0.76rem; font-weight: 600; color: var(--mint-text-muted); margin-bottom: 4px; }
+.la-field-row { display: flex; align-items: center; gap: 10px; padding: 3px 0; font-size: 0.8rem; }
+.la-field-k { flex: 0 0 auto; min-width: 42px; color: var(--mint-text); font-weight: 600; }
+.la-field-p75 { flex: 0 0 auto; min-width: 62px; color: var(--mint-text); }
+.la-cwv-bar {
+  flex: 1 1 auto;
+  display: flex;
+  height: 8px;
+  min-width: 80px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--mint-border);
+}
+.la-cwv-bar .seg { height: 100%; }
+.la-cwv-dot.good, .la-cwv-bar .seg.good { background: #3a9d5d; }
+.la-cwv-dot.ni, .la-cwv-bar .seg.ni { background: #c47f17; }
+.la-cwv-dot.poor, .la-cwv-bar .seg.poor { background: #b03a2e; }
 
 /* Optimierungs-Chancen (aufklappbar) */
 .la-opps { margin-top: 14px; }
