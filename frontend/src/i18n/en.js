@@ -447,6 +447,8 @@ export default {
     noFieldData: 'No field data available — this page has too little measured user traffic.',
     opportunitiesTitle: 'Opportunities',
     moreItems: 'and {0} more',
+    findingsTitle: 'Recommendations',
+    learnMore: 'Learn more',
     good: 'Good',
     needsImprovement: 'Needs improvement',
     poor: 'Poor',
@@ -699,6 +701,8 @@ export default {
       },
       oppsTitle: 'Optimization opportunities',
       oppsMore: '… and {0} more',
+      findTitle: 'Recommendations',
+      learnMore: 'Learn more',
       field: {
         title: 'Field data (real users, Chrome UX Report)',
         url: 'This page',

@@ -128,6 +128,26 @@ const fieldMetrics = computed(() => {
 // --- Optimierungs-Chancen (Gruppe B) ----------------------------------------
 
 const opportunities = computed(() => result.value?.opportunities ?? [])
+
+// Verbesserungshinweise je Kategorie (Barrierefreiheit, Best Practices, SEO):
+// fehlgeschlagene Prüfungen mit Titel + Beschreibung, nur vorhandene Kategorien.
+const FINDING_CATEGORIES = ['accessibility', 'best-practices', 'seo']
+const findings = computed(() => result.value?.findings ?? {})
+const findingGroups = computed(() =>
+  FINDING_CATEGORIES
+    .filter((c) => findings.value[c]?.length)
+    .map((c) => ({ cat: c, items: findings.value[c].map((f) => ({ ...f, ...descParts(f.description) })) })),
+)
+
+// Lighthouse-Beschreibung: den Markdown-Doku-Link abtrennen. text = Beschreibung
+// ohne Link, url = die verlinkte Adresse (für „Mehr erfahren").
+function descParts(desc) {
+  if (!desc) return { text: '', url: '' }
+  const m = desc.match(/\[([^\]]+)\]\(([^)]+)\)/)
+  const url = m ? m[2] : ''
+  const text = desc.replace(/\[([^\]]+)\]\([^)]+\)/g, '').replace(/\s+/g, ' ').trim()
+  return { text, url }
+}
 // Ersparnis lesbar (Zeit; ab 1 s in Sekunden).
 function savingsText(ms) {
   return ms >= 1000 ? '−' + (ms / 1000).toFixed(1) + ' s' : '−' + Math.round(ms) + ' ms'
@@ -372,6 +392,29 @@ async function runBoth() {
               <div v-if="o.moreItems" class="ps-opp-more">{{ $t('pagespeed.moreItems', [o.moreItems]) }}</div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Verbesserungshinweise je Kategorie (Barrierefreiheit / Best Practices / SEO) -->
+      <div v-if="findingGroups.length" class="ps-section">
+        <div class="ps-metrics-title">{{ $t('pagespeed.findingsTitle') }}</div>
+        <div class="ps-finds">
+          <details v-for="g in findingGroups" :key="g.cat" class="ps-find">
+            <summary class="ps-find-head">
+              <v-icon icon="mdi-chevron-right" size="18" class="ps-find-chev" />
+              <span class="ps-find-cat">{{ $t('pagespeed.category.' + g.cat) }}</span>
+              <span class="ps-find-count">{{ g.items.length }}</span>
+            </summary>
+            <div class="ps-find-list">
+              <div v-for="f in g.items" :key="f.id" class="ps-find-item">
+                <div class="ps-find-item-title">{{ f.title }}</div>
+                <div v-if="f.text" class="ps-find-item-desc">
+                  {{ f.text }}
+                  <a v-if="f.url" :href="f.url" target="_blank" rel="noopener" class="ps-find-more">{{ $t('pagespeed.learnMore') }}</a>
+                </div>
+              </div>
+            </div>
+          </details>
         </div>
       </div>
 
@@ -677,6 +720,50 @@ async function runBoth() {
   opacity: 0.6;
   padding-top: 3px;
 }
+
+/* Verbesserungshinweise je Kategorie (aufklappbar) */
+.ps-finds { display: flex; flex-direction: column; gap: 6px; }
+.ps-find {
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: var(--mint-radius);
+  overflow: hidden;
+}
+.ps-find-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.86rem;
+  color: rgb(var(--v-theme-on-surface));
+}
+.ps-find-head::-webkit-details-marker { display: none; }
+.ps-find-chev { flex: 0 0 auto; transition: transform 0.15s; }
+.ps-find[open] .ps-find-chev { transform: rotate(90deg); }
+.ps-find-cat { flex: 1 1 auto; font-weight: 600; }
+.ps-find-count {
+  flex: 0 0 auto;
+  min-width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(var(--v-border-color), var(--v-border-opacity));
+  font-size: 0.75rem;
+}
+.ps-find-list { padding: 2px 10px 8px; }
+.ps-find-item {
+  padding: 6px 0;
+  border-top: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.6));
+}
+.ps-find-item:first-child { border-top: none; }
+.ps-find-item-title { font-weight: 600; font-size: 0.82rem; color: rgb(var(--v-theme-on-surface)); }
+.ps-find-item-desc { font-size: 0.78rem; margin-top: 2px; color: rgb(var(--v-theme-on-surface)); opacity: 0.8; }
+.ps-find-more { color: rgb(var(--v-theme-primary)); white-space: nowrap; margin-left: 4px; }
+
 .ps-foot {
   margin-top: 28px;
   font-size: 0.75rem;

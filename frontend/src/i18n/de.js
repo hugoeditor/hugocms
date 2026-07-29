@@ -448,6 +448,8 @@ export default {
     noFieldData: 'Keine Felddaten vorhanden — diese Seite hat zu wenig gemessenen Nutzerverkehr.',
     opportunitiesTitle: 'Optimierungs-Chancen',
     moreItems: 'und {0} weitere',
+    findingsTitle: 'Verbesserungshinweise',
+    learnMore: 'Mehr erfahren',
     good: 'Gut',
     needsImprovement: 'Verbesserungswürdig',
     poor: 'Schlecht',
@@ -700,6 +702,8 @@ export default {
       },
       oppsTitle: 'Optimierungs-Chancen',
       oppsMore: '… und {0} weitere',
+      findTitle: 'Verbesserungshinweise',
+      learnMore: 'Mehr erfahren',
       field: {
         title: 'Felddaten (echte Nutzer, Chrome UX Report)',
         url: 'Diese Seite',

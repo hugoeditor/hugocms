@@ -232,6 +232,33 @@ function fieldPct(density) {
   return Math.round((density || 0) * 100) + '%'
 }
 
+// Verbesserungshinweise je Kategorie (Barrierefreiheit, Best Practices, SEO):
+// fehlgeschlagene Prüfungen mit Titel + Beschreibung. `key` ist der
+// Lighthouse-Kategorie-Schlüssel (mit Bindestrich), `label` das i18n-Suffix
+// (wie die Score-Labels, mit Unterstrich).
+const FINDING_CATS = [
+  { key: 'accessibility', label: 'accessibility' },
+  { key: 'best-practices', label: 'best_practices' },
+  { key: 'seo', label: 'seo' },
+]
+const findingGroups = computed(() => {
+  const cf = live.result?.browser?.category_findings
+  if (!cf || typeof cf !== 'object') return []
+  return FINDING_CATS
+    .filter((c) => Array.isArray(cf[c.key]) && cf[c.key].length)
+    .map((c) => ({ ...c, items: cf[c.key].map((f) => ({ ...f, ...descParts(f.description) })) }))
+})
+
+// Lighthouse-Beschreibung: den Markdown-Doku-Link abtrennen. text = Beschreibung
+// ohne Link, url = die verlinkte Adresse (für „Mehr erfahren").
+function descParts(desc) {
+  if (!desc) return { text: '', url: '' }
+  const m = desc.match(/\[([^\]]+)\]\(([^)]+)\)/)
+  const url = m ? m[2] : ''
+  const text = desc.replace(/\[([^\]]+)\]\([^)]+\)/g, '').replace(/\s+/g, ' ').trim()
+  return { text, url }
+}
+
 // Export-Adressen (server-seitig, am JSON-Umschlag vorbei). HTML im neuen Tab
 // zum Drucken, CSV als Download. `locale` lokalisiert auch den Bericht selbst
 // (Befundtexte und Beschriftungen) — das leistet nur der Dienst.
@@ -651,18 +678,22 @@ function fmtDate(iso) {
             <div v-for="(w, i) in live.result.browser.run_warnings" :key="i" class="la-warning">{{ w }}</div>
           </div>
 
-          <!-- Konkrete Accessibility-Verstöße (der Befund nennt nur den Score) -->
-          <div v-if="live.result.browser.accessibility_failures?.length" class="la-a11y">
-            <div class="la-a11y-title">
-              {{ $t('liveAnalysis.browser.a11yTitle', [live.result.browser.accessibility_failures.length]) }}
-            </div>
-            <ul class="la-a11y-list">
-              <li v-for="f in live.result.browser.accessibility_failures" :key="f.id" class="la-a11y-item">
-                <span v-if="f.impact" class="la-a11y-impact" :class="'impact-' + f.impact">{{ f.impact }}</span>
-                <span class="la-a11y-text">{{ f.title || f.id }}</span>
-                <code class="la-a11y-id">{{ f.id }}</code>
-              </li>
-            </ul>
+          <!-- Verbesserungshinweise je Kategorie (Barrierefreiheit / Best Practices / SEO) -->
+          <div v-if="findingGroups.length" class="la-finds">
+            <div class="la-finds-title">{{ $t('liveAnalysis.browser.findTitle') }}</div>
+            <details v-for="g in findingGroups" :key="g.key" class="la-find">
+              <summary class="la-find-head">
+                <span class="la-find-cat">{{ $t('liveAnalysis.browser.' + g.label) }}</span>
+                <span class="la-find-count">{{ g.items.length }}</span>
+              </summary>
+              <div v-for="f in g.items" :key="f.id" class="la-find-item">
+                <div class="la-find-item-title">{{ f.title }}</div>
+                <div v-if="f.text" class="la-find-item-desc">
+                  {{ f.text }}
+                  <a v-if="f.url" :href="f.url" target="_blank" rel="noopener" class="la-find-more">{{ $t('liveAnalysis.browser.learnMore') }}</a>
+                </div>
+              </div>
+            </details>
           </div>
 
           <div v-if="live.result.browser.lighthouse_version" class="la-muted la-lhver">
@@ -953,6 +984,44 @@ function fmtDate(iso) {
   background: #fdf2e0;
   color: #c47f17;
 }
+
+/* Verbesserungshinweise je Kategorie (aufklappbar) */
+.la-finds { margin-top: 14px; }
+.la-finds-title { font-size: 0.84rem; font-weight: 600; margin-bottom: 6px; color: var(--mint-text); }
+.la-find { border-bottom: 1px solid var(--mint-border); }
+.la-find-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.82rem;
+}
+.la-find-head::-webkit-details-marker { display: none; }
+.la-find-head::before {
+  content: '▸';
+  flex: 0 0 auto;
+  color: var(--mint-text-muted);
+  font-size: 0.7rem;
+}
+.la-find[open] > .la-find-head::before { content: '▾'; }
+.la-find-cat { flex: 1 1 auto; font-weight: 600; color: var(--mint-text); }
+.la-find-count {
+  flex: 0 0 auto;
+  min-width: 20px;
+  padding: 0 6px;
+  text-align: center;
+  border-radius: 999px;
+  background: var(--mint-border);
+  color: var(--mint-text-muted);
+  font-size: 0.72rem;
+}
+.la-find-item { padding: 5px 0 5px 16px; border-top: 1px solid var(--mint-border); }
+.la-find-item:first-of-type { border-top: none; }
+.la-find-item-title { font-size: 0.8rem; font-weight: 600; color: var(--mint-text); }
+.la-find-item-desc { font-size: 0.76rem; margin-top: 2px; color: var(--mint-text-muted); }
+.la-find-more { color: var(--mint-green); white-space: nowrap; margin-left: 4px; }
 
 .la-export { display: flex; gap: 10px; }
 

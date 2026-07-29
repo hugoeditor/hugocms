@@ -72,6 +72,15 @@ final class PageSpeedClient
      */
     private const MAX_OPPORTUNITY_ITEMS = 5;
 
+    /**
+     * Kategorien mit konkreten Verbesserungshinweisen. Performance bleibt außen
+     * vor — dort sind die messbaren „Chancen" (B) die Handlungsanleitung.
+     */
+    private const FINDING_CATEGORIES = ['accessibility', 'best-practices', 'seo'];
+
+    /** Obergrenze der Hinweise je Kategorie. */
+    private const MAX_FINDINGS_PER_CATEGORY = 15;
+
     public function __construct(
         private readonly ?string $apiKey = null,
         private readonly int $timeout = 60,
@@ -220,6 +229,7 @@ final class PageSpeedClient
             'scores' => $scores,
             'metrics' => $metrics,
             'opportunities' => self::opportunities($audits),
+            'findings' => self::categoryFindings($lh, $audits),
             'fieldData' => [
                 'url' => self::fieldExperience($data['loadingExperience'] ?? null),
                 'origin' => self::fieldExperience($data['originLoadingExperience'] ?? null),
@@ -302,6 +312,56 @@ final class PageSpeedClient
             ($b['savingsMs'] <=> $a['savingsMs']) ?: (($b['savingsBytes'] ?? 0) <=> ($a['savingsBytes'] ?? 0)));
 
         return array_slice($out, 0, self::MAX_OPPORTUNITIES);
+    }
+
+    /**
+     * Fehlgeschlagene Prüfungen je Kategorie (Barrierefreiheit, Best Practices,
+     * SEO) als konkrete Verbesserungshinweise. Aus den auditRefs der Kategorie
+     * die Audits mit score < 1 (ohne notApplicable/informative/manual/error),
+     * je {id, title, description}. Die description ist Lighthouses eigener,
+     * bei gesetztem locale lokalisierter Hinweis samt Doku-Link (Markdown).
+     * Gekappt auf {@see MAX_FINDINGS_PER_CATEGORY} je Kategorie.
+     *
+     * @param array<string, mixed> $lh
+     * @param array<string, mixed> $audits
+     * @return array<string, list<array{id: string, title: string, description: string}>>
+     */
+    private static function categoryFindings(array $lh, array $audits): array
+    {
+        $categories = is_array($lh['categories'] ?? null) ? $lh['categories'] : [];
+        $out = [];
+        foreach (self::FINDING_CATEGORIES as $cat) {
+            $refs = is_array($categories[$cat]['auditRefs'] ?? null) ? $categories[$cat]['auditRefs'] : [];
+            $list = [];
+            foreach ($refs as $ref) {
+                $id = is_array($ref) ? (string) ($ref['id'] ?? '') : '';
+                $audit = $audits[$id] ?? null;
+                if (!is_array($audit)) {
+                    continue;
+                }
+                // Nicht anwendbare, rein informative oder manuelle Prüfungen sind
+                // keine Mängel — nur echte Fehlschläge (score < 1) sind Hinweise.
+                if (in_array((string) ($audit['scoreDisplayMode'] ?? ''), ['notApplicable', 'informative', 'manual', 'error'], true)) {
+                    continue;
+                }
+                if (!is_numeric($audit['score'] ?? null) || (float) $audit['score'] >= 1.0) {
+                    continue;
+                }
+                $list[] = [
+                    'id' => $id,
+                    'title' => (string) ($audit['title'] ?? $id),
+                    'description' => (string) ($audit['description'] ?? ''),
+                ];
+                if (count($list) >= self::MAX_FINDINGS_PER_CATEGORY) {
+                    break;
+                }
+            }
+            if ($list !== []) {
+                $out[$cat] = $list;
+            }
+        }
+
+        return $out;
     }
 
     /**
