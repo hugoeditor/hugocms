@@ -55,13 +55,15 @@ offensichtlich ist — die ausführliche Funktionsübersicht steht in der README
   bleiben.
 - **Shell-Skripte auf Englisch**: Skripte unter `bin/` (und generell alle
   Shell-Skripte) sind für Profi-Admins gedacht — ihr Kommentar- und Terminal-
-  Ausgabe-Text ist **englisch**. NICHT übersetzt wird der Inhalt, den ein Skript
-  in erzeugte Dateien schreibt: die `label`-Werte und Kommentare der erzeugten
-  `mounts/<hash>.ini` bleiben deutsch (Redakteurs-UI bzw. neben den deutschen
-  `*.ini.beispiel`). Insbesondere ist die Kopfzeile
-  `; HugoCMS – Mounts für <HOST> (von install.sh erzeugt).` ein **geparster
-  Vertrag** (`bin/sites.sh`, `bin/crontab-entries.sh`) und bleibt wörtlich
-  deutsch.
+  Ausgabe-Text ist **englisch**.
+- **Erzeugte Mount-Datei mehrsprachig**: Der lesbare Text der von `install.sh`
+  erzeugten `mounts/<hash>.ini` (die `label`-Werte im CMS-Dateibaum, die
+  Kopfzeilen und der `[hugo]`-Kommentar) folgt `install.sh --lang=en|de`
+  (**Default `en`**) über EINE Übersetzungstabelle — die Block-Vorlagen liegen
+  nur einmal vor. Die Sektions-IDs (`[content]` usw.) sind intern und bleiben
+  sprachunabhängig. Die Host-Kopfzeile `; HugoCMS – Mounts f(ür|or) <HOST> (…)`
+  ist ein **geparster Vertrag**; die Parser in `bin/sites.sh` und
+  `bin/crontab-entries.sh` erkennen sie in beiden Sprachen.
 - **i18n**: jede nutzersichtbare Zeichenkette in `frontend/src/i18n/de.js` UND
   `en.js`. Backend-Fehler tragen nur Codes/Schlüssel; der Client übersetzt.
 - **`*.ini`** ist gitignored (instanzspezifisch); nur `*.ini.beispiel` gehört
