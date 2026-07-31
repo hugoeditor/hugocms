@@ -220,6 +220,12 @@ export const useAuthStore = defineStore('auth', {
       const data = await api.post('login', { username, password })
       this.authenticated = data.authenticated
       this.user = data.user
+      // Benutzerabhängiges aus der Login-Antwort übernehmen. Beim Mehrbenutzer
+      // wechselt mit dem Konto auch, was es darf und wie seine Oberfläche
+      // aussieht; ohne diese beiden Zeilen bliebe der Stand des vorher
+      // angemeldeten Kontos stehen.
+      if (data.ui) this.ui = data.ui
+      this.manageUsers = data.manageUsers ?? false
       // Frisches CSRF-Token der angemeldeten Sitzung übernehmen, damit der erste
       // Schreibbefehl nach dem Login gelingt — auch nach einem Sitzungsablauf,
       // bei dem das vorige Token verworfen wurde.
@@ -230,6 +236,10 @@ export const useAuthStore = defineStore('auth', {
       await api.post('logout')
       this.authenticated = false
       this.user = null
+      // Rechte des abgemeldeten Kontos dürfen nicht stehen bleiben: Sonst
+      // zeigte die Oberfläche dem nächsten Anmelder kurzzeitig Einträge, die
+      // ihm nicht zustehen.
+      this.manageUsers = false
     },
   },
 })

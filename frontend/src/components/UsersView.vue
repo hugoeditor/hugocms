@@ -170,7 +170,10 @@ async function removeUser(user) {
 </script>
 
 <template>
-  <div v-if="store.open" class="us-overlay">
+  <!-- auth.manageUsers zusätzlich zum Ansichtszustand: Ein Kontowechsel darf
+       die Verwaltung nicht offen zurücklassen, wenn das neue Konto sie nicht
+       aufrufen darf. Die harte Grenze zieht ohnehin der Server. -->
+  <div v-if="store.open && auth.manageUsers" class="us-overlay">
     <header class="us-head nemo-noselect">
       <button class="us-back" :title="$t('common.close')" @click="store.close()">
         <v-icon icon="mdi-arrow-left" size="20" />

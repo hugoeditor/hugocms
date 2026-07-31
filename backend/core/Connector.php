@@ -795,10 +795,20 @@ final class Connector
             throw ApiException::unauthorized('LOGIN-FAILED');
         }
 
+        // Alles Benutzerabhängige gleich mitgeben: Der Client holt nach dem
+        // Login kein whoami nach (die erste Anfrage danach kann noch das alte
+        // Sitzungs-Cookie tragen). Ohne diese Felder behielte er den Stand des
+        // ZUVOR angemeldeten Kontos — beim Mehrbenutzer wären das fremde
+        // Einstellungen und, schlimmer, fremde Verwaltungsrechte.
+        $this->userPrefs = null;
+
         return [
             'authenticated' => true,
             'user' => $this->auth->currentUser(),
             'csrf' => $this->csrfToken(),
+            'ui' => $this->uiState(),
+            'manageUsers' => $this->auth instanceof UserAdminInterface
+                && $this->auth->can('users.manage'),
         ];
     }
 

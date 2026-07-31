@@ -167,7 +167,9 @@ setUnauthorizedHandler(() => {
   if (!auth.authenticated) return // bereits abgemeldet
   auth.authenticated = false
   auth.user = null
+  auth.manageUsers = false
   files.$reset()
+  users.$reset()
   error.value = t('app.sessionExpired')
   // Ein veraltetes CSRF-Token ist hier unkritisch: Der Login ist serverseitig
   // von der CSRF-Prüfung ausgenommen und liefert ein frisches Token zurück.
@@ -242,6 +244,9 @@ async function logout() {
   if (files.dirty && !(await confirmDiscard())) return
   await auth.logout()
   files.$reset()
+  // Sonst stünde die Benutzerverwaltung beim nächsten Anmelden sofort offen —
+  // womöglich vor einem Konto, das sie gar nicht aufrufen darf.
+  users.$reset()
 }
 
 // Orte-Menü: zu einem Mount-Point oder zum Papierkorb wechseln. Ist gerade eine
