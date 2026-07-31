@@ -10,7 +10,7 @@
 ; ===========================================================================
 
 [auth]
-; Authentifizierungsverfahren. Eingebaut: singleuser.
+; Authentifizierungsverfahren. Eingebaut: singleuser, multiuser.
 ; Weitere AuthInterface-Implementierungen lassen sich über die Connector-
 ; Option "authDrivers" registrieren (siehe index.php) und hier per driver
 ; auswählen.
@@ -23,6 +23,31 @@ username = admin
 ;   php -r "echo password_hash('DEIN-PASSWORT', PASSWORD_DEFAULT), PHP_EOL;"
 ; Wegen der $-Zeichen in doppelte Anführungszeichen setzen.
 password_hash = "HIER-PASSWORT-HASH-EINTRAGEN"
+
+; --- driver=multiuser (mehrere Konten, PRO-FUNKTION) -----------------------
+; Umstellen genügt: driver = multiuser. Gibt es noch kein Konto, wird der
+; obige Einzelbenutzer beim nächsten Aufruf zum ersten Administrator — mit
+; unverändertem Passwort. Danach werden weitere Konten in der Oberfläche
+; angelegt („Benutzer verwalten", nur für Administratoren sichtbar).
+;
+; Jedes Konto liegt als eigene INI-Datei unter users/ (Dateiname = SHA-256 des
+; kleingeschriebenen Anmeldenamens), analog zu mounts/<hash>.ini. Es gibt genau
+; zwei Rollen:
+;   admin   erreicht alle Webseiten, verwaltet Konten und setzt fremde
+;           Passwörter neu.
+;   editor  arbeitet an den zugewiesenen Webseiten (Feld `sites` der
+;           Kontodatei; "*" = alle) und verwaltet keine Konten.
+; Was auf einem Mount erlaubt ist, entscheidet unverändert ALLEIN dessen
+; Mount-Konfiguration (permissions/readonly) — die Rolle regelt nur, WELCHE
+; Webseiten sichtbar sind.
+;
+; Pro-Schranke: Ohne gültige Pro-Lizenz für die aufgerufene Webseite melden
+; sich nur Administratoren an. So sperrt eine fehlende oder abgelaufene Lizenz
+; niemanden endgültig aus — der Administrator kommt herein und kann sie
+; eintragen —, die übrigen Konten bleiben so lange draußen.
+;
+; Optional: anderes Verzeichnis für die Kontodateien (relativ zu DIESER Datei).
+;users_dir = users
 
 [user]
 ; Globale Einstellungen, die für alle Benutzer gelten. Solange

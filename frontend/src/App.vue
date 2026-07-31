@@ -19,6 +19,7 @@ import EditorPanel from './components/EditorPanel.vue'
 import ReconfigureDialog from './components/ReconfigureDialog.vue'
 import ProjectSettingsDialog from './components/ProjectSettingsDialog.vue'
 import AccountDialog from './components/AccountDialog.vue'
+import UserAdminDialog from './components/UserAdminDialog.vue'
 import LicenseDialog from './components/LicenseDialog.vue'
 import RepositoryDialog from './components/RepositoryDialog.vue'
 import HelpView from './components/HelpView.vue'
@@ -346,6 +347,9 @@ watch(
   },
 )
 const accountOpen = ref(false)
+// Benutzerverwaltung (Mehrbenutzer, Rolle admin) — der Server entscheidet
+// über auth.manageUsers, ob der Knopf überhaupt erscheint.
+const usersOpen = ref(false)
 const licenseOpen = ref(false)
 const repositoryOpen = ref(false)
 const notice = ref(null) // kurze Erfolgsmeldung (Snackbar)
@@ -784,6 +788,22 @@ async function build() {
                 </template>
               </v-tooltip>
 
+              <!-- Benutzerverwaltung: nur beim Mehrbenutzer-Verfahren und nur
+                   für Administratoren (der Server meldet das in whoami). -->
+              <v-tooltip v-if="auth.manageUsers" :text="$t('users.open')" location="right" :disabled="!toolbarCollapsed">
+                <template #activator="{ props }">
+                  <button
+                    v-bind="props"
+                    type="button"
+                    class="nemo-tool-btn"
+                    @click="usersOpen = true"
+                  >
+                    <v-icon icon="mdi-account-group-outline" size="20" />
+                    <span class="nemo-tool-label">{{ $t('users.open') }}</span>
+                  </button>
+                </template>
+              </v-tooltip>
+
               <!-- Projekteinstellungen: gelten nur für DIESE Webseite (ihre
                    Mount-Konfiguration) — im Gegensatz zur globalen Konfiguration
                    darunter. -->
@@ -916,6 +936,7 @@ async function build() {
       @saved="onProjectSettingsSaved"
     />
     <AccountDialog v-model="accountOpen" @changed="onAccountChanged" @saved="onAccountSaved" />
+    <UserAdminDialog v-model="usersOpen" @notice="notice = $event" />
 
     <!-- Pro-Lizenz aktivieren · Git-Versionierung (Pro-Funktion) -->
     <LicenseDialog v-model="licenseOpen" @activated="onLicenseActivated" />

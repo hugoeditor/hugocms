@@ -278,9 +278,12 @@ final class Config
      * toolbar_collapsed: ob die vertikale Werkzeugleiste auf Desktop-Breite
      * eingeklappt startet. Fehlt der Wert, startet sie ausgeklappt.
      *
+     * Öffentlich, weil dieselbe Normalisierung auch für die Einstellungen gilt,
+     * die ein Auth-Treiber je Benutzer vorhält (Mehrbenutzer: users/<hash>.ini).
+     *
      * @return array{sessionLifetime: int, contentWidth: int, toolbarCollapsed: bool, updateLastmod: ?bool}  sessionLifetime in Sekunden
      */
-    private static function userSection(mixed $section): array
+    public static function userSection(mixed $section): array
     {
         $section = is_array($section) ? $section : [];
         $hours = isset($section['session_lifetime']) ? (float) $section['session_lifetime'] : 0.0;

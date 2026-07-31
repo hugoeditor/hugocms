@@ -8,6 +8,8 @@ use HugoCMS\FileManager\Audit\AuditMailReport;
 use HugoCMS\FileManager\Audit\AuditService;
 use HugoCMS\FileManager\Audit\ContentQualityService;
 use HugoCMS\FileManager\Auth\AuthInterface;
+use HugoCMS\FileManager\Auth\SiteAwareInterface;
+use HugoCMS\FileManager\Auth\UserAdminInterface;
 use HugoCMS\FileManager\Cron\Heartbeat;
 use HugoCMS\FileManager\Exception\ApiException;
 use HugoCMS\FileManager\Review\FrontMatter;
@@ -114,13 +116,21 @@ final class Connector
      */
     private ?string $liveAnalysisUrl = null;
 
-    /** Globale [user]-Einstellungen (Sitzungsdauer, Inhaltsbreite, Werkzeugleiste). */
+    /**
+     * Globale [user]-Vorgaben aus der hugocms.ini (Sitzungsdauer, Inhaltsbreite,
+     * Werkzeugleiste). Sie gelten vor der Anmeldung und beim Einzelbenutzer;
+     * beim Mehrbenutzer bringt jedes Konto eigene Werte mit — die liefert der
+     * Treiber (siehe {@see userPrefs()}).
+     */
     private array $user = [
         'sessionLifetime' => 28800,
         'contentWidth' => 1200,
         'toolbarCollapsed' => false,
         'updateLastmod' => null,
     ];
+
+    /** Zwischenspeicher der wirksamen Einstellungen (einmal je Request). */
+    private ?array $userPrefs = null;
 
     /**
      * E-Mail-Versand aus der [mail]-Sektion der hugocms.ini (Gesundheitscheck-
@@ -294,6 +304,21 @@ final class Connector
         }
 
         $this->auth = $options['auth'];
+
+        // Treiber, deren Entscheidungen an der aufgerufenen Webseite hängen
+        // (Mehrbenutzer: Zuordnung und Pro-Schranke), bekommen den Kontext hier.
+        // Der Lizenzstatus kommt als Rückruf, weil die Mount-Konfiguration erst
+        // nach dem Konstruktor geladen wird (mountsFromFile).
+        // Bezugsgröße ist der HOST, nicht der volle SiteKey: Daran hängt schon
+        // die Lizenz, und ein Umzug des Endpunkts von /cms-api nach /hugocms-api
+        // soll keine Zuordnung entwerten.
+        if ($this->auth instanceof SiteAwareInterface) {
+            $this->auth->bindSite(
+                SiteKey::host($_SERVER),
+                fn (): bool => $this->license()->isPro(),
+            );
+        }
+
         $this->resolver = new MountResolver();
         $this->files = new FileService(
             $this->resolver,
@@ -480,6 +505,11 @@ final class Connector
                 'projectreconfigure' => $this->cmdProjectReconfigure($request),
                 'improveauto' => $this->cmdImproveAuto($request),
                 'setuserprefs' => $this->cmdSetUserPrefs($request),
+                'users' => $this->cmdUsers(),
+                'usercreate' => $this->cmdUserCreate($request),
+                'userupdate' => $this->cmdUserUpdate($request),
+                'userpassword' => $this->cmdUserPassword($request),
+                'userdelete' => $this->cmdUserDelete($request),
                 'account' => $this->cmdAccount($request),
                 'license' => $this->cmdLicense(),
                 'activate' => $this->cmdActivate($request),
@@ -631,10 +661,14 @@ final class Connector
                 // seine eigene Liste (siehe util/aiModels.js).
                 'models' => $this->ai['models'],
             ],
-            // Globale Einstellungen aus [user]. Im Einzelbenutzer-Modus ist das
-            // der Zustand, den der Client zuletzt gemerkt hat (Befehl
-            // setuserprefs) — er gilt nach jedem Neuladen.
+            // Einstellungen aus [user]: die des angemeldeten Kontos, sonst die
+            // globalen Vorgaben. Der Client merkt darin selbst nach, was der
+            // Benutzer mit der Maus einstellt (Befehl setuserprefs).
             'ui' => $this->uiState(),
+            // Kontenverwaltung: nur beim Mehrbenutzer-Treiber und nur für
+            // Administratoren. Der Client blendet den Menüpunkt danach ein.
+            'manageUsers' => $this->auth instanceof UserAdminInterface
+                && $this->auth->can('users.manage'),
             // Pro-Edition (Git u. Ä.). 'configured' meldet einen hinterlegten,
             // ggf. ungültigen Schlüssel (falsche Domain) — für einen Hinweis im
             // Client. Der Schlüssel selbst wird nie zurückgegeben.
@@ -3515,32 +3549,30 @@ final class Connector
     }
 
     /**
-     * Schreibt einzelne Schlüssel der [user]-Sektion, ohne die übrigen zu
-     * verlieren: updateSections ersetzt die ganze Sektion, deshalb wird sie roh
-     * gelesen, überlagert und wieder vollständig geschrieben. Ein Wert null
-     * entfernt den Schlüssel.
+     * Die WIRKSAMEN [user]-Einstellungen: die des angemeldeten Benutzers, sonst
+     * die globalen Vorgaben aus der hugocms.ini.
      *
-     * @param array<string, string|null> $changes
+     * Wo die Einstellungen liegen, weiß allein der Auth-Treiber — beim
+     * Einzelbenutzer in der hugocms.ini, beim Mehrbenutzer in der Datei des
+     * jeweiligen Kontos. Einmal je Request ermittelt.
+     *
+     * @return array{sessionLifetime: int, contentWidth: int, toolbarCollapsed: bool, updateLastmod: ?bool}
      */
-    private function writeUserSection(array $changes): void
+    private function userPrefs(): array
     {
-        if ($this->configPath === null) {
-            throw new ApiException('ECONFIG', 409, 'RECONFIGURE-UNAVAILABLE');
+        if ($this->userPrefs !== null) {
+            return $this->userPrefs;
         }
-        $user = Config::raw($this->configPath)['user'] ?? [];
-        foreach ($changes as $key => $value) {
-            if ($value === null) {
-                unset($user[$key]);
-            } else {
-                $user[$key] = $value;
-            }
+        if ($this->auth->isAuthenticated() && $this->auth->supportsPreferences()) {
+            return $this->userPrefs = Config::userSection($this->auth->loadPreferences());
         }
-        Config::updateSections($this->configPath, ['user' => $user]);
+
+        return $this->userPrefs = $this->user;
     }
 
     /**
-     * Schreibt die Einstellungen der [user]-Sektion — im Einzelbenutzer-
-     * Verfahren ist die hugocms.ini der einzige Speicherort dafür:
+     * Schreibt die Einstellungen der [user]-Sektion — beim Einzelbenutzer in die
+     * hugocms.ini, beim Mehrbenutzer in die Datei des angemeldeten Kontos:
      *
      *   contentWidth     Breite des Hauptfensters in px (content_width)
      *   toolbarCollapsed Werkzeugleiste eingeklappt (toolbar_collapsed)
@@ -3571,7 +3603,6 @@ final class Connector
                 throw ApiException::badRequest('PARAM-INVALID', ['contentWidth']);
             }
             $changes['content_width'] = (string) $width;
-            $this->user['contentWidth'] = $width;
         }
 
         if (array_key_exists('toolbarCollapsed', $request)) {
@@ -3580,7 +3611,6 @@ final class Connector
                 throw ApiException::badRequest('PARAM-INVALID', ['toolbarCollapsed']);
             }
             $changes['toolbar_collapsed'] = $collapsed ? 'true' : 'false';
-            $this->user['toolbarCollapsed'] = $collapsed;
         }
 
         if (array_key_exists('sessionLifetime', $request)) {
@@ -3597,7 +3627,6 @@ final class Connector
             $changes['session_lifetime'] = $hours == (int) $hours
                 ? (string) (int) $hours
                 : rtrim(rtrim(number_format($hours, 2, '.', ''), '0'), '.');
-            $this->user['sessionLifetime'] = (int) round($hours * 3600);
         }
 
         if (array_key_exists('updateLastmod', $request)) {
@@ -3607,14 +3636,17 @@ final class Connector
             }
             // null entfernt den Schlüssel: Der Editor fragt dann wieder nach.
             $changes['update_lastmod'] = $lastmod === null ? null : ($lastmod ? 'true' : 'false');
-            $this->user['updateLastmod'] = $lastmod;
         }
 
         if ($changes === []) {
             throw ApiException::badRequest('PARAM-MISSING', ['contentWidth']);
         }
 
-        $this->writeUserSection($changes);
+        if (!$this->auth->supportsPreferences()) {
+            throw new ApiException('ECONFIG', 409, 'RECONFIGURE-UNAVAILABLE');
+        }
+        $this->auth->savePreferences($changes);
+        $this->userPrefs = null; // beim nächsten Zugriff frisch vom Treiber
         $this->logger->info('Benutzereinstellungen gespeichert: ' . implode(', ', array_keys($changes)));
 
         return ['ok' => true, 'ui' => $this->uiState()];
@@ -3628,16 +3660,159 @@ final class Connector
      */
     private function uiState(): array
     {
+        $prefs = $this->userPrefs();
+
         return [
-            'contentWidth' => $this->user['contentWidth'],
-            'toolbarCollapsed' => $this->user['toolbarCollapsed'],
+            'contentWidth' => $prefs['contentWidth'],
+            'toolbarCollapsed' => $prefs['toolbarCollapsed'],
             // Sitzungsdauer in STUNDEN — so steht sie in der INI und so zeigt
             // der Konto-Dialog sie an (intern rechnet der Connector in Sekunden).
-            'sessionLifetimeHours' => round($this->user['sessionLifetime'] / 3600, 2),
+            'sessionLifetimeHours' => round($prefs['sessionLifetime'] / 3600, 2),
             // Dreiwertig: null = beim Speichern nach lastmod-Aktualisierung
             // fragen; true/false = ohne Nachfrage anwenden.
-            'updateLastmod' => $this->user['updateLastmod'],
+            'updateLastmod' => $prefs['updateLastmod'],
         ];
+    }
+
+    // ---- Kontenverwaltung (nur Mehrbenutzer, nur Rolle admin) --------------
+    //
+    // Der Connector reicht die Befehle nur durch: WER was darf, entscheidet der
+    // Treiber (UserAdminInterface). Bringt der Treiber die Schnittstelle nicht
+    // mit — etwa der Einzelbenutzer —, gibt es diese Befehle schlicht nicht.
+
+    /**
+     * Der Treiber als Kontenverwaltung, oder ein klarer Fehler.
+     */
+    private function userAdmin(): UserAdminInterface
+    {
+        $this->requireAuth();
+        if (!$this->auth instanceof UserAdminInterface) {
+            throw new ApiException('ECONFIG', 409, 'USERS-NOT-SUPPORTED');
+        }
+
+        return $this->auth;
+    }
+
+    /**
+     * users — alle Konten samt der Webseiten, die diese Installation kennt
+     * (Auswahlliste für die Zuordnung).
+     */
+    private function cmdUsers(): array
+    {
+        $admin = $this->userAdmin();
+
+        return [
+            'users' => $admin->listUsers(),
+            'sites' => $this->knownSites(),
+            'roles' => [UserAdminInterface::ROLE_ADMIN, UserAdminInterface::ROLE_EDITOR],
+        ];
+    }
+
+    private function cmdUserCreate(array $request): array
+    {
+        $admin = $this->userAdmin();
+        $this->requireMethod('POST');
+
+        $username = (string) ($request['username'] ?? '');
+        $password = (string) ($request['password'] ?? '');
+        if (strlen($password) < self::MIN_PASSWORD_LENGTH) {
+            throw ApiException::badRequest('SETUP-PASSWORD-TOO-SHORT', [self::MIN_PASSWORD_LENGTH]);
+        }
+        $admin->createUser(
+            $username,
+            $password,
+            (string) ($request['role'] ?? UserAdminInterface::ROLE_EDITOR),
+            $this->requestSites($request),
+        );
+        $this->logger->info('Benutzerkonto angelegt: ' . $username);
+
+        return ['ok' => true, 'users' => $admin->listUsers()];
+    }
+
+    private function cmdUserUpdate(array $request): array
+    {
+        $admin = $this->userAdmin();
+        $this->requireMethod('POST');
+
+        $username = (string) ($request['username'] ?? '');
+        $disabled = array_key_exists('disabled', $request) ? $request['disabled'] : null;
+        if ($disabled !== null && !is_bool($disabled)) {
+            throw ApiException::badRequest('PARAM-INVALID', ['disabled']);
+        }
+        $admin->updateUser(
+            $username,
+            array_key_exists('role', $request) ? (string) $request['role'] : null,
+            array_key_exists('sites', $request) ? $this->requestSites($request) : null,
+            $disabled,
+        );
+        $this->logger->info('Benutzerkonto geändert: ' . $username);
+
+        return ['ok' => true, 'users' => $admin->listUsers()];
+    }
+
+    /** Setzt das Passwort eines FREMDEN Kontos neu („Passwort vergessen"). */
+    private function cmdUserPassword(array $request): array
+    {
+        $admin = $this->userAdmin();
+        $this->requireMethod('POST');
+
+        $username = (string) ($request['username'] ?? '');
+        $password = (string) ($request['password'] ?? '');
+        if (strlen($password) < self::MIN_PASSWORD_LENGTH) {
+            throw ApiException::badRequest('SETUP-PASSWORD-TOO-SHORT', [self::MIN_PASSWORD_LENGTH]);
+        }
+        $admin->resetPassword($username, $password);
+        $this->logger->info('Passwort zurückgesetzt für: ' . $username);
+
+        return ['ok' => true];
+    }
+
+    private function cmdUserDelete(array $request): array
+    {
+        $admin = $this->userAdmin();
+        $this->requireMethod('POST');
+
+        $username = (string) ($request['username'] ?? '');
+        $admin->deleteUser($username);
+        $this->logger->info('Benutzerkonto gelöscht: ' . $username);
+
+        return ['ok' => true, 'users' => $admin->listUsers()];
+    }
+
+    /**
+     * Webseiten-Zuordnung aus der Anfrage: eine Liste von Hosts oder ["*"].
+     *
+     * @return list<string>
+     */
+    private function requestSites(array $request): array
+    {
+        $sites = $request['sites'] ?? [];
+        if (!is_array($sites)) {
+            throw ApiException::badRequest('PARAM-INVALID', ['sites']);
+        }
+
+        return array_values(array_map('strval', $sites));
+    }
+
+    /**
+     * Hosts aller Webseiten dieser Installation — aus den Kopfzeilen der
+     * Mount-Konfigurationen. Der eigene Host ist immer dabei, auch wenn die
+     * Installation (noch) über den Rückfall mounts.ini läuft.
+     *
+     * @return list<string>
+     */
+    private function knownSites(): array
+    {
+        $sites = $this->configPath !== null
+            ? SiteKey::knownHosts(dirname($this->configPath) . '/mounts')
+            : [];
+        $own = SiteKey::host($_SERVER);
+        if ($own !== '' && !in_array($own, $sites, true)) {
+            $sites[] = $own;
+            sort($sites, SORT_NATURAL);
+        }
+
+        return $sites;
     }
 
     /**

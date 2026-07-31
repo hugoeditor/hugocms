@@ -1,0 +1,71 @@
+; HugoCMS – Aufbau einer Benutzer-Kontodatei (driver = multiuser)
+; ===========================================================================
+; Diese Datei ist NUR eine Vorlage zur Ansicht. Im Betrieb liegt je Konto EINE
+; Datei unter backend/users/:
+;
+;     users/
+;       3f2a…c1.ini   ; „redakteur"
+;       9b71…04.ini   ; „lektorin"
+;
+; Der Dateiname ist der SHA-256 des kleingeschriebenen Anmeldenamens — genau
+; wie bei mounts/<hash>.ini. Das hat zwei Gründe: Die Anmeldung findet das
+; Konto mit EINEM Zugriff statt über einen Verzeichnis-Durchlauf, und ein Name
+; mit Sonderzeichen kann keinen Pfad aufbrechen.
+;
+; Eine Datei je Konto (statt einer gemeinsamen Liste) hält gleichzeitige
+; Schreibvorgänge auseinander: Wer seine Einstellungen speichert, fasst nur
+; seine eigene Datei an.
+;
+; Konten werden in der Oberfläche verwaltet („Benutzer verwalten", nur für
+; Administratoren). Von Hand bearbeiten muss man hier nichts — nur wenn man
+; sich selbst ausgesperrt hat, ist es gut zu wissen, wie es aussieht.
+;
+; Das Verzeichnis users/ gehört NICHT ins öffentliche Web. Es liegt unter
+; backend/, das der Webserver ohnehin nicht ausliefert; die Dateien sollten
+; 0640 tragen — sie enthalten Passwort-HASHES.
+; ===========================================================================
+
+[account]
+; Anmeldename, wie ihn der Benutzer eingibt. Beim Vergleich spielt die
+; Groß-/Kleinschreibung keine Rolle; angezeigt wird die hier hinterlegte Form.
+; Höchstens 64 Zeichen, keine Steuerzeichen und keines der Zeichen " [ ] =.
+username = "redakteur"
+
+; Passwort-HASH (NIEMALS das Klartextpasswort). Setzt die Oberfläche beim
+; Anlegen bzw. beim Zurücksetzen. Von Hand erzeugen mit:
+;   php -r "echo password_hash('DEIN-PASSWORT', PASSWORD_DEFAULT), PHP_EOL;"
+password_hash = "$2y$10$HIER-PASSWORT-HASH-EINTRAGEN"
+
+; Rolle: admin | editor. Unbekannte Werte gelten als editor — die Rolle mit
+; weniger Rechten.
+;   admin   erreicht alle Webseiten, verwaltet Konten, setzt fremde Passwörter
+;           neu. Mindestens ein aktives Administratorkonto muss es immer geben;
+;           HugoCMS verhindert, dass das letzte gelöscht, herabgestuft oder
+;           gesperrt wird.
+;   editor  arbeitet an den unter `sites` zugewiesenen Webseiten.
+role = "editor"
+
+; Webseiten, die dieses Konto bedienen darf: Kommaliste der HOSTS (ohne Port
+; und ohne Endpunkt-Pfad — dieselbe Bezugsgröße wie die Lizenz, damit ein Umzug
+; von /cms-api nach /hugocms-api die Zuordnung nicht entwertet).
+;   "*"        = alle Webseiten dieser Installation
+;   leer       = keine — das Konto kommt nirgends herein
+; Für die Rolle admin ohne Belang: Administratoren erreichen ohnehin alles.
+sites = "kunde-a.example.com, kunde-b.example.com"
+
+; Gesperrt? true = die Anmeldung wird abgewiesen, das Konto bleibt aber
+; bestehen (samt Zuordnung und Einstellungen).
+disabled = "false"
+
+[user]
+; Persönliche Einstellungen dieses Kontos — dieselben Schlüssel wie die
+; [user]-Sektion der hugocms.ini, nur eben je Benutzer. Was hier fehlt, fällt
+; auf die globale Vorgabe aus der hugocms.ini zurück.
+; Die Oberfläche schreibt diese Werte selbst: session_lifetime und
+; update_lastmod über „Konto und Einstellungen", content_width und
+; toolbar_collapsed beim Ziehen am Fensterrand bzw. beim Ein-/Ausklappen der
+; Werkzeugleiste.
+;session_lifetime = "8"
+;content_width = "1200"
+;toolbar_collapsed = "false"
+;update_lastmod = "false"

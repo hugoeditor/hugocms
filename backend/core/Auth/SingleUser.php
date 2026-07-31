@@ -22,16 +22,7 @@ use HugoCMS\FileManager\Exception\ApiException;
  */
 final class SingleUser implements AuthInterface
 {
-    private const SESSION_KEY = 'hugocms_fm_user';
-
-    /** Zeitstempel des letzten Zugriffs — Grundlage des Inaktivitäts-Limits. */
-    private const LAST_SEEN_KEY = 'hugocms_fm_last_seen';
-
-    /** Name des Sitzungs-Cookies (statt des Standards PHPSESSID). */
-    private const SESSION_NAME = 'HUGOCMS';
-
-    /** Standard-Sitzungsdauer in Sekunden, falls keine konfiguriert ist (8 Stunden). */
-    private const DEFAULT_SESSION_LIFETIME = 28800;
+    use SessionHandling;
 
     public function __construct(
         private readonly string $username,
@@ -39,7 +30,9 @@ final class SingleUser implements AuthInterface
         private readonly ?string $configPath = null,
         private readonly int $sessionLifetime = self::DEFAULT_SESSION_LIFETIME,
     ) {
-        $this->ensureSession();
+        if ($this->startSession($this->sessionLifetime)) {
+            $this->enforceIdleTimeout($this->sessionLifetime);
+        }
     }
 
     public function attemptLogin(string $username, string $password): bool
@@ -114,42 +107,41 @@ final class SingleUser implements AuthInterface
 
     public function can(string $permission): bool
     {
+        // Der Einzelbenutzer kann alles — auch Konten „verwalten" gibt es hier
+        // nicht: Der Connector bietet die Verwaltungsbefehle nur an, wenn der
+        // Treiber UserAdminInterface umsetzt.
         return $this->isAuthenticated();
     }
 
-    private function ensureSession(): void
+    public function supportsPreferences(): bool
     {
-        if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
-            session_name(self::SESSION_NAME);
-            // Serverseitige Lebensdauer der Sitzungsdaten an die konfigurierte
-            // Dauer koppeln (Best Effort). Die eigentliche Durchsetzung erfolgt
-            // über den Inaktivitäts-Zeitstempel unten — unabhängig von der
-            // Garbage Collection, die bei eigenem Sitzungsverzeichnis nicht
-            // zuverlässig läuft. Das Cookie bleibt ein Sitzungs-Cookie.
-            @ini_set('session.gc_maxlifetime', (string) $this->sessionLifetime);
-            session_set_cookie_params([
-                'httponly' => true,
-                'samesite' => 'Lax',
-            ]);
-            session_start();
-            $this->enforceIdleTimeout();
-        }
+        return $this->configPath !== null;
     }
 
-    /**
-     * Setzt die Sitzungsdauer als gleitendes Inaktivitäts-Limit durch: Liegt
-     * der letzte Zugriff länger als die konfigurierte Dauer zurück, wird die
-     * Sitzung verworfen (Abmeldung). Andernfalls wird der Zeitstempel auf den
-     * aktuellen Zugriff aufgefrischt, sodass aktive Nutzung angemeldet bleibt.
-     */
-    private function enforceIdleTimeout(): void
+    public function loadPreferences(): array
     {
-        $now = time();
-        $last = $_SESSION[self::LAST_SEEN_KEY] ?? null;
-        if (is_int($last) && $now - $last > $this->sessionLifetime) {
-            $_SESSION = [];
-            session_regenerate_id(true);
+        if ($this->configPath === null) {
+            return [];
         }
-        $_SESSION[self::LAST_SEEN_KEY] = $now;
+
+        return array_map('strval', Config::raw($this->configPath)['user'] ?? []);
+    }
+
+    public function savePreferences(array $changes): void
+    {
+        if ($this->configPath === null) {
+            throw new ApiException('ECONFIG', 409, 'RECONFIGURE-UNAVAILABLE');
+        }
+        // updateSections ersetzt die ganze Sektion — deshalb roh lesen,
+        // überlagern und vollständig zurückschreiben.
+        $user = Config::raw($this->configPath)['user'] ?? [];
+        foreach ($changes as $key => $value) {
+            if ($value === null) {
+                unset($user[$key]);
+            } else {
+                $user[$key] = $value;
+            }
+        }
+        Config::updateSections($this->configPath, ['user' => $user]);
     }
 }

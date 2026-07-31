@@ -59,6 +59,9 @@ export const useAuthStore = defineStore('auth', {
     // Rechnername der Hugo-baseURL (z. B. dev.opensourceerp.dev) — benennt die
     // Webseite im Browser-Tab. Leer, wenn das Projekt keine baseURL führt.
     siteHost: '',
+    // Darf dieses Konto andere Konten verwalten? Nur beim Mehrbenutzer-
+    // Verfahren und nur für die Rolle „admin“.
+    manageUsers: false,
   }),
 
   getters: {
@@ -106,6 +109,7 @@ export const useAuthStore = defineStore('auth', {
       this.cronPause = data.cronPause ?? { pauseBuild: false, pauseImprove: false, pauseHealthcheck: false }
       this.features = data.features ?? {}
       this.siteHost = data.siteHost ?? ''
+      this.manageUsers = data.manageUsers ?? false
       setCsrfToken(data.csrf)
       this.ready = true
     },
@@ -181,6 +185,34 @@ export const useAuthStore = defineStore('auth', {
     // Merkt die Benutzerwahl zum lastmod-Verhalten in [user] update_lastmod.
     async setUpdateLastmod(value) {
       await this.saveUserPrefs({ updateLastmod: value })
+    },
+
+    // --- Kontenverwaltung (Mehrbenutzer, Rolle admin) ---------------------
+    // Alle vier Schreibbefehle liefern die aktualisierte Liste gleich mit, so
+    // dass die Ansicht ohne zweiten Aufruf auf dem Stand bleibt.
+
+    // Konten, bekannte Webseiten (Auswahlliste) und die möglichen Rollen.
+    async loadUsers() {
+      return api.get('users')
+    },
+
+    async createUser(payload) {
+      return api.post('usercreate', payload)
+    },
+
+    // Rolle, Webseiten-Zuordnung oder Sperre eines Kontos ändern. Nicht
+    // genannte Felder bleiben, wie sie sind.
+    async updateUser(payload) {
+      return api.post('userupdate', payload)
+    },
+
+    // Passwort eines FREMDEN Kontos neu setzen („Passwort vergessen“).
+    async resetUserPassword(username, password) {
+      return api.post('userpassword', { username, password })
+    },
+
+    async deleteUser(username) {
+      return api.post('userdelete', { username })
     },
 
     // Ändert die Anmeldedaten (Name/Passwort). Der Server beendet danach die

@@ -55,6 +55,48 @@ final class SiteKey
         return hash('sha256', $siteKey);
     }
 
+    /**
+     * Die Hosts aller Webseiten, die diese Installation kennt — gelesen aus den
+     * Kopfzeilen der Mount-Konfigurationen unter mounts/:
+     *
+     *   ; HugoCMS – Mounts für kunde-a.example.com (von install.sh erzeugt).
+     *
+     * Diese Zeile ist ein Vertrag: bin/sites.sh und bin/crontab-entries.sh
+     * lesen sie ebenso, in beiden Sprachen. Grundlage der Auswahlliste, mit der
+     * ein Administrator Konten einzelnen Webseiten zuordnet.
+     *
+     * @return list<string> alphabetisch, ohne Doppelte
+     */
+    public static function knownHosts(string $mountsDir): array
+    {
+        $hosts = [];
+        foreach (glob(rtrim($mountsDir, '/') . '/*.ini') ?: [] as $path) {
+            $handle = @fopen($path, 'rb');
+            if ($handle === false) {
+                continue;
+            }
+            // Nur den Kopf lesen — die Zeile steht immer ganz oben.
+            for ($i = 0; $i < 5; $i++) {
+                $line = fgets($handle);
+                if ($line === false) {
+                    break;
+                }
+                if (preg_match('/Mounts f(?:ür|or)\s+(.+?)\s+\(/u', $line, $m) === 1) {
+                    $host = strtolower(trim($m[1]));
+                    if ($host !== '') {
+                        $hosts[$host] = true;
+                    }
+                    break;
+                }
+            }
+            fclose($handle);
+        }
+        $list = array_keys($hosts);
+        sort($list, SORT_NATURAL);
+
+        return $list;
+    }
+
     /** Verzeichnis des Endpunkts, normalisiert ('' für das Wurzelverzeichnis). */
     private static function endpointPath(string $scriptName): string
     {
