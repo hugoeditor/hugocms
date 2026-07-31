@@ -129,6 +129,12 @@ const sections = [
   { key: 'seo', label: 'seoConfig.section' },
   { key: 'pagespeed', label: 'pagespeedConfig.section' },
 ]
+// Zweite Schicht neben der Serverprüfung: Ein Redakteur bekommt den Dialog
+// zwar gar nicht erst angeboten (auth.reconfigurable ist dann falsch), aber
+// falls er doch einmal geöffnet wird, bleiben die Felder gesperrt und der
+// Speichern-Knopf unbenutzbar. Die harte Grenze zieht weiterhin der Server.
+const canEdit = computed(() => auth.manageConfig)
+
 // Auswahl und Hinweise zum Anmeldeverfahren.
 const driverOptions = computed(() =>
   authDrivers.value.map((d) => ({
@@ -208,6 +214,8 @@ watch(model, async (open) => {
 })
 
 async function submit() {
+  if (!canEdit.value) return // gesperrt — der Server würde ohnehin ablehnen
+
   saving.value = true
   error.value = null
   try {
@@ -268,7 +276,7 @@ async function submit() {
           density="comfortable"
           color="primary"
           :loading="saving"
-          :disabled="saving || loading"
+          :disabled="saving || loading || !canEdit"
           :aria-label="$t('reconfigure.submit')"
           @click="submit"
         />
@@ -300,7 +308,10 @@ async function submit() {
       </div>
       <v-card-text>
         <v-skeleton-loader v-if="loading" type="article" />
-        <v-form v-else @submit.prevent="submit">
+        <v-alert v-else-if="!canEdit" type="info" density="comfortable" class="mb-3">
+          {{ $t('reconfigure.readOnly') }}
+        </v-alert>
+        <v-form v-if="!loading" :disabled="!canEdit" @submit.prevent="submit">
           <div :ref="registerSection('auth')" class="text-subtitle-2 mb-2">{{ $t('authConfig.section') }}</div>
           <div class="text-caption text-medium-emphasis mb-2">{{ $t('authConfig.driverHint') }}</div>
           <v-select
@@ -386,7 +397,7 @@ async function submit() {
               size="small"
               class="ml-1"
               :loading="modelsLoading"
-              :disabled="!aiConfigured || modelsLoading || saving"
+              :disabled="!aiConfigured || modelsLoading || saving || !canEdit"
               :title="aiConfigured ? $t('aiConfig.refreshModels') : $t('aiConfig.refreshModelsUnavailable')"
               :aria-label="$t('aiConfig.refreshModels')"
               @click="refreshModels"

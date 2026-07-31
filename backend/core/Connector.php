@@ -646,16 +646,19 @@ final class Connector
             // Ist ein Hugo-Aufruf möglich? Nötig sind das zentrale Programm
             // (hugocms.ini) UND der Webseiten-Teil (source) der Mount-Konfig.
             'buildable' => $this->hugo !== null && $this->hugoBin !== null,
-            // Lässt sich die Konfiguration im laufenden Betrieb ändern? Nur,
-            // wenn der Connector aus einer hugocms.ini aufgebaut wurde — und
-            // nur, wenn das Konto es darf (beim Mehrbenutzer: Rolle admin).
-            // So verschwinden die Knöpfe beim Redakteur, statt erst beim Klick
-            // abgewiesen zu werden.
-            'reconfigurable' => $this->configPath !== null && $this->auth->can('config.manage'),
-            // Dasselbe für die Einstellungen DIESER Webseite: nur, wenn die
-            // Mounts aus einer Datei stammen (bei programmatischer Konfiguration
-            // über custom.php gibt es keine Datei zum Schreiben).
-            'projectConfigurable' => $this->mountsPath !== null && $this->auth->can('config.manage'),
+            // Lässt sich die Konfiguration im laufenden Betrieb EINSEHEN? Das
+            // setzt nur voraus, dass der Connector aus einer hugocms.ini
+            // aufgebaut wurde. Ob das Konto auch SPEICHERN darf, sagt
+            // `manageConfig` — der Dialog sperrt seine Felder danach.
+            'reconfigurable' => $this->configPath !== null,
+            // Die Einstellungen DIESER Webseite (SEO-Ausschlüsse, Verbesserer,
+            // Cron-Pausen, Auto-Commit, Analyse-Adressen) stehen JEDEM
+            // angemeldeten Konto offen — sie gehören zur redaktionellen Arbeit
+            // an der Webseite, nicht zur Verwaltung der Installation.
+            // Voraussetzung ist nur, dass die Mounts aus einer Datei stammen
+            // (bei programmatischer Konfiguration über custom.php gibt es keine
+            // Datei zum Schreiben).
+            'projectConfigurable' => $this->mountsPath !== null,
             // KI-Assistent: aktiv, wenn ein API-Schlüssel konfiguriert ist.
             'ai' => [
                 'enabled' => $this->ai['apiKey'] !== null,
@@ -673,6 +676,11 @@ final class Connector
             // Administratoren. Der Client blendet den Menüpunkt danach ein.
             'manageUsers' => $this->auth instanceof UserAdminInterface
                 && $this->auth->can('users.manage'),
+            // Darf dieses Konto konfigurieren? Bewusst getrennt von
+            // `reconfigurable`, das zusätzlich eine schreibbare hugocms.ini
+            // verlangt: Der Konfigurationsdialog sperrt darüber seine Felder,
+            // auch wenn er auf anderem Weg geöffnet wird.
+            'manageConfig' => $this->auth->can('config.manage'),
             // Pro-Edition (Git u. Ä.). 'configured' meldet einen hinterlegten,
             // ggf. ungültigen Schlüssel (falsche Domain) — für einen Hinweis im
             // Client. Der Schlüssel selbst wird nie zurückgegeben.
@@ -800,21 +808,16 @@ final class Connector
             throw ApiException::unauthorized('LOGIN-FAILED');
         }
 
-        // Alles Benutzerabhängige gleich mitgeben: Der Client holt nach dem
-        // Login kein whoami nach (die erste Anfrage danach kann noch das alte
-        // Sitzungs-Cookie tragen). Ohne diese Felder behielte er den Stand des
-        // ZUVOR angemeldeten Kontos — beim Mehrbenutzer wären das fremde
-        // Einstellungen und, schlimmer, fremde Verwaltungsrechte.
+        // Der Client holt nach dem Login KEIN whoami nach — die erste Anfrage
+        // danach kann noch das alte Sitzungs-Cookie tragen und käme als „nicht
+        // angemeldet" zurück. Deshalb liefert der Login denselben vollständigen
+        // Zustand: Alles, was vom angemeldeten Konto abhängt (Einstellungen,
+        // Verwaltungsrechte, welche Dialoge offenstehen), ist damit auf einen
+        // Schlag richtig. Einzelne Felder hier nachzupflegen ginge schief,
+        // sobald whoami um eines erweitert wird.
         $this->userPrefs = null;
 
-        return [
-            'authenticated' => true,
-            'user' => $this->auth->currentUser(),
-            'csrf' => $this->csrfToken(),
-            'ui' => $this->uiState(),
-            'manageUsers' => $this->auth instanceof UserAdminInterface
-                && $this->auth->can('users.manage'),
-        ];
+        return $this->cmdWhoami();
     }
 
     private function cmdLogout(): array
@@ -3057,7 +3060,11 @@ final class Connector
      */
     private function cmdConfig(): array
     {
-        $this->requireConfigAdmin();
+        // Nur LESEN — das darf jedes angemeldete Konto. Die Antwort enthält
+        // keine Geheimnisse (Schlüssel und Passwörter erscheinen ausschließlich
+        // als „…Configured"-Flag). Geschrieben wird über cmdReconfigure, und das
+        // verlangt config.manage.
+        $this->requireAuth();
         if ($this->configPath === null) {
             throw new ApiException('ECONFIG', 409, 'RECONFIGURE-UNAVAILABLE');
         }
@@ -3379,7 +3386,7 @@ final class Connector
      */
     private function cmdProjectConfig(): array
     {
-        $this->requireConfigAdmin();
+        $this->requireAuth();
         if ($this->mountsPath === null) {
             throw new ApiException('ECONFIG', 409, 'PROJECT-CONFIG-UNAVAILABLE');
         }
@@ -3441,7 +3448,7 @@ final class Connector
      */
     private function cmdProjectReconfigure(array $request): array
     {
-        $this->requireConfigAdmin();
+        $this->requireAuth();
         $this->requireMethod('POST');
         if ($this->mountsPath === null) {
             throw new ApiException('ECONFIG', 409, 'PROJECT-CONFIG-UNAVAILABLE');
@@ -3771,11 +3778,16 @@ final class Connector
     }
 
     /**
-     * Verlangt die Befugnis, die Installation zu konfigurieren: hugocms.ini,
-     * Projekteinstellungen, Lizenz. Beim Einzelbenutzer trifft das immer zu —
-     * es gibt nur ein Konto. Beim Mehrbenutzer ist es der Rolle „admin"
-     * vorbehalten: Ein Redakteur soll Inhalte pflegen, nicht das
-     * Anmeldeverfahren umstellen oder Schlüssel austauschen.
+     * Verlangt die Befugnis, die INSTALLATION zu konfigurieren: hugocms.ini
+     * (Anmeldeverfahren, Verzeichnisse, Log, Hugo, Schlüssel) und die Lizenz.
+     * Beim Einzelbenutzer trifft das immer zu — es gibt nur ein Konto. Beim
+     * Mehrbenutzer ist es der Rolle „admin" vorbehalten: Ein Redakteur soll
+     * Inhalte pflegen, nicht das Anmeldeverfahren umstellen oder Schlüssel
+     * austauschen.
+     *
+     * NICHT betroffen sind die Einstellungen einer einzelnen WEBSEITE
+     * (projectconfig/projectreconfigure) — die gehören zur redaktionellen
+     * Arbeit und stehen jedem angemeldeten Konto offen.
      */
     private function requireConfigAdmin(): void
     {

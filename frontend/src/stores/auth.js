@@ -62,6 +62,9 @@ export const useAuthStore = defineStore('auth', {
     // Darf dieses Konto andere Konten verwalten? Nur beim Mehrbenutzer-
     // Verfahren und nur für die Rolle „admin“.
     manageUsers: false,
+    // Darf dieses Konto konfigurieren (hugocms.ini, Projekteinstellungen,
+    // Lizenz)? Beim Einzelbenutzer immer, beim Mehrbenutzer nur als „admin“.
+    manageConfig: false,
   }),
 
   getters: {
@@ -81,7 +84,14 @@ export const useAuthStore = defineStore('auth', {
 
   actions: {
     async check() {
-      const data = await api.get('whoami')
+      this.applyState(await api.get('whoami'))
+    },
+
+    // Übernimmt eine vollständige Zustandsantwort. Genau diese Form liefern
+    // BEIDE Wege — `whoami` beim Laden der Seite und `login` nach dem Anmelden.
+    // Deshalb hier zentral: Wird die Antwort um ein Feld erweitert, gilt das
+    // sofort für beide, statt in einem von ihnen zu veralten.
+    applyState(data) {
       this.authenticated = data.authenticated
       this.user = data.user
       this.warnings = data.warnings ?? []
@@ -110,6 +120,7 @@ export const useAuthStore = defineStore('auth', {
       this.features = data.features ?? {}
       this.siteHost = data.siteHost ?? ''
       this.manageUsers = data.manageUsers ?? false
+      this.manageConfig = data.manageConfig ?? false
       setCsrfToken(data.csrf)
       this.ready = true
     },
@@ -217,19 +228,11 @@ export const useAuthStore = defineStore('auth', {
     },
 
     async login(username, password) {
-      const data = await api.post('login', { username, password })
-      this.authenticated = data.authenticated
-      this.user = data.user
-      // Benutzerabhängiges aus der Login-Antwort übernehmen. Beim Mehrbenutzer
-      // wechselt mit dem Konto auch, was es darf und wie seine Oberfläche
-      // aussieht; ohne diese beiden Zeilen bliebe der Stand des vorher
-      // angemeldeten Kontos stehen.
-      if (data.ui) this.ui = data.ui
-      this.manageUsers = data.manageUsers ?? false
-      // Frisches CSRF-Token der angemeldeten Sitzung übernehmen, damit der erste
-      // Schreibbefehl nach dem Login gelingt — auch nach einem Sitzungsablauf,
-      // bei dem das vorige Token verworfen wurde.
-      if (data.csrf) setCsrfToken(data.csrf)
+      // Der Server antwortet mit demselben vollständigen Zustand wie `whoami`
+      // (inklusive frischem CSRF-Token). Ein nachgelagertes whoami wäre hier
+      // riskant: Die erste Anfrage nach dem Login kann noch das alte
+      // Sitzungs-Cookie tragen und käme als „nicht angemeldet" zurück.
+      this.applyState(await api.post('login', { username, password }))
     },
 
     async logout() {
@@ -240,6 +243,7 @@ export const useAuthStore = defineStore('auth', {
       // zeigte die Oberfläche dem nächsten Anmelder kurzzeitig Einträge, die
       // ihm nicht zustehen.
       this.manageUsers = false
+      this.manageConfig = false
     },
   },
 })

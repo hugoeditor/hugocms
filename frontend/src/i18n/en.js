@@ -137,6 +137,7 @@ export default {
   },
 
   reconfigure: {
+    readOnly: 'These values can only be changed by administrators. They are shown here for reference only.',
     open: 'Change configuration',
     title: 'Change configuration',
     intro: 'Global settings, applied to all website projects.',

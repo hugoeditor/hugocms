@@ -531,12 +531,24 @@ seither geändert hat, käme nicht mehr herein. Die Kontodateien bleiben liegen;
 ein erneuter Wechsel findet sie unverändert vor.
 
 **Verwaltende Befugnisse.** `MultiUser::ADMIN_PERMISSIONS` führt, was der Rolle
-`admin` vorbehalten ist: `users.manage` (Konten) und `config.manage`
-(`hugocms.ini`, Projekteinstellungen, Lizenz). Der Connector prüft das über
-`requireConfigAdmin()`; `whoami` verknüpft `reconfigurable`,
-`projectConfigurable` und `licensable` damit, sodass die Knöpfe beim Redakteur
-gar nicht erst erscheinen. Beim Einzelbenutzer liefert `can()` immer `true` —
-dort ändert sich nichts.
+`admin` vorbehalten ist: `users.manage` (Konten) und `config.manage`. Die Grenze
+verläuft entlang SCHREIBEN, nicht LESEN:
+
+| Befehl | Redakteur | Grund |
+|---|---|---|
+| `config` | ja | reines Lesen; die Antwort führt keine Geheimnisse, Schlüssel und Passwörter erscheinen nur als `…Configured`-Flag |
+| `reconfigure`, `aimodels`, `activate` | nein | verändern die Installation bzw. die Lizenz (`requireConfigAdmin()`) |
+| `projectconfig`, `projectreconfigure` | ja | Einstellungen EINER Webseite (SEO-Ausschlüsse, Verbesserer, Cron-Pausen, Auto-Commit, Analyse-Adressen) — redaktionelle Arbeit |
+| `users…` | nein | Kontenverwaltung (`users.manage`) |
+
+Entsprechend melden `reconfigurable` und `projectConfigurable` nur, ob es
+überhaupt eine Datei zum Anzeigen gibt; die Befugnis zum Speichern steht getrennt
+in `manageConfig`. Der Konfigurationsdialog öffnet sich damit auch für
+Redakteure, sperrt aber sämtliche Felder (`<v-form :disabled>`) und blendet einen
+Hinweis ein. `licensable` bleibt an `config.manage` gebunden — dort gibt es
+nichts einzusehen, nur zu aktivieren.
+
+Beim Einzelbenutzer liefert `can()` immer `true` — dort ändert sich nichts.
 
 **Selbstsperren ausgeschlossen.** Das letzte aktive Administratorkonto lässt sich
 weder löschen noch herabstufen noch sperren; das eigene Konto lässt sich nicht
@@ -741,7 +753,7 @@ eindeutig zu genau einer Webpräsenz. Zwei Folgen für den Mehrfach-Betrieb:
 | `build`    | POST    | –                                    | Hugo aufrufen (Webseite erzeugen)      |
 | `assistant`| POST    | `messages`, `locale`?, `confirm`?, `openFilePath`?, `openDirPath`? | KI-Assistent: einen Zug ausführen (Werkzeug-Schleife) |
 | `config`   | GET     | –                                    | Aktuelle Konfigurationswerte inkl. AI-Status (ohne Geheimnisse) |
-| `reconfigure`| POST  | `authDriver`?, `sessionPath`, `logFile`, `logLevel`, `hugoBin`?, `aiApiKey`?, `aiModel`?, `aiWriteMode`? | hugocms.ini ändern (Anmeldeverfahren/Verzeichnisse/Log/Hugo/AI). `config`/`reconfigure` sowie `projectconfig`/`projectreconfigure`/`activate`/`aimodels` verlangen `config.manage` |
+| `reconfigure`| POST  | `authDriver`?, `sessionPath`, `logFile`, `logLevel`, `hugoBin`?, `aiApiKey`?, `aiModel`?, `aiWriteMode`? | hugocms.ini ändern (Anmeldeverfahren/Verzeichnisse/Log/Hugo/AI). Verlangt `config.manage` — ebenso `aimodels` und `activate`. `config` (lesen) und `projectconfig`/`projectreconfigure` nicht |
 | `account`  | POST    | `currentPassword`, `username`, `password`? | Anmeldedaten ändern (danach Neuanmeldung) |
 | `setuserprefs`| POST | `contentWidth`?, `toolbarCollapsed`?, `sessionLifetime`? (Stunden), `updateLastmod`? (`null` = nachfragen) | Eigene `[user]`-Einstellungen schreiben; nur die genannten Felder |
 | `users`    | GET     | –                                    | **Pro/multiuser:** Konten, bekannte Webseiten, Rollen |

@@ -137,6 +137,7 @@ export default {
   },
 
   reconfigure: {
+    readOnly: 'Diese Werte lassen sich nur von Administratoren ändern. Sie werden hier nur angezeigt.',
     open: 'Konfiguration ändern',
     title: 'Konfiguration ändern',
     intro: 'Globale Einstellungen, gelten für alle Webseitenprojekte.',
