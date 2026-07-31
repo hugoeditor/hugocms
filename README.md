@@ -48,16 +48,23 @@ hugocms-2026/                     # Quell-Repo (Entwicklung)
 │   │   ├── Review/               # gestaffelte Veröffentlichung (Freigabe)
 │   │   │   ├── ReviewStore.php        # Entwurfsspeicher je Webseite (var/review/)
 │   │   │   └── FrontMatter.php        # draft/publishDate im Front Matter setzen
-│   │   ├── AuthFactory.php       # Auth-Treiber (singleuser)
+│   │   ├── AuthFactory.php       # Auth-Treiber (singleuser, multiuser)
 │   │   ├── Logger.php            # Datei-Logging mit Stufen
 │   │   ├── Response.php          # einheitliche JSON-Antworten
-│   │   ├── Auth/                 # AuthInterface + SingleUser
+│   │   ├── Auth/                 # Anmeldeverfahren
+│   │   │   ├── AuthInterface.php     # Vertrag (Anmeldung + Einstellungen je Benutzer)
+│   │   │   ├── SingleUser.php        # ein Konto, Daten in der hugocms.ini
+│   │   │   ├── MultiUser.php         # Pro: mehrere Konten mit Rollen
+│   │   │   ├── UserStore.php         # Pro: Kontodateien users/<hash>.ini
+│   │   │   ├── UserAdminInterface.php / SiteAwareInterface.php
+│   │   │   └── SessionHandling.php   # gemeinsamer Sitzungsteil beider Treiber
 │   │   └── Exception/            # ApiException
 │   ├── cli/                      # Kommandozeilen-Werkzeuge
 │   │   ├── cron-improve.php      # Cron: nächste Dateien per KI verbessern (auto)
 │   │   └── cron-build.php        # Cron: bei fälligen Freigaben bauen (--force: immer)
 │   ├── custom/                   # custom.php.beispiel (programmatischer Bootstrap)
 │   ├── mounts/                   # host-spezifische mounts/<hash>.ini (je Webseite)
+│   ├── users/                    # Pro: eine INI je Benutzerkonto (multiuser)
 │   ├── help/                     # Wissensdatenbank (Markdown), u. a. SEO-Regel-Hilfen
 │   ├── hugocms.ini(.beispiel)    # Hauptkonfiguration: Anmeldung, Session, Log
 │   ├── mounts.ini(.beispiel)     # Rückfall-Mounts (greift ohne host-eigene Datei)
@@ -113,11 +120,21 @@ gelten relativ zur Datei (also zu `backend/`).
 
 ```ini
 [auth]
+; singleuser (Standard) | multiuser (Pro, siehe „Mehrbenutzer“)
 driver = singleuser
 username = admin
 ; Passwort-HASH (nie Klartext), erzeugen mit:
 ;   php -r "echo password_hash('DEIN-PASSWORT', PASSWORD_DEFAULT), PHP_EOL;"
 password_hash = "$2y$10$..."
+
+[user]
+; Installationsweite Vorgaben für die Oberfläche. Beim Einzelbenutzer sind es
+; zugleich SEINE Einstellungen; beim Mehrbenutzer die Vorgabe, auf die jedes
+; Konto zurückfällt, das den Schlüssel nicht selbst führt.
+session_lifetime  = 8      ; Stunden Inaktivität bis zur Abmeldung (Standard 8)
+content_width     = 1200   ; Breite des Hauptfensters in px (Standard 1200)
+toolbar_collapsed = false  ; Werkzeugleiste eingeklappt starten
+update_lastmod    = false  ; lastmod beim Speichern setzen; fehlt = Editor fragt
 
 [session]
 ; Pflichtfeld; muss für den Webserver-Benutzer beschreibbar sein.
@@ -433,6 +450,84 @@ Voraussetzungen: `git` ist auf dem Server installiert, das Projektverzeichnis
 ist ein Git-Repository, und für `push` sind die Zugangsdaten der Gegenstelle in
 der Serverumgebung eingerichtet (SSH-Schlüssel bzw. Credential-Helper).
 
+### Mehrbenutzer (`driver = multiuser`)
+
+Mehrere Konten mit zwei Rollen. Die Anmeldung bleibt treiberabstrahiert: Der
+Connector kennt weder Speicherformat noch Treibertyp, alle Entscheidungen fallen
+im Treiber.
+
+**Speicherform: eine INI je Konto.** Bewusst keine Datenbank — es gibt keine
+Abfrage, die SQL bräuchte, und `pdo_sqlite` ist auf Shared Hosting nicht
+verlässlich vorhanden. Stattdessen das Muster der Mount-Konfigurationen:
+
+```
+backend/users/
+  3f2a…c1.ini    ; „redakteur“
+  9b71…04.ini    ; „lektorin“
+```
+
+Der Dateiname ist der SHA-256 des kleingeschriebenen Anmeldenamens. Damit findet
+die Anmeldung das Konto mit EINEM Zugriff statt über einen Verzeichnis-Durchlauf,
+und ein Name mit Sonderzeichen kann keinen Pfad aufbrechen. Eine Datei je Konto
+(statt einer gemeinsamen Liste) hält gleichzeitige Schreibvorgänge auseinander:
+Wer seine Einstellungen speichert, fasst nur seine eigene Datei an.
+
+```ini
+[account]
+username      = "redakteur"
+password_hash = "$2y$10$…"
+role          = "editor"                   ; admin | editor
+sites         = "kunde-a.example.com"      ; Kommaliste der HOSTS oder "*"
+disabled      = "false"
+
+[user]
+; Wie die [user]-Sektion der hugocms.ini, nur je Konto. Was hier fehlt, fällt
+; auf die dortigen Vorgaben zurück.
+content_width = "1440"
+```
+
+**Rollen.** `admin` erreicht alle Webseiten, verwaltet Konten und setzt fremde
+Passwörter neu; `editor` arbeitet an den unter `sites` zugewiesenen Webseiten.
+Kein feingranulares Rechtesystem: Was auf einem Mount erlaubt ist, entscheidet
+unverändert dessen `permissions`/`readonly`.
+
+**Zuordnung über den Host**, nicht über den vollen SiteKey — dieselbe Bezugsgröße
+wie die Lizenz. Ein Umzug des Endpunkts von `/cms-api` nach `/hugocms-api`
+entwertet damit keine Zuordnung. Die Auswahlliste in der Oberfläche liest die
+Hosts aus den Kopfzeilen der Mount-Konfigurationen (`SiteKey::knownHosts()`) —
+dieselbe Zeile, die `bin/sites.sh` parst.
+
+**Pro-Schranke.** Ohne gültige Lizenz für die aufgerufene Webseite melden sich
+nur Administratoren an. Eine harte Sperre hätte eine Installation unbedienbar
+gemacht, sobald eine Lizenz fehlt oder abläuft — so bleibt der Weg herein offen,
+um sie einzutragen, während die übrigen Konten ruhen.
+
+**Schnittstellen.** `AuthInterface` trägt nur, was beide Treiber können
+(Anmeldung, Anmeldedaten ändern, Einstellungen laden/speichern). Alles Weitere
+steht in eigenen Verträgen, die der Connector per `instanceof` prüft:
+
+| Schnittstelle | Umsetzung | Wirkung |
+|---|---|---|
+| `UserAdminInterface` | nur `MultiUser` | Kontenverwaltung; ohne sie gibt es die Befehle `users…` nicht |
+| `SiteAwareInterface` | nur `MultiUser` | `bindSite(host, isPro)` — der Connector reicht den Webseiten-Kontext nach, da die Mount-Konfiguration erst nach dem Konstruktor feststeht (Lizenzstatus als Rückruf, damit die Prüfung nur bei Bedarf läuft) |
+
+**Umstieg vom Einzelbenutzer.** Es genügt, `driver = multiuser` zu setzen. Ist
+`users/` noch leer, macht `AuthFactory::seedFirstAdmin()` aus `[auth] username` +
+`password_hash` das erste Administratorkonto — der Hash wird übernommen, das
+Passwort bleibt also unverändert, und eine laufende Sitzung überlebt den Wechsel
+(beide Treiber nutzen denselben Sitzungsschlüssel). Fehlen Konten UND
+Einzelbenutzer, bricht der Aufbau mit `AUTH-MULTIUSER-NO-ACCOUNTS` ab, statt eine
+Installation ohne Zugang zu hinterlassen.
+
+`username`/`password_hash` bleiben danach in `[auth]` stehen und veralten dort —
+gelesen werden sie nur, solange `users/` leer ist. Das ist ein
+Wiederherstellungsweg; wer ihn nicht will, löscht beide Zeilen nach dem Umstieg.
+
+**Selbstsperren ausgeschlossen.** Das letzte aktive Administratorkonto lässt sich
+weder löschen noch herabstufen noch sperren; das eigene Konto lässt sich nicht
+selbst entmachten und nicht über die Verwaltung ändern — dafür gibt es den
+Konto-Dialog mit Passwortbestätigung.
+
 ### Lizenzmodell
 
 Die Lizenz gilt **pro Webseite** und ist an deren **Domain** gebunden
@@ -607,8 +702,8 @@ eindeutig zu genau einer Webpräsenz. Zwei Folgen für den Mehrfach-Betrieb:
 
 | Befehl     | Methode | Parameter                            | Zweck                                  |
 |------------|---------|--------------------------------------|----------------------------------------|
-| `whoami`   | GET     | –                                    | Anmeldestatus abfragen                 |
-| `login`    | POST    | `username`, `password`               | Anmelden                               |
+| `whoami`   | GET     | –                                    | Anmeldestatus abfragen (liefert u. a. `ui`, `manageUsers`, `csrf`) |
+| `login`    | POST    | `username`, `password`               | Anmelden — die Antwort trägt `ui` und `manageUsers` mit, da der Client danach kein `whoami` nachholt |
 | `logout`   | POST    | –                                    | Abmelden                               |
 | `mounts`   | GET     | –                                    | Mounts auflisten                       |
 | `list`     | GET     | `target` (ID)                        | Verzeichnis auflisten                  |
@@ -633,6 +728,12 @@ eindeutig zu genau einer Webpräsenz. Zwei Folgen für den Mehrfach-Betrieb:
 | `config`   | GET     | –                                    | Aktuelle Konfigurationswerte inkl. AI-Status (ohne Geheimnisse) |
 | `reconfigure`| POST  | `sessionPath`, `logFile`, `logLevel`, `hugoBin`?, `aiApiKey`?, `aiModel`?, `aiWriteMode`? | hugocms.ini ändern (Verzeichnisse/Log/Hugo/AI) |
 | `account`  | POST    | `currentPassword`, `username`, `password`? | Anmeldedaten ändern (danach Neuanmeldung) |
+| `setuserprefs`| POST | `contentWidth`?, `toolbarCollapsed`?, `sessionLifetime`? (Stunden), `updateLastmod`? (`null` = nachfragen) | Eigene `[user]`-Einstellungen schreiben; nur die genannten Felder |
+| `users`    | GET     | –                                    | **Pro/multiuser:** Konten, bekannte Webseiten, Rollen |
+| `usercreate`| POST   | `username`, `password`, `role`, `sites` | **Pro/multiuser:** Konto anlegen        |
+| `userupdate`| POST   | `username`, `role`?, `sites`?, `disabled`? | **Pro/multiuser:** Rolle, Zuordnung oder Sperre ändern |
+| `userpassword`| POST | `username`, `password`               | **Pro/multiuser:** fremdes Passwort neu setzen |
+| `userdelete`| POST   | `username`                           | **Pro/multiuser:** Konto löschen        |
 | `license`  | GET     | –                                    | Lizenzstatus (Edition, Lizenznehmer, Domain) |
 | `activate` | POST    | `key`                                | Pro-Lizenz aktivieren (schreibt `mounts/<hash>.ini`) |
 | `gitstatus`| GET     | –                                    | **Pro:** Git-Status (Branch, geänderte Dateien) |
@@ -715,7 +816,14 @@ Client:
   innerhalb ihres Mounts liegen; `..` ist verboten.
 - **Anmeldepflicht:** Alle Datei-Befehle erfordern eine gültige Sitzung.
 - **Rechte je Mount:** `permissions` und `readonly` begrenzen Operationen pro
-  Mount – Grundlage für spätere Rollen.
+  Mount. Sie gelten unabhängig vom Anmeldeverfahren: Beim Mehrbenutzer regelt
+  die Rolle nur, WELCHE Webseiten ein Konto sieht und wer Konten verwaltet —
+  was auf einem Mount erlaubt ist, entscheidet weiterhin allein dessen
+  Konfiguration.
+- **Passwörter nur als Hash:** `password_hash()` mit `PASSWORD_DEFAULT`, in der
+  `hugocms.ini` bzw. in der Kontodatei. Beim Mehrbenutzer laufen Anmeldeversuche
+  mit unbekanntem Namen gegen einen Vergleichshash, damit die Antwortzeit nicht
+  verrät, welche Konten es gibt.
 - **Host-sicherer Mount-Pfad:** Die host-spezifische Mount-Datei wird über einen
   SHA-256-Hash adressiert; ein manipulierter Host-Header kann keinen
   Pfad-Ausbruch erzeugen.

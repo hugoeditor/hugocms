@@ -3574,7 +3574,9 @@ final class Connector
             return $this->userPrefs;
         }
         if ($this->auth->isAuthenticated() && $this->auth->supportsPreferences()) {
-            return $this->userPrefs = Config::userSection($this->auth->loadPreferences());
+            // Was die Kontodatei nicht führt, fällt auf die globalen Vorgaben
+            // der hugocms.ini zurück.
+            return $this->userPrefs = Config::userSection($this->auth->loadPreferences(), $this->user);
         }
 
         return $this->userPrefs = $this->user;

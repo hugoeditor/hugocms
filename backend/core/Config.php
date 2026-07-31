@@ -280,28 +280,38 @@ final class Config
      *
      * Öffentlich, weil dieselbe Normalisierung auch für die Einstellungen gilt,
      * die ein Auth-Treiber je Benutzer vorhält (Mehrbenutzer: users/<hash>.ini).
+     * $defaults trägt dann die globalen Vorgaben aus der hugocms.ini: Was in der
+     * Datei EINES Kontos fehlt, fällt darauf zurück — sonst verlöre ein frisch
+     * angelegtes Konto (und jedes beim Umstieg übernommene) die installations-
+     * weiten Vorgaben.
+     *
+     * @param ?array{sessionLifetime: int, contentWidth: int, toolbarCollapsed: bool, updateLastmod: ?bool} $defaults
      *
      * @return array{sessionLifetime: int, contentWidth: int, toolbarCollapsed: bool, updateLastmod: ?bool}  sessionLifetime in Sekunden
      */
-    public static function userSection(mixed $section): array
+    public static function userSection(mixed $section, ?array $defaults = null): array
     {
         $section = is_array($section) ? $section : [];
+        $defaultSeconds = $defaults['sessionLifetime'] ?? self::DEFAULT_SESSION_LIFETIME;
+        $defaultWidth = $defaults['contentWidth'] ?? self::DEFAULT_CONTENT_WIDTH;
+
         $hours = isset($section['session_lifetime']) ? (float) $section['session_lifetime'] : 0.0;
-        $seconds = $hours > 0 ? (int) round($hours * 3600) : self::DEFAULT_SESSION_LIFETIME;
+        $seconds = $hours > 0 ? (int) round($hours * 3600) : $defaultSeconds;
 
         $width = isset($section['content_width']) ? (int) $section['content_width'] : 0;
         if ($width < self::MIN_CONTENT_WIDTH) {
-            $width = self::DEFAULT_CONTENT_WIDTH;
+            $width = $defaultWidth;
         }
 
         $toolbarCollapsed = isset($section['toolbar_collapsed'])
-            && filter_var($section['toolbar_collapsed'], FILTER_VALIDATE_BOOLEAN);
+            ? filter_var($section['toolbar_collapsed'], FILTER_VALIDATE_BOOLEAN)
+            : ($defaults['toolbarCollapsed'] ?? false);
 
         // update_lastmod ist dreiwertig: fehlt der Schlüssel (null), fragt der
         // Editor beim Speichern nach; true/false wenden das ohne Nachfrage an.
         $updateLastmod = isset($section['update_lastmod'])
             ? filter_var($section['update_lastmod'], FILTER_VALIDATE_BOOLEAN)
-            : null;
+            : ($defaults['updateLastmod'] ?? null);
 
         return [
             'sessionLifetime' => $seconds,
