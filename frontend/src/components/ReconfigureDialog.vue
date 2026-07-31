@@ -12,6 +12,13 @@ const auth = useAuthStore()
 const model = defineModel({ type: Boolean, default: false })
 const emit = defineEmits(['saved'])
 
+// Anmeldeverfahren: singleuser (ein Konto in der hugocms.ini) oder multiuser
+// (mehrere Konten unter users/, Pro). `authUserCount` sagt, ob beim Wechsel
+// noch ein Konto aus dem Einzelbenutzer entsteht oder ob schon welche liegen.
+const authDriver = ref('singleuser')
+const authDriverSaved = ref('singleuser')
+const authDrivers = ref(['singleuser', 'multiuser'])
+const authUserCount = ref(0)
 const sessionPath = ref('')
 const logFile = ref('')
 const logLevel = ref('warning')
@@ -115,12 +122,31 @@ const error = ref(null)
 // im SEO-Bericht). Reihenfolge wie im Formular; jeder Knopf scrollt zur zugehörigen
 // Überschrift. Die Elemente werden per Funktions-Ref registriert.
 const sections = [
+  { key: 'auth', label: 'authConfig.section' },
   { key: 'ai', label: 'aiConfig.section' },
   { key: 'speech', label: 'speechConfig.section' },
   { key: 'mail', label: 'mailConfig.section' },
   { key: 'seo', label: 'seoConfig.section' },
   { key: 'pagespeed', label: 'pagespeedConfig.section' },
 ]
+// Auswahl und Hinweise zum Anmeldeverfahren.
+const driverOptions = computed(() =>
+  authDrivers.value.map((d) => ({
+    title: t(d === 'multiuser' ? 'authConfig.driverMulti' : 'authConfig.driverSingle'),
+    value: d,
+  })),
+)
+const driverChanged = computed(() => authDriver.value !== authDriverSaved.value)
+const driverChangeHint = computed(() => {
+  if (authDriver.value === 'multiuser') {
+    // Liegen bereits Konten, greifen die — dann entsteht kein neues.
+    return authUserCount.value > 0
+      ? t('authConfig.toMultiExisting', [authUserCount.value])
+      : t('authConfig.toMultiFirst')
+  }
+  return t('authConfig.toSingle')
+})
+
 const sectionEls = {}
 function registerSection(key) {
   return (el) => {
@@ -138,6 +164,10 @@ watch(model, async (open) => {
   loading.value = true
   try {
     const cfg = await auth.loadConfig()
+    authDriver.value = cfg.authDriver ?? 'singleuser'
+    authDriverSaved.value = authDriver.value
+    authDrivers.value = cfg.authDrivers ?? ['singleuser', 'multiuser']
+    authUserCount.value = cfg.authUserCount ?? 0
     sessionPath.value = cfg.sessionPath ?? ''
     logFile.value = cfg.logFile ?? ''
     logLevel.value = cfg.logLevel ?? 'warning'
@@ -188,6 +218,7 @@ async function submit() {
       await auth.verifyService({ speechKey: speechKey.value, speechUrl: speechUrl.value })
     }
     await auth.reconfigure({
+      authDriver: authDriver.value,
       sessionPath: sessionPath.value,
       logFile: logFile.value,
       logLevel: logLevel.value,
@@ -270,6 +301,32 @@ async function submit() {
       <v-card-text>
         <v-skeleton-loader v-if="loading" type="article" />
         <v-form v-else @submit.prevent="submit">
+          <div :ref="registerSection('auth')" class="text-subtitle-2 mb-2">{{ $t('authConfig.section') }}</div>
+          <div class="text-caption text-medium-emphasis mb-2">{{ $t('authConfig.driverHint') }}</div>
+          <v-select
+            v-model="authDriver"
+            :items="driverOptions"
+            :label="$t('authConfig.driver')"
+            prepend-inner-icon="mdi-account-key"
+            variant="outlined"
+            density="comfortable"
+            class="mb-2"
+          />
+          <!-- Was der Wechsel bewirkt, VOR dem Speichern sagen: Er greift beim
+               nächsten Aufruf und verändert, wer sich womit anmeldet. -->
+          <v-alert v-if="driverChanged" type="info" density="compact" class="mb-3">
+            {{ driverChangeHint }}
+          </v-alert>
+          <v-alert
+            v-else-if="authDriver === 'multiuser' && !auth.isPro"
+            type="info"
+            density="compact"
+            class="mb-3"
+          >
+            {{ $t('authConfig.proHint') }}
+          </v-alert>
+
+          <v-divider class="my-3" />
           <div class="text-caption text-medium-emphasis mb-2">{{ $t('setup.sessionPathHint') }}</div>
           <v-text-field
             v-model="sessionPath"

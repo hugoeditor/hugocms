@@ -10,6 +10,7 @@ use HugoCMS\FileManager\Audit\ContentQualityService;
 use HugoCMS\FileManager\Auth\AuthInterface;
 use HugoCMS\FileManager\Auth\SiteAwareInterface;
 use HugoCMS\FileManager\Auth\UserAdminInterface;
+use HugoCMS\FileManager\Auth\UserStore;
 use HugoCMS\FileManager\Cron\Heartbeat;
 use HugoCMS\FileManager\Exception\ApiException;
 use HugoCMS\FileManager\Review\FrontMatter;
@@ -646,12 +647,15 @@ final class Connector
             // (hugocms.ini) UND der Webseiten-Teil (source) der Mount-Konfig.
             'buildable' => $this->hugo !== null && $this->hugoBin !== null,
             // Lässt sich die Konfiguration im laufenden Betrieb ändern? Nur,
-            // wenn der Connector aus einer hugocms.ini aufgebaut wurde.
-            'reconfigurable' => $this->configPath !== null,
+            // wenn der Connector aus einer hugocms.ini aufgebaut wurde — und
+            // nur, wenn das Konto es darf (beim Mehrbenutzer: Rolle admin).
+            // So verschwinden die Knöpfe beim Redakteur, statt erst beim Klick
+            // abgewiesen zu werden.
+            'reconfigurable' => $this->configPath !== null && $this->auth->can('config.manage'),
             // Dasselbe für die Einstellungen DIESER Webseite: nur, wenn die
             // Mounts aus einer Datei stammen (bei programmatischer Konfiguration
             // über custom.php gibt es keine Datei zum Schreiben).
-            'projectConfigurable' => $this->mountsPath !== null,
+            'projectConfigurable' => $this->mountsPath !== null && $this->auth->can('config.manage'),
             // KI-Assistent: aktiv, wenn ein API-Schlüssel konfiguriert ist.
             'ai' => [
                 'enabled' => $this->ai['apiKey'] !== null,
@@ -675,8 +679,9 @@ final class Connector
             'license' => $this->license()->info(),
             // Lässt sich eine Lizenz aktivieren? Nur, wenn eine Mount-Datei
             // geladen wurde (mounts/<hash>.ini bzw. mounts.ini) — dorthin wird
-            // geschrieben. Bei custom.php (programmatisch) nicht möglich.
-            'licensable' => $this->mountsPath !== null,
+            // geschrieben. Bei custom.php (programmatisch) nicht möglich, und
+            // nur für Konten, die konfigurieren dürfen.
+            'licensable' => $this->mountsPath !== null && $this->auth->can('config.manage'),
             // Git ist nur nutzbar, wenn die Webseite ein Hugo-Projekt hat
             // (dort liegt das Repository) UND eine gültige Pro-Lizenz vorliegt.
             'git' => $this->hugo !== null && $this->license()->isPro(),
@@ -3021,6 +3026,13 @@ final class Connector
     /** Erlaubte Log-Stufen — gemeinsam für Lesen (config) und Schreiben. */
     private const LOG_LEVELS = ['debug', 'info', 'warning', 'error'];
 
+    /**
+     * Über den Konfigurationsdialog umschaltbare Anmeldeverfahren. Weitere
+     * Treiber lassen sich programmatisch registrieren (Connector-Option
+     * „authDrivers"); die stehen dann nicht im Dialog, bleiben aber gültig.
+     */
+    private const AUTH_DRIVERS = ['singleuser', 'multiuser'];
+
     /** Erlaubte Schreibmodi des KI-Assistenten. */
     private const AI_WRITE_MODES = ['readonly', 'confirm', 'auto'];
 
@@ -3045,13 +3057,19 @@ final class Connector
      */
     private function cmdConfig(): array
     {
-        $this->requireAuth();
+        $this->requireConfigAdmin();
         if ($this->configPath === null) {
             throw new ApiException('ECONFIG', 409, 'RECONFIGURE-UNAVAILABLE');
         }
         $raw = Config::raw($this->configPath);
 
         return [
+            // Anmeldeverfahren. `authUserCount` sagt dem Dialog, ob beim Wechsel
+            // auf multiuser noch ein Konto aus dem Einzelbenutzer entsteht oder
+            // ob bereits Konten liegen (dann gelten die).
+            'authDriver'    => strtolower(trim((string) ($raw['auth']['driver'] ?? 'singleuser'))),
+            'authDrivers'   => self::AUTH_DRIVERS,
+            'authUserCount' => count((new UserStore(dirname($this->configPath) . '/users'))->all()),
             'sessionPath' => $raw['session']['path'] ?? '',
             'logFile'     => $raw['log']['file'] ?? '',
             'logLevel'    => $raw['log']['level'] ?? 'warning',
@@ -3114,7 +3132,7 @@ final class Connector
      */
     private function cmdReconfigure(array $request): array
     {
-        $this->requireAuth();
+        $this->requireConfigAdmin();
         $this->requireMethod('POST');
         if ($this->configPath === null) {
             throw new ApiException('ECONFIG', 409, 'RECONFIGURE-UNAVAILABLE');
@@ -3128,6 +3146,9 @@ final class Connector
         }
         $hugoBin = self::cleanConfigValue($request['hugoBin'] ?? '', 'hugoBin', false);
         $hugoClean = filter_var($request['hugoClean'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+        // Anmeldeverfahren (optional; fehlt das Feld, bleibt alles wie es ist).
+        $authSection = $this->authSectionForDriver($request['authDriver'] ?? null);
 
         // KI-Assistent. Der API-Schlüssel ist ein Geheimnis: ein leeres Feld
         // lässt den bestehenden unverändert; nur eine Eingabe ersetzt ihn.
@@ -3256,7 +3277,7 @@ final class Connector
             }
         }
 
-        Config::updateSections($this->configPath, [
+        $sections = [
             'session' => ['path' => $sessionPath],
             'log'     => ['file' => $logFile, 'level' => $logLevel],
             'hugo'    => $hugoSection,
@@ -3268,7 +3289,14 @@ final class Connector
             'mail'    => $mailSection,
             // Ohne zusätzliche Präfixe/Dateien keine [seo_report]-Sektion.
             'seo_report' => $seoSection,
-        ]);
+        ];
+        // [auth] NUR bei einem Treiberwechsel mitgeben. Den Schlüssel immer zu
+        // setzen wäre gefährlich: updateSections deutet null als „Sektion
+        // entfernen" — die Anmeldedaten wären damit weg.
+        if ($authSection !== null) {
+            $sections = ['auth' => $authSection] + $sections;
+        }
+        Config::updateSections($this->configPath, $sections);
         $this->logger->info('Konfiguration aktualisiert (reconfigure).');
 
         return ['ok' => true];
@@ -3319,7 +3347,7 @@ final class Connector
      */
     private function cmdAiModels(): array
     {
-        $this->requireAuth();
+        $this->requireConfigAdmin();
         $this->requireMethod('POST');
         if ($this->configPath === null) {
             throw new ApiException('ECONFIG', 409, 'RECONFIGURE-UNAVAILABLE');
@@ -3351,7 +3379,7 @@ final class Connector
      */
     private function cmdProjectConfig(): array
     {
-        $this->requireAuth();
+        $this->requireConfigAdmin();
         if ($this->mountsPath === null) {
             throw new ApiException('ECONFIG', 409, 'PROJECT-CONFIG-UNAVAILABLE');
         }
@@ -3413,7 +3441,7 @@ final class Connector
      */
     private function cmdProjectReconfigure(array $request): array
     {
-        $this->requireAuth();
+        $this->requireConfigAdmin();
         $this->requireMethod('POST');
         if ($this->mountsPath === null) {
             throw new ApiException('ECONFIG', 409, 'PROJECT-CONFIG-UNAVAILABLE');
@@ -3691,6 +3719,71 @@ final class Connector
     // Der Connector reicht die Befehle nur durch: WER was darf, entscheidet der
     // Treiber (UserAdminInterface). Bringt der Treiber die Schnittstelle nicht
     // mit — etwa der Einzelbenutzer —, gibt es diese Befehle schlicht nicht.
+
+    /**
+     * Bereitet den Wechsel des Anmeldeverfahrens vor und liefert die zu
+     * schreibende [auth]-Sektion — oder null, wenn sich nichts ändert (dann
+     * bleibt die Sektion wörtlich stehen).
+     *
+     * Zum Mehrbenutzer hin bleiben `username` und `password_hash` erhalten:
+     * Daraus baut die AuthFactory beim nächsten Aufruf das erste
+     * Administratorkonto, sofern users/ noch leer ist.
+     *
+     * Zurück zum Einzelbenutzer wandern die Anmeldedaten des GERADE
+     * angemeldeten Kontos in die [auth]-Sektion. Ohne diesen Schritt gälte
+     * wieder der alte Stand aus der Zeit vor der Umstellung — wer sein Passwort
+     * seither geändert hat, käme nicht mehr herein. Die Kontodateien bleiben
+     * liegen; ein erneuter Wechsel zum Mehrbenutzer findet sie unverändert vor.
+     *
+     * @return ?array<string, string>
+     */
+    private function authSectionForDriver(mixed $requested): ?array
+    {
+        if ($requested === null) {
+            return null; // Feld nicht mitgeschickt — Verfahren unverändert
+        }
+        $driver = strtolower(trim((string) $requested));
+        if (!in_array($driver, self::AUTH_DRIVERS, true)) {
+            throw ApiException::badRequest('AUTH-DRIVER-UNKNOWN', [$driver]);
+        }
+        $raw = Config::raw((string) $this->configPath)['auth'] ?? [];
+        $current = strtolower(trim((string) ($raw['driver'] ?? 'singleuser')));
+        if ($driver === $current) {
+            return null;
+        }
+
+        if ($driver === 'multiuser') {
+            return array_merge($raw, ['driver' => 'multiuser']);
+        }
+
+        // → singleuser: Das eigene Konto wird zum Einzelbenutzer.
+        $name = (string) ($this->auth->currentUser()['name'] ?? '');
+        $account = (new UserStore(dirname((string) $this->configPath) . '/users'))->load($name);
+        if ($account === null) {
+            throw new ApiException('ECONFIG', 409, 'AUTH-SINGLEUSER-NO-ACCOUNT');
+        }
+
+        return array_merge($raw, [
+            'driver' => 'singleuser',
+            'username' => $account['name'],
+            'password_hash' => $account['hash'],
+        ]);
+    }
+
+    /**
+     * Verlangt die Befugnis, die Installation zu konfigurieren: hugocms.ini,
+     * Projekteinstellungen, Lizenz. Beim Einzelbenutzer trifft das immer zu —
+     * es gibt nur ein Konto. Beim Mehrbenutzer ist es der Rolle „admin"
+     * vorbehalten: Ein Redakteur soll Inhalte pflegen, nicht das
+     * Anmeldeverfahren umstellen oder Schlüssel austauschen.
+     */
+    private function requireConfigAdmin(): void
+    {
+        $this->requireAuth();
+        if (!$this->auth->can('config.manage')) {
+            throw ApiException::denied('CONFIG-ADMIN-REQUIRED');
+        }
+    }
 
     /**
      * Der Treiber als Kontenverwaltung, oder ein klarer Fehler.
@@ -4127,7 +4220,7 @@ final class Connector
      */
     private function cmdActivate(array $request): array
     {
-        $this->requireAuth();
+        $this->requireConfigAdmin();
         $this->requireMethod('POST');
         if ($this->mountsPath === null) {
             // Programmatische Konfiguration (custom.php): keine Datei zum Schreiben.

@@ -1219,6 +1219,23 @@ export default {
     ignore: 'Ignore',
   },
 
+  authConfig: {
+    section: 'Sign-in',
+    driver: 'Sign-in method',
+    driverSingle: 'One account (single user)',
+    driverMulti: 'Several accounts with roles (Pro)',
+    driverHint:
+      'One account is enough while a single person maintains the sites. With several accounts everyone gets their own sign-in, a role, and the sites they are responsible for.',
+    toMultiFirst:
+      'On save, the current sign-in becomes the first administrator account — same name, same password. You stay signed in. Add further accounts afterwards under “Manage users”.',
+    toMultiExisting:
+      'There are already {0} accounts; those apply again. The sign-in from this configuration is not taken over a second time.',
+    toSingle:
+      'On save, your current account becomes the only sign-in — name and password stay as they are. The remaining accounts can no longer sign in; they are not deleted.',
+    proHint:
+      'Several accounts are a Pro feature. Without a valid licence you can create accounts, but only administrators can sign in.',
+  },
+
   users: {
     open: 'Manage users',
     title: 'Manage users',
@@ -1477,6 +1494,9 @@ export default {
     'SETUP-PASSWORD-TOO-SHORT': 'The password must be at least {0} characters long.',
     'SETUP-LOG-LEVEL-INVALID': 'Invalid log level. Allowed: {0}.',
 
+    'CONFIG-ADMIN-REQUIRED': 'Only administrators may change the configuration.',
+    'AUTH-DRIVER-UNKNOWN': 'Unknown sign-in method “{0}”.',
+    'AUTH-SINGLEUSER-NO-ACCOUNT': 'Your own account could not be read — without its credentials the sign-in would be lost after the switch.',
     'USERS-NOT-SUPPORTED': 'This sign-in method holds a single account — it has no user management.',
     'USER-ADMIN-REQUIRED': 'Only administrators may manage accounts.',
     'USER-NOT-FOUND': 'There is no account named “{0}”.',

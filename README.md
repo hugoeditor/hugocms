@@ -511,7 +511,8 @@ steht in eigenen Verträgen, die der Connector per `instanceof` prüft:
 | `UserAdminInterface` | nur `MultiUser` | Kontenverwaltung; ohne sie gibt es die Befehle `users…` nicht |
 | `SiteAwareInterface` | nur `MultiUser` | `bindSite(host, isPro)` — der Connector reicht den Webseiten-Kontext nach, da die Mount-Konfiguration erst nach dem Konstruktor feststeht (Lizenzstatus als Rückruf, damit die Prüfung nur bei Bedarf läuft) |
 
-**Umstieg vom Einzelbenutzer.** Es genügt, `driver = multiuser` zu setzen. Ist
+**Umstieg vom Einzelbenutzer.** Im Dialog „Konfiguration ändern" umschaltbar
+(Abschnitt *Anmeldung*) oder von Hand: Es genügt, `driver = multiuser` zu setzen. Ist
 `users/` noch leer, macht `AuthFactory::seedFirstAdmin()` aus `[auth] username` +
 `password_hash` das erste Administratorkonto — der Hash wird übernommen, das
 Passwort bleibt also unverändert, und eine laufende Sitzung überlebt den Wechsel
@@ -522,6 +523,20 @@ Installation ohne Zugang zu hinterlassen.
 `username`/`password_hash` bleiben danach in `[auth]` stehen und veralten dort —
 gelesen werden sie nur, solange `users/` leer ist. Das ist ein
 Wiederherstellungsweg; wer ihn nicht will, löscht beide Zeilen nach dem Umstieg.
+
+**Rückweg.** Der Dialog schaltet auch zurück auf `singleuser`. Dabei schreibt
+`authSectionForDriver()` die Anmeldedaten des GERADE angemeldeten Kontos in
+`[auth]` — sonst gälte wieder der Stand vor der Umstellung, und wer sein Passwort
+seither geändert hat, käme nicht mehr herein. Die Kontodateien bleiben liegen;
+ein erneuter Wechsel findet sie unverändert vor.
+
+**Verwaltende Befugnisse.** `MultiUser::ADMIN_PERMISSIONS` führt, was der Rolle
+`admin` vorbehalten ist: `users.manage` (Konten) und `config.manage`
+(`hugocms.ini`, Projekteinstellungen, Lizenz). Der Connector prüft das über
+`requireConfigAdmin()`; `whoami` verknüpft `reconfigurable`,
+`projectConfigurable` und `licensable` damit, sodass die Knöpfe beim Redakteur
+gar nicht erst erscheinen. Beim Einzelbenutzer liefert `can()` immer `true` —
+dort ändert sich nichts.
 
 **Selbstsperren ausgeschlossen.** Das letzte aktive Administratorkonto lässt sich
 weder löschen noch herabstufen noch sperren; das eigene Konto lässt sich nicht
@@ -726,7 +741,7 @@ eindeutig zu genau einer Webpräsenz. Zwei Folgen für den Mehrfach-Betrieb:
 | `build`    | POST    | –                                    | Hugo aufrufen (Webseite erzeugen)      |
 | `assistant`| POST    | `messages`, `locale`?, `confirm`?, `openFilePath`?, `openDirPath`? | KI-Assistent: einen Zug ausführen (Werkzeug-Schleife) |
 | `config`   | GET     | –                                    | Aktuelle Konfigurationswerte inkl. AI-Status (ohne Geheimnisse) |
-| `reconfigure`| POST  | `sessionPath`, `logFile`, `logLevel`, `hugoBin`?, `aiApiKey`?, `aiModel`?, `aiWriteMode`? | hugocms.ini ändern (Verzeichnisse/Log/Hugo/AI) |
+| `reconfigure`| POST  | `authDriver`?, `sessionPath`, `logFile`, `logLevel`, `hugoBin`?, `aiApiKey`?, `aiModel`?, `aiWriteMode`? | hugocms.ini ändern (Anmeldeverfahren/Verzeichnisse/Log/Hugo/AI). `config`/`reconfigure` sowie `projectconfig`/`projectreconfigure`/`activate`/`aimodels` verlangen `config.manage` |
 | `account`  | POST    | `currentPassword`, `username`, `password`? | Anmeldedaten ändern (danach Neuanmeldung) |
 | `setuserprefs`| POST | `contentWidth`?, `toolbarCollapsed`?, `sessionLifetime`? (Stunden), `updateLastmod`? (`null` = nachfragen) | Eigene `[user]`-Einstellungen schreiben; nur die genannten Felder |
 | `users`    | GET     | –                                    | **Pro/multiuser:** Konten, bekannte Webseiten, Rollen |

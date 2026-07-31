@@ -174,13 +174,23 @@ final class MultiUser implements AuthInterface, UserAdminInterface, SiteAwareInt
         ];
     }
 
+    /**
+     * Verwaltende Befugnisse — sie unterscheiden Administrator von Redakteur.
+     * Alles Übrige (Dateien lesen, schreiben, veröffentlichen) steht jedem
+     * angemeldeten Konto offen und wird über die Mount-Konfiguration begrenzt.
+     */
+    private const ADMIN_PERMISSIONS = [
+        'users.manage',  // Konten anlegen, ändern, löschen, Passwörter setzen
+        'config.manage', // hugocms.ini, Projekteinstellungen, Lizenz aktivieren
+    ];
+
     public function can(string $permission): bool
     {
         $user = $this->currentAccount();
         if ($user === null) {
             return false;
         }
-        if ($permission === 'users.manage') {
+        if (in_array($permission, self::ADMIN_PERMISSIONS, true)) {
             return $user['role'] === self::ROLE_ADMIN;
         }
 

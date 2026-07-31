@@ -1222,6 +1222,23 @@ export default {
     ignore: 'Ignorieren',
   },
 
+  authConfig: {
+    section: 'Anmeldung',
+    driver: 'Anmeldeverfahren',
+    driverSingle: 'Ein Zugang (Einzelbenutzer)',
+    driverMulti: 'Mehrere Konten mit Rollen (Pro)',
+    driverHint:
+      'Ein Zugang genügt, solange eine Person die Seiten pflegt. Mit mehreren Konten bekommt jede Person ihren eigenen Zugang, eine Rolle und die Webseiten, für die sie zuständig ist.',
+    toMultiFirst:
+      'Beim Speichern wird aus dem bisherigen Zugang das erste Administratorkonto — mit unverändertem Namen und Passwort. Sie bleiben angemeldet. Weitere Konten legen Sie danach unter „Benutzer verwalten“ an.',
+    toMultiExisting:
+      'Es liegen bereits {0} Konten vor; diese gelten wieder. Der Zugang aus dieser Konfiguration wird nicht erneut übernommen.',
+    toSingle:
+      'Beim Speichern wird Ihr aktuelles Konto zum alleinigen Zugang — Name und Passwort bleiben, wie sie sind. Die übrigen Konten können sich dann nicht mehr anmelden; gelöscht werden sie nicht.',
+    proHint:
+      'Mehrere Konten sind eine Pro-Funktion. Ohne gültige Lizenz können Sie Konten anlegen, anmelden können sich aber nur Administratoren.',
+  },
+
   users: {
     open: 'Benutzer verwalten',
     title: 'Benutzer verwalten',
@@ -1482,6 +1499,9 @@ export default {
     'SETUP-PASSWORD-TOO-SHORT': 'Das Passwort muss mindestens {0} Zeichen lang sein.',
     'SETUP-LOG-LEVEL-INVALID': 'Ungültige Log-Stufe. Erlaubt: {0}.',
 
+    'CONFIG-ADMIN-REQUIRED': 'Nur Administratoren dürfen die Konfiguration ändern.',
+    'AUTH-DRIVER-UNKNOWN': 'Unbekanntes Anmeldeverfahren „{0}“.',
+    'AUTH-SINGLEUSER-NO-ACCOUNT': 'Das eigene Konto ließ sich nicht lesen — ohne seine Anmeldedaten wäre der Zugang nach dem Wechsel verloren.',
     'USERS-NOT-SUPPORTED': 'Dieses Anmeldeverfahren führt nur ein Konto — eine Benutzerverwaltung gibt es dafür nicht.',
     'USER-ADMIN-REQUIRED': 'Nur Administratoren dürfen Konten verwalten.',
     'USER-NOT-FOUND': 'Das Konto „{0}“ gibt es nicht.',
