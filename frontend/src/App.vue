@@ -19,7 +19,6 @@ import EditorPanel from './components/EditorPanel.vue'
 import ReconfigureDialog from './components/ReconfigureDialog.vue'
 import ProjectSettingsDialog from './components/ProjectSettingsDialog.vue'
 import AccountDialog from './components/AccountDialog.vue'
-import UserAdminDialog from './components/UserAdminDialog.vue'
 import LicenseDialog from './components/LicenseDialog.vue'
 import RepositoryDialog from './components/RepositoryDialog.vue'
 import HelpView from './components/HelpView.vue'
@@ -29,7 +28,9 @@ import { useHelpStore } from './stores/help'
 import { useAuditContentStore } from './stores/auditContent'
 import { useReviewStore } from './stores/review'
 import { useStatusStore } from './stores/status'
+import { useUsersStore } from './stores/users'
 import StatusView from './components/StatusView.vue'
+import UsersView from './components/UsersView.vue'
 import LanguageSwitcher from './components/LanguageSwitcher.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import { useConfirm } from './util/confirm'
@@ -67,6 +68,7 @@ const help = useHelpStore()
 const auditContent = useAuditContentStore()
 const review = useReviewStore()
 const status = useStatusStore()
+const users = useUsersStore()
 const error = ref(null)
 const fatalError = ref(null)
 const warningsVisible = ref(false)
@@ -298,6 +300,23 @@ function openReviewQueue() {
   leaveEditorThen(() => review.openQueue())
 }
 
+// Benutzerverwaltung öffnen/schließen — Umschalter wie die übrigen Overlays.
+// Ob der Eintrag überhaupt erscheint, entscheidet der Server (auth.manageUsers).
+function openUsersView() {
+  if (users.open) {
+    users.close()
+    return
+  }
+  leaveEditorThen(() => {
+    // Die übrigen Overlays teilen sich dieselbe Ebene; eines davon offen zu
+    // lassen hieße, die Verwaltung darunter zu verstecken.
+    status.close()
+    review.closeQueue()
+    files.leaveAudit()
+    users.openView()
+  })
+}
+
 // Systemstatus öffnen/schließen — Umschalter wie die übrigen Overlays.
 function openStatusView() {
   if (status.open) {
@@ -347,9 +366,6 @@ watch(
   },
 )
 const accountOpen = ref(false)
-// Benutzerverwaltung (Mehrbenutzer, Rolle admin) — der Server entscheidet
-// über auth.manageUsers, ob der Knopf überhaupt erscheint.
-const usersOpen = ref(false)
 const licenseOpen = ref(false)
 const repositoryOpen = ref(false)
 const notice = ref(null) // kurze Erfolgsmeldung (Snackbar)
@@ -796,7 +812,7 @@ async function build() {
                     v-bind="props"
                     type="button"
                     class="nemo-tool-btn"
-                    @click="usersOpen = true"
+                    @click="openUsersView"
                   >
                     <v-icon icon="mdi-account-group-outline" size="20" />
                     <span class="nemo-tool-label">{{ $t('users.open') }}</span>
@@ -887,6 +903,9 @@ async function build() {
             <!-- Freigabe-Warteschlange (gestaffelte Veröffentlichung): Overlay
                  über dem Dateimanager, aus der Werkzeugschiene geöffnet. -->
             <ReviewQueueView @open-status="openStatusView" />
+            <!-- Benutzerverwaltung (Mehrbenutzer): Konten anlegen, zuordnen,
+                 sperren, Passwörter neu vergeben. Overlay wie der Systemstatus. -->
+            <UsersView @notice="notice = $event" />
             <!-- Systemstatus: Lizenz, Zugänge, Cron-Aufgaben. Die
                  Lizenzaktivierung öffnet von hier aus den bestehenden Dialog. -->
             <StatusView
@@ -936,7 +955,6 @@ async function build() {
       @saved="onProjectSettingsSaved"
     />
     <AccountDialog v-model="accountOpen" @changed="onAccountChanged" @saved="onAccountSaved" />
-    <UserAdminDialog v-model="usersOpen" @notice="notice = $event" />
 
     <!-- Pro-Lizenz aktivieren · Git-Versionierung (Pro-Funktion) -->
     <LicenseDialog v-model="licenseOpen" @activated="onLicenseActivated" />

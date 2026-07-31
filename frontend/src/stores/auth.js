@@ -187,34 +187,6 @@ export const useAuthStore = defineStore('auth', {
       await this.saveUserPrefs({ updateLastmod: value })
     },
 
-    // --- Kontenverwaltung (Mehrbenutzer, Rolle admin) ---------------------
-    // Alle vier Schreibbefehle liefern die aktualisierte Liste gleich mit, so
-    // dass die Ansicht ohne zweiten Aufruf auf dem Stand bleibt.
-
-    // Konten, bekannte Webseiten (Auswahlliste) und die möglichen Rollen.
-    async loadUsers() {
-      return api.get('users')
-    },
-
-    async createUser(payload) {
-      return api.post('usercreate', payload)
-    },
-
-    // Rolle, Webseiten-Zuordnung oder Sperre eines Kontos ändern. Nicht
-    // genannte Felder bleiben, wie sie sind.
-    async updateUser(payload) {
-      return api.post('userupdate', payload)
-    },
-
-    // Passwort eines FREMDEN Kontos neu setzen („Passwort vergessen“).
-    async resetUserPassword(username, password) {
-      return api.post('userpassword', { username, password })
-    },
-
-    async deleteUser(username) {
-      return api.post('userdelete', { username })
-    },
-
     // Ändert die Anmeldedaten (Name/Passwort). Der Server beendet danach die
     // Sitzung; per anschließendem whoami den Zustand (abgemeldet) und ein
     // frisches CSRF-Token holen, damit die Login-Maske sauber funktioniert.
