@@ -114,8 +114,13 @@ final class Connector
      */
     private ?string $liveAnalysisUrl = null;
 
-    /** Globale [user]-Einstellungen (Sitzungsdauer, Inhaltsbreite). */
-    private array $user = ['sessionLifetime' => 28800, 'contentWidth' => 1200, 'updateLastmod' => null];
+    /** Globale [user]-Einstellungen (Sitzungsdauer, Inhaltsbreite, Werkzeugleiste). */
+    private array $user = [
+        'sessionLifetime' => 28800,
+        'contentWidth' => 1200,
+        'toolbarCollapsed' => false,
+        'updateLastmod' => null,
+    ];
 
     /**
      * E-Mail-Versand aus der [mail]-Sektion der hugocms.ini (Gesundheitscheck-
@@ -474,7 +479,7 @@ final class Connector
                 'projectconfig' => $this->cmdProjectConfig(),
                 'projectreconfigure' => $this->cmdProjectReconfigure($request),
                 'improveauto' => $this->cmdImproveAuto($request),
-                'setupdatelastmod' => $this->cmdSetUpdateLastmod($request),
+                'setuserprefs' => $this->cmdSetUserPrefs($request),
                 'account' => $this->cmdAccount($request),
                 'license' => $this->cmdLicense(),
                 'activate' => $this->cmdActivate($request),
@@ -626,14 +631,10 @@ final class Connector
                 // seine eigene Liste (siehe util/aiModels.js).
                 'models' => $this->ai['models'],
             ],
-            // Globale UI-Vorgaben aus [user]. contentWidth ist im Einzelbenutzer-
-            // Modus der Startwert für die Fensterbreite nach jedem Neuladen.
-            'ui' => [
-                'contentWidth' => $this->user['contentWidth'],
-                // Dreiwertig: null = beim Speichern nach lastmod-Aktualisierung
-                // fragen; true/false = ohne Nachfrage anwenden.
-                'updateLastmod' => $this->user['updateLastmod'],
-            ],
+            // Globale Einstellungen aus [user]. Im Einzelbenutzer-Modus ist das
+            // der Zustand, den der Client zuletzt gemerkt hat (Befehl
+            // setuserprefs) — er gilt nach jedem Neuladen.
+            'ui' => $this->uiState(),
             // Pro-Edition (Git u. Ä.). 'configured' meldet einen hinterlegten,
             // ggf. ungültigen Schlüssel (falsche Domain) — für einen Hinweis im
             // Client. Der Schlüssel selbst wird nie zurückgegeben.
@@ -2986,6 +2987,14 @@ final class Connector
     private const MIN_PASSWORD_LENGTH = 8;
 
     /**
+     * Grenzen für eine über den Konto-Dialog gesetzte Sitzungsdauer (Stunden):
+     * eine Viertelstunde bis 30 Tage. Beim LESEN gelten sie nicht — ein von Hand
+     * eingetragener Wert bleibt wirksam.
+     */
+    private const MIN_SESSION_LIFETIME_HOURS = 0.25;
+    private const MAX_SESSION_LIFETIME_HOURS = 720;
+
+    /**
      * Liefert die aktuellen, ROHEN (nicht aufgelösten) Konfigurationswerte aus
      * der hugocms.ini zum Vorbefüllen des Umkonfigurations-Formulars. Die
      * Anmeldedaten ([auth]) werden bewusst NICHT zurückgegeben.
@@ -3506,31 +3515,129 @@ final class Connector
     }
 
     /**
-     * Merkt die Benutzerwahl, ob beim Speichern das Front-Matter-Feld `lastmod`
-     * auf die aktuelle Zeit gesetzt werden soll, in [user] update_lastmod. Die
-     * übrigen [user]-Werte (session_lifetime, content_width) bleiben erhalten:
-     * updateSections ersetzt die ganze Sektion, deshalb werden sie roh gelesen
-     * und wieder mitgeschrieben.
+     * Schreibt einzelne Schlüssel der [user]-Sektion, ohne die übrigen zu
+     * verlieren: updateSections ersetzt die ganze Sektion, deshalb wird sie roh
+     * gelesen, überlagert und wieder vollständig geschrieben. Ein Wert null
+     * entfernt den Schlüssel.
+     *
+     * @param array<string, string|null> $changes
      */
-    private function cmdSetUpdateLastmod(array $request): array
+    private function writeUserSection(array $changes): void
     {
-        $this->requireAuth();
-        $this->requireMethod('POST');
         if ($this->configPath === null) {
             throw new ApiException('ECONFIG', 409, 'RECONFIGURE-UNAVAILABLE');
         }
-        $value = $request['value'] ?? null;
-        if (!is_bool($value)) {
-            throw ApiException::badRequest('PARAM-INVALID', ['value']);
+        $user = Config::raw($this->configPath)['user'] ?? [];
+        foreach ($changes as $key => $value) {
+            if ($value === null) {
+                unset($user[$key]);
+            } else {
+                $user[$key] = $value;
+            }
+        }
+        Config::updateSections($this->configPath, ['user' => $user]);
+    }
+
+    /**
+     * Schreibt die Einstellungen der [user]-Sektion — im Einzelbenutzer-
+     * Verfahren ist die hugocms.ini der einzige Speicherort dafür:
+     *
+     *   contentWidth     Breite des Hauptfensters in px (content_width)
+     *   toolbarCollapsed Werkzeugleiste eingeklappt (toolbar_collapsed)
+     *   sessionLifetime  Sitzungsdauer in STUNDEN (session_lifetime)
+     *   updateLastmod    lastmod beim Speichern setzen (update_lastmod);
+     *                    null entfernt den Schlüssel = im Editor nachfragen
+     *
+     * Jedes Feld ist einzeln optional; nur mitgegebene Felder werden
+     * geschrieben, die übrigen [user]-Werte bleiben unberührt. Die ersten
+     * beiden schickt die Oberfläche selbsttätig (Ende eines Greifrand-Zugs,
+     * Umschalten der Werkzeugleiste), die letzten beiden stammen aus dem
+     * Konto-Dialog.
+     */
+    private function cmdSetUserPrefs(array $request): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+
+        $changes = [];
+
+        if (array_key_exists('contentWidth', $request)) {
+            $width = $request['contentWidth'];
+            if (!is_int($width) && !(is_string($width) && ctype_digit($width))) {
+                throw ApiException::badRequest('PARAM-INVALID', ['contentWidth']);
+            }
+            $width = (int) $width;
+            if ($width < Config::MIN_CONTENT_WIDTH || $width > Config::MAX_CONTENT_WIDTH) {
+                throw ApiException::badRequest('PARAM-INVALID', ['contentWidth']);
+            }
+            $changes['content_width'] = (string) $width;
+            $this->user['contentWidth'] = $width;
         }
 
-        $user = Config::raw($this->configPath)['user'] ?? [];
-        $user['update_lastmod'] = $value ? 'true' : 'false';
-        Config::updateSections($this->configPath, ['user' => $user]);
-        $this->user['updateLastmod'] = $value;
-        $this->logger->info('Benutzereinstellung update_lastmod: ' . ($value ? 'true' : 'false'));
+        if (array_key_exists('toolbarCollapsed', $request)) {
+            $collapsed = $request['toolbarCollapsed'];
+            if (!is_bool($collapsed)) {
+                throw ApiException::badRequest('PARAM-INVALID', ['toolbarCollapsed']);
+            }
+            $changes['toolbar_collapsed'] = $collapsed ? 'true' : 'false';
+            $this->user['toolbarCollapsed'] = $collapsed;
+        }
 
-        return ['ok' => true, 'updateLastmod' => $value];
+        if (array_key_exists('sessionLifetime', $request)) {
+            $hours = $request['sessionLifetime'];
+            if (!is_int($hours) && !is_float($hours) && !(is_string($hours) && is_numeric($hours))) {
+                throw ApiException::badRequest('PARAM-INVALID', ['sessionLifetime']);
+            }
+            $hours = (float) $hours;
+            if ($hours < self::MIN_SESSION_LIFETIME_HOURS || $hours > self::MAX_SESSION_LIFETIME_HOURS) {
+                throw ApiException::badRequest('PARAM-INVALID', ['sessionLifetime']);
+            }
+            // Ganze Stunden ohne Nachkommastellen schreiben — die INI bleibt so
+            // lesbar wie von Hand gepflegt.
+            $changes['session_lifetime'] = $hours == (int) $hours
+                ? (string) (int) $hours
+                : rtrim(rtrim(number_format($hours, 2, '.', ''), '0'), '.');
+            $this->user['sessionLifetime'] = (int) round($hours * 3600);
+        }
+
+        if (array_key_exists('updateLastmod', $request)) {
+            $lastmod = $request['updateLastmod'];
+            if ($lastmod !== null && !is_bool($lastmod)) {
+                throw ApiException::badRequest('PARAM-INVALID', ['updateLastmod']);
+            }
+            // null entfernt den Schlüssel: Der Editor fragt dann wieder nach.
+            $changes['update_lastmod'] = $lastmod === null ? null : ($lastmod ? 'true' : 'false');
+            $this->user['updateLastmod'] = $lastmod;
+        }
+
+        if ($changes === []) {
+            throw ApiException::badRequest('PARAM-MISSING', ['contentWidth']);
+        }
+
+        $this->writeUserSection($changes);
+        $this->logger->info('Benutzereinstellungen gespeichert: ' . implode(', ', array_keys($changes)));
+
+        return ['ok' => true, 'ui' => $this->uiState()];
+    }
+
+    /**
+     * Die für den Client sichtbaren [user]-Werte. Genau dieser Block steckt auch
+     * in der whoami-Antwort, damit beide Wege denselben Zustand melden.
+     *
+     * @return array<string, mixed>
+     */
+    private function uiState(): array
+    {
+        return [
+            'contentWidth' => $this->user['contentWidth'],
+            'toolbarCollapsed' => $this->user['toolbarCollapsed'],
+            // Sitzungsdauer in STUNDEN — so steht sie in der INI und so zeigt
+            // der Konto-Dialog sie an (intern rechnet der Connector in Sekunden).
+            'sessionLifetimeHours' => round($this->user['sessionLifetime'] / 3600, 2),
+            // Dreiwertig: null = beim Speichern nach lastmod-Aktualisierung
+            // fragen; true/false = ohne Nachfrage anwenden.
+            'updateLastmod' => $this->user['updateLastmod'],
+        ];
     }
 
     /**

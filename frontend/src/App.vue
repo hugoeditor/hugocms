@@ -70,14 +70,24 @@ const error = ref(null)
 const fatalError = ref(null)
 const warningsVisible = ref(false)
 
+// --- Zustand der Oberfläche merken -----------------------------------------
+// Was der Benutzer mit der Maus einstellt (Fensterbreite, eingeklappte
+// Werkzeugleiste), wird im Einzelbenutzer-Verfahren in der [user]-Sektion der
+// hugocms.ini gemerkt und gilt nach dem nächsten Neuladen wieder. Das Schreiben
+// läuft nebenher: Schlägt es fehl (z. B. nicht schreibbare INI), bleibt die
+// Einstellung für diese Sitzung trotzdem stehen — der Server protokolliert den
+// Fehler, die Oberfläche stört ihn nicht.
+function persistUi(patch) {
+  auth.saveUserPrefs(patch).catch(() => {})
+}
+
 // --- Fensterbreite (Hauptfenster, große Bildschirme) -----------------------
 // Die Breite des zentrierten Fensters lässt sich über Greifränder mit der Maus
 // einstellen. Startwert ist die [user] content_width aus der hugocms.ini (über
-// whoami geliefert). Laufzeit-Änderungen werden NICHT gespeichert — nach dem
-// Neuladen gilt wieder der INI-Wert (Persistenz folgt mit der Mehrbenutzer-
-// Umsetzung).
+// whoami geliefert); das Ende eines Zugs schreibt den neuen Wert dorthin zurück.
 const MIN_CONTENT_WIDTH = 640
-const contentWidth = ref(auth.ui?.contentWidth ?? 1200)
+const DEFAULT_CONTENT_WIDTH = 1200
+const contentWidth = ref(auth.ui?.contentWidth ?? DEFAULT_CONTENT_WIDTH)
 
 // Den Vorgabewert übernehmen, sobald whoami ihn liefert (bzw. wenn er sich
 // durch eine Umkonfiguration ändert). Gleichbleibende Werte lassen eine bereits
@@ -124,14 +134,23 @@ function onResize(event) {
 }
 
 function stopResize() {
+  if (!resizing) return
   resizing = false
   window.removeEventListener('pointermove', onResize)
   window.removeEventListener('pointerup', stopResize)
+  // Erst am Ende des Zugs schreiben — nicht bei jeder Zeigerbewegung.
+  if (contentWidth.value !== auth.ui?.contentWidth) {
+    persistUi({ contentWidth: contentWidth.value })
+  }
 }
 
-// Doppelklick auf einen Greifrand: zurück auf den Vorgabewert aus [user].
+// Doppelklick auf einen Greifrand: zurück auf die Standardbreite. Der Wert wird
+// wie ein gezogener gemerkt, sonst käme nach dem Neuladen die alte Breite wieder.
 function resetWidth() {
-  contentWidth.value = auth.ui?.contentWidth ?? 1200
+  contentWidth.value = DEFAULT_CONTENT_WIDTH
+  if (contentWidth.value !== auth.ui?.contentWidth) {
+    persistUi({ contentWidth: DEFAULT_CONTENT_WIDTH })
+  }
 }
 
 onBeforeUnmount(stopResize)
@@ -332,11 +351,21 @@ const repositoryOpen = ref(false)
 const notice = ref(null) // kurze Erfolgsmeldung (Snackbar)
 
 // --- Vertikale Werkzeugleiste (links, vor der Orte-Seitenleiste) -----------
-// Eingeklappt/ausgeklappt; Vorgabe ausgeklappt. Das Erscheinungsbild richtet
-// sich zusätzlich nach der Breite (CSS-Umbruchpunkt 960 px):
+// Eingeklappt/ausgeklappt; Startwert ist [user] toolbar_collapsed aus der
+// hugocms.ini (Vorgabe ausgeklappt). Das Erscheinungsbild richtet sich
+// zusätzlich nach der Breite (CSS-Umbruchpunkt 960 px):
 //   Desktop ausgeklappt → Icon + Name · Desktop eingeklappt → nur Icon-Schiene
 //   Schmal  ausgeklappt → nur Icon-Schiene (Tooltip) · Schmal eingeklappt → ganz aus
-const toolbarCollapsed = ref(false)
+const toolbarCollapsed = ref(auth.ui?.toolbarCollapsed ?? false)
+
+// Den gemerkten Zustand übernehmen, sobald whoami ihn liefert — die Antwort
+// trifft erst nach dem Aufbau dieser Ansicht ein.
+watch(
+  () => auth.ui?.toolbarCollapsed,
+  (collapsed) => {
+    if (typeof collapsed === 'boolean') toolbarCollapsed.value = collapsed
+  },
+)
 
 // Orte in der Werkzeugschiene: Nur auf Desktop-Breite UND bei ausgeklappter
 // Schiene sind die Namen sichtbar — dann werden die Orte direkt aufgelistet.
@@ -344,6 +373,14 @@ const toolbarCollapsed = ref(false)
 // Orte-Knopf, der die eingeschobene Seitenleiste öffnet.
 const { mdAndUp } = useDisplay()
 const railExpanded = computed(() => mdAndUp.value && !toolbarCollapsed.value)
+
+// Umschalten und merken. Nur auf Desktop-Breite gemerkt: Auf schmalen Schirmen
+// blendet derselbe Schalter die Leiste ganz aus — das ist eine Handreichung für
+// diesen Moment und soll den Desktop-Zustand nicht überschreiben.
+function toggleToolbar() {
+  toolbarCollapsed.value = !toolbarCollapsed.value
+  if (mdAndUp.value) persistUi({ toolbarCollapsed: toolbarCollapsed.value })
+}
 
 // Eingeschobene Orte-Seitenleiste (überdeckt die Dateiliste, verschiebt sie
 // nicht). Nur im Icon-Schienen-Zustand über den Orte-Knopf erreichbar.
@@ -377,6 +414,11 @@ function onAccountChanged() {
   // Der Server hat die Sitzung beendet; der Store-Zustand ist bereits auf
   // abgemeldet aktualisiert, daher zeigt App nun die Login-Maske. Hinweis dazu.
   notice.value = t('account.note')
+}
+
+// Nur die Einstellungen wurden geändert — die Anmeldung bleibt bestehen.
+function onAccountSaved() {
+  notice.value = t('account.saved')
 }
 
 async function onReconfigured() {
@@ -483,7 +525,7 @@ async function build() {
                 variant="text"
                 size="small"
                 class="d-md-none mr-1"
-                @click="toolbarCollapsed = !toolbarCollapsed"
+                @click="toggleToolbar"
               />
             </template>
           </v-tooltip>
@@ -569,7 +611,7 @@ async function build() {
                     v-bind="props"
                     type="button"
                     class="nemo-tool-btn nemo-tool-toggle d-none d-md-flex"
-                    @click="toolbarCollapsed = !toolbarCollapsed"
+                    @click="toggleToolbar"
                   >
                     <v-icon :icon="toolbarCollapsed ? 'mdi-chevron-right' : 'mdi-chevron-left'" size="20" />
                   </button>
@@ -873,7 +915,7 @@ async function build() {
       :focus-section="projectSettingsFocus"
       @saved="onProjectSettingsSaved"
     />
-    <AccountDialog v-model="accountOpen" @changed="onAccountChanged" />
+    <AccountDialog v-model="accountOpen" @changed="onAccountChanged" @saved="onAccountSaved" />
 
     <!-- Pro-Lizenz aktivieren · Git-Versionierung (Pro-Funktion) -->
     <LicenseDialog v-model="licenseOpen" @activated="onLicenseActivated" />

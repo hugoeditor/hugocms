@@ -30,17 +30,27 @@ password_hash = "HIER-PASSWORT-HASH-EINTRAGEN"
 ; für solche Einstellungen.
 ; session_lifetime: Sitzungsdauer in STUNDEN — so lange bleibt eine Anmeldung
 ; bei Inaktivität gültig; jede Aktion frischt das Fenster auf. Optional;
-; fehlt der Wert, gilt der Standard von 8 Stunden.
+; fehlt der Wert, gilt der Standard von 8 Stunden. Lässt sich auch im Dialog
+; „Konto und Einstellungen" setzen (dort 0,25 bis 720 Stunden).
 ;session_lifetime = 8
 ; content_width: Breite des zentrierten Hauptfensters in PIXELN auf großen
 ; Bildschirmen. Optional; fehlt der Wert, gilt der Standard 1200. Im
-; Einzelbenutzer-Modus ist dies der Startwert nach jedem Neuladen (per Maus
-; ziehbare Änderungen werden derzeit nicht gespeichert).
+; Einzelbenutzer-Modus schreibt die Oberfläche eine per Greifrand gezogene
+; Breite selbst hierher — nach dem Neuladen gilt wieder der zuletzt
+; eingestellte Wert. Doppelklick auf einen Greifrand setzt auf 1200 zurück.
 ;content_width = 1200
+; toolbar_collapsed: ob die vertikale Werkzeugleiste auf Desktop-Breite
+; eingeklappt (nur Symbole) startet. Optional; fehlt der Wert, startet sie
+; ausgeklappt. Im Einzelbenutzer-Modus merkt die Oberfläche das Umschalten
+; selbst hierher; auf schmalen Schirmen bleibt der Umschalter ohne Wirkung auf
+; diesen Wert.
+;toolbar_collapsed = false
 ; update_lastmod: legt fest, ob beim Speichern ein vorhandenes Front-Matter-Feld
 ; „lastmod“ auf die aktuelle Zeit gesetzt wird. Fehlt der Schlüssel, fragt der
 ; Editor beim Speichern nach (mit Option, die Wahl hier dauerhaft zu merken).
-; true = immer aktualisieren, false = nie.
+; true = immer aktualisieren, false = nie. Lässt sich auch im Dialog „Konto und
+; Einstellungen" setzen — dort stellt „Jedes Mal nachfragen“ den Schlüssel
+; wieder ab.
 ;update_lastmod = false
 
 [session]

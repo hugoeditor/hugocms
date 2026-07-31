@@ -19,7 +19,9 @@ export const useAuthStore = defineStore('auth', {
     ai: { enabled: false, model: '', writeMode: 'confirm', models: [] },
     // globale UI-Vorgaben aus [user]. updateLastmod ist dreiwertig:
     // null = beim Speichern nachfragen, true/false = ohne Nachfrage anwenden.
-    ui: { contentWidth: 1200, updateLastmod: null },
+    // contentWidth und toolbarCollapsed hält die Oberfläche selbst nach (siehe
+    // saveUserPrefs) — sie sind der Zustand nach dem nächsten Neuladen.
+    ui: { contentWidth: 1200, toolbarCollapsed: false, sessionLifetimeHours: 8, updateLastmod: null },
     // Pro-Lizenz (aus whoami). configured = ein Schlüssel ist hinterlegt (ggf.
     // ungültig/falsche Domain). git = Git-Funktion nutzbar (Pro + Hugo-Projekt).
     // Die Lizenz gilt pro Webseite; licensable = aktivierbar (Mount-Datei vorhanden).
@@ -86,7 +88,7 @@ export const useAuthStore = defineStore('auth', {
       this.reconfigurable = data.reconfigurable ?? false
       this.projectConfigurable = data.projectConfigurable ?? false
       this.ai = data.ai ?? { enabled: false, model: '', writeMode: 'confirm' }
-      this.ui = data.ui ?? { contentWidth: 1200, updateLastmod: null }
+      this.ui = data.ui ?? { contentWidth: 1200, toolbarCollapsed: false, sessionLifetimeHours: 8, updateLastmod: null }
       this.license = data.license ?? { edition: 'community', licensee: null, domain: '', configured: false }
       this.licensable = data.licensable ?? false
       this.git = data.git ?? false
@@ -165,10 +167,20 @@ export const useAuthStore = defineStore('auth', {
       return api.post('serviceverify', payload)
     },
 
+    // Schreibt Einstellungen der [user]-Sektion. Das Feld-Objekt enthält nur die
+    // geänderten Werte: { contentWidth?, toolbarCollapsed?, sessionLifetime?
+    // (Stunden), updateLastmod? (null = im Editor nachfragen) }.
+    // Fensterbreite und Werkzeugleiste schickt die Oberfläche selbsttätig; dort
+    // gilt ein Fehler als unkritisch (die Einstellung hält dann bis zum
+    // Neuladen). Der Konto-Dialog zeigt einen Fehler dagegen an.
+    async saveUserPrefs(patch) {
+      const data = await api.post('setuserprefs', patch)
+      this.ui = { ...this.ui, ...(data.ui ?? patch) }
+    },
+
     // Merkt die Benutzerwahl zum lastmod-Verhalten in [user] update_lastmod.
     async setUpdateLastmod(value) {
-      await api.post('setupdatelastmod', { value })
-      this.ui = { ...this.ui, updateLastmod: value }
+      await this.saveUserPrefs({ updateLastmod: value })
     },
 
     // Ändert die Anmeldedaten (Name/Passwort). Der Server beendet danach die
