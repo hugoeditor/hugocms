@@ -12,7 +12,8 @@
 #   │     ├── update.sh            (erneuert alle Webseiten nach einem Release)
 #   │     ├── crontab-entries.sh   (gibt die Crontab-Zeilen für alle Webseiten aus)
 #   │     └── lib/                 (gemeinsame Bash-Bibliothek: deploy.sh)
-#   │     (hugo/ wird NICHT mitgeliefert — install.sh holt es per get-hugo.sh)
+#   │     (hugo/ wird NICHT mitgeliefert — install.sh holt es per get-hugo.sh;
+#   │      hooks/ ebenso wenig — Git-Hooks gehören zur Entwicklung an HugoCMS)
 #   ├── backend/
 #   │     ├── core/                (Kern-Bibliothek inkl. autoload.php + hugocms.php)
 #   │     ├── custom/
@@ -184,11 +185,13 @@ cp "$PROJECT_DIR/index.php" "$PKG/index.php"
 
 # 5b. bin/ ausliefern — nur die Skripte (install.sh, get-hugo.sh). Das Hugo-
 #     Binary wird NICHT mitgeliefert; install.sh lädt es per get-hugo.sh im
-#     Produktivsystem nach (bin/hugo/ ist in beiden Repos ignoriert).
-echo "5b. bin -> $PKG/bin (ohne Hugo-Binary)"
+#     Produktivsystem nach (bin/hugo/ ist in beiden Repos ignoriert). Die
+#     Git-Hooks bleiben ebenfalls draußen: Sie gehören zur Entwicklung an
+#     HugoCMS, im Auslieferungs-Repo wird nicht committet.
+echo "5b. bin -> $PKG/bin (ohne Hugo-Binary und Git-Hooks)"
 rm -rf "$PKG/bin"
 cp -r "$PROJECT_DIR/bin" "$PKG/bin"
-rm -rf "$PKG/bin/hugo"
+rm -rf "$PKG/bin/hugo" "$PKG/bin/hooks"
 chmod +x "$PKG/bin/"*.sh 2>/dev/null || true
 
 # 6. Berechtigungen vereinheitlichen

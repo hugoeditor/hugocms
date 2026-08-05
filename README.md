@@ -235,6 +235,23 @@ CORS nötig.
 Ohne `dev.sh` lassen sich beide Prozesse auch von Hand starten (`php -S
 127.0.0.1:8765 index.php` und `cd frontend && npm install && npm run dev`).
 
+### Git-Hooks aktivieren (einmal je Arbeitskopie)
+
+```bash
+git config core.hooksPath bin/hooks
+```
+
+Git sucht seine Hooks danach in `bin/hooks/` statt im nicht versionierten
+`.git/hooks/`. Vorhanden ist bislang einer:
+
+- **`pre-commit`** weist Quelldateien ab, die Git als **binär** einstufen würde.
+  Ein einziges NUL-Byte (0x00) genügt dafür — die Datei übersetzt und
+  funktioniert weiterhin, aber `diff`, `blame`, `merge` und jede Suche gehen an
+  ihr vorbei, was lange unbemerkt bleibt. Geprüft wird nur, was zum Commit
+  vorgemerkt ist, und nur bei Endungen, die Text enthalten müssen; echte
+  Binärdateien (Bilder, Schriften) passieren ungehindert. Im Ausnahmefall:
+  `git commit --no-verify`.
+
 ## Auslieferung & Produktivbetrieb
 
 ### Auslieferungs-Repo (hugocms-release)

@@ -1,0 +1,60 @@
+#!/bin/bash
+# pre-commit — Refuses to commit source files that Git would treat as binary.
+#
+# A single NUL byte (0x00) anywhere in a file is enough for Git to classify it
+# as binary. Such a file still compiles and behaves normally, so the damage goes
+# unnoticed for a long time: no diff, no blame, no merge, and every search skips
+# it. This has happened before (frontend/src/stores/linkScan.js), which is why
+# this hook exists.
+#
+# The check reuses Git's OWN classification instead of scanning for NUL bytes by
+# hand: `git diff --cached --numstat` prints "-" for added and deleted lines
+# exactly when Git considers a blob binary — including whatever .gitattributes
+# says. What the hook adds is the judgement call: for the extensions listed in
+# TEXT_PATTERN, binary is always a mistake. Real binaries (images, fonts,
+# archives) carry other extensions and pass untouched.
+#
+# Install once per clone:
+#     git config core.hooksPath bin/hooks
+#
+# Bypass a single commit (rarely justified — the file stays broken):
+#     git commit --no-verify
+
+set -u
+
+# Extensions that must never contain a NUL byte. Deliberately a whitelist: a new
+# binary format added to the repository later cannot cause a false alarm.
+TEXT_PATTERN='\.(js|mjs|cjs|ts|vue|php|css|scss|html|json|md|sh|ini|beispiel|conf|yml|yaml|txt|xml|svg|gitignore|gitattributes|env|example)$'
+
+offenders=()
+
+# --no-renames keeps the third column a plain path; a detected rename would print
+# "old => new" and break the split below.
+while IFS=$'\t' read -r added deleted path; do
+    [[ "$added" == "-" && "$deleted" == "-" ]] || continue
+    [[ "$path" =~ $TEXT_PATTERN ]] || continue
+    offenders+=("$path")
+done < <(git diff --cached --numstat --no-renames)
+
+[[ ${#offenders[@]} -eq 0 ]] && exit 0
+
+echo "pre-commit: refusing to commit — Git sees these text files as binary:" >&2
+echo >&2
+for path in "${offenders[@]}"; do
+    # Locate the first NUL byte so the message points at a line, not just a file.
+    # grep -P is GNU-only; without it the file name alone has to do.
+    location=$(git show ":$path" | grep -anP '\x00' 2>/dev/null | head -1 | cut -d: -f1)
+    if [[ -n "$location" ]]; then
+        echo "  $path:$location — NUL byte (0x00)" >&2
+    else
+        echo "  $path — binary content" >&2
+    fi
+done
+echo >&2
+echo "A NUL byte usually slipped in instead of a space. Remove it, for example:" >&2
+echo "  python3 -c \"import sys;p=sys.argv[1];d=open(p,'rb').read();open(p,'wb').write(d.replace(b'\\\\0',b' '))\" <file>" >&2
+echo >&2
+echo "Then check with: file <file>   (expected: \"UTF-8 text\", not \"data\")" >&2
+echo "To commit anyway: git commit --no-verify" >&2
+
+exit 1
