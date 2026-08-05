@@ -92,6 +92,27 @@ const MIN_CONTENT_WIDTH = 640
 const DEFAULT_CONTENT_WIDTH = 1200
 const contentWidth = ref(auth.ui?.contentWidth ?? DEFAULT_CONTENT_WIDTH)
 
+// Breite eines Greifrands. Er liegt NEBEN dem Fenster (siehe .nemo-resize), also
+// muss links und rechts so viel Platz frei bleiben — sonst läge er außerhalb des
+// Bildschirms und die Breite wäre nicht mehr einstellbar. Unterhalb der
+// md-Schwelle (Vuetify: 960 px) ist der Greifrand ausgeblendet und das Fenster
+// nimmt die volle Breite ein; dort gilt die Reserve nicht.
+const GRIP = 8
+const GRIP_BREAKPOINT = 960
+const viewportWidth = ref(window.innerWidth)
+
+function onViewportResize() {
+  viewportWidth.value = window.innerWidth
+}
+
+// Obergrenze für die Darstellung. Der gemerkte Wert selbst bleibt unangetastet:
+// Ein an einem breiten Monitor eingestelltes Fenster erscheint an einem schmalen
+// nur begrenzt und ist am breiten wieder so breit wie zuvor.
+const maxWindowWidth = computed(() =>
+  viewportWidth.value >= GRIP_BREAKPOINT ? viewportWidth.value - 2 * GRIP : viewportWidth.value,
+)
+const windowWidth = computed(() => Math.min(contentWidth.value, maxWindowWidth.value))
+
 // Den Vorgabewert übernehmen, sobald whoami ihn liefert (bzw. wenn er sich
 // durch eine Umkonfiguration ändert). Gleichbleibende Werte lassen eine bereits
 // per Maus eingestellte Breite unberührt, da der Watcher nur auf Änderungen reagiert.
@@ -133,7 +154,7 @@ function onResize(event) {
   // sich die Breite aus dem doppelten Abstand des Zeigers zur Bildschirmmitte.
   const center = window.innerWidth / 2
   const w = Math.round(Math.abs(event.clientX - center) * 2)
-  contentWidth.value = Math.max(MIN_CONTENT_WIDTH, Math.min(window.innerWidth, w))
+  contentWidth.value = Math.max(MIN_CONTENT_WIDTH, Math.min(maxWindowWidth.value, w))
 }
 
 function stopResize() {
@@ -156,7 +177,11 @@ function resetWidth() {
   }
 }
 
-onBeforeUnmount(stopResize)
+onMounted(() => window.addEventListener('resize', onViewportResize))
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', onViewportResize)
+  stopResize()
+})
 
 // Läuft eine geschützte Anfrage in EAUTH (Sitzung serverseitig abgelaufen),
 // zentral zur Login-Ansicht zurückkehren: abmelden, alle geladenen Daten
@@ -523,7 +548,7 @@ async function build() {
       <!-- Äußerer Rahmen: zentriert das gesamte Fenster und begrenzt seine
            Breite auf großen Monitoren (volle Höhe bleibt erhalten). -->
       <div class="nemo-shell">
-        <div class="nemo-window" :style="{ maxWidth: contentWidth + 'px' }">
+        <div class="nemo-window" :style="{ maxWidth: windowWidth + 'px' }">
         <!-- Greifränder zum Einstellen der Fensterbreite (nur große Schirme). -->
         <div
           class="nemo-resize nemo-resize--left"
@@ -1016,6 +1041,12 @@ async function build() {
   justify-content: center;
   min-height: 100vh;
   background: var(--mint-shell-bg);
+  /* Die Greifränder liegen neben dem Fenster. Der Platz dafür ist zwar
+     eingerechnet, doch beim Verkleinern des Browserfensters hinkt die
+     Neuberechnung einen Frame hinterher — clip verhindert, dass dabei kurz ein
+     waagerechter Scrollbalken aufblitzt. Anders als hidden erzeugt clip keinen
+     Scroll-Container und lässt die senkrechte Achse sichtbar. */
+  overflow-x: clip;
 }
 .nemo-window {
   position: relative;
@@ -1028,22 +1059,25 @@ async function build() {
   box-shadow: 0 0 1px rgba(0, 0, 0, 0.25), 0 0 22px rgba(0, 0, 0, 0.1);
 }
 
-/* Greifränder zum Einstellen der Fensterbreite. Liegen über dem Inhalt (auch
-   über der Editor-Überlagerung), damit die Breite überall anpassbar ist. Nur
-   auf großen Bildschirmen, wo das Fenster zentriert und begrenzt ist. */
+/* Greifränder zum Einstellen der Fensterbreite — wie der Rahmen eines
+   Fensters NEBEN der Arbeitsfläche, nicht darüber. Lägen sie innen, verdeckten
+   sie den Scrollbalken des Inhalts (10 px breit, ebenfalls am Fensterrand) und
+   dessen Schieber ließe sich kaum noch greifen. Der Platz außen ist reserviert:
+   maxWindowWidth in App.vue hält links und rechts GRIP Pixel frei. Nur auf
+   großen Bildschirmen, wo das Fenster zentriert und begrenzt ist. */
 .nemo-resize {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 7px;
+  width: 8px;
   z-index: 20;
   cursor: ew-resize;
   background: transparent;
   transition: background 0.12s;
   touch-action: none; /* Drag statt Scroll-Geste */
 }
-.nemo-resize--left { left: 0; }
-.nemo-resize--right { right: 0; }
+.nemo-resize--left { left: -8px; }
+.nemo-resize--right { right: -8px; }
 .nemo-resize:hover,
 .nemo-resize:active {
   background: var(--mint-green-soft);
