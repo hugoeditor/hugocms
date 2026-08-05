@@ -19,7 +19,7 @@ const props = defineProps({
   // Läuft gerade ein Auftrag? Dann keinen zweiten anstoßen.
   busy: { type: Boolean, default: false },
 })
-const emit = defineEmits(['open-source', 'open-help', 'fix-issue', 'update:row-count'])
+const emit = defineEmits(['open-source', 'open-help', 'fix-issue', 'diagnose-issue', 'update:row-count'])
 
 const { t } = useI18n()
 
@@ -189,6 +189,17 @@ function showMore() {
             >
               <v-icon :icon="isFixed(row.issue) ? 'mdi-check' : 'mdi-auto-fix'" size="18" />
             </button>
+            <!-- Nicht über die Content-Datei behebbar (Theme, Konfiguration,
+                 Struktur): Statt einer Behebung gibt es eine Diagnose. -->
+            <button
+              v-else-if="row.issue.diagnosable"
+              class="audit-jump audit-diagnose"
+              :disabled="busy"
+              :title="$t('audit.diagnoseWithAi')"
+              @click="emit('diagnose-issue', row.issue)"
+            >
+              <v-icon icon="mdi-stethoscope" size="18" />
+            </button>
             <button
               v-if="row.issue.fileId"
               class="audit-jump"
@@ -269,6 +280,15 @@ function showMore() {
                 @click="emit('fix-issue', issue)"
               >
                 <v-icon :icon="isFixed(issue) ? 'mdi-check' : 'mdi-auto-fix'" size="18" />
+              </button>
+              <button
+                v-else-if="issue.diagnosable"
+                class="audit-jump audit-diagnose"
+                :disabled="busy"
+                :title="$t('audit.diagnoseWithAi')"
+                @click="emit('diagnose-issue', issue)"
+              >
+                <v-icon icon="mdi-stethoscope" size="18" />
               </button>
               <button
                 v-if="issue.fileId"
@@ -411,6 +431,9 @@ function showMore() {
    erst durch einen neuen Lauf aktuell. */
 .audit-fix { color: var(--mint-green); margin-right: 4px; }
 .audit-fix.done { color: #fff; background: var(--mint-green); border-color: var(--mint-green); }
+/* Diagnose: erklärt nur, ändert nichts — deshalb zurückhaltender als der
+   Behebungs-Knopf, mit dem er nie zusammen auftritt. */
+.audit-diagnose { color: #4a7bab; margin-right: 4px; }
 
 .nemo-empty {
   display: flex;

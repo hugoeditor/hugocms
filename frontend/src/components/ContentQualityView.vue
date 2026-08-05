@@ -211,6 +211,15 @@ async function fixIssue(issue) {
   store.closeDialog()
   await assistant.fixIssue(runId, issue.ruleId, issue.url ?? null, locale.value)
 }
+
+// Diagnose statt Behebung — für Funde, die im Theme, in der Konfiguration oder
+// in der Seitenstruktur wurzeln.
+async function diagnoseIssue(issue) {
+  const runId = audit.value?.runId
+  if (!runId) return
+  store.closeDialog()
+  await assistant.fixIssue(runId, issue.ruleId, issue.url ?? null, locale.value, 'diagnose')
+}
 </script>
 
 <template>
@@ -464,6 +473,7 @@ async function fixIssue(issue) {
               @open-source="openIssueSource"
               @open-help="openHelp"
               @fix-issue="fixIssue"
+              @diagnose-issue="diagnoseIssue"
             />
           </template>
           <p v-else class="text-caption text-medium-emphasis mt-2">

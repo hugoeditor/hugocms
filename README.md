@@ -652,10 +652,23 @@ der Client schickt nur Lauf-ID, Regel-ID und URL, kein Meldungstext. Die
 Anweisung enthält zusätzlich den Hilfetext der Regel und, bei Duplikaten, die
 übrigen betroffenen Seiten, damit der neue Text sich von ihnen unterscheidet.
 Schreibmodus, Bestätigungspause und Entwurfs-Freigabe sind die des normalen
-Assistenten. Regeln, die im Theme oder in der URL-Struktur wurzeln, bieten den
-Knopf bewusst nicht an. Der Fund selbst bleibt im Bericht stehen — dieser ist
-der Schnappschuss eines Laufs; er verschwindet erst nach dem nächsten Bauen und
+Assistenten. Der Fund selbst bleibt im Bericht stehen — dieser ist der
+Schnappschuss eines Laufs; er verschwindet erst nach dem nächsten Bauen und
 Prüfen.
+
+**Diagnose statt Behebung:** Die übrigen 30 Regeln wurzeln im Theme, in der
+Hugo-Konfiguration oder in der Seitenstruktur — sie tragen deshalb einen
+Stethoskop-Knopf (`mode=diagnose`). Der Assistent läuft dafür im
+**Nur-Lese-Modus**, bekommt also gar keine Schreibwerkzeuge, liest sich durch das
+Projekt (die von `install.sh` erzeugten Mounts umfassen das Projektverzeichnis
+mit Konfiguration und `layouts/`) und antwortet in vier Teilen: Ursache,
+Fundstelle, konkrete Änderung, Reichweite. Die Anweisung nennt ihm dabei, wie
+viele Seiten dieselbe Regel im selben Lauf betrifft — betrifft sie viele, liegt
+die Ursache fast sicher in einem Template und nicht an einer einzelnen Seite.
+Gehört die Fundstelle zu einem Theme, soll er das Überschreiben in `layouts/` als
+aktualisierungsfesten Weg nennen. Behebbar und diagnostizierbar schließen
+einander aus (21 + 30 = alle 51 Regeln); es gibt deshalb nur EINE gepflegte
+Liste, `RuleCatalog::FIXABLE` — der Rest ergibt sich daraus.
 
 ### Content-Qualität & KI-Verbesserung
 
@@ -879,7 +892,7 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `gitpush`  | POST    | –                                    | **Pro:** zum konfigurierten Remote pushen |
 | `gitreset` | POST    | `ref`?                               | **Pro:** Arbeitsbaum zurücksetzen (Standard: `HEAD`) |
 | `assistantimprove`| POST | `id` (Datei-ID), `locale`?         | **Pro:** KI-Verbesserung einer Datei starten (nutzt `get_file_report`) |
-| `assistantfix`| POST | `runId`, `ruleId`, `url`?, `locale`?     | **Pro:** KI-Micro-Auftrag zu genau einem Fund des SEO-Berichts |
+| `assistantfix`| POST | `runId`, `ruleId`, `url`?, `mode`?, `locale`? | **Pro:** KI-Micro-Auftrag zu genau einem Fund des SEO-Berichts (`mode`: `fix` behebt, `diagnose` erklärt nur) |
 | `audit`    | POST    | –                                    | **Pro:** SEO-Check-Lauf ausführen (Bericht)            |
 | `auditlist`| GET     | –                                    | **Pro:** gespeicherte Läufe auflisten                  |
 | `auditget` | GET     | `id`                                 | **Pro:** vollständiger Bericht eines Laufs             |

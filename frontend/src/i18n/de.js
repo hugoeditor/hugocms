@@ -525,6 +525,7 @@ export default {
     groupCollapse: 'Betroffene Seiten ausblenden',
     fixWithAi: 'Diesen Fund von der KI beheben lassen',
     fixDone: 'KI-Auftrag gelaufen — der Fund verschwindet nach dem nächsten Bauen und Prüfen',
+    diagnoseWithAi: 'Diagnose: Die KI erklärt, was im Theme oder in der Konfiguration zu ändern ist (ohne zu schreiben)',
     allSeverities: 'Alle',
     colSeverity: 'Schweregrad',
     colIssue: 'Befund',
@@ -1508,6 +1509,7 @@ export default {
     'AUDIT-CONTENT-EMPTY': 'Die Datei enthält keinen prüfbaren Fließtext: {0}',
     'AUDIT-CONTENT-NOT-FOUND': 'Kein gespeichertes Prüfergebnis gefunden: {0}',
     'AUDIT-RULE-NOT-FIXABLE': 'Diese Regel lässt sich nicht über die Content-Datei beheben: {0}',
+    'AUDIT-RULE-NOT-DIAGNOSABLE': 'Für diese Regel gibt es keine Diagnose — sie lässt sich direkt beheben: {0}',
     'AUDIT-ISSUE-NOT-FOUND': 'Der Fund steht nicht mehr im gewählten Bericht: {0}',
     'AUDIT-ISSUE-NO-SOURCE': 'Zu diesem Fund gibt es keine bearbeitbare Quelldatei: {0}',
 

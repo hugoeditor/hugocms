@@ -168,6 +168,15 @@ async function fixIssue(issue) {
   if (!fixedKeys.value.includes(key)) fixedKeys.value = [...fixedKeys.value, key]
 }
 
+// Diagnose zu einem Fund, der im Theme, in der Hugo-Konfiguration oder in der
+// Seitenstruktur wurzelt. Der Assistent liest sich durch das Projekt und
+// erklärt, was wo zu ändern wäre — geschrieben wird nichts, also gibt es auch
+// keinen Erledigt-Merker.
+function diagnoseIssue(issue) {
+  if (!audit.current?.id) return
+  assistant.fixIssue(audit.current.id, issue.ruleId, issue.url ?? null, locale.value, 'diagnose')
+}
+
 // Neuer Bericht (anderer Lauf oder frischer Durchlauf): die Erledigt-Merker
 // gehören zum alten Lauf und werden verworfen.
 watch(() => audit.current?.id, () => { fixedKeys.value = [] })
@@ -400,6 +409,7 @@ function runLabel(run) {
         @open-source="openSource"
         @open-help="openHelp"
         @fix-issue="fixIssue"
+        @diagnose-issue="diagnoseIssue"
         @update:row-count="rowCount = $event"
       />
     </div>

@@ -166,6 +166,18 @@ final class RuleCatalog
         return isset(self::FIXABLE[$ruleId]);
     }
 
+    /**
+     * Taugt die Regel für eine KI-Diagnose statt einer Behebung? Das sind genau
+     * die bekannten Regeln, die NICHT über die Content-Datei behebbar sind:
+     * Theme, Hugo-Konfiguration oder Seitenstruktur. Die Diagnose liest nur und
+     * erklärt, was wo zu ändern wäre — es gibt bewusst keine zweite gepflegte
+     * Liste, die mit {@see FIXABLE} auseinanderlaufen könnte.
+     */
+    public static function diagnosable(string $ruleId): bool
+    {
+        return isset(self::RULES[$ruleId]) && !isset(self::FIXABLE[$ruleId]);
+    }
+
     /** Kategorie einer Regel (oder 'other', falls unbekannt). */
     public static function category(string $ruleId): string
     {

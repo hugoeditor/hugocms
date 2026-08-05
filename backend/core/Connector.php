@@ -3125,7 +3125,14 @@ final class Connector
 
     /**
      * Micro-Auftrag: lässt den Assistenten GENAU EINEN Fund des SEO-Berichts
-     * beheben — der Knopf sitzt an der Fundzeile des Berichts.
+     * bearbeiten — der Knopf sitzt an der Fundzeile des Berichts.
+     *
+     * Zwei Betriebsarten (`mode`):
+     * - `fix` (Vorgabe): behebt den Fund in der Content-Datei. Nur für Regeln
+     *   aus {@see RuleCatalog::FIXABLE}.
+     * - `diagnose`: erklärt, wodurch der Fund entsteht und was wo zu ändern ist
+     *   — für Regeln, die im Theme, in der Hugo-Konfiguration oder in der
+     *   Seitenstruktur wurzeln. Läuft im Nur-Lese-Modus und schreibt nichts.
      *
      * Der Fund wird NICHT vom Client übernommen, sondern anhand von Lauf-ID,
      * Regel-ID und URL im gespeicherten Bericht nachgeschlagen. So bestimmt
@@ -3150,10 +3157,14 @@ final class Connector
         $ruleId = $this->requireParam($request, 'ruleId');
         $url = isset($request['url']) ? (string) $request['url'] : null;
         $locale = (string) ($request['locale'] ?? 'de');
+        // "fix" behebt in der Content-Datei, "diagnose" erklärt nur (Theme,
+        // Hugo-Konfiguration, Seitenstruktur) und schreibt nichts.
+        $diagnose = (string) ($request['mode'] ?? 'fix') === 'diagnose';
 
-        // Nur Regeln, die sich über die Content-Datei beheben lassen. Alles
-        // andere gehört ins Theme oder in eine Struktur-Entscheidung.
-        if (!RuleCatalog::fixable($ruleId)) {
+        if ($diagnose && !RuleCatalog::diagnosable($ruleId)) {
+            throw new ApiException('ECONFIG', 409, 'AUDIT-RULE-NOT-DIAGNOSABLE', [$ruleId]);
+        }
+        if (!$diagnose && !RuleCatalog::fixable($ruleId)) {
             throw new ApiException('ECONFIG', 409, 'AUDIT-RULE-NOT-FIXABLE', [$ruleId]);
         }
 
@@ -3167,18 +3178,30 @@ final class Connector
         $fileId = $rel === ''
             ? null
             : $this->resolveFileId((string) $this->hugo['source'] . '/' . $rel);
-        if ($fileId === null) {
+        // Behebung braucht die Datei; die Diagnose kommt auch ohne sie aus
+        // (fehlende Sitemap, robots.txt — Funde ganz ohne Seite).
+        if ($fileId === null && !$diagnose) {
             throw ApiException::notFound('AUDIT-ISSUE-NO-SOURCE', [$ruleId]);
         }
-        $r = $this->resolver->resolve($fileId, true);
-        $path = $r['mount']->name() . '/' . $r['rel'];
+        $path = null;
+        if ($fileId !== null) {
+            $r = $this->resolver->resolve($fileId, true);
+            $path = $r['mount']->name() . '/' . $r['rel'];
+        }
 
         // Wie beim Verbesserungslauf großzügig bemessen (Lesen, Nachdenken,
-        // Schreiben in einem Request), aber ohne Hintergrundprozess.
+        // Schreiben in einem Request), aber ohne Hintergrundprozess. Die
+        // Diagnose sucht sich durch das Projekt und braucht das ebenso.
         @set_time_limit(180);
 
-        return $this->assistantService()->run(
-            [['role' => 'user', 'content' => $this->fixInstruction($path, $issue, $report, $locale)]],
+        $instruction = $diagnose
+            ? $this->diagnoseInstruction($path, $issue, $report, $locale)
+            : $this->fixInstruction((string) $path, $issue, $report, $locale);
+
+        // Der Nur-Lese-Modus ist die harte Zusage der Diagnose: In dieser
+        // Betriebsart bietet der Assistent gar keine Schreibwerkzeuge an.
+        return $this->assistantService($diagnose ? 'readonly' : null)->run(
+            [['role' => 'user', 'content' => $instruction]],
             null,
             $locale,
             $path,
@@ -3263,6 +3286,93 @@ final class Connector
 
         return implode("\n", $lines);
     }
+
+    /**
+     * Startanweisung für die Diagnose eines Funds, der sich NICHT über die
+     * Content-Datei beheben lässt. Der Assistent läuft dabei im Nur-Lese-Modus:
+     * Er darf sich durch das Hugo-Projekt lesen (die erzeugten Mounts enthalten
+     * das Projektverzeichnis samt Konfiguration und `layouts/`), aber nichts
+     * ändern. Ergebnis ist eine Anleitung für den Betreiber.
+     *
+     * Wichtig ist die Reichweite: Betrifft dieselbe Regel viele Seiten, liegt
+     * die Ursache fast sicher in einem Template und nicht an einer einzelnen
+     * Seite. Diese Zahl steht deshalb ausdrücklich in der Anweisung.
+     *
+     * @param array<string, mixed> $issue
+     * @param array<string, mixed> $report
+     */
+    private function diagnoseInstruction(?string $path, array $issue, array $report, string $locale): string
+    {
+        $en = str_starts_with(strtolower($locale), 'en');
+        $ruleId = (string) ($issue['ruleId'] ?? '');
+        $url = (string) ($issue['url'] ?? '');
+        [$count, $examples] = self::ruleScope($report, $ruleId, $url);
+
+        $lines = [];
+        $lines[] = $en
+            ? 'Diagnose ONE finding from the SEO report. You cannot write in this mode — deliver an explanation, not a change.'
+            : 'Stelle eine Diagnose zu EINEM Fund des SEO-Berichts. Du kannst in dieser Betriebsart nicht schreiben — liefere eine Erklärung, keine Änderung.';
+        $lines[] = '';
+        $lines[] = ($en ? 'Rule: ' : 'Regel: ') . $ruleId;
+        if ($url !== '') {
+            $lines[] = ($en ? 'Affected page: ' : 'Betroffene Seite: ') . $url;
+        }
+        if ($path !== null) {
+            $lines[] = ($en ? 'Content file of that page: ' : 'Content-Datei dieser Seite: ') . '`' . $path . '`';
+        }
+        $lines[] = $en
+            ? "Pages affected by this rule in the same run: {$count}."
+            : "Von dieser Regel betroffene Seiten im selben Lauf: {$count}.";
+        if ($examples !== []) {
+            $lines[] = ($en ? 'Examples: ' : 'Beispiele: ') . implode(', ', $examples);
+        }
+
+        $help = $this->ruleHelp($ruleId, $locale);
+        if ($help !== null) {
+            $lines[] = '';
+            $lines[] = $en ? '--- What the rule means ---' : '--- Was die Regel bedeutet ---';
+            $lines[] = $help;
+        }
+
+        $lines[] = '';
+        $lines[] = $en
+            ? 'This finding cannot be fixed from a content file — its cause lies in the theme, in the Hugo configuration or in the site structure. The Hugo project is reachable through the mounts (the project directory with its configuration, `layouts/` with templates and partials, possibly a themes/ directory). Use list_dir and read_file to find the responsible place.'
+            : 'Dieser Fund lässt sich nicht über eine Content-Datei beheben — seine Ursache liegt im Theme, in der Hugo-Konfiguration oder in der Seitenstruktur. Das Hugo-Projekt ist über die Mounts erreichbar (Projektverzeichnis samt Konfiguration, `layouts/` mit Templates und Partials, gegebenenfalls ein themes/-Verzeichnis). Nutze list_dir und read_file, um die zuständige Stelle zu finden.';
+        $lines[] = '';
+        $lines[] = $en
+            ? "Answer in four short parts: (1) CAUSE — what produces this finding; (2) LOCATION — the exact file and, if possible, the line or block (name the path as `<mount>/<path>`); (3) CHANGE — the concrete edit, with a short code snippet where it helps; (4) SCOPE — whether this fixes all affected pages at once and whether the file belongs to a theme (then say that overriding it in `layouts/` is the update-safe route). If you cannot locate the cause, say what you looked at and what is missing — do not guess."
+            : 'Antworte in vier kurzen Teilen: (1) URSACHE — wodurch der Fund entsteht; (2) FUNDSTELLE — die genaue Datei und, wenn möglich, die Zeile oder der Block (nenne den Pfad als `<mount>/<pfad>`); (3) ÄNDERUNG — der konkrete Eingriff, mit kurzem Code-Ausschnitt, wo es hilft; (4) REICHWEITE — ob damit alle betroffenen Seiten auf einmal erledigt sind und ob die Datei zu einem Theme gehört (dann nenne das Überschreiben in `layouts/` als aktualisierungsfesten Weg). Findest du die Ursache nicht, sage, wo du gesucht hast und was fehlt — rate nicht.';
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * Reichweite einer Regel im Bericht: wie viele Funde sie insgesamt hat und
+     * einige andere betroffene Seiten als Beispiel.
+     *
+     * @param array<string, mixed> $report
+     * @return array{0: int, 1: list<string>}
+     */
+    private static function ruleScope(array $report, string $ruleId, string $exceptUrl): array
+    {
+        $count = 0;
+        $examples = [];
+        foreach ($report['issues'] ?? [] as $other) {
+            if (!is_array($other) || ($other['ruleId'] ?? null) !== $ruleId) {
+                continue;
+            }
+            $count++;
+            $otherUrl = (string) ($other['url'] ?? '');
+            if ($otherUrl !== '' && $otherUrl !== $exceptUrl && count($examples) < self::DIAGNOSE_EXAMPLES_MAX) {
+                $examples[] = $otherUrl;
+            }
+        }
+
+        return [$count, $examples];
+    }
+
+    /** Höchstzahl der genannten Beispielseiten in einer Diagnose. */
+    private const int DIAGNOSE_EXAMPLES_MAX = 5;
 
     /** Höchstlänge des Regelwissens in der Anweisung (Zeichen). */
     private const int FIX_HELP_MAX = 1500;
@@ -5186,12 +5296,16 @@ final class Connector
      * zur editierbaren Quelle springen kann. Es wird NIE ein Serverpfad
      * ausgegeben, nur die undurchsichtige ID.
      *
-     * Dazu kommt `fixable`: Der Fund lässt sich über seine Content-Datei
-     * beheben ({@see RuleCatalog::FIXABLE}), es gibt eine Datei dazu und der
-     * KI-Assistent ist einsatzbereit — dann bietet der Client den Micro-Auftrag
-     * an ({@see cmdAssistantFix}). Beides entsteht erst beim Ausliefern; der
-     * abgelegte Bericht bleibt unangetastet, ältere Läufe bekommen die Angaben
-     * dadurch automatisch.
+     * Dazu kommen zwei Angebote des KI-Assistenten, sofern er eingerichtet ist:
+     * `fixable` — der Fund lässt sich über seine Content-Datei beheben
+     * ({@see RuleCatalog::FIXABLE}) und diese Datei ist auflösbar — und
+     * `diagnosable` — der Fund wurzelt im Theme, in der Hugo-Konfiguration oder
+     * in der Seitenstruktur; dafür gibt es statt einer Behebung eine erklärende
+     * Diagnose. Beide führen zu {@see cmdAssistantFix}. Die Diagnose braucht
+     * weder eine Quelldatei noch Schreibrechte.
+     *
+     * Alle drei Angaben entstehen erst beim Ausliefern; der abgelegte Bericht
+     * bleibt unangetastet, ältere Läufe bekommen sie dadurch automatisch.
      *
      * @param array<string, mixed> $report
      * @return array<string, mixed>
@@ -5202,12 +5316,22 @@ final class Connector
             return $report;
         }
         $source = (string) $this->hugo['source'];
-        // Ohne API-Schlüssel oder im Nur-Lese-Modus kann der Assistent nichts
-        // beheben — dann den Knopf gar nicht erst anbieten.
-        $canFix = $this->ai['apiKey'] !== null && $this->ai['writeMode'] !== 'readonly';
+        // Beheben heißt schreiben — im Nur-Lese-Modus gibt es das nicht. Die
+        // Diagnose liest ausschließlich und genügt sich mit dem API-Schlüssel.
+        $hasAi = $this->ai['apiKey'] !== null;
+        $canFix = $hasAi && $this->ai['writeMode'] !== 'readonly';
         $cache = [];
         foreach ($report['issues'] as &$issue) {
-            $rel = is_array($issue) ? ($issue['sourceFile'] ?? null) : null;
+            if (!is_array($issue)) {
+                continue;
+            }
+            $ruleId = (string) ($issue['ruleId'] ?? '');
+            // Diagnose zuerst: Sie hängt an keiner Quelldatei — auch Funde ohne
+            // Seite (fehlende Sitemap, robots.txt) sind erklärbar.
+            if ($hasAi && RuleCatalog::diagnosable($ruleId)) {
+                $issue['diagnosable'] = true;
+            }
+            $rel = $issue['sourceFile'] ?? null;
             if (!is_string($rel) || $rel === '') {
                 continue;
             }
@@ -5216,7 +5340,7 @@ final class Connector
             }
             if ($cache[$rel] !== null) {
                 $issue['fileId'] = $cache[$rel];
-                if ($canFix && RuleCatalog::fixable((string) ($issue['ruleId'] ?? ''))) {
+                if ($canFix && RuleCatalog::fixable($ruleId)) {
                     $issue['fixable'] = true;
                 }
             }

@@ -142,15 +142,19 @@ export const useAssistantStore = defineStore('assistant', {
       }
     },
 
-    // Micro-Auftrag aus dem SEO-Bericht: lässt genau EINEN Fund beheben. Der
+    // Micro-Auftrag aus dem SEO-Bericht: lässt genau EINEN Fund bearbeiten. Der
     // Server schlägt den Fund selbst im gespeicherten Lauf nach — hierher gehen
     // nur die Kennungen, kein Meldungstext.
-    async fixIssue(runId, ruleId, url, locale) {
+    //
+    // mode 'fix' behebt ihn in der Content-Datei; mode 'diagnose' erklärt nur,
+    // was im Theme, in der Konfiguration oder an der Struktur zu ändern wäre
+    // (der Server läuft dafür im Nur-Lese-Modus).
+    async fixIssue(runId, ruleId, url, locale, mode = 'fix') {
       this.reset()
       this.open = true
       this.busy = true
       try {
-        const data = await api.post('assistantfix', { runId, ruleId, url: url ?? null, locale })
+        const data = await api.post('assistantfix', { runId, ruleId, url: url ?? null, locale, mode })
         this.apply(data)
         return true
       } catch (e) {

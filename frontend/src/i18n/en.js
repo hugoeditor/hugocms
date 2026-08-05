@@ -524,6 +524,7 @@ export default {
     groupCollapse: 'Hide affected pages',
     fixWithAi: 'Let the AI fix this issue',
     fixDone: 'AI task completed — the issue disappears after the next build and check',
+    diagnoseWithAi: 'Diagnosis: the AI explains what to change in the theme or configuration (without writing)',
     allSeverities: 'All',
     colSeverity: 'Severity',
     colIssue: 'Issue',
@@ -1503,6 +1504,7 @@ export default {
     'AUDIT-CONTENT-EMPTY': 'The file contains no checkable body text: {0}',
     'AUDIT-CONTENT-NOT-FOUND': 'No stored check result found: {0}',
     'AUDIT-RULE-NOT-FIXABLE': 'This rule cannot be fixed from the content file: {0}',
+    'AUDIT-RULE-NOT-DIAGNOSABLE': 'There is no diagnosis for this rule — it can be fixed directly: {0}',
     'AUDIT-ISSUE-NOT-FOUND': 'The issue is no longer part of the selected report: {0}',
     'AUDIT-ISSUE-NO-SOURCE': 'There is no editable source file for this issue: {0}',
 
