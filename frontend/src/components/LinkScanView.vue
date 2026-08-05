@@ -35,11 +35,17 @@ watch(
 )
 
 // Reihenfolge der Abschnitte: Tippfehler zuerst, denn sie sind der Zweck der
-// Suche. Was exakt so geschrieben ist, steht zuletzt — es ist ja in Ordnung.
+// Suche. Was exakt so geschrieben ist, steht danach — es ist ja in Ordnung —,
+// und zuletzt die Adressen unterhalb der gesuchten: Bei einer Domain-Suche sind
+// das schnell Tausende (jede gebaute Seite verlinkt die Navigation), sie sollen
+// die eigentlichen Funde nicht zudecken.
 const SECTIONS = [
+  // Protokoll-Suche („http://"): dann ist dies die einzige vorkommende Art.
+  { kind: 'scheme', icon: 'mdi-protocol', color: 'warning' },
   { kind: 'similar', icon: 'mdi-alert-circle-outline', color: 'warning' },
   { kind: 'normalized', icon: 'mdi-format-letter-case', color: 'info' },
   { kind: 'exact', icon: 'mdi-check-circle-outline', color: 'success' },
+  { kind: 'under', icon: 'mdi-subdirectory-arrow-right', color: 'grey' },
 ]
 
 const area = ref('all') // 'all' | 'content' | 'public'

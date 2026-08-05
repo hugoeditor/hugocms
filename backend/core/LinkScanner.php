@@ -83,7 +83,7 @@ final class LinkScanner
     {
         $files = $this->files();
         $total = count($files);
-        $needle = self::normalize($query);
+        $needle = self::forms($query) + ['scheme' => self::schemePrefix($query)];
         $start = max(0, $cursor);
         $end = min($total, $start + self::BATCH_FILES);
 
@@ -169,9 +169,11 @@ final class LinkScanner
     /**
      * Alle Links EINER Datei gegen die Suchadresse halten.
      *
+     * @param array{full: string, path: string, scheme: string} $needle Formen
+     *        der Suchadresse
      * @return list<array<string, mixed>>
      */
-    private function scanFile(string $abs, string $rel, string $area, string $query, string $needle): array
+    private function scanFile(string $abs, string $rel, string $area, string $query, array $needle): array
     {
         $size = @filesize($abs);
         if ($size === false || $size > self::MAX_FILE_BYTES) {
@@ -253,28 +255,69 @@ final class LinkScanner
     }
 
     /**
-     * Vergleicht einen gefundenen Link mit der Suchadresse.
+     * Vergleicht einen gefundenen Link mit der Suchadresse. Geprüft wird jede
+     * Vergleichsform gegen jede (siehe {@see forms()}), die beste Bewertung
+     * gewinnt: gleich vor darunterliegend vor ähnlich.
      *
+     * @param array{full: string, path: string, scheme: string} $needle Formen
+     *        der Suchadresse; `scheme` nur bei einer Protokoll-Suche belegt
      * @return array{0: string, 1: int}|null [Art, Editierdistanz] oder null
      */
-    private function compare(string $link, string $query, string $needle): ?array
+    private function compare(string $link, string $query, array $needle): ?array
     {
+        // Protokoll-Suche: Es zählt allein der Anfang des Links. Ähnlichkeit
+        // wäre hier sinnlos — „https:" ist kein Vertipper von „http:", sondern
+        // gerade das Gegenteil.
+        if ($needle['scheme'] !== '') {
+            return str_starts_with(mb_strtolower(trim($link)), $needle['scheme'])
+                ? ['scheme', 0]
+                : null;
+        }
+
         if ($link === $query) {
             return ['exact', 0];
         }
-        $candidate = self::normalize($link);
-        if ($candidate === '' || $needle === '') {
-            return null;
-        }
-        if ($candidate === $needle) {
-            return ['normalized', 0];
-        }
-        if (strlen($candidate) > self::LEVENSHTEIN_MAX || strlen($needle) > self::LEVENSHTEIN_MAX) {
-            return null;
-        }
-        $distance = levenshtein($candidate, $needle);
+        $candidate = self::forms($link);
 
-        return $distance > 0 && $distance <= self::threshold($needle) ? ['similar', $distance] : null;
+        // Paare aus je einer nicht leeren Form beider Seiten.
+        $pairs = [];
+        foreach ([$needle['full'], $needle['path']] as $n) {
+            foreach ([$candidate['full'], $candidate['path']] as $c) {
+                if ($n !== '' && $c !== '') {
+                    $pairs[$n . "\0" . $c] = [$n, $c];
+                }
+            }
+        }
+        if ($pairs === []) {
+            return null;
+        }
+
+        foreach ($pairs as [$n, $c]) {
+            if ($n === $c) {
+                return ['normalized', 0];
+            }
+        }
+        // Adressen unterhalb der gesuchten: Wer eine Domain oder einen Abschnitt
+        // sucht, will auch die Links darauf sehen. Nur an Segmentgrenzen, sonst
+        // gälte „/produkte" auch für „/produktebilder".
+        foreach ($pairs as [$n, $c]) {
+            if (str_starts_with($c, $n . '/')) {
+                return ['under', 0];
+            }
+        }
+
+        $best = null;
+        foreach ($pairs as [$n, $c]) {
+            if (strlen($n) > self::LEVENSHTEIN_MAX || strlen($c) > self::LEVENSHTEIN_MAX) {
+                continue;
+            }
+            $distance = levenshtein($c, $n);
+            if ($distance > 0 && $distance <= self::threshold($n) && ($best === null || $distance < $best)) {
+                $best = $distance;
+            }
+        }
+
+        return $best === null ? null : ['similar', $best];
     }
 
     /** Erlaubte Editierdistanz für eine Suchadresse dieser Länge. */
@@ -289,18 +332,62 @@ final class LinkScanner
     }
 
     /**
-     * Vergleichsform einer Adresse: ohne Schema und Rechnername, ohne Query und
-     * Fragment, ohne Schrägstriche am Rand, kleingeschrieben, Umlaute und
-     * Akzente ausgeschrieben. So gilt „https://example.org/Über-Uns/" als
-     * dieselbe Adresse wie „/ueber-uns" — der Unterschied ist Schreibweise,
-     * kein Tippfehler.
+     * Erkennt eine Suche nach einem PROTOKOLL: „http:", „http://", „https://",
+     * „mailto:" und so fort. Solche Eingaben sind keine Adresse, die man
+     * vergleichen könnte — sie fragen nach allem, was so beginnt. Häufigster
+     * Fall: unverschlüsselte externe Links aufspüren, die auf https gehören.
+     *
+     * Der Doppelpunkt ist Pflicht, sonst wäre „http" nicht von einem Pfad zu
+     * unterscheiden. Ein angehängtes „//" bleibt erhalten, damit „http://" nur
+     * echte Web-Adressen trifft.
+     *
+     * @return string Präfix in Kleinschreibung, oder '' wenn es keine
+     *                Protokoll-Suche ist
      */
-    private static function normalize(string $url): string
+    private static function schemePrefix(string $query): string
     {
-        $s = trim($url);
-        $s = preg_replace('#^[a-z][a-z0-9+.-]*://[^/]*#i', '', $s) ?? $s;
-        $s = preg_replace('/[#?].*$/', '', $s) ?? $s;
-        $s = trim($s, '/');
+        $s = mb_strtolower(trim($query));
+
+        return preg_match('#^[a-z][a-z0-9+.-]*:(//)?$#', $s) === 1 ? $s : '';
+    }
+
+    /**
+     * Die beiden Vergleichsformen einer Adresse — ohne Schema, Query und
+     * Fragment, ohne Schrägstriche am Rand, kleingeschrieben, Umlaute und
+     * Akzente ausgeschrieben:
+     *
+     *   `full` mit Rechnername: „www.example.org/ueber-uns"
+     *   `path` nur der Pfad:    „ueber-uns"
+     *
+     * Zwei Formen, weil beide Suchweisen vorkommen. Wer „/ueber-uns" sucht, meint
+     * auch das absolut geschriebene „https://example.org/ueber-uns" — dafür
+     * braucht es `path`. Wer eine Domain sucht („www.example.org"), meint gerade
+     * den Rechnernamen — dafür braucht es `full`. Verglichen wird jede Form der
+     * Suchadresse gegen jede des Links; leere Formen bleiben außen vor, sonst
+     * gälten zwei verschiedene Domains ohne Pfad als dieselbe Adresse.
+     *
+     * @return array{full: string, path: string}
+     */
+    private static function forms(string $url): array
+    {
+        $s = preg_replace('/[#?].*$/', '', trim($url)) ?? trim($url);
+
+        // Rechnername abtrennen, wenn einer da ist — auch bei protokollrelativen
+        // Adressen („//example.org/x").
+        $host = '';
+        if (preg_match('#^(?:[a-z][a-z0-9+.-]*:)?//([^/]*)#i', $s, $m) === 1) {
+            $host = $m[1];
+            $s = substr($s, strlen($m[0]));
+        }
+        $path = self::fold(trim($s, '/'));
+        $full = $host === '' ? $path : self::fold($host) . ($path === '' ? '' : '/' . $path);
+
+        return ['full' => $full, 'path' => $path];
+    }
+
+    /** Kleinschreibung plus Transliteration gängiger Diakritika. */
+    private static function fold(string $s): string
+    {
         $s = mb_strtolower($s);
 
         return strtr($s, [

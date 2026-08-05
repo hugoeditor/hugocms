@@ -744,10 +744,24 @@ Hugo-Quellen (`content/`, aus der Hugo-Konfiguration gelesen) und im gebauten
 Ordner sucht. Zweck ist das Aufspüren **falsch geschriebener Links**: Gefunden
 wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 
-- **Drei Arten von Treffern.** *Genau so geschrieben* (zeichengleich),
+- **Vier Arten von Treffern.** *Genau so geschrieben* (zeichengleich),
   *abweichende Schreibweise* (nach Normalisierung gleich: Groß-/Kleinschreibung,
-  Schrägstrich am Ende, Umlaute, vollständige Adresse statt Pfad) und *mögliche
-  Tippfehler* (Editierdistanz ≤ 1–3, gestaffelt nach Länge der Suchadresse).
+  Schrägstrich am Ende, Umlaute, vollständige Adresse statt Pfad), *mögliche
+  Tippfehler* (Editierdistanz ≤ 1–3, gestaffelt nach Länge der Suchadresse) und
+  *Adressen darunter* (die Suchadresse ist ein Präfix an einer Segmentgrenze).
+- **Protokoll-Suche.** Sieht die Eingabe wie ein Protokoll aus (`http:`,
+  `http://`, `https://`, `mailto:` …, Doppelpunkt ist Pflicht), zählt allein der
+  Anfang des Links: Geliefert wird alles, was so beginnt. Der praktische Zweck
+  ist `http://` — unverschlüsselte externe Links, die auf `https` gehören.
+  Ähnlichkeit bleibt dabei außen vor, denn `https:` ist kein Vertipper von
+  `http:`, sondern das Gegenteil.
+- **Pfad oder Domain.** Jede Adresse wird in zwei Vergleichsformen zerlegt: mit
+  Rechnernamen (`www.example.de/kontakt`) und nur der Pfad (`kontakt`); verglichen
+  wird jede Form gegen jede. So findet die Suche nach `/kontakt` auch das absolut
+  geschriebene `https://www.example.de/kontakt` — und die Suche nach
+  `www.example.de` die Links auf diese Domain, samt ihrer Unterseiten. Bei der
+  eigenen Domain sind das schnell Tausende Fundstellen (jede gebaute Seite
+  verlinkt die Navigation); die Ansicht bündelt sie je Adresse.
 - **Was als Hyperlink gilt.** HTML-Attribute `href`/`src`, Markdown-Ziele
   `](…)` und Referenzdefinitionen sowie die Hugo-Shortcodes `{{< ref >}}` /
   `{{< relref >}}`. Durchsucht werden `.md`/`.markdown`/`.html` in den Quellen
