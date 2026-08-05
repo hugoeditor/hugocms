@@ -200,6 +200,17 @@ async function openIssueSource(issue) {
 function openHelp(ruleId) {
   help.open('audit', ruleId, locale.value)
 }
+
+// Micro-Auftrag zu einem einzelnen SEO-Fund — derselbe Weg wie aus dem
+// SEO-Bericht. Der Fund gehört zum jüngsten Lauf; dessen ID liefert der
+// Gesamt-Bericht mit. Wie beim Verbesserungslauf schließt der Bericht, das
+// Assistenten-Panel übernimmt.
+async function fixIssue(issue) {
+  const runId = audit.value?.runId
+  if (!runId) return
+  store.closeDialog()
+  await assistant.fixIssue(runId, issue.ruleId, issue.url ?? null, locale.value)
+}
 </script>
 
 <template>
@@ -449,8 +460,10 @@ function openHelp(ruleId) {
             <AuditIssueTable
               v-else
               :issues="audit.issues"
+              :busy="assistant.busy"
               @open-source="openIssueSource"
               @open-help="openHelp"
+              @fix-issue="fixIssue"
             />
           </template>
           <p v-else class="text-caption text-medium-emphasis mt-2">

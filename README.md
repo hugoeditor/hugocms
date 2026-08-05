@@ -675,6 +675,18 @@ ruft er intern `get_file_report` auf und bearbeitet ausschließlich die Zieldate
 im `confirm`-Modus wird jede Änderung wie gewohnt bestätigt. Der Schnellweg
 funktioniert auch **ohne** vorher erstellten Qualitätsbericht.
 
+**Die SEO-Funde werden dabei mit abgearbeitet** — beim Knopfdruck wie im
+nächtlichen Cron-Lauf, denn beide nutzen dieselbe Startanweisung. Damit das
+verlässlich gelingt, liefert `get_file_report` zu jedem Fund mit, was zum Beheben
+nötig ist: `fixable` markiert die Funde, die sich allein über diese Content-Datei
+beheben lassen (`RuleCatalog::FIXABLE`); `duplicateOf` nennt bei doppelten Titeln
+und Meta-Descriptions die übrigen betroffenen Seiten, damit der neue Text sich von
+ihnen abhebt statt erneut austauschbar zu sein; das Glossar `rules` erklärt jede
+vorkommende Regel (Titel und Zusammenfassung aus `backend/help/audit/`, je Regel
+einmal statt an jedem Fund). Die Anweisung verlangt ausdrücklich, jeden
+`fixable`-Fund zu beheben, die übrigen nur zu benennen und keine Front-Matter-
+Felder für Theme-Probleme zu erfinden.
+
 Jede vom Assistenten geschriebene Datei wird als „verbessert" vermerkt; die
 Arbeitsliste „Zu verbessern" (Score < 100 und noch nicht verbessert) leitet sich
 daraus ab. Ein Eintrag lässt sich über „Wieder aufnehmen" erneut aufnehmen.

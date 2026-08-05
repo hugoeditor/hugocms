@@ -3087,14 +3087,40 @@ final class Connector
         );
     }
 
-    /** Startanweisung für den Verbesserungslauf (in der Sprache des Benutzers). */
+    /**
+     * Startanweisung für den Verbesserungslauf (in der Sprache des Benutzers).
+     * Denselben Text bekommt der Cron-Verbesserer ({@see runImprove}) — der
+     * automatische Lauf arbeitet also nach exakt denselben Vorgaben wie der von
+     * Hand ausgelöste.
+     *
+     * Der Abschnitt zu den SEO-Funden ist bewusst ausführlich: Der Bericht aus
+     * `get_file_report` liefert zu jedem Fund `fixable` (über diese Datei
+     * behebbar), bei Duplikaten `duplicateOf` (die übrigen betroffenen Seiten)
+     * und im Glossar `rules` die Bedeutung jeder vorkommenden Regel. Ohne
+     * ausdrückliche Anweisung nutzt das Modell diese Felder nicht zuverlässig
+     * und lässt SEO-Funde liegen.
+     */
     private function improveInstruction(string $path, string $locale): string
     {
         if (str_starts_with(strtolower($locale), 'en')) {
-            return "Improve the existing content file `{$path}`. Steps: (1) call get_file_report for this path and act on BOTH parts — the content-quality verdict AND the SEO findings; (2) read the file; (3) fix the reported issues and write the improved version in a SINGLE write_file call. If the report contains a non-empty `userInstruction` field, it is an explicit instruction from the site owner and OVERRIDES conflicting findings or suggestions — follow it exactly. Adopt the file's existing front-matter format. Address the SEO findings as far as this file allows (e.g. title/H1 duplication, missing meta description, Open Graph / Twitter fields). If a SEO finding depends on which front-matter field the theme reads (e.g. og:image), you MAY READ the relevant layout/partial to find the correct field — but WRITE only this content file. Keep the front matter valid and preserve the author's meaning.";
+            return "Improve the existing content file `{$path}`. Steps: (1) call get_file_report for this path and act on BOTH parts — the content-quality verdict AND the SEO findings; (2) read the file; (3) fix the reported issues and write the improved version in a SINGLE write_file call. If the report contains a non-empty `userInstruction` field, it is an explicit instruction from the site owner and OVERRIDES conflicting findings or suggestions — follow it exactly. Adopt the file's existing front-matter format.\n\n"
+                . "The SEO findings are NOT optional — work through `audit.issues` completely:\n"
+                . "- Fix EVERY finding marked `fixable: true`. These are fixable from this content file alone.\n"
+                . "- `audit.rules` explains what each rule requires — consult it instead of guessing from the rule ID.\n"
+                . "- A finding with `duplicateOf` means the SAME title or meta description is used on the pages listed there. Write a text that clearly distinguishes THIS page from them; do not reuse their wording.\n"
+                . "- Findings WITHOUT `fixable` live in the theme or in the URL structure. Do not attempt them and do not invent front-matter fields for them — name them briefly in your reply instead.\n"
+                . "- If you deliberately leave a fixable finding unfixed, say which one and why.\n\n"
+                . "If a SEO finding depends on which front-matter field the theme reads (e.g. og:image), you MAY READ the relevant layout/partial to find the correct field — but WRITE only this content file. Keep the front matter valid and preserve the author's meaning.";
         }
 
-        return "Verbessere die bestehende Content-Datei `{$path}`. Vorgehen: (1) rufe get_file_report für diesen Pfad auf und beachte BEIDE Teile — das Qualitätsurteil UND die SEO-Funde; (2) lies die Datei; (3) behebe die gemeldeten Probleme und schreibe die verbesserte Fassung in EINEM write_file-Aufruf. Enthält der Bericht ein nicht leeres Feld `userInstruction`, ist das eine ausdrückliche Anweisung des Betreibers und hat VORRANG vor widersprechenden Funden oder Vorschlägen — befolge sie genau. Übernimm das vorhandene Front-Matter-Format der Datei. Behebe die SEO-Funde, soweit über diese Datei möglich (z. B. Titel/H1-Dopplung, fehlende Meta-Description, Open-Graph-/Twitter-Felder). Hängt ein SEO-Fund davon ab, welches Front-Matter-Feld das Theme auswertet (etwa og:image), darfst du das betreffende Layout/Partial NUR LESEN, um das richtige Feld zu finden — GESCHRIEBEN wird ausschließlich diese Content-Datei. Halte das Front-Matter gültig und bewahre die Aussage des Autors.";
+        return "Verbessere die bestehende Content-Datei `{$path}`. Vorgehen: (1) rufe get_file_report für diesen Pfad auf und beachte BEIDE Teile — das Qualitätsurteil UND die SEO-Funde; (2) lies die Datei; (3) behebe die gemeldeten Probleme und schreibe die verbesserte Fassung in EINEM write_file-Aufruf. Enthält der Bericht ein nicht leeres Feld `userInstruction`, ist das eine ausdrückliche Anweisung des Betreibers und hat VORRANG vor widersprechenden Funden oder Vorschlägen — befolge sie genau. Übernimm das vorhandene Front-Matter-Format der Datei.\n\n"
+            . "Die SEO-Funde sind NICHT optional — arbeite `audit.issues` vollständig ab:\n"
+            . "- Behebe JEDEN Fund mit `fixable: true`. Diese Funde lassen sich allein über diese Content-Datei beheben.\n"
+            . "- `audit.rules` erklärt, was die jeweilige Regel verlangt — sieh dort nach, statt aus der Regel-ID zu raten.\n"
+            . "- Ein Fund mit `duplicateOf` bedeutet: Derselbe Titel bzw. dieselbe Meta-Description steht auf den dort genannten Seiten. Schreibe einen Text, der DIESE Seite deutlich von ihnen unterscheidet; übernimm ihre Formulierung nicht.\n"
+            . "- Funde OHNE `fixable` wurzeln im Theme oder in der URL-Struktur. Versuche sie nicht zu beheben und erfinde dafür keine Front-Matter-Felder — nenne sie stattdessen kurz in deiner Antwort.\n"
+            . "- Lässt du einen behebbaren Fund bewusst liegen, sage welchen und warum.\n\n"
+            . "Hängt ein SEO-Fund davon ab, welches Front-Matter-Feld das Theme auswertet (etwa og:image), darfst du das betreffende Layout/Partial NUR LESEN, um das richtige Feld zu finden — GESCHRIEBEN wird ausschließlich diese Content-Datei. Halte das Front-Matter gültig und bewahre die Aussage des Autors.";
     }
 
     /**
@@ -3312,9 +3338,14 @@ final class Connector
      * Assistenten-Werkzeug get_file_report). Qualitätsurteil optional (null,
      * wenn die Datei nie geprüft wurde), SEO-Funde aus dem jüngsten Lauf.
      *
+     * Die Sprache betrifft allein das Regel-Glossar der SEO-Funde — es ist
+     * Arbeitsmaterial für das Modell, kein nutzersichtbarer Text. Deshalb steht
+     * hier ein fester Vorgabewert, statt die Sprache durch die Werkzeug-Kette
+     * zu fädeln; die Sprache der Antwort steuert der Systemprompt.
+     *
      * @return array<string, mixed>
      */
-    private function buildFileReportById(string $fileId): array
+    private function buildFileReportById(string $fileId, string $locale = 'de'): array
     {
         $r = $this->resolver->resolve($fileId, true);
         $mount = $r['mount']->name();
@@ -3328,7 +3359,7 @@ final class Connector
                 'title' => $base['title'] ?? basename($r['rel']),
             ]),
             'contentQuality' => $entry,
-            'audit' => $this->auditIssuesForEntry($base),
+            'audit' => $this->auditIssuesForEntry($base, $locale),
         ];
     }
 
@@ -4924,7 +4955,7 @@ final class Connector
                 'title' => $entry['title'] ?? null,
             ]),
             'contentQuality' => $entry,
-            'audit' => $this->auditIssuesForEntry($entry),
+            'audit' => $this->auditIssuesForEntry($entry, (string) ($request['locale'] ?? 'de')),
         ];
     }
 
@@ -4966,7 +4997,7 @@ final class Connector
      * @param array<string, mixed> $entry
      * @return array<string, mixed>|null
      */
-    private function auditIssuesForEntry(array $entry): ?array
+    private function auditIssuesForEntry(array $entry, string $locale = 'de'): ?array
     {
         if ($this->hugo === null) {
             return null;
@@ -4977,6 +5008,7 @@ final class Connector
         }
         $summary = ['error' => 0, 'warning' => 0, 'hint' => 0];
         $issues = [];
+        $rules = [];
         $rel = $this->sourceRelForEntry($entry);
         if ($rel !== null) {
             $fileId = $this->withContentFileId($entry)['fileId'] ?? null;
@@ -4986,6 +5018,22 @@ final class Connector
                 }
                 if ($fileId !== null) {
                     $issue['fileId'] = $fileId;
+                }
+                $ruleId = (string) ($issue['ruleId'] ?? '');
+                // Über diese Datei behebbar? Trennt die Arbeit von dem, was im
+                // Theme oder in der URL-Struktur wurzelt (siehe RuleCatalog).
+                if (RuleCatalog::fixable($ruleId)) {
+                    $issue['fixable'] = true;
+                }
+                // Duplikat-Funde: die übrigen betroffenen Seiten. Ohne sie kann
+                // die KI nichts Unterscheidendes schreiben — sie wüsste nicht,
+                // wovon der neue Text sich abheben soll.
+                $siblings = self::duplicateSiblings($report, $issue);
+                if ($siblings !== []) {
+                    $issue['duplicateOf'] = $siblings;
+                }
+                if ($ruleId !== '' && !array_key_exists($ruleId, $rules)) {
+                    $rules[$ruleId] = $this->ruleSummary($ruleId, $locale);
                 }
                 $issues[] = $issue;
                 $sev = (string) ($issue['severity'] ?? '');
@@ -4999,7 +5047,44 @@ final class Connector
             'runId' => $report['id'] ?? null,
             'startedAt' => $report['startedAt'] ?? null,
             'issues' => $issues,
+            // Regel-Glossar: je vorkommender Regel EINE Erklärung, statt sie an
+            // jedem Fund zu wiederholen. Damit weiß das Modell, was eine Regel
+            // überhaupt verlangt, statt aus der Regel-ID zu raten. Leer als
+            // Objekt, nicht als Liste — es ist eine Abbildung (wie byCategory).
+            'rules' => self::mapOrObject(array_filter($rules, static fn (?array $r): bool => $r !== null)),
             'summary' => $summary,
+        ];
+    }
+
+    /**
+     * Gibt eine Abbildung als solche aus: leer als JSON-Objekt statt als leere
+     * Liste (wie `byCategory` im Audit-Bericht).
+     *
+     * @param array<string, mixed> $map
+     */
+    private static function mapOrObject(array $map): array|\stdClass
+    {
+        return $map === [] ? new \stdClass() : $map;
+    }
+
+    /**
+     * Kurzerklärung einer Regel aus der Hilfe-Datenbank (Titel + Zusammenfassung
+     * aus dem Front-Matter) oder null. Bewusst nur die Zusammenfassung, nicht der
+     * ganze Artikel: Der Dateibericht wird bei jedem Werkzeugaufruf mitgeschickt.
+     *
+     * @return array{title: string, summary: ?string}|null
+     */
+    private function ruleSummary(string $ruleId, string $locale): ?array
+    {
+        try {
+            $topic = (new HelpService($this->helpDir))->topic('audit', $ruleId, $locale);
+        } catch (Throwable) {
+            return null;
+        }
+
+        return [
+            'title' => (string) ($topic['title'] ?? $ruleId),
+            'summary' => is_string($topic['summary'] ?? null) ? $topic['summary'] : null,
         ];
     }
 

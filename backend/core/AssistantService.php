@@ -503,7 +503,7 @@ final class AssistantService
         if ($this->fileReport !== null) {
             $tools[] = [
                 'name' => 'get_file_report',
-                'description' => 'Get the combined quality/SEO report for a content file: the AI content-quality verdict (score, readability, findings, suggestions) and the SEO audit findings for that file from the latest audit run. "path" is "<mount>/<relative path>". Use this before improving a page to know what to fix.',
+                'description' => 'Get the combined quality/SEO report for a content file: the AI content-quality verdict (score, readability, findings, suggestions) and the SEO audit findings for that file from the latest audit run. "path" is "<mount>/<relative path>". Use this before improving a page to know what to fix. In the SEO part, "audit.issues[].fixable" marks findings you can fix from this content file, "audit.issues[].duplicateOf" lists the other pages carrying the same title or meta description, and "audit.rules" explains every rule that occurs.',
                 'input_schema' => ['type' => 'object', 'properties' => ['path' => ['type' => 'string']], 'required' => ['path']],
             ];
         }
