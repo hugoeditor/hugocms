@@ -10,6 +10,7 @@ import CodeMirrorEditor from './CodeMirrorEditor.vue'
 import { setEditorSaver, flushEditor } from '../util/editorBridge'
 import WysiwygEditor from './WysiwygEditor.vue'
 import FrontMatterPanel from './FrontMatterPanel.vue'
+import QueueImproveDialog from './QueueImproveDialog.vue'
 import FrontMatterDialog from './FrontMatterDialog.vue'
 import LinkDialog from './LinkDialog.vue'
 import { htmlLink, markdownLink, domainFromText } from '../util/linkSnippet'
@@ -48,6 +49,33 @@ async function improveContent() {
     if (!saved) return
   }
   assistant.improve(files.openFile.id, locale.value)
+}
+
+// Mit KI später verbessern: die offene Datei ohne kostenpflichtigen Check zur
+// Verbesserung vormerken. Der Cron-Verbesserer arbeitet sie später ab — deshalb
+// muss der aktuelle Stand gespeichert sein, sonst verbessert die KI die alte
+// Fassung auf der Platte.
+const queueDialog = ref(false)
+async function openQueueImprove() {
+  if (!files.openFile) return
+  if (!(await requireAi())) return
+  if (files.dirty) {
+    const saved = await flushEditor()
+    if (!saved) return
+  }
+  queueDialog.value = true
+}
+
+async function confirmQueue(instruction) {
+  const file = files.openFile
+  queueDialog.value = false
+  if (!file) return
+  try {
+    const { queued } = await auditContent.queue([file.id], instruction)
+    notice.value = t('contentQuality.queuedToast', [queued])
+  } catch (e) {
+    error.value = errorText(t, e)
+  }
 }
 
 const draft = ref('')
@@ -589,6 +617,16 @@ onBeforeUnmount(() => {
               />
             </template>
           </v-tooltip>
+          <v-tooltip :text="$t('ctx.queueImprove')" location="bottom">
+            <template #activator="{ props: tip }">
+              <v-btn
+                v-bind="tip"
+                icon="mdi-playlist-plus"
+                variant="text"
+                @click="openQueueImprove"
+              />
+            </template>
+          </v-tooltip>
         </template>
 
         <v-btn icon="mdi-close" variant="text" @click="close" />
@@ -696,6 +734,9 @@ onBeforeUnmount(() => {
 
     <!-- Link in den Quelltext einfügen (HTML- oder Markdown-Syntax). -->
     <LinkDialog v-model="linkDialog" :initial="linkInitial" :external="linkExternal" @submit="insertLink" />
+
+    <!-- Offene Datei zur KI-Verbesserung vormerken (Anweisung an die KI). -->
+    <QueueImproveDialog v-model="queueDialog" :count="1" @confirm="confirmQueue" />
 
     <!-- Beim Speichern fragen, ob lastmod aktualisiert werden soll (nur, solange
          [user] update_lastmod nicht gesetzt ist). -->
