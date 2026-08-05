@@ -13,7 +13,7 @@ const props = defineProps({
   // Filter.
   search: { type: String, default: '' },
 })
-const emit = defineEmits(['open-source', 'open-help'])
+const emit = defineEmits(['open-source', 'open-help', 'update:row-count'])
 
 const { t } = useI18n()
 
@@ -39,15 +39,61 @@ const filtered = computed(() => {
   )
 })
 
+// Zeilen bilden: Funde, die derselbe Text auf vielen Seiten erzeugt (doppelte
+// Meta-Description, doppelter Titel), kommen vom Server mit einer gemeinsamen
+// Kennung in `context.group`. Sie werden zu EINER aufklappbaren Zeile
+// zusammengefasst — die Funde selbst bleiben einzeln erhalten (Zähler,
+// Quelldatei-Sprung). Funde ohne Kennung (auch alle aus älteren Berichten)
+// bleiben eigenständige Zeilen.
+const rows = computed(() => {
+  const out = []
+  const groups = new Map()
+  for (const issue of filtered.value) {
+    const g = issue.context?.group
+    if (!g) {
+      out.push({ group: false, issue })
+      continue
+    }
+    const key = issue.ruleId + '|' + g
+    const existing = groups.get(key)
+    if (existing) {
+      existing.issues.push(issue)
+      continue
+    }
+    const row = { group: true, key, lead: issue, issues: [issue] }
+    groups.set(key, row)
+    out.push(row)
+  }
+  // Blieb von einer Gruppe nur ein Fund übrig (z. B. durch die Suche), ist die
+  // Zusammenfassung überflüssig — dann wieder als gewöhnliche Zeile zeigen.
+  return out.map((r) => (r.group && r.issues.length < 2 ? { group: false, issue: r.lead } : r))
+})
+
+// Aufgeklappte Gruppen (nach Zeilenschlüssel).
+const expanded = ref(new Set())
+function toggle(key) {
+  const next = new Set(expanded.value)
+  if (!next.delete(key)) next.add(key)
+  expanded.value = next
+}
+
 // Nur einen Ausschnitt rendern: Tausende Zeilen auf einmal blockieren den
 // Hauptthread und lassen das Öffnen „lange dauern". Weitere kommen auf Klick.
 const STEP = 300
 const limit = ref(STEP)
-const visibleIssues = computed(() => filtered.value.slice(0, limit.value))
-const hasMore = computed(() => filtered.value.length > limit.value)
+const visibleRows = computed(() => rows.value.slice(0, limit.value))
+const hasMore = computed(() => rows.value.length > limit.value)
 
-// Bei Filterwechsel (neue Fundmenge oder Suchbegriff) wieder von vorn begrenzen.
-watch([() => props.issues, () => props.search], () => { limit.value = STEP })
+// Bei Filterwechsel (neue Fundmenge oder Suchbegriff) wieder von vorn begrenzen
+// und alle Gruppen schließen.
+watch([() => props.issues, () => props.search], () => {
+  limit.value = STEP
+  expanded.value = new Set()
+})
+
+// Die Statuszeile der Ansicht nennt neben der Fundzahl die Zeilenzahl, sobald
+// zusammengefasst wurde.
+watch(rows, (r) => emit('update:row-count', r.length), { immediate: true })
 
 function showMore() {
   limit.value += STEP
@@ -76,58 +122,133 @@ function showMore() {
       </tr>
     </thead>
     <tbody>
-      <tr v-for="(issue, idx) in visibleIssues" :key="idx" class="nemo-row">
-        <td class="col-sev"><span class="sev-chip" :class="'sev-chip--' + issue.severity">{{ $t('audit.severity.' + issue.severity) }}</span></td>
-        <td class="col-msg">
-          <button
-            class="audit-msg-help"
-            :title="$t('audit.showHelp')"
-            @click="emit('open-help', issue.ruleId)"
+      <template v-for="(row, idx) in visibleRows" :key="row.group ? row.key : 'i' + idx">
+        <!-- Gewöhnlicher Einzelfund -->
+        <tr v-if="!row.group" class="nemo-row">
+          <td class="col-sev"><span class="sev-chip" :class="'sev-chip--' + row.issue.severity">{{ $t('audit.severity.' + row.issue.severity) }}</span></td>
+          <td class="col-msg">
+            <button
+              class="audit-msg-help"
+              :title="$t('audit.showHelp')"
+              @click="emit('open-help', row.issue.ruleId)"
+            >
+              <span class="audit-msg">{{ ruleMessage(row.issue) }}</span>
+              <v-icon icon="mdi-help-circle-outline" size="14" class="audit-msg-hint" />
+            </button>
+            <code class="audit-ruleid">{{ row.issue.ruleId }}</code>
+          </td>
+          <td class="col-url">
+            <!-- URL öffnet die veröffentlichte Webseite (das gebaute HTML) in einem
+                 neuen Tab; die Quelldatei erreicht man über den Knopf rechts. -->
+            <a
+              v-if="row.issue.url"
+              class="audit-url-link"
+              :href="pageUrl(row.issue)"
+              target="_blank"
+              rel="noopener noreferrer"
+              :title="$t('audit.openPage')"
+            >
+              <code>{{ row.issue.url }}</code>
+            </a>
+            <span
+              v-else-if="row.issue.sourceFile"
+              class="audit-src"
+              :class="{ 'col-url-clickable': row.issue.fileId }"
+              :title="row.issue.fileId ? $t('audit.openSource') : null"
+              @click="row.issue.fileId && emit('open-source', row.issue)"
+            >{{ row.issue.sourceFile }}</span>
+            <span v-else>—</span>
+          </td>
+          <td class="col-act">
+            <button
+              v-if="row.issue.fileId"
+              class="audit-jump"
+              :title="$t('audit.openSource')"
+              @click="emit('open-source', row.issue)"
+            >
+              <v-icon icon="mdi-file-edit-outline" size="18" />
+            </button>
+          </td>
+        </tr>
+
+        <!-- Zusammengefasste Duplikate: eine Kopfzeile, die betroffenen Seiten
+             erscheinen aufgeklappt darunter. -->
+        <template v-else>
+          <tr class="nemo-row audit-grouprow" @click="toggle(row.key)">
+            <td class="col-sev"><span class="sev-chip" :class="'sev-chip--' + row.lead.severity">{{ $t('audit.severity.' + row.lead.severity) }}</span></td>
+            <td class="col-msg">
+              <button
+                class="audit-msg-help"
+                :title="$t('audit.showHelp')"
+                @click.stop="emit('open-help', row.lead.ruleId)"
+              >
+                <span class="audit-msg">{{ ruleMessage(row.lead) }}</span>
+                <v-icon icon="mdi-help-circle-outline" size="14" class="audit-msg-hint" />
+              </button>
+              <code class="audit-ruleid">{{ row.lead.ruleId }}</code>
+              <div v-if="row.lead.context?.text" class="audit-dup-text">„{{ row.lead.context.text }}“</div>
+            </td>
+            <td class="col-url">
+              <span class="audit-groupcount">{{ $t('audit.groupPages', [row.issues.length]) }}</span>
+            </td>
+            <td class="col-act">
+              <button
+                class="audit-jump"
+                :title="expanded.has(row.key) ? $t('audit.groupCollapse') : $t('audit.groupExpand')"
+                @click.stop="toggle(row.key)"
+              >
+                <v-icon :icon="expanded.has(row.key) ? 'mdi-chevron-up' : 'mdi-chevron-down'" size="18" />
+              </button>
+            </td>
+          </tr>
+          <tr
+            v-for="(issue, i) in (expanded.has(row.key) ? row.issues : [])"
+            :key="row.key + '#' + i"
+            class="nemo-row audit-childrow"
           >
-            <span class="audit-msg">{{ ruleMessage(issue) }}</span>
-            <v-icon icon="mdi-help-circle-outline" size="14" class="audit-msg-hint" />
-          </button>
-          <code class="audit-ruleid">{{ issue.ruleId }}</code>
-        </td>
-        <td class="col-url">
-          <!-- URL öffnet die veröffentlichte Webseite (das gebaute HTML) in einem
-               neuen Tab; die Quelldatei erreicht man über den Knopf rechts. -->
-          <a
-            v-if="issue.url"
-            class="audit-url-link"
-            :href="pageUrl(issue)"
-            target="_blank"
-            rel="noopener noreferrer"
-            :title="$t('audit.openPage')"
-          >
-            <code>{{ issue.url }}</code>
-          </a>
-          <span
-            v-else-if="issue.sourceFile"
-            class="audit-src"
-            :class="{ 'col-url-clickable': issue.fileId }"
-            :title="issue.fileId ? $t('audit.openSource') : null"
-            @click="issue.fileId && emit('open-source', issue)"
-          >{{ issue.sourceFile }}</span>
-          <span v-else>—</span>
-        </td>
-        <td class="col-act">
-          <button
-            v-if="issue.fileId"
-            class="audit-jump"
-            :title="$t('audit.openSource')"
-            @click="emit('open-source', issue)"
-          >
-            <v-icon icon="mdi-file-edit-outline" size="18" />
-          </button>
-        </td>
-      </tr>
+            <td class="col-sev"></td>
+            <td class="col-msg">
+              <span
+                v-if="issue.sourceFile"
+                class="audit-src"
+                :class="{ 'col-url-clickable': issue.fileId }"
+                :title="issue.fileId ? $t('audit.openSource') : null"
+                @click="issue.fileId && emit('open-source', issue)"
+              >{{ issue.sourceFile }}</span>
+              <span v-else class="audit-src">—</span>
+            </td>
+            <td class="col-url">
+              <a
+                v-if="issue.url"
+                class="audit-url-link"
+                :href="pageUrl(issue)"
+                target="_blank"
+                rel="noopener noreferrer"
+                :title="$t('audit.openPage')"
+              >
+                <code>{{ issue.url }}</code>
+              </a>
+              <span v-else>—</span>
+            </td>
+            <td class="col-act">
+              <button
+                v-if="issue.fileId"
+                class="audit-jump"
+                :title="$t('audit.openSource')"
+                @click="emit('open-source', issue)"
+              >
+                <v-icon icon="mdi-file-edit-outline" size="18" />
+              </button>
+            </td>
+          </tr>
+        </template>
+      </template>
     </tbody>
     </table>
 
-    <!-- Weitere Funde nachladen (Rendern bleibt so flüssig). -->
+    <!-- Weitere Zeilen nachladen (Rendern bleibt so flüssig). -->
     <div v-if="hasMore" class="audit-more nemo-noselect">
-      <span class="audit-more-count">{{ $t('audit.showingOf', [visibleIssues.length, filtered.length]) }}</span>
+      <span class="audit-more-count">{{ $t('audit.showingOf', [visibleRows.length, rows.length]) }}</span>
       <button class="audit-btn" @click="showMore">{{ $t('audit.showMore') }}</button>
     </div>
   </template>
@@ -173,6 +294,22 @@ function showMore() {
   vertical-align: top;
 }
 .nemo-row:hover { background: var(--mint-row-hover); }
+
+/* Kopfzeile einer zusammengefassten Duplikat-Gruppe: die ganze Zeile klappt
+   auf und zu (der Hilfe-Knopf darin stoppt das Ereignis). */
+.audit-grouprow { cursor: pointer; }
+/* Der doppelte Text selbst (z. B. die mehrfach verwendete Meta-Description). */
+.audit-dup-text {
+  margin-top: 2px;
+  font-size: 0.78rem;
+  color: var(--mint-text-muted);
+  font-style: italic;
+}
+.audit-groupcount { font-size: 0.8rem; color: var(--mint-text-muted); }
+/* Betroffene Seite innerhalb einer aufgeklappten Gruppe: eingerückt und
+   zurückgenommen, damit die Zugehörigkeit sichtbar bleibt. */
+.audit-childrow td { background: var(--mint-panel); }
+.audit-childrow .col-msg { padding-left: 26px; }
 
 .col-msg { color: var(--mint-text); }
 /* Problembeschreibung als Schaltfläche: öffnet die ausführliche Hilfe. */
