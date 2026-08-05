@@ -482,6 +482,7 @@ final class Connector
                 'raw' => $this->cmdRaw($request),
                 'thumb' => $this->cmdThumb($request),
                 'search' => $this->cmdSearch($request),
+                'linkscan' => $this->cmdLinkScan($request),
                 'trashlist' => $this->cmdTrashList(),
                 'restore' => $this->cmdRestore($request),
                 'emptytrash' => $this->cmdEmptyTrash($request),
@@ -734,6 +735,11 @@ final class Connector
             // Projekt. Keine Pro-Bindung — der Entwurf-Modus ist eine allgemeine
             // Sicherheitsfunktion (auch der Editor-Button nutzt ihn).
             'review' => $this->hugo !== null,
+            // Hyperlink-Suche: durchsucht den Content- und den gebauten Ordner
+            // dieser Webseite, setzt also ein Hugo-Projekt voraus. Ein Hugo-
+            // Programm braucht sie nicht (sie baut nichts), daher nicht an
+            // `buildable` gebunden. Keine Pro-Bindung — sie läuft rein lokal.
+            'linkScan' => $this->hugo !== null,
             // Automatikmodus des Cron-Verbesserers dieser Webseite. Der Client
             // zeigt ihn als Schalter in der Liste „zu verbessern“ und in den
             // Projekteinstellungen. `effectivePerDay` ist die Menge, die im
@@ -1153,6 +1159,79 @@ final class Connector
         $results = $this->files->search($target['mount'], $target['rel'], $target['abs'], $q);
 
         return ['query' => $q, 'entries' => $results, 'truncated' => count($results) >= FileService::SEARCH_LIMIT];
+    }
+
+    /**
+     * Hyperlink-Suche in den Hugo-Quellen (content/) und im gebauten Ergebnis
+     * (public/) — ein SEGMENT je Aufruf. Der Client ruft den Befehl mit dem
+     * zurückgegebenen `cursor` erneut auf, bis `done` gesetzt ist; so bleibt das
+     * Backend zustandslos und kein einzelner Request läuft in ein Zeitlimit.
+     *
+     * Gefunden wird nicht nur die eingegebene Adresse, sondern auch, was ihr
+     * ähnlich sieht — darum geht es: falsch geschriebene Links aufspüren.
+     * Jeder Treffer trägt seine Dateimanager-ID, sofern die Datei in einem Mount
+     * liegt; Serverpfade verlassen das Backend nie.
+     */
+    private function cmdLinkScan(array $request): array
+    {
+        $this->requireAuth();
+        if ($this->hugo === null) {
+            throw new ApiException('ECONFIG', 409, 'LINKSCAN-NO-PROJECT');
+        }
+        $q = trim($this->requireParam($request, 'url'));
+        if (mb_strlen($q) < 2) {
+            throw ApiException::badRequest('PARAM-INVALID', ['url']);
+        }
+        $cursor = max(0, (int) ($request['cursor'] ?? 0));
+
+        $source = (string) $this->hugo['source'];
+        $public = (string) ($this->hugo['destination'] ?? $source . '/public');
+        $contentName = AuditService::detectContentDir($source);
+        $publicName = self::projectRelativeName($source, $public);
+
+        // Ein Segment ist klein bemessen; das Zeitlimit deckt einen langsamen
+        // Datenträger ab, nicht den ganzen Lauf (der verteilt sich auf viele
+        // Aufrufe).
+        @set_time_limit(60);
+
+        $result = (new LinkScanner(
+            $source . '/' . $contentName,
+            $contentName,
+            $public,
+            $publicName,
+        ))->scan($q, $cursor);
+
+        // Treffer um die Dateimanager-ID ergänzen (je Datei einmal aufgelöst).
+        $ids = [];
+        foreach ($result['matches'] as &$match) {
+            $rel = (string) $match['file'];
+            if (!array_key_exists($rel, $ids)) {
+                $abs = $match['area'] === 'public'
+                    ? $public . '/' . ltrim(substr($rel, strlen($publicName)), '/')
+                    : $source . '/' . $rel;
+                $ids[$rel] = $this->resolveFileId($abs);
+            }
+            $match['fileId'] = $ids[$rel];
+        }
+        unset($match);
+
+        return ['query' => $q, ...$result];
+    }
+
+    /**
+     * Name eines Ordners relativ zur Projektwurzel, für die Anzeige im Client.
+     * Liegt er außerhalb des Projekts (eigenes destination), bleibt sein
+     * Basisname übrig — ein absoluter Serverpfad wird nie ausgegeben.
+     */
+    private static function projectRelativeName(string $source, string $dir): string
+    {
+        $sourceReal = realpath($source);
+        $dirReal = realpath($dir);
+        if ($sourceReal !== false && $dirReal !== false && str_starts_with($dirReal, $sourceReal . '/')) {
+            return trim(str_replace('\\', '/', substr($dirReal, strlen($sourceReal))), '/');
+        }
+
+        return basename($dir);
     }
 
     /** Papierkörbe aller Mounts mit Löschrecht (zusammengeführt). */

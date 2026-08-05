@@ -989,6 +989,40 @@ export default {
     refresh: 'Aktualisieren',
   },
 
+  // Hyperlink-Suche in den Hugo-Quellen und den veröffentlichten Seiten.
+  linkScan: {
+    open: 'Hyperlinks',
+    title: 'Hyperlink-Suche',
+    placeholder: 'Adresse, z. B. /produkte/kaffeemaschine',
+    search: 'Suchen',
+    cancel: 'Abbrechen',
+    hint: 'Durchsucht die Hugo-Quellen und die veröffentlichten Seiten nach dieser Adresse — auch nach abweichenden Schreibweisen und Tippfehlern.',
+    empty: 'Adresse eingeben und suchen.',
+    scanning: '{0} von {1} Dateien durchsucht',
+    cancelled: 'Suche abgebrochen — das Ergebnis ist unvollständig.',
+    truncated: 'Sehr viele Treffer — die Suche wurde vorzeitig beendet. Das Ergebnis ist unvollständig.',
+    noMatches: 'Kein Hyperlink gefunden, der zu „{0}“ passt.',
+    noMatchesInArea: 'In diesem Bereich keine Treffer.',
+    summary: '{0} Fundstellen in {1} Dateien',
+    areaAll: 'Alle',
+    areaContent: 'Quellen',
+    areaPublic: 'Veröffentlicht',
+    kind: {
+      similar: 'Mögliche Tippfehler',
+      normalized: 'Abweichende Schreibweise',
+      exact: 'Genau so geschrieben',
+    },
+    kindHint: {
+      similar: 'Diese Adressen weichen nur um wenige Zeichen ab — vermutlich Vertipper, die ins Leere führen.',
+      normalized: 'Dieselbe Adresse, anders geschrieben: Groß-/Kleinschreibung, Schrägstrich am Ende, Umlaute oder vollständige Adresse statt Pfad.',
+      exact: 'Zeichengenau die gesuchte Adresse — hier ist nichts zu tun.',
+    },
+    distance: '{0} Zeichen abweichend',
+    hits: '{0} Fundstellen',
+    line: 'Zeile {0}',
+    openSource: 'Zur Quelldatei',
+  },
+
   // Gestaffelte Veröffentlichung: Freigabe-Warteschlange offener Entwürfe.
   review: {
     open: 'Freigabe',
@@ -1452,6 +1486,8 @@ export default {
     'GIT-INVALID-HASH': 'Ungültiger Commit-Hash: {0}',
     'GIT-INVALID-REF': 'Ungültige Git-Referenz: {0}',
     'GIT-MESSAGE-TOO-LONG': 'Die Commit-Nachricht ist zu lang (höchstens {0} Zeichen).',
+
+    'LINKSCAN-NO-PROJECT': 'Für diese Webseite ist kein Hugo-Projekt konfiguriert — die Hyperlink-Suche braucht content/ und den gebauten Ordner.',
 
     'AUDIT-NO-PROJECT': 'Für diese Webseite ist kein Hugo-Projekt konfiguriert — der Check braucht public/ und content/.',
     'AUDIT-NO-BUILD-OUTPUT': 'Kein gebautes Ergebnis gefunden. Bitte die Webseite zuerst veröffentlichen (Hugo-Lauf).',

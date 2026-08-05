@@ -15,6 +15,7 @@ import TrashView from './components/TrashView.vue'
 import AuditView from './components/AuditView.vue'
 import ContentQualityView from './components/ContentQualityView.vue'
 import ReviewQueueView from './components/ReviewQueueView.vue'
+import LinkScanView from './components/LinkScanView.vue'
 import EditorPanel from './components/EditorPanel.vue'
 import ReconfigureDialog from './components/ReconfigureDialog.vue'
 import ProjectSettingsDialog from './components/ProjectSettingsDialog.vue'
@@ -27,6 +28,7 @@ import { useAssistantStore } from './stores/assistant'
 import { useHelpStore } from './stores/help'
 import { useAuditContentStore } from './stores/auditContent'
 import { useReviewStore } from './stores/review'
+import { useLinkScanStore } from './stores/linkScan'
 import { useStatusStore } from './stores/status'
 import { useUsersStore } from './stores/users'
 import StatusView from './components/StatusView.vue'
@@ -67,6 +69,7 @@ const assistant = useAssistantStore()
 const help = useHelpStore()
 const auditContent = useAuditContentStore()
 const review = useReviewStore()
+const linkScan = useLinkScanStore()
 const status = useStatusStore()
 const users = useUsersStore()
 const error = ref(null)
@@ -288,6 +291,7 @@ async function leaveEditorThen(action) {
   help.close()
   auditContent.closeDialog()
   review.closeQueue()
+  linkScan.close()
   status.close()
   // Auch den SEO-Check verlassen: Er ist keine Überlagerung, sondern ein
   // Modus der Hauptansicht — bliebe er gesetzt, zeigte die Werkzeugschiene ihn
@@ -328,6 +332,17 @@ function openReviewQueue() {
     return
   }
   leaveEditorThen(() => review.openQueue())
+}
+
+// Hyperlink-Suche öffnen/schließen — Umschalter wie die übrigen Overlays. Ein
+// laufender Suchlauf wird dabei NICHT abgebrochen: Er läuft im Store weiter und
+// ist beim Zurückkehren fertig.
+function openLinkScan() {
+  if (linkScan.open) {
+    linkScan.close()
+    return
+  }
+  leaveEditorThen(() => linkScan.openView())
 }
 
 // Benutzerverwaltung öffnen/schließen — Umschalter wie die übrigen Overlays.
@@ -739,6 +754,28 @@ async function build() {
                 </template>
               </v-tooltip>
 
+              <!-- Hyperlink-Suche: findet eine Adresse in den Quellen und in den
+                   veröffentlichten Seiten, samt abweichender Schreibweisen und
+                   Tippfehler. Braucht nur ein Hugo-Projekt, keine Lizenz. -->
+              <v-tooltip v-if="auth.linkScan" :text="$t('linkScan.open')" location="right" :disabled="!toolbarCollapsed">
+                <template #activator="{ props }">
+                  <button
+                    v-bind="props"
+                    type="button"
+                    class="nemo-tool-btn"
+                    :class="{ active: linkScan.open }"
+                    @click="openLinkScan"
+                  >
+                    <!-- Läuft die Suche, tritt der Spinner an die Stelle des
+                         Symbols (wie beim Veröffentlichen): Der Lauf geht auch
+                         bei geschlossener Ansicht weiter, das soll man sehen. -->
+                    <v-progress-circular v-if="linkScan.running" indeterminate size="18" width="2" />
+                    <v-icon v-else icon="mdi-link-variant" size="20" />
+                    <span class="nemo-tool-label">{{ $t('linkScan.open') }}</span>
+                  </button>
+                </template>
+              </v-tooltip>
+
               <!-- Freigabe-Warteschlange (gestaffelte Veröffentlichung) — nur
                    bei konfiguriertem Hugo-Projekt (draft/publishDate). -->
               <v-tooltip v-if="auth.review" :text="$t('review.open')" location="right" :disabled="!toolbarCollapsed">
@@ -933,6 +970,10 @@ async function build() {
             <!-- Freigabe-Warteschlange (gestaffelte Veröffentlichung): Overlay
                  über dem Dateimanager, aus der Werkzeugschiene geöffnet. -->
             <ReviewQueueView @open-status="openStatusView" />
+            <!-- Hyperlink-Suche: Overlay über dem Dateimanager, aus der
+                 Werkzeugschiene geöffnet. Der Suchlauf lebt im Store und läuft
+                 auch weiter, wenn die Ansicht zwischendurch geschlossen wird. -->
+            <LinkScanView />
             <!-- Benutzerverwaltung (Mehrbenutzer): Konten anlegen, zuordnen,
                  sperren, Passwörter neu vergeben. Overlay wie der Systemstatus. -->
             <UsersView @notice="notice = $event" />

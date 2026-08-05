@@ -322,30 +322,42 @@ das Backend ist ohne diesen Schritt bereits aktuell.
 
 ### Veröffentlichen: Hugo aufrufen
 
-Der Client zeigt in der Titelleiste einen **Veröffentlichen**-Knopf, der Hugo
-für die aufgerufene Webseite startet (API-Befehl `build`). Die Konfiguration ist
-auf zwei Dateien verteilt:
+Der Client zeigt in der linken Werkzeugleiste einen **Veröffentlichen**-Knopf,
+der Hugo für die aufgerufene Webseite startet (API-Befehl `build`). Die
+Konfiguration ist auf zwei Dateien verteilt:
 
 - Das **Hugo-Programm** steht zentral in `hugocms.ini` (`[hugo] bin`) — es gibt
-  installationsweit nur eine Binärdatei.
+  installationsweit nur eine Binärdatei. Dieselbe Sektion kennt `clean = true`;
+  das schaltet `--cleanDestinationDir` für alle Webseiten ein (im Zahnrad-Dialog
+  als Schalter, siehe unten).
 - Die **je Webseite** unterschiedlichen Pfade stehen in der reservierten Sektion
-  `[hugo]` der Mount-Konfiguration (`install.sh` trägt sie automatisch ein):
+  `[hugo]` der Mount-Konfiguration (`install.sh` trägt `source` und
+  `destination` automatisch ein):
 
 ```ini
 [hugo]
 source = /var/www/kunde-a               ; Hugo-Projektverzeichnis
 destination = /var/www/kunde-a/public   ; optional, Standard: <source>/public
-minify = true                            ; optional: hugo --minify
+minify = true                           ; optional: hugo --minify
+clean = true                            ; optional: --cleanDestinationDir (Vorsicht, siehe unten)
 ```
 
-Aufgerufen wird `hugo -s <source> -d <destination>` (optional mit `--minify`;
-`clean = true` ergänzt `--cleanDestinationDir`). Veröffentlichbar ist eine
-Webseite nur, wenn **beides** vorliegt — das zentrale Programm **und** die
-Mount-`[hugo]`-Sektion; sonst erscheint der Knopf nicht. Ist eine offene Datei
-ungespeichert, wird sie vor dem Build automatisch gesichert. Die Hugo-Ausgabe
-(Statistik bzw. Fehlermeldungen) zeigt der Client in einem Dialog an. Der
-Webserver-Benutzer braucht Ausführrechte auf das Binary und Schreibrechte im
-Ziel.
+Aufgerufen wird `hugo -s <source> -d <destination>`, optional ergänzt um
+`--minify` sowie um `--cleanDestinationDir`, sobald `clean = true` **entweder**
+zentral in der `hugocms.ini` **oder** in der Mount-Sektion gesetzt ist. Bewusst
+**ohne** `--buildFuture`/`--buildDrafts`: künftige `publishDate` und
+`draft: true` bleiben so unveröffentlicht — genau das trägt die gestaffelte
+Freigabe (siehe „Gestaffelte Veröffentlichung (Freigabe)").
+
+Veröffentlichbar ist eine Webseite nur, wenn **beides** vorliegt — das zentrale
+Programm **und** die Mount-`[hugo]`-Sektion; sonst erscheint der Knopf nicht.
+Ist eine offene Datei ungespeichert, wird sie vor dem Build automatisch
+gesichert; scheitert das Speichern, unterbleibt der Build. Anschließend wendet
+das Backend fällige terminierte Austausche an, damit Hugo den neuen Stand sieht.
+Ein erfolgreicher Lauf meldet sich mit einer kurzen Einblendung samt
+**Details**-Knopf; ein fehlgeschlagener öffnet sofort den Dialog mit der
+Hugo-Ausgabe (die letzten 200 Zeilen). Der Webserver-Benutzer braucht
+Ausführrechte auf das Binary und Schreibrechte im Ziel.
 
 > **Zu `--cleanDestinationDir`:** Der Schalter entfernt im Ziel alles, was Hugo
 > nicht selbst erzeugt. Damit die Installation (`edit/`, `cms-api/`) das
@@ -358,8 +370,8 @@ Die `hugocms.ini` lässt sich auch nach der Einrichtung über die Oberfläche
 anpassen (nur bei INI-basierter Installation, nicht bei `custom.php`):
 
 - **Zahnrad in der Titelleiste** (`reconfigure`): Sitzungsverzeichnis, Logdatei,
-  Log-Stufe, Hugo-Programm sowie der KI-Assistent (API-Schlüssel, Modell,
-  Schreibmodus). Die Anmeldedaten bleiben unberührt; ein leeres
+  Log-Stufe, Hugo-Programm samt Schalter für `--cleanDestinationDir`
+  (`[hugo] clean`) sowie der KI-Assistent (API-Schlüssel, Modell, Schreibmodus). Die Anmeldedaten bleiben unberührt; ein leeres
   API-Schlüssel-Feld lässt den vorhandenen Schlüssel unverändert. Pfadänderungen
   greifen beim nächsten Laden.
 - **Klick auf den Benutzernamen** (`account`): Anmeldename und Passwort ändern.
@@ -725,6 +737,35 @@ eindeutig zu genau einer Webpräsenz. Zwei Folgen für den Mehrfach-Betrieb:
   so dieselbe Quelle, teilen sie sich auch den Review-Ordner. Im sauber
   eingerichteten Mehrfach-Betrieb hat jede Domain ihre eigene Mount-Datei.
 
+## Hyperlink-Suche
+
+Ein Werkzeug der Werkzeugschiene (frei, kein Pro), das eine Adresse in den
+Hugo-Quellen (`content/`, aus der Hugo-Konfiguration gelesen) und im gebauten
+Ordner sucht. Zweck ist das Aufspüren **falsch geschriebener Links**: Gefunden
+wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
+
+- **Drei Arten von Treffern.** *Genau so geschrieben* (zeichengleich),
+  *abweichende Schreibweise* (nach Normalisierung gleich: Groß-/Kleinschreibung,
+  Schrägstrich am Ende, Umlaute, vollständige Adresse statt Pfad) und *mögliche
+  Tippfehler* (Editierdistanz ≤ 1–3, gestaffelt nach Länge der Suchadresse).
+- **Was als Hyperlink gilt.** HTML-Attribute `href`/`src`, Markdown-Ziele
+  `](…)` und Referenzdefinitionen sowie die Hugo-Shortcodes `{{< ref >}}` /
+  `{{< relref >}}`. Durchsucht werden `.md`/`.markdown`/`.html` in den Quellen
+  und `.html` im gebauten Ordner; Papierkörbe bleiben außen vor.
+- **Segmentiert statt am Stück.** `linkscan` durchsucht je Aufruf 250 Dateien
+  und liefert den nächsten `cursor` zurück; der Client ruft den Befehl, bis
+  `done` gesetzt ist. So braucht es **keinen** Hintergrundlauf und keinen
+  Job-Zustand auf dem Server — der Fortschritt liegt allein im Client, und kein
+  einzelner Request kann in ein Zeitlimit laufen. Ein Abbruch wirkt sofort; die
+  Ansicht darf zwischendurch geschlossen werden, der Lauf läuft weiter.
+- **Grenzen.** 400 Treffer je Segment und 5000 je Lauf; darüber meldet die
+  Ansicht das Ergebnis ausdrücklich als unvollständig. Dateien über 4 MiB werden
+  übersprungen.
+- **Sprung zur Quelle.** Jeder Treffer trägt die Dateimanager-ID seiner Datei,
+  sofern sie in einem Mount liegt — Serverpfade gibt der Befehl nie aus. Beim
+  gebauten Ordner fehlt die ID, wenn er nicht eingebunden ist; die Fundstelle
+  wird dann nur angezeigt.
+
 ## API-Befehle
 
 | Befehl     | Methode | Parameter                            | Zweck                                  |
@@ -747,6 +788,7 @@ eindeutig zu genau einer Webpräsenz. Zwei Folgen für den Mehrfach-Betrieb:
 | `raw`      | GET     | `target` (ID)                        | Bild inline ausliefern (Betrachter)    |
 | `thumb`    | GET     | `target` (ID), `size`?               | Bildvorschau (GD; ohne GD das Original)|
 | `search`   | GET     | `target` (Ordner-ID), `q` (≥ 2 Z.)   | Rekursive Namenssuche (max. 200)       |
+| `linkscan` | GET     | `url` (≥ 2 Z.), `cursor`?            | Hyperlink-Suche in `content/` und im gebauten Ordner — EIN Segment je Aufruf (siehe „Hyperlink-Suche") |
 | `trashlist`| GET     | –                                    | Papierkörbe aller Mounts auflisten     |
 | `restore`  | POST    | `mount`, `names` (Liste)             | Aus dem Papierkorb wiederherstellen    |
 | `emptytrash`| POST   | `mount`?                             | Papierkorb endgültig leeren            |

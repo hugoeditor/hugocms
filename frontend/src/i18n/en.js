@@ -986,6 +986,40 @@ export default {
     refresh: 'Refresh',
   },
 
+  // Hyperlink search across the Hugo sources and the published pages.
+  linkScan: {
+    open: 'Hyperlinks',
+    title: 'Hyperlink search',
+    placeholder: 'Address, e.g. /products/coffee-machine',
+    search: 'Search',
+    cancel: 'Cancel',
+    hint: 'Searches the Hugo sources and the published pages for this address — including different spellings and typos.',
+    empty: 'Enter an address and search.',
+    scanning: '{0} of {1} files searched',
+    cancelled: 'Search cancelled — the result is incomplete.',
+    truncated: 'Very many matches — the search stopped early. The result is incomplete.',
+    noMatches: 'No hyperlink found that matches “{0}”.',
+    noMatchesInArea: 'No matches in this area.',
+    summary: '{0} occurrences in {1} files',
+    areaAll: 'All',
+    areaContent: 'Sources',
+    areaPublic: 'Published',
+    kind: {
+      similar: 'Possible typos',
+      normalized: 'Different spelling',
+      exact: 'Written exactly this way',
+    },
+    kindHint: {
+      similar: 'These addresses differ by only a few characters — most likely typos that lead nowhere.',
+      normalized: 'The same address written differently: capitalisation, trailing slash, accents, or a full URL instead of a path.',
+      exact: 'Character for character the address you searched for — nothing to do here.',
+    },
+    distance: '{0} characters off',
+    hits: '{0} occurrences',
+    line: 'Line {0}',
+    openSource: 'Go to source',
+  },
+
   // Staged publishing: review queue of pending drafts.
   review: {
     open: 'Review',
@@ -1447,6 +1481,8 @@ export default {
     'GIT-INVALID-HASH': 'Invalid commit hash: {0}',
     'GIT-INVALID-REF': 'Invalid Git reference: {0}',
     'GIT-MESSAGE-TOO-LONG': 'The commit message is too long (at most {0} characters).',
+
+    'LINKSCAN-NO-PROJECT': 'No Hugo project is configured for this site — the hyperlink search needs content/ and the built folder.',
 
     'AUDIT-NO-PROJECT': 'No Hugo project is configured for this site — the check needs public/ and content/.',
     'AUDIT-NO-BUILD-OUTPUT': 'No build output found. Please publish the site first (Hugo run).',
