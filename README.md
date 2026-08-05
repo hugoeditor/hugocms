@@ -435,13 +435,19 @@ Grundlage der KI-Verbesserung (siehe „SEO-Check & Content-Qualität").
 
 Im `confirm`-Modus zeigt das Panel vor dem Schreiben eine Vorschau: bei einer
 bestehenden Datei einen zeilenweisen Diff, bei einer neuen Datei den Inhalt.
-Bestätigen lässt sich auf zwei Arten: **Übernehmen** schreibt sofort in die
+Bestätigen lässt sich auf drei Arten: **Übernehmen** schreibt sofort in die
 Datei, **Später veröffentlichen** legt denselben Vorschlag als Entwurf in die
 Freigabe-Warteschlange (die Live-Datei bleibt unverändert; dort wird er
-freigegeben oder terminiert). Der zweite Knopf erscheint nur beim Schreiben einer
-Datei und nur bei konfiguriertem Hugo-Projekt — ohne eines gibt es kein
-`draft`/`publishDate` und damit keine Warteschlange. Umbenennen, Verschieben und
-Löschen kennen keinen Entwurf und bleiben bei Übernehmen/Ablehnen.
+freigegeben oder terminiert), **Termin festlegen** legt ihn gleich *terminiert*
+ab — Datum pflicht, Uhrzeit optional, wie in der Warteschlange. Der Entwurf trägt
+dann bereits sein `publishAt`; die veröffentlichte Fassung bleibt bis dahin
+unverändert online, und der verzögerte Austausch tauscht die Datei beim ersten
+Bauen nach dem Zeitpunkt. Ein vergangener Zeitpunkt gilt als „ohne Termin".
+
+Beide Entwurfswege erscheinen nur beim Schreiben einer Datei und nur bei
+konfiguriertem Hugo-Projekt — ohne eines gibt es kein `draft`/`publishDate` und
+damit keine Warteschlange. Umbenennen, Verschieben und Löschen kennen keinen
+Entwurf und bleiben bei Übernehmen/Ablehnen.
 
 **Editor- und Dateiverwaltungs-Anbindung.** Der Assistent erhält bei jedem Zug den
 Kontext der Oberfläche: die im **Editor** geöffnete Datei (für „diese Datei")
@@ -751,8 +757,9 @@ zur Freigabe unangetastet.
   einem konfigurierten Hugo-Projekt nicht in die Datei, sondern als Entwurf in
   die Warteschlange — die veröffentlichte Seite bleibt unangetastet. Im Modus
   `confirm` entscheidet der Benutzer je Schreibvorgang: „Übernehmen" schreibt
-  live, **„Später veröffentlichen"** legt denselben Vorschlag als Entwurf ab
-  (Antwort `draft` auf die Bestätigung). Zusätzlich legt der **Entwurf-Knopf**
+  live, **„Später veröffentlichen"** legt denselben Vorschlag als Entwurf ab und
+  **„Termin festlegen"** gleich terminiert (Antwort `draft` auf die Bestätigung,
+  optional mit `publishDate`). Zusätzlich legt der **Entwurf-Knopf**
   neben „Speichern" den aktuellen Editor-Stand manuell als Entwurf ab. Normales
   Speichern ist nicht betroffen. Nur Schreib-/Anlege-Vorgänge werden gestaffelt,
   keine Löschungen oder Umbenennungen.
@@ -882,7 +889,7 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `restore`  | POST    | `mount`, `names` (Liste)             | Aus dem Papierkorb wiederherstellen    |
 | `emptytrash`| POST   | `mount`?                             | Papierkorb endgültig leeren            |
 | `build`    | POST    | –                                    | Hugo aufrufen (Webseite erzeugen)      |
-| `assistant`| POST    | `messages`, `locale`?, `confirm`?, `openFilePath`?, `openDirPath`? | KI-Assistent: einen Zug ausführen (Werkzeug-Schleife). `confirm`: `allow` \| `draft` (als Entwurf ablegen) \| `reject` |
+| `assistant`| POST    | `messages`, `locale`?, `confirm`?, `publishDate`?, `openFilePath`?, `openDirPath`? | KI-Assistent: einen Zug ausführen (Werkzeug-Schleife). `confirm`: `allow` \| `draft` (als Entwurf ablegen) \| `reject`; `publishDate` terminiert den Entwurf |
 | `config`   | GET     | –                                    | Aktuelle Konfigurationswerte inkl. AI-Status (ohne Geheimnisse) |
 | `reconfigure`| POST  | `authDriver`?, `sessionPath`, `logFile`, `logLevel`, `hugoBin`?, `aiApiKey`?, `aiModel`?, `aiWriteMode`? | hugocms.ini ändern (Anmeldeverfahren/Verzeichnisse/Log/Hugo/AI). Verlangt `config.manage` — ebenso `aimodels` und `activate`. `config` (lesen) und `projectconfig`/`projectreconfigure` nicht |
 | `account`  | POST    | `currentPassword`, `username`, `password`? | Anmeldedaten ändern (danach Neuanmeldung) |

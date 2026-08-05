@@ -183,12 +183,52 @@ async function submit() {
   await reloadIfOpenChanged()
 }
 
-async function resolve(decision) {
-  await assistant.resolve(decision, locale.value, context())
+async function resolve(decision, publishDate = '') {
+  await assistant.resolve(decision, locale.value, context(), publishDate)
   if (decision === 'allow') {
     files.refresh?.() // Ordneransicht könnte veraltet sein
     await reloadIfOpenChanged()
   }
+  // Nach „draft" bleibt die Live-Datei unverändert — Editor und Ordneransicht
+  // zeigen weiterhin den richtigen Stand.
+}
+
+// --- Termin für einen Entwurf ---------------------------------------------
+// Wie in der Freigabe-Warteschlange: Datum pflicht, Uhrzeit optional (leer =
+// 00:00 Uhr lokal). Der Entwurf entsteht damit gleich terminiert; die
+// veröffentlichte Fassung bleibt bis zum Zeitpunkt unverändert online.
+const scheduleDialog = ref(false)
+const publishDay = ref('')
+const publishTime = ref('')
+
+const publishAtLocal = computed(() =>
+  publishDay.value ? `${publishDay.value}T${publishTime.value || '00:00'}` : '',
+)
+
+// Lokale Eingabe in einen zonenbehafteten ISO-Zeitstempel wandeln.
+function toIso(local) {
+  if (!local) return ''
+  const d = new Date(local)
+  return Number.isNaN(d.getTime()) ? '' : d.toISOString()
+}
+
+// Nur ein künftiger Termin hält die Veröffentlichung zurück — ein vergangener
+// bedeutet serverseitig „ohne Termin ablegen".
+const scheduledInFuture = computed(() => {
+  const t = new Date(publishAtLocal.value).getTime()
+  return !Number.isNaN(t) && t > Date.now()
+})
+
+function openScheduleDialog() {
+  publishDay.value = ''
+  publishTime.value = ''
+  scheduleDialog.value = true
+}
+
+async function resolveScheduled() {
+  if (!scheduledInFuture.value) return
+  scheduleDialog.value = false
+  await resolve('draft', toIso(publishAtLocal.value))
 }
 
 // Nach einem an der Schrittgrenze abgebrochenen Zug fortsetzen.
@@ -326,9 +366,11 @@ watch(
           </div>
         </template>
 
-        <!-- Ausstehende Änderung (confirm-Modus) -->
-        <v-card v-if="assistant.pending" variant="outlined" class="my-2 pa-0" color="warning">
-          <v-card-title class="text-subtitle-2 d-flex align-center">
+        <!-- Ausstehende Änderung (confirm-Modus). Der Warnton sitzt auf Rahmen
+             und Überschrift, NICHT auf der Karte: Ein color="warning" färbt den
+             gesamten Inhalt ein und lässt die Schaltflächen darin blass wirken. -->
+        <v-card v-if="assistant.pending" variant="outlined" class="my-2 pa-0 assistant-pending">
+          <v-card-title class="text-subtitle-2 text-warning d-flex align-center">
             <v-icon icon="mdi-content-save-edit-outline" size="small" class="mr-2" />
             {{ $t('assistant.pendingTitle') }}
           </v-card-title>
@@ -362,25 +404,42 @@ watch(
               {{ $t('assistant.pendingMove', [assistant.pending.input.path, assistant.pending.input.dest_dir]) }}
             </div>
           </v-card-text>
-          <v-card-actions>
-            <v-spacer />
-            <v-btn variant="text" size="small" :disabled="assistant.busy" @click="resolve('reject')">{{ $t('assistant.reject') }}</v-btn>
+          <!-- Zwei Zeilen statt einer: Vier Schaltflächen passen in der Breite
+               des Panels (440 px) nicht nebeneinander. Oben die Entwurfswege,
+               unten die Entscheidung über die Live-Datei. -->
+          <v-card-actions class="flex-column align-stretch ga-2 pt-0">
             <!-- Ja mit Aufschub: Der Vorschlag geht als Entwurf in die
-                 Freigabe-Warteschlange, die Live-Datei bleibt unverändert. Dort
-                 wird er freigegeben oder terminiert. Nur beim Schreiben einer
-                 Datei und nur mit Hugo-Projekt (canDraft vom Server). -->
-            <v-btn
-              v-if="assistant.pending.canDraft"
-              variant="tonal"
-              size="small"
-              prepend-icon="mdi-clock-outline"
-              :disabled="assistant.busy"
-              :title="$t('assistant.approveLaterHint')"
-              @click="resolve('draft')"
-            >
-              {{ $t('assistant.approveLater') }}
-            </v-btn>
-            <v-btn color="primary" variant="flat" size="small" :loading="assistant.busy" @click="resolve('allow')">{{ $t('assistant.approve') }}</v-btn>
+                 Freigabe-Warteschlange, die Live-Datei bleibt unverändert — auf
+                 Wunsch gleich mit Termin. Nur beim Schreiben einer Datei und nur
+                 mit Hugo-Projekt (canDraft vom Server). -->
+            <div v-if="assistant.pending.canDraft" class="d-flex flex-wrap ga-2">
+              <v-btn
+                variant="tonal"
+                size="small"
+                class="flex-grow-1"
+                prepend-icon="mdi-clock-outline"
+                :disabled="assistant.busy"
+                :title="$t('assistant.approveLaterHint')"
+                @click="resolve('draft')"
+              >
+                {{ $t('assistant.approveLater') }}
+              </v-btn>
+              <v-btn
+                variant="tonal"
+                size="small"
+                class="flex-grow-1"
+                prepend-icon="mdi-calendar-clock"
+                :disabled="assistant.busy"
+                :title="$t('assistant.scheduleHint')"
+                @click="openScheduleDialog"
+              >
+                {{ $t('assistant.schedule') }}
+              </v-btn>
+            </div>
+            <div class="d-flex flex-wrap ga-2 justify-end">
+              <v-btn variant="text" size="small" :disabled="assistant.busy" @click="resolve('reject')">{{ $t('assistant.reject') }}</v-btn>
+              <v-btn color="primary" variant="flat" size="small" :loading="assistant.busy" @click="resolve('allow')">{{ $t('assistant.approve') }}</v-btn>
+            </div>
           </v-card-actions>
         </v-card>
 
@@ -452,6 +511,59 @@ watch(
     </div>
   </v-navigation-drawer>
 
+  <!-- Termin für den Entwurf: derselbe Aufbau wie in der Freigabe-Warteschlange
+       (Datum pflicht, Uhrzeit optional). Bestätigt wird damit zugleich die
+       Änderung — der Entwurf entsteht terminiert. -->
+  <v-dialog v-model="scheduleDialog" max-width="480">
+    <v-card>
+      <v-card-title class="text-subtitle-1">{{ $t('assistant.scheduleTitle') }}</v-card-title>
+      <v-card-text>
+        <p class="text-body-2 mb-3">{{ $t('assistant.scheduleIntro') }}</p>
+        <div class="d-flex ga-3">
+          <v-text-field
+            v-model="publishDay"
+            type="date"
+            :label="$t('review.pickDate')"
+            density="comfortable"
+            hide-details
+            variant="outlined"
+          />
+          <v-text-field
+            v-model="publishTime"
+            type="time"
+            :label="$t('review.pickTime')"
+            density="comfortable"
+            hide-details
+            variant="outlined"
+            style="max-width: 150px"
+          />
+        </div>
+        <p class="text-caption text-medium-emphasis mt-1">{{ $t('review.timeOptionalHint') }}</p>
+        <v-alert v-if="scheduledInFuture" type="info" density="compact" variant="tonal" class="mt-3">
+          {{ $t('assistant.scheduleLiveInfo') }}
+        </v-alert>
+        <p v-else-if="publishDay" class="text-caption text-medium-emphasis mt-2">
+          {{ $t('assistant.schedulePastHint') }}
+        </p>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn variant="text" :disabled="assistant.busy" @click="scheduleDialog = false">
+          {{ $t('common.cancel') }}
+        </v-btn>
+        <v-btn
+          color="primary"
+          variant="flat"
+          :disabled="!scheduledInFuture"
+          :loading="assistant.busy"
+          @click="resolveScheduled"
+        >
+          {{ $t('assistant.scheduleConfirm') }}
+        </v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
   <!-- Spracheingabe nicht freigeschaltet: Hinweis als kleiner Dialog — im
        schmalen Eingabebereich wäre für einen eingebetteten Kasten kein Platz. -->
   <v-dialog v-model="voiceGateOpen" width="560">
@@ -470,6 +582,12 @@ watch(
 <style scoped>
 /* Spracheingabe ohne Freischaltung: sichtbar, aber zurückgenommen. */
 .assistant-locked { opacity: 0.5; }
+
+/* Bestätigungsbox: Warnton nur am Rahmen. Die Karte selbst bleibt neutral,
+   damit die Schaltflächen darin ihre eigene Farbe behalten. */
+.assistant-pending {
+  border-color: rgb(var(--v-theme-warning)) !important;
+}
 
 /* Drawer-Höhe an die per VisualViewport gemessene, tatsächlich sichtbare Höhe
    binden (--assistant-vh, vom Script gesetzt). Das berücksichtigt auf echten

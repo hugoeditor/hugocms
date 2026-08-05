@@ -165,8 +165,11 @@ export const useAssistantStore = defineStore('assistant', {
       }
     },
 
-    // Beantwortet eine ausstehende Schreibaktion (confirm-Modus).
-    async resolve(decision, locale, ctx = {}) {
+    // Beantwortet eine ausstehende Schreibaktion (confirm-Modus): 'allow'
+    // schreibt live, 'draft' legt einen Entwurf zur Freigabe ab, 'reject' lehnt
+    // ab. Zu 'draft' kann ein Termin (ISO 8601) mitgegeben werden — dann ist der
+    // Entwurf gleich terminiert und die Live-Datei bleibt bis dahin unverändert.
+    async resolve(decision, locale, ctx = {}, publishDate = '') {
       this.setError(null)
       this.busy = true
       try {
@@ -174,6 +177,7 @@ export const useAssistantStore = defineStore('assistant', {
           messages: this.history,
           locale,
           confirm: decision,
+          publishDate: publishDate || undefined,
           model: this.model ?? undefined, // leer/undefined = konfiguriertes Modell
           writeMode: this.writeMode ?? undefined,
           openFilePath: ctx.openFilePath ?? null,

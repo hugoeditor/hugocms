@@ -1711,10 +1711,18 @@ final class Connector
         $writeModeOverride = in_array($writeModeReq, self::AI_WRITE_MODES, true) ? $writeModeReq : null;
         $modelOverride = trim((string) ($request['model'] ?? '')) ?: null;
 
+        // Termin für einen Entwurf („Termin festlegen" statt bloßem „Später
+        // veröffentlichen"). Wie bei der Freigabe in der Warteschlange zählt nur
+        // ein KÜNFTIGER Zeitpunkt; alles andere heißt „ohne Termin ablegen".
+        $publishTs = $confirm === 'draft' && is_string($request['publishDate'] ?? null)
+            ? strtotime(trim((string) $request['publishDate']))
+            : false;
+        $draftPublishAt = ($publishTs !== false && $publishTs > time()) ? gmdate('c', $publishTs) : null;
+
         // Der Werkzeug-Loop kann mehrere API-Aufrufe nacheinander machen.
         @set_time_limit(180);
 
-        return $this->assistantService($writeModeOverride, $modelOverride)->run(
+        return $this->assistantService($writeModeOverride, $modelOverride, 'ai', null, $draftPublishAt)->run(
             $messages,
             $confirm === null ? null : (string) $confirm,
             $locale,
@@ -1749,7 +1757,7 @@ final class Connector
      * Werkzeug get_file_report wird nur eingehängt, wenn Pro-Lizenz und
      * Hugo-Projekt vorliegen (sonst gibt es keinen Audit-/Content-Bericht).
      */
-    private function assistantService(?string $writeModeOverride = null, ?string $modelOverride = null, string $draftOrigin = 'ai', ?bool $forceThinkingOverride = null): AssistantService
+    private function assistantService(?string $writeModeOverride = null, ?string $modelOverride = null, string $draftOrigin = 'ai', ?bool $forceThinkingOverride = null, ?string $draftPublishAt = null): AssistantService
     {
         // Interaktiver Assistent nutzt `model`; der Cron-Verbesserer reicht sein
         // eigenes Modell (`model_cron`) als Override durch.
@@ -1775,9 +1783,12 @@ final class Connector
         // Assistent) oder auf ausdrücklichen Wunsch je Schreibvorgang (Modus
         // confirm, Antwort „draft" — „später veröffentlichen"). Diese
         // Unterscheidung trifft der AssistantService anhand des Schreibmodus.
+        // $draftPublishAt terminiert den so entstehenden Entwurf gleich mit
+        // („Termin festlegen" im Bestätigungsfeld); ohne Angabe landet er
+        // undatiert in der Warteschlange.
         $mode = $writeModeOverride ?? $this->ai['writeMode'];
         $draftSink = $this->hugo !== null
-            ? fn (Mount $m, string $rel, string $abs, string $content) => $this->stashDraft($m, $rel, $abs, $content, $draftOrigin, $model)
+            ? fn (Mount $m, string $rel, string $abs, string $content) => $this->stashDraft($m, $rel, $abs, $content, $draftOrigin, $model, $draftPublishAt)
             : null;
 
         return new AssistantService(
@@ -1814,12 +1825,20 @@ final class Connector
      * `author` hält fest, wer den Entwurf ausgelöst hat — beim manuellen Entwurf
      * und beim interaktiven Assistenten der angemeldete Benutzer, im Cron null
      * (dort gibt es keine Session). Der Client beschriftet damit die Herkunft.
+     *
+     * Mit `$publishAt` (ISO 8601, künftig) entsteht der Entwurf gleich
+     * TERMINIERT — als hätte der Benutzer ihn in der Warteschlange freigegeben
+     * und datiert. Die Live-Datei bleibt bis zum Termin unverändert; getauscht
+     * wird sie vom verzögerten Austausch ({@see applyDueDrafts()}).
      */
-    private function stashDraft(Mount $mount, string $rel, string $abs, string $content, string $origin, ?string $model = null): void
+    private function stashDraft(Mount $mount, string $rel, string $abs, string $content, string $origin, ?string $model = null, ?string $publishAt = null): void
     {
         $exists = is_file($abs);
         $user = $this->auth->currentUser();
         $this->reviewStore()->put([
+            // Nur setzen, wenn terminiert — ein leeres Feld gälte der
+            // Warteschlange sonst als „geplant, aber ohne Zeitpunkt".
+            ...($publishAt !== null ? ['publishAt' => $publishAt] : []),
             'key' => ReviewStore::keyFor($mount->name(), $rel),
             'mount' => $mount->name(),
             'rel' => $rel,
