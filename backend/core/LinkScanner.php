@@ -55,12 +55,17 @@ final class LinkScanner
      * @param string $contentName   sein Name relativ zur Projektwurzel (content)
      * @param string $publicDirAbs  absoluter Pfad des gebauten Ordners
      * @param string $publicName    sein Name relativ zur Projektwurzel (public)
+     * @param ?Audit\SourceGuesser $guesser Ordnet einer gebauten Seite ihre
+     *        Quelldatei zu — dieselbe Zuordnung, die der SEO-Check für seine
+     *        Funde nutzt. Ohne ihn tragen Treffer im gebauten Ordner keine
+     *        Quellangabe.
      */
     public function __construct(
         private readonly string $contentDirAbs,
         private readonly string $contentName,
         private readonly string $publicDirAbs,
         private readonly string $publicName,
+        private readonly ?Audit\SourceGuesser $guesser = null,
     ) {
     }
 
@@ -178,10 +183,20 @@ final class LinkScanner
         }
 
         $out = [];
+        // Quelldatei einer gebauten Seite: einmal je Datei raten, nicht je
+        // Treffer — die Zuordnung sieht im Dateisystem nach.
+        $sourceFile = null;
+        $sourceResolved = false;
         foreach (self::extractLinks($raw) as $link => $offset) {
             $kind = $this->compare((string) $link, $query, $needle);
             if ($kind === null) {
                 continue;
+            }
+            if (!$sourceResolved) {
+                $sourceResolved = true;
+                $sourceFile = $area === 'public' && $this->guesser !== null
+                    ? $this->guesser->forFile(ltrim(substr($rel, strlen($this->publicName)), '/'))
+                    : null;
             }
             $out[] = [
                 'file' => $rel,
@@ -190,6 +205,10 @@ final class LinkScanner
                 'link' => (string) $link,
                 'kind' => $kind[0],
                 'distance' => $kind[1],
+                // Nur bei Treffern im gebauten Ordner gesetzt: die Hugo-Datei,
+                // aus der die Seite entstanden ist. Im Content-Bereich IST die
+                // Fundstelle bereits die Quelle.
+                'sourceFile' => $sourceFile,
             ];
         }
 

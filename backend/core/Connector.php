@@ -7,6 +7,7 @@ namespace HugoCMS\FileManager;
 use HugoCMS\FileManager\Audit\AuditMailReport;
 use HugoCMS\FileManager\Audit\AuditService;
 use HugoCMS\FileManager\Audit\ContentQualityService;
+use HugoCMS\FileManager\Audit\SourceGuesser;
 use HugoCMS\FileManager\Auth\AuthInterface;
 use HugoCMS\FileManager\Auth\SiteAwareInterface;
 use HugoCMS\FileManager\Auth\UserAdminInterface;
@@ -1199,9 +1200,13 @@ final class Connector
             $contentName,
             $public,
             $publicName,
+            new SourceGuesser($source, $contentName),
         ))->scan($q, $cursor);
 
-        // Treffer um die Dateimanager-ID ergänzen (je Datei einmal aufgelöst).
+        // Treffer um die Dateimanager-IDs ergänzen (je Datei einmal aufgelöst):
+        // `fileId` für die Fundstelle selbst, `sourceFileId` für die Hugo-Quelle
+        // einer gebauten Seite — wie beim SEO-Check, wo ein Fund ebenfalls zur
+        // bearbeitbaren Quelle führt statt nur zum Erzeugnis.
         $ids = [];
         foreach ($result['matches'] as &$match) {
             $rel = (string) $match['file'];
@@ -1212,6 +1217,16 @@ final class Connector
                 $ids[$rel] = $this->resolveFileId($abs);
             }
             $match['fileId'] = $ids[$rel];
+
+            $src = $match['sourceFile'] ?? null;
+            if (is_string($src) && $src !== '') {
+                if (!array_key_exists($src, $ids)) {
+                    $ids[$src] = $this->resolveFileId($source . '/' . $src);
+                }
+                $match['sourceFileId'] = $ids[$src];
+            } else {
+                $match['sourceFileId'] = null;
+            }
         }
         unset($match);
 

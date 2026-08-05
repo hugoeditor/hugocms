@@ -42,12 +42,11 @@ final class AuditRunner
     private const int MAX_ISSUES = 20000;
 
     /**
-     * Cache je Content-Verzeichnis: normalisierter Dateiname → Quellpfad. Für
-     * den unscharfen Rückabgleich URL → Quelldatei (siehe guessSource).
-     *
-     * @var array<string, array<string, string>>
+     * Rückabgleich URL → Quelldatei. Liegt in einer eigenen Klasse, weil die
+     * Hyperlink-Suche dieselbe Zuordnung braucht (siehe {@see SourceGuesser}).
+     * Wird beim ersten Bedarf gebaut, da sie den Content-Ordner kennen muss.
      */
-    private array $dirIndex = [];
+    private ?SourceGuesser $guesser = null;
 
     /**
      * Fest verdrahtete plus konfigurierte Ausschluss-Präfixe (public-relativ,
@@ -103,7 +102,7 @@ final class AuditRunner
         $htmlFiles = [];
         foreach ($allFiles as $rel) {
             if (self::isHtml($rel) && !$this->isExcluded($rel)) {
-                $htmlFiles[$rel] = self::urlForFile($rel);
+                $htmlFiles[$rel] = SourceGuesser::urlForFile($rel);
             }
         }
 
@@ -327,108 +326,15 @@ final class AuditRunner
             || str_contains($rel, '/' . self::TRASH_DIR . '/');
     }
 
-    /** Leitet aus einem public-relativen Dateipfad den Request-Pfad ab. */
-    private static function urlForFile(string $rel): string
-    {
-        if ($rel === 'index.html') {
-            return '/';
-        }
-        if (str_ends_with($rel, '/index.html')) {
-            return '/' . substr($rel, 0, -strlen('index.html'));
-        }
-
-        return '/' . $rel;
-    }
-
     /**
-     * Best-effort-Zuordnung einer URL zur Hugo-Quelldatei (relativ zum Projekt).
-     * Liefert den ersten existierenden Kandidaten oder null.
+     * Rückabgleich URL → Quelldatei. Die Zuordnung selbst steckt im
+     * {@see SourceGuesser}; hier steht nur der gemeinsame Zugriff darauf, damit
+     * der Verzeichnis-Cache über den ganzen Lauf hält.
      */
     private function guessSource(string $url): ?string
     {
-        $c = $this->contentDir;
-        $path = trim($url, '/');
-        if ($path === '') {
-            return $this->firstExisting([$c . '/_index.md']);
-        }
-        if (str_ends_with($path, '.html')) {
-            $path = substr($path, 0, -strlen('.html'));
-        }
+        $this->guesser ??= new SourceGuesser($this->sourceDir, $this->contentDir);
 
-        $direct = $this->firstExisting([
-            $c . '/' . $path . '.md',
-            $c . '/' . $path . '/index.md',
-            $c . '/' . $path . '/_index.md',
-        ]);
-        if ($direct !== null) {
-            return $direct;
-        }
-
-        // Fallback: Hugo normalisiert Dateinamen für die URL (entfernt z. B.
-        // Kommas: "1,9l" → "19l"), was sich nicht 1:1 zurückrechnen lässt. Daher
-        // im Content-Verzeichnis der Sektion die Datei suchen, deren
-        // normalisierter Name dem letzten URL-Segment entspricht.
-        $slash = strrpos($path, '/');
-        $section = $slash === false ? '' : substr($path, 0, $slash);
-        $segment = $slash === false ? $path : substr($path, $slash + 1);
-        $dirRel = $section === '' ? $c : $c . '/' . $section;
-
-        return $this->sectionIndex($dirRel)[self::slugKey($segment)] ?? null;
-    }
-
-    /**
-     * Baut (gecacht) den Index eines Content-Verzeichnisses: normalisierter
-     * Name → Quellpfad (relativ zum Projekt). Erfasst flache .md-Dateien und
-     * Ordner-Bundles (index.md/_index.md).
-     *
-     * @return array<string, string>
-     */
-    private function sectionIndex(string $dirRel): array
-    {
-        if (isset($this->dirIndex[$dirRel])) {
-            return $this->dirIndex[$dirRel];
-        }
-        $index = [];
-        $abs = $this->sourceDir . '/' . $dirRel;
-        if (is_dir($abs)) {
-            foreach (scandir($abs) ?: [] as $entry) {
-                if ($entry === '.' || $entry === '..') {
-                    continue;
-                }
-                $full = $abs . '/' . $entry;
-                if (is_file($full) && str_ends_with($entry, '.md') && $entry !== '_index.md' && $entry !== 'index.md') {
-                    $index[self::slugKey(substr($entry, 0, -3))] ??= $dirRel . '/' . $entry;
-                } elseif (is_dir($full)) {
-                    foreach (['index.md', '_index.md'] as $bundle) {
-                        if (is_file($full . '/' . $bundle)) {
-                            $index[self::slugKey($entry)] ??= $dirRel . '/' . $entry . '/' . $bundle;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        return $this->dirIndex[$dirRel] = $index;
-    }
-
-    /** Normalisiert einen Namen für den unscharfen Abgleich (nur a-z0-9). */
-    private static function slugKey(string $name): string
-    {
-        return preg_replace('/[^a-z0-9]+/', '', strtolower($name)) ?? '';
-    }
-
-    /**
-     * @param list<string> $candidates Pfade relativ zum Projekt
-     */
-    private function firstExisting(array $candidates): ?string
-    {
-        foreach ($candidates as $rel) {
-            if (is_file($this->sourceDir . '/' . $rel)) {
-                return $rel;
-            }
-        }
-
-        return null;
+        return $this->guesser->forUrl($url);
     }
 }

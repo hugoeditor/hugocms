@@ -89,10 +89,10 @@ function start() {
 // Zur Fundstelle springen: Overlay schließen, Datei im Editor öffnen. Nur
 // möglich, wenn die Datei in einem Mount liegt (sonst fehlt die fileId — das
 // betrifft vor allem den gebauten Ordner, der nicht eingebunden sein muss).
-async function openHit(hit) {
-  if (!hit.fileId) return
+async function openFile(id) {
+  if (!id) return
   store.close()
-  await files.openFileById(hit.fileId)
+  await files.openFileById(id)
 }
 </script>
 
@@ -262,8 +262,22 @@ async function openHit(hit) {
                     size="x-small"
                     variant="text"
                     density="comfortable"
-                    :title="$t('linkScan.openSource')"
-                    @click="openHit(h)"
+                    :title="h.area === 'public' ? $t('linkScan.openBuilt') : $t('linkScan.openSource')"
+                    @click="openFile(h.fileId)"
+                  />
+                  <!-- Fundstelle im gebauten Ordner: zusätzlich der Sprung zur
+                       Hugo-Quelle — dort wird der Link wirklich korrigiert, die
+                       gebaute Datei überschreibt der nächste Hugo-Lauf. Wie beim
+                       SEO-Check, der ebenfalls zur Quelle führt. -->
+                  <v-btn
+                    v-if="h.sourceFileId"
+                    icon="mdi-file-document-edit-outline"
+                    size="x-small"
+                    variant="text"
+                    density="comfortable"
+                    color="primary"
+                    :title="$t('linkScan.openSourceOf', [h.sourceFile])"
+                    @click="openFile(h.sourceFileId)"
                   />
                 </li>
               </ul>

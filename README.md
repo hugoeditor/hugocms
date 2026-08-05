@@ -764,7 +764,12 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 - **Sprung zur Quelle.** Jeder Treffer trägt die Dateimanager-ID seiner Datei,
   sofern sie in einem Mount liegt — Serverpfade gibt der Befehl nie aus. Beim
   gebauten Ordner fehlt die ID, wenn er nicht eingebunden ist; die Fundstelle
-  wird dann nur angezeigt.
+  wird dann nur angezeigt. Fundstellen im gebauten Ordner tragen zusätzlich
+  `sourceFile`/`sourceFileId`: den Sprung zur **Hugo-Quelle**, aus der die Seite
+  entstand — dort wird der Link tatsächlich korrigiert, die gebaute Datei
+  überschreibt der nächste Hugo-Lauf. Die Zuordnung macht der
+  `Audit\SourceGuesser`, denselben Rückabgleich nutzt der SEO-Check für die
+  Quellangabe seiner Funde.
 
 ## API-Befehle
 

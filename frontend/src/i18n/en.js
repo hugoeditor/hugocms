@@ -1018,6 +1018,8 @@ export default {
     hits: '{0} occurrences',
     line: 'Line {0}',
     openSource: 'Go to source',
+    openBuilt: 'Open built file',
+    openSourceOf: 'Go to source: {0}',
   },
 
   // Staged publishing: review queue of pending drafts.

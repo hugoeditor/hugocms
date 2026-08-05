@@ -1021,6 +1021,8 @@ export default {
     hits: '{0} Fundstellen',
     line: 'Zeile {0}',
     openSource: 'Zur Quelldatei',
+    openBuilt: 'Gebaute Datei öffnen',
+    openSourceOf: 'Zur Quelldatei: {0}',
   },
 
   // Gestaffelte Veröffentlichung: Freigabe-Warteschlange offener Entwürfe.
