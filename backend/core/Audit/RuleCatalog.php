@@ -110,6 +110,62 @@ final class RuleCatalog
         'hugo.markdown.dead_link'   => ['hugo', self::WARNING],
     ];
 
+    /**
+     * Regeln, die sich AUSSCHLIESSLICH durch Ändern der Hugo-Content-Datei
+     * beheben lassen — nur für diese bietet der Client den KI-Micro-Auftrag an
+     * (siehe Connector::cmdAssistantFix).
+     *
+     * Bewusst NICHT enthalten sind zwei Gruppen:
+     *
+     * - Theme-Sache: `html.*`, `canonical.*`, `structured_data.*`,
+     *   `social.twitter.card.missing`. Sie stehen im Layout, und der Assistent
+     *   darf Layouts nur LESEN, nie schreiben.
+     * - Struktur-Sache: `url.*`, `filename.*`, `page.unreferenced`,
+     *   `link.orphan_page`, `sitemap.*`, `robots.*`. Ihre Behebung benennt
+     *   Dateien um oder ändert die Verlinkung — das ändert URLs und braucht
+     *   Aliase/Weiterleitungen, also eine Entscheidung des Betreibers.
+     *
+     * @var array<string, true>
+     */
+    public const array FIXABLE = [
+        'title.missing'            => true,
+        'title.duplicate'          => true,
+        'title.too_long'           => true,
+        'title.too_short'          => true,
+        'title.identical_to_h1'    => true,
+
+        'meta.description.missing'   => true,
+        'meta.description.duplicate' => true,
+        'meta.description.too_long'  => true,
+
+        'heading.h1.missing'       => true,
+        'heading.h1.multiple'      => true,
+        'heading.h1.empty'         => true,
+        'heading.hierarchy_jump'   => true,
+
+        'img.alt.missing'          => true,
+        'img.alt.generic'          => true,
+        'img.alt.too_long'         => true,
+
+        'social.og.title.missing'       => true,
+        'social.og.description.missing' => true,
+
+        'content.word_count_low'   => true,
+        'content.placeholder'      => true,
+
+        'hugo.frontmatter.required' => true,
+        'hugo.markdown.dead_link'   => true,
+    ];
+
+    /**
+     * Lässt sich die Regel durch Ändern der Content-Datei beheben? Grundlage
+     * für den KI-Micro-Auftrag am einzelnen Fund.
+     */
+    public static function fixable(string $ruleId): bool
+    {
+        return isset(self::FIXABLE[$ruleId]);
+    }
+
     /** Kategorie einer Regel (oder 'other', falls unbekannt). */
     public static function category(string $ruleId): string
     {

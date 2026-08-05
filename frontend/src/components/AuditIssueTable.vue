@@ -12,13 +12,30 @@ const props = defineProps({
   // AuditView; der bereits entprellte Wert kommt als Prop herein. Leer = kein
   // Filter.
   search: { type: String, default: '' },
+  // Funde, für die in dieser Sitzung bereits ein KI-Micro-Auftrag lief
+  // (Schlüssel aus issueKey). Sie bleiben stehen — der Bericht ist ein
+  // Schnappschuss —, werden aber als erledigt gekennzeichnet.
+  fixedKeys: { type: Array, default: () => [] },
+  // Läuft gerade ein Auftrag? Dann keinen zweiten anstoßen.
+  busy: { type: Boolean, default: false },
 })
-const emit = defineEmits(['open-source', 'open-help', 'update:row-count'])
+const emit = defineEmits(['open-source', 'open-help', 'fix-issue', 'update:row-count'])
 
 const { t } = useI18n()
 
 function ruleMessage(issue) {
   return t('audit.rules.' + issue.ruleId.replaceAll('.', '_'), issue.params || [])
+}
+
+// Kennung eines Funds innerhalb eines Berichts — dieselbe Zusammensetzung, mit
+// der der Server den Fund wiederfindet (Regel + betroffene Seite).
+function issueKey(issue) {
+  return issue.ruleId + '|' + (issue.url || issue.sourceFile || '')
+}
+
+const fixedSet = computed(() => new Set(props.fixedKeys))
+function isFixed(issue) {
+  return fixedSet.value.has(issueKey(issue))
 }
 
 // Die veröffentlichte Webseite liegt auf derselben Domain wie das CMS (wie der
@@ -160,6 +177,18 @@ function showMore() {
             <span v-else>—</span>
           </td>
           <td class="col-act">
+            <!-- KI-Micro-Auftrag: behebt genau diesen Fund. Nur bei Regeln, die
+                 der Server als über die Content-Datei behebbar meldet. -->
+            <button
+              v-if="row.issue.fixable"
+              class="audit-jump audit-fix"
+              :class="{ done: isFixed(row.issue) }"
+              :disabled="busy"
+              :title="isFixed(row.issue) ? $t('audit.fixDone') : $t('audit.fixWithAi')"
+              @click="emit('fix-issue', row.issue)"
+            >
+              <v-icon :icon="isFixed(row.issue) ? 'mdi-check' : 'mdi-auto-fix'" size="18" />
+            </button>
             <button
               v-if="row.issue.fileId"
               class="audit-jump"
@@ -232,6 +261,16 @@ function showMore() {
             </td>
             <td class="col-act">
               <button
+                v-if="issue.fixable"
+                class="audit-jump audit-fix"
+                :class="{ done: isFixed(issue) }"
+                :disabled="busy"
+                :title="isFixed(issue) ? $t('audit.fixDone') : $t('audit.fixWithAi')"
+                @click="emit('fix-issue', issue)"
+              >
+                <v-icon :icon="isFixed(issue) ? 'mdi-check' : 'mdi-auto-fix'" size="18" />
+              </button>
+              <button
                 v-if="issue.fileId"
                 class="audit-jump"
                 :title="$t('audit.openSource')"
@@ -286,7 +325,8 @@ function showMore() {
 .sev-chip--warning { background: #d98613; }
 .sev-chip--hint { background: #4a7bab; }
 .col-url { width: 28%; }
-.col-act { width: 44px; text-align: center; }
+/* Zwei Knöpfe nebeneinander: KI-Auftrag und Sprung zur Quelle. */
+.col-act { width: 80px; text-align: center; white-space: nowrap; }
 
 .nemo-row td {
   padding: 6px 10px;
@@ -364,7 +404,13 @@ function showMore() {
   color: var(--mint-text);
   cursor: pointer;
 }
-.audit-jump:hover { background: var(--mint-panel-hover); }
+.audit-jump:hover:not(:disabled) { background: var(--mint-panel-hover); }
+.audit-jump:disabled { color: #b6b6b3; cursor: default; }
+/* KI-Micro-Auftrag: hebt sich vom Sprung-Knopf ab; nach getaner Arbeit grün.
+   Der Fund bleibt in der Liste — der Bericht ist ein Schnappschuss und wird
+   erst durch einen neuen Lauf aktuell. */
+.audit-fix { color: var(--mint-green); margin-right: 4px; }
+.audit-fix.done { color: #fff; background: var(--mint-green); border-color: var(--mint-green); }
 
 .nemo-empty {
   display: flex;

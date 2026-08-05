@@ -523,6 +523,8 @@ export default {
     groupPages: '{0} Seiten',
     groupExpand: 'Betroffene Seiten anzeigen',
     groupCollapse: 'Betroffene Seiten ausblenden',
+    fixWithAi: 'Diesen Fund von der KI beheben lassen',
+    fixDone: 'KI-Auftrag gelaufen — der Fund verschwindet nach dem nächsten Bauen und Prüfen',
     allSeverities: 'Alle',
     colSeverity: 'Schweregrad',
     colIssue: 'Befund',
@@ -1505,6 +1507,9 @@ export default {
     'AUDIT-STORAGE-FAILED': 'Der Check-Bericht konnte nicht gespeichert werden.',
     'AUDIT-CONTENT-EMPTY': 'Die Datei enthält keinen prüfbaren Fließtext: {0}',
     'AUDIT-CONTENT-NOT-FOUND': 'Kein gespeichertes Prüfergebnis gefunden: {0}',
+    'AUDIT-RULE-NOT-FIXABLE': 'Diese Regel lässt sich nicht über die Content-Datei beheben: {0}',
+    'AUDIT-ISSUE-NOT-FOUND': 'Der Fund steht nicht mehr im gewählten Bericht: {0}',
+    'AUDIT-ISSUE-NO-SOURCE': 'Zu diesem Fund gibt es keine bearbeitbare Quelldatei: {0}',
 
     'MAIL-NOT-CONFIGURED': 'Es wurden Probleme gefunden, aber der E-Mail-Versand ist nicht eingerichtet ([mail] in der hugocms.ini).',
     'MAIL-CONNECT-FAILED': 'Verbindung zum Mailserver {0}:{1} fehlgeschlagen.',

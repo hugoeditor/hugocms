@@ -4,6 +4,7 @@
 // editierbaren Hugo-Quelldatei. Aufbau wie die Papierkorb-Ansicht (TrashView).
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useAssistantStore } from '../stores/assistant'
 import { useAuditStore } from '../stores/audit'
 import { useAuditContentStore } from '../stores/auditContent'
 import { useAuthStore } from '../stores/auth'
@@ -23,6 +24,7 @@ import ProGate from './ProGate.vue'
 const emit = defineEmits(['activate-license'])
 
 const { t, locale } = useI18n()
+const assistant = useAssistantStore()
 const audit = useAuditStore()
 const auditContent = useAuditContentStore()
 const auth = useAuthStore()
@@ -147,6 +149,28 @@ async function removeOtherRuns() {
     error.value = errorText(t, e)
   }
 }
+
+// KI-Micro-Auftrag zu genau einem Fund. Der Assistent öffnet sich mit dem
+// bereits laufenden Auftrag (wie der Verbesserungslauf aus der Content-Liste);
+// im Modus „confirm" pausiert er vor dem Schreiben und lässt bestätigen.
+//
+// Der Fund bleibt danach im Bericht stehen — dieser ist der Schnappschuss eines
+// Laufs und wird nicht nachträglich verändert. Erledigte Funde merkt sich nur
+// diese Sitzung, damit man beim Abarbeiten den Überblick behält.
+const fixedKeys = ref([])
+
+async function fixIssue(issue) {
+  if (!audit.current?.id) return
+  // Fehler zeigt das Assistenten-Panel selbst — es ist bereits geöffnet.
+  const ok = await assistant.fixIssue(audit.current.id, issue.ruleId, issue.url ?? null, locale.value)
+  if (!ok) return
+  const key = issue.ruleId + '|' + (issue.url || issue.sourceFile || '')
+  if (!fixedKeys.value.includes(key)) fixedKeys.value = [...fixedKeys.value, key]
+}
+
+// Neuer Bericht (anderer Lauf oder frischer Durchlauf): die Erledigt-Merker
+// gehören zum alten Lauf und werden verworfen.
+watch(() => audit.current?.id, () => { fixedKeys.value = [] })
 
 async function openSource(issue) {
   try {
@@ -371,8 +395,11 @@ function runLabel(run) {
         v-else
         :issues="audit.filteredIssues"
         :search="searchQuery"
+        :fixed-keys="fixedKeys"
+        :busy="assistant.busy"
         @open-source="openSource"
         @open-help="openHelp"
+        @fix-issue="fixIssue"
         @update:row-count="rowCount = $event"
       />
     </div>

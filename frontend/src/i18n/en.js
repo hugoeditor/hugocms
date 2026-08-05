@@ -522,6 +522,8 @@ export default {
     groupPages: '{0} pages',
     groupExpand: 'Show affected pages',
     groupCollapse: 'Hide affected pages',
+    fixWithAi: 'Let the AI fix this issue',
+    fixDone: 'AI task completed — the issue disappears after the next build and check',
     allSeverities: 'All',
     colSeverity: 'Severity',
     colIssue: 'Issue',
@@ -1500,6 +1502,9 @@ export default {
     'AUDIT-STORAGE-FAILED': 'The check report could not be saved.',
     'AUDIT-CONTENT-EMPTY': 'The file contains no checkable body text: {0}',
     'AUDIT-CONTENT-NOT-FOUND': 'No stored check result found: {0}',
+    'AUDIT-RULE-NOT-FIXABLE': 'This rule cannot be fixed from the content file: {0}',
+    'AUDIT-ISSUE-NOT-FOUND': 'The issue is no longer part of the selected report: {0}',
+    'AUDIT-ISSUE-NO-SOURCE': 'There is no editable source file for this issue: {0}',
 
     'MAIL-NOT-CONFIGURED': 'Problems were found, but email delivery is not set up ([mail] in hugocms.ini).',
     'MAIL-CONNECT-FAILED': 'Could not connect to the mail server {0}:{1}.',

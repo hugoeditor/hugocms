@@ -638,6 +638,25 @@ Geöffnet über den **SEO-Check-Knopf** in der Titelleiste; im Reiter
 „SEO-Bericht" lassen sich Läufe starten, filtern (Schweregrad/Kategorie, Suche
 nach URL/Quelle) und vergleichen.
 
+**Duplikate erscheinen zusammengefasst:** Steht derselbe Titel oder dieselbe
+Meta-Description auf vielen Seiten, zeigt der Bericht dafür EINE aufklappbare
+Zeile mit der Zahl der betroffenen Seiten. Gezählt werden die Funde weiterhin
+einzeln — jede Seite behält ihren eigenen Fund samt Sprung zur Quelldatei.
+
+**Micro-Aufträge an die KI:** Funde, die sich über die Content-Datei beheben
+lassen (`RuleCatalog::FIXABLE` — Titel, Meta-Description, Überschriften,
+Bild-`alt`, Open Graph, Front-Matter u. a.), tragen einen Zauberstab-Knopf. Er
+startet über `assistantfix` einen eng gefassten Auftrag: genau dieser eine Fund,
+genau diese Datei. Den Fund schlägt der **Server** im gespeicherten Lauf nach —
+der Client schickt nur Lauf-ID, Regel-ID und URL, kein Meldungstext. Die
+Anweisung enthält zusätzlich den Hilfetext der Regel und, bei Duplikaten, die
+übrigen betroffenen Seiten, damit der neue Text sich von ihnen unterscheidet.
+Schreibmodus, Bestätigungspause und Entwurfs-Freigabe sind die des normalen
+Assistenten. Regeln, die im Theme oder in der URL-Struktur wurzeln, bieten den
+Knopf bewusst nicht an. Der Fund selbst bleibt im Bericht stehen — dieser ist
+der Schnappschuss eines Laufs; er verschwindet erst nach dem nächsten Bauen und
+Prüfen.
+
 ### Content-Qualität & KI-Verbesserung
 
 Ergänzend zum regelbasierten SEO-Check bewertet die **Content-Qualität** einzelne
@@ -848,6 +867,7 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `gitpush`  | POST    | –                                    | **Pro:** zum konfigurierten Remote pushen |
 | `gitreset` | POST    | `ref`?                               | **Pro:** Arbeitsbaum zurücksetzen (Standard: `HEAD`) |
 | `assistantimprove`| POST | `id` (Datei-ID), `locale`?         | **Pro:** KI-Verbesserung einer Datei starten (nutzt `get_file_report`) |
+| `assistantfix`| POST | `runId`, `ruleId`, `url`?, `locale`?     | **Pro:** KI-Micro-Auftrag zu genau einem Fund des SEO-Berichts |
 | `audit`    | POST    | –                                    | **Pro:** SEO-Check-Lauf ausführen (Bericht)            |
 | `auditlist`| GET     | –                                    | **Pro:** gespeicherte Läufe auflisten                  |
 | `auditget` | GET     | `id`                                 | **Pro:** vollständiger Bericht eines Laufs             |

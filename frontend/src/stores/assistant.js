@@ -142,6 +142,25 @@ export const useAssistantStore = defineStore('assistant', {
       }
     },
 
+    // Micro-Auftrag aus dem SEO-Bericht: lässt genau EINEN Fund beheben. Der
+    // Server schlägt den Fund selbst im gespeicherten Lauf nach — hierher gehen
+    // nur die Kennungen, kein Meldungstext.
+    async fixIssue(runId, ruleId, url, locale) {
+      this.reset()
+      this.open = true
+      this.busy = true
+      try {
+        const data = await api.post('assistantfix', { runId, ruleId, url: url ?? null, locale })
+        this.apply(data)
+        return true
+      } catch (e) {
+        this.setError(e)
+        return false
+      } finally {
+        this.busy = false
+      }
+    },
+
     // Beantwortet eine ausstehende Schreibaktion (confirm-Modus).
     async resolve(decision, locale, ctx = {}) {
       this.setError(null)

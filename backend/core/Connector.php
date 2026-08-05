@@ -7,6 +7,7 @@ namespace HugoCMS\FileManager;
 use HugoCMS\FileManager\Audit\AuditMailReport;
 use HugoCMS\FileManager\Audit\AuditService;
 use HugoCMS\FileManager\Audit\ContentQualityService;
+use HugoCMS\FileManager\Audit\RuleCatalog;
 use HugoCMS\FileManager\Audit\SourceGuesser;
 use HugoCMS\FileManager\Auth\AuthInterface;
 use HugoCMS\FileManager\Auth\SiteAwareInterface;
@@ -491,6 +492,7 @@ final class Connector
                 'assistant' => $this->cmdAssistant($request),
                 'assistantping' => $this->cmdAssistantPing(),
                 'assistantimprove' => $this->cmdAssistantImprove($request),
+                'assistantfix' => $this->cmdAssistantFix($request),
                 'speech' => $this->cmdSpeech($request),
                 'serviceverify' => $this->cmdServiceVerify($request),
                 'pagespeed' => $this->cmdPageSpeed($request),
@@ -3096,6 +3098,216 @@ final class Connector
     }
 
     /**
+     * Micro-Auftrag: lässt den Assistenten GENAU EINEN Fund des SEO-Berichts
+     * beheben — der Knopf sitzt an der Fundzeile des Berichts.
+     *
+     * Der Fund wird NICHT vom Client übernommen, sondern anhand von Lauf-ID,
+     * Regel-ID und URL im gespeicherten Bericht nachgeschlagen. So bestimmt
+     * allein der Server, was in der Anweisung an das Modell steht, und der
+     * Client kann keinen Text einschleusen.
+     *
+     * Schreibmodus, Bestätigungspause und Entwurfs-Schiene sind die des
+     * normalen Assistenten — es ist derselbe Werkzeug-Loop.
+     */
+    private function cmdAssistantFix(array $request): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+        $this->requirePro();
+        if ($this->hugo === null) {
+            throw new ApiException('ECONFIG', 409, 'AUDIT-NO-PROJECT');
+        }
+        if ($this->ai['apiKey'] === null) {
+            throw new ApiException('ECONFIG', 409, 'AI-NOT-CONFIGURED');
+        }
+        $runId = $this->requireParam($request, 'runId');
+        $ruleId = $this->requireParam($request, 'ruleId');
+        $url = isset($request['url']) ? (string) $request['url'] : null;
+        $locale = (string) ($request['locale'] ?? 'de');
+
+        // Nur Regeln, die sich über die Content-Datei beheben lassen. Alles
+        // andere gehört ins Theme oder in eine Struktur-Entscheidung.
+        if (!RuleCatalog::fixable($ruleId)) {
+            throw new ApiException('ECONFIG', 409, 'AUDIT-RULE-NOT-FIXABLE', [$ruleId]);
+        }
+
+        $report = $this->auditStore()->get($runId);
+        $issue = self::findIssue($report, $ruleId, $url);
+        if ($issue === null) {
+            throw ApiException::notFound('AUDIT-ISSUE-NOT-FOUND', [$ruleId]);
+        }
+
+        $rel = (string) ($issue['sourceFile'] ?? '');
+        $fileId = $rel === ''
+            ? null
+            : $this->resolveFileId((string) $this->hugo['source'] . '/' . $rel);
+        if ($fileId === null) {
+            throw ApiException::notFound('AUDIT-ISSUE-NO-SOURCE', [$ruleId]);
+        }
+        $r = $this->resolver->resolve($fileId, true);
+        $path = $r['mount']->name() . '/' . $r['rel'];
+
+        // Wie beim Verbesserungslauf großzügig bemessen (Lesen, Nachdenken,
+        // Schreiben in einem Request), aber ohne Hintergrundprozess.
+        @set_time_limit(180);
+
+        return $this->assistantService()->run(
+            [['role' => 'user', 'content' => $this->fixInstruction($path, $issue, $report, $locale)]],
+            null,
+            $locale,
+            $path,
+        );
+    }
+
+    /**
+     * Sucht einen Fund im Bericht: erst Regel-ID UND URL, sonst — falls keine
+     * URL übergeben wurde — den ersten Fund dieser Regel.
+     *
+     * @param array<string, mixed> $report
+     * @return array<string, mixed>|null
+     */
+    private static function findIssue(array $report, string $ruleId, ?string $url): ?array
+    {
+        $fallback = null;
+        foreach ($report['issues'] ?? [] as $issue) {
+            if (!is_array($issue) || ($issue['ruleId'] ?? null) !== $ruleId) {
+                continue;
+            }
+            if ($url === null || $url === '') {
+                return $issue;
+            }
+            if ((string) ($issue['url'] ?? '') === $url) {
+                return $issue;
+            }
+            $fallback ??= $issue;
+        }
+
+        return $url === null ? $fallback : null;
+    }
+
+    /**
+     * Startanweisung für den Micro-Auftrag. Sie besteht aus drei Teilen: dem
+     * eng gefassten Auftrag, dem Regelwissen aus der Hilfe-Datenbank (dieselben
+     * Texte, die der Benutzer im Bericht aufruft) und — bei Duplikat-Funden —
+     * den übrigen betroffenen Seiten. Der letzte Teil ist wesentlich: Ohne ihn
+     * schreibt das Modell der Seite erneut einen austauschbaren Text, mit ihm
+     * einen unterscheidenden.
+     *
+     * @param array<string, mixed> $issue
+     * @param array<string, mixed> $report
+     */
+    private function fixInstruction(string $path, array $issue, array $report, string $locale): string
+    {
+        $en = str_starts_with(strtolower($locale), 'en');
+        $ruleId = (string) ($issue['ruleId'] ?? '');
+        $url = (string) ($issue['url'] ?? '');
+
+        $lines = [];
+        $lines[] = $en
+            ? "Fix EXACTLY ONE reported SEO issue in the content file `{$path}` — change nothing else."
+            : "Behebe in der Content-Datei `{$path}` GENAU EINEN gemeldeten SEO-Fund — ändere sonst nichts.";
+        $lines[] = '';
+        $lines[] = ($en ? 'Rule: ' : 'Regel: ') . $ruleId;
+        if ($url !== '') {
+            $lines[] = ($en ? 'Affected page: ' : 'Betroffene Seite: ') . $url;
+        }
+
+        $help = $this->ruleHelp($ruleId, $locale);
+        if ($help !== null) {
+            $lines[] = '';
+            $lines[] = $en ? '--- What the rule means ---' : '--- Was die Regel bedeutet ---';
+            $lines[] = $help;
+        }
+
+        $others = self::duplicateSiblings($report, $issue);
+        if ($others !== []) {
+            $lines[] = '';
+            $lines[] = $en
+                ? 'The SAME text is used on these other pages. Your new text must clearly distinguish this page from them — do not reuse their wording:'
+                : 'Derselbe Text steht auf diesen weiteren Seiten. Dein neuer Text muss diese Seite deutlich von ihnen unterscheiden — übernimm ihre Formulierung nicht:';
+            foreach ($others as $o) {
+                $lines[] = '- ' . $o;
+            }
+        }
+
+        $lines[] = '';
+        $lines[] = $en
+            ? "Steps: (1) read `{$path}`; (2) fix this ONE issue and write the file back in a SINGLE write_file call. Keep the existing front-matter format valid, preserve the author's meaning, and leave everything unrelated to this rule untouched. If the cause is not in this file but in the theme, do NOT write — explain what has to change in which layout instead."
+            : "Vorgehen: (1) lies `{$path}`; (2) behebe DIESEN einen Fund und schreibe die Datei in EINEM write_file-Aufruf zurück. Halte das vorhandene Front-Matter-Format gültig, bewahre die Aussage des Autors und lass alles unangetastet, was mit dieser Regel nichts zu tun hat. Liegt die Ursache nicht in dieser Datei, sondern im Theme, schreibe NICHT — erkläre stattdessen, was in welchem Layout zu ändern ist.";
+
+        return implode("\n", $lines);
+    }
+
+    /** Höchstlänge des Regelwissens in der Anweisung (Zeichen). */
+    private const int FIX_HELP_MAX = 1500;
+
+    /** Höchstzahl der genannten Schwester-Seiten einer Duplikat-Gruppe. */
+    private const int FIX_SIBLINGS_MAX = 12;
+
+    /**
+     * Erklärtext einer Regel aus der Hilfe-Datenbank (Titel + Rumpf, gekürzt)
+     * oder null, wenn es keinen gibt. Fehler sind unerheblich — der Auftrag
+     * läuft auch ohne Regelwissen.
+     */
+    private function ruleHelp(string $ruleId, string $locale): ?string
+    {
+        try {
+            $topic = (new HelpService($this->helpDir))->topic('audit', $ruleId, $locale);
+        } catch (Throwable) {
+            return null;
+        }
+        $text = trim((string) ($topic['title'] ?? '') . "\n\n" . (string) ($topic['body'] ?? ''));
+        if ($text === '') {
+            return null;
+        }
+
+        return mb_strlen($text) > self::FIX_HELP_MAX
+            ? mb_substr($text, 0, self::FIX_HELP_MAX) . ' …'
+            : $text;
+    }
+
+    /**
+     * Die übrigen Seiten einer Duplikat-Gruppe (gleiche Regel, gleiche
+     * `context.group`-Kennung) als lesbare Zeilen. Leer, wenn der Fund zu
+     * keiner Gruppe gehört — etwa bei Berichten aus der Zeit vor der
+     * Gruppierung.
+     *
+     * @param array<string, mixed> $report
+     * @param array<string, mixed> $issue
+     * @return list<string>
+     */
+    private static function duplicateSiblings(array $report, array $issue): array
+    {
+        $group = $issue['context']['group'] ?? null;
+        if (!is_string($group) || $group === '') {
+            return [];
+        }
+        $ruleId = $issue['ruleId'] ?? null;
+        $url = $issue['url'] ?? null;
+
+        $out = [];
+        foreach ($report['issues'] ?? [] as $other) {
+            if (!is_array($other)
+                || ($other['ruleId'] ?? null) !== $ruleId
+                || ($other['context']['group'] ?? null) !== $group
+                || ($other['url'] ?? null) === $url) {
+                continue;
+            }
+            $line = (string) ($other['url'] ?? '');
+            $src = $other['sourceFile'] ?? null;
+            if (is_string($src) && $src !== '') {
+                $line .= ' (' . $src . ')';
+            }
+            $out[] = $line;
+            if (count($out) >= self::FIX_SIBLINGS_MAX) {
+                break;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * Gesamt-Bericht einer Datei anhand ihrer Dateimanager-ID (für das
      * Assistenten-Werkzeug get_file_report). Qualitätsurteil optional (null,
      * wenn die Datei nie geprüft wurde), SEO-Funde aus dem jüngsten Lauf.
@@ -4889,6 +5101,13 @@ final class Connector
      * zur editierbaren Quelle springen kann. Es wird NIE ein Serverpfad
      * ausgegeben, nur die undurchsichtige ID.
      *
+     * Dazu kommt `fixable`: Der Fund lässt sich über seine Content-Datei
+     * beheben ({@see RuleCatalog::FIXABLE}), es gibt eine Datei dazu und der
+     * KI-Assistent ist einsatzbereit — dann bietet der Client den Micro-Auftrag
+     * an ({@see cmdAssistantFix}). Beides entsteht erst beim Ausliefern; der
+     * abgelegte Bericht bleibt unangetastet, ältere Läufe bekommen die Angaben
+     * dadurch automatisch.
+     *
      * @param array<string, mixed> $report
      * @return array<string, mixed>
      */
@@ -4898,6 +5117,9 @@ final class Connector
             return $report;
         }
         $source = (string) $this->hugo['source'];
+        // Ohne API-Schlüssel oder im Nur-Lese-Modus kann der Assistent nichts
+        // beheben — dann den Knopf gar nicht erst anbieten.
+        $canFix = $this->ai['apiKey'] !== null && $this->ai['writeMode'] !== 'readonly';
         $cache = [];
         foreach ($report['issues'] as &$issue) {
             $rel = is_array($issue) ? ($issue['sourceFile'] ?? null) : null;
@@ -4909,6 +5131,9 @@ final class Connector
             }
             if ($cache[$rel] !== null) {
                 $issue['fileId'] = $cache[$rel];
+                if ($canFix && RuleCatalog::fixable((string) ($issue['ruleId'] ?? ''))) {
+                    $issue['fixable'] = true;
+                }
             }
         }
         unset($issue);
