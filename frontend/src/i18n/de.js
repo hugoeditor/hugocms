@@ -1080,6 +1080,9 @@ export default {
     sourceMissing: 'Quelle fehlt',
     improvedChip: 'verbessert',
     improvedAt: 'Verbessert am {0}',
+    preImproveTitle: 'Stand vor der Verbesserung',
+    preImproveNote:
+      'Dieser Bericht stammt aus der Prüfung vom {0}; die KI-Verbesserung erfolgte danach am {1}. Bewertung, Befunde und Vorschläge beschreiben den Textstand vor der Bearbeitung, nicht die heutige Datei. Für ein aktuelles Urteil neu prüfen.',
     requeue: 'Wieder aufnehmen',
     filterAll: 'Alle',
     filterToImprove: 'Zu verbessern',

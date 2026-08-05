@@ -1077,6 +1077,9 @@ export default {
     sourceMissing: 'source missing',
     improvedChip: 'improved',
     improvedAt: 'Improved on {0}',
+    preImproveTitle: 'State before the improvement',
+    preImproveNote:
+      'This report comes from the check on {0}; the AI improvement followed on {1}. Rating, findings and suggestions describe the text as it was before that edit, not the current file. Re-check for an up-to-date assessment.',
     requeue: 'Re-queue',
     filterAll: 'All',
     filterToImprove: 'To improve',

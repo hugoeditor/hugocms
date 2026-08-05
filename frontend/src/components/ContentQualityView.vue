@@ -182,6 +182,25 @@ function openHelp(ruleId) {
 
         <!-- Ergebnis (geprüft) ODER Vormerkung ohne Prüfung -->
         <template v-else-if="entry">
+          <!-- Wurde die Seite nach der Prüfung von der KI verbessert, beschreibt
+               der ganze Bericht den Textstand VOR dieser Bearbeitung: Die
+               Verbesserung setzt nur den improvedAt-Vermerk, sie schreibt weder
+               Bewertung noch Befunde fort. Der Hinweis steht deshalb ganz oben,
+               vor dem Score. Alte Einträge ohne improvedAt zeigen ihn nicht. -->
+          <v-alert
+            v-if="entry.improvedAt && verdict"
+            type="warning"
+            variant="tonal"
+            density="comfortable"
+            class="mb-4"
+            prepend-icon="mdi-history"
+          >
+            <div class="font-weight-medium mb-1">{{ $t('contentQuality.preImproveTitle') }}</div>
+            <div class="text-body-2">
+              {{ $t('contentQuality.preImproveNote', [formatDate(entry.checkedAt), formatDate(entry.improvedAt)]) }}
+            </div>
+          </v-alert>
+
           <!-- Qualitätsurteil nur, wenn geprüft. -->
           <template v-if="verdict">
             <div class="d-flex align-center mb-3">
