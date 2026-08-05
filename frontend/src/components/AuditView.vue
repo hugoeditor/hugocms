@@ -77,6 +77,12 @@ watch(searchInput, (v) => {
 })
 onBeforeUnmount(() => clearTimeout(searchTimer))
 
+// Zahl der tatsächlich gezeigten Tabellenzeilen — kleiner als die Fundzahl,
+// sobald die Tabelle Duplikate zu einer Zeile zusammenfasst. Kommt von dort
+// zurück, damit die Statuszeile beides nennen kann.
+const rowCount = ref(0)
+const grouped = computed(() => rowCount.value > 0 && rowCount.value < audit.filteredIssues.length)
+
 onMounted(async () => {
   // Ohne Freischaltung nichts laden: Der Bericht-Reiter zeigt dann den
   // Pro-Hinweis, und jeder Abruf liefe in ein PRO-REQUIRED des Servers.
@@ -367,6 +373,7 @@ function runLabel(run) {
         :search="searchQuery"
         @open-source="openSource"
         @open-help="openHelp"
+        @update:row-count="rowCount = $event"
       />
     </div>
 
@@ -377,7 +384,9 @@ function runLabel(run) {
       <span v-else-if="tab === 'pagespeed'">{{ $t('pagespeed.tab') }}</span>
       <span v-else-if="tab === 'live'">{{ $t('liveAnalysis.tab') }}</span>
       <span v-else-if="audit.current">
-        {{ $t('audit.issueCount', [audit.filteredIssues.length]) }}
+        {{ grouped
+          ? $t('audit.issueCountGrouped', [audit.filteredIssues.length, rowCount])
+          : $t('audit.issueCount', [audit.filteredIssues.length]) }}
       </span>
       <span v-else>{{ $t('audit.subtitle') }}</span>
     </footer>

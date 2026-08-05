@@ -228,20 +228,26 @@ final class Checks
     {
         $out = [];
 
-        // Doppelte Titel.
-        foreach (self::groupBy($pages, static fn (PageRecord $p): ?string => $p->title()) as $group) {
+        // Doppelte Titel. Jede betroffene Seite ergibt weiterhin einen eigenen
+        // Fund (Zähler, Mail-Bericht und der Sprung zur Quelldatei hängen daran);
+        // der context-Schlüssel `group` fasst sie im Client zu EINER aufklappbaren
+        // Zeile zusammen (siehe self::duplicateContext).
+        foreach (self::groupBy($pages, static fn (PageRecord $p): ?string => $p->title()) as $key => $group) {
             if (count($group) > 1) {
+                // Kein `text`: Der doppelte Titel steht bereits in der Meldung.
+                $ctx = self::duplicateContext($key);
                 foreach ($group as $p) {
-                    $out[] = Issue::of('title.duplicate', $p->url, $p->sourceFile, [count($group), (string) $p->title()]);
+                    $out[] = Issue::of('title.duplicate', $p->url, $p->sourceFile, [count($group), (string) $p->title()], $ctx);
                 }
             }
         }
 
         // Doppelte Meta-Descriptions.
-        foreach (self::groupBy($pages, static fn (PageRecord $p): ?string => self::firstNonEmpty($p->descriptions)) as $group) {
+        foreach (self::groupBy($pages, static fn (PageRecord $p): ?string => self::firstNonEmpty($p->descriptions)) as $key => $group) {
             if (count($group) > 1) {
+                $ctx = self::duplicateContext($key, (string) self::firstNonEmpty($group[0]->descriptions));
                 foreach ($group as $p) {
-                    $out[] = Issue::of('meta.description.duplicate', $p->url, $p->sourceFile, [count($group)]);
+                    $out[] = Issue::of('meta.description.duplicate', $p->url, $p->sourceFile, [count($group)], $ctx);
                 }
             }
         }
@@ -635,6 +641,37 @@ final class Checks
         }
 
         return null;
+    }
+
+    /** Höchstlänge des im Bericht mitgeführten Duplikat-Textes (Anzeigezweck). */
+    private const int DUPLICATE_TEXT_MAX = 120;
+
+    /**
+     * Zusatzdaten für die Duplikat-Funde einer Gruppe: eine über alle Seiten der
+     * Gruppe IDENTISCHE Kennung, dazu — sofern die Meldung ihn nicht ohnehin
+     * nennt — der gekürzte doppelte Text. Der Client fasst Funde gleicher Regel
+     * und gleicher Kennung zu einer aufklappbaren Zeile zusammen; ältere
+     * Berichte ohne diese Schlüssel bleiben flach — der Berichtsaufbau selbst
+     * ändert sich dadurch nicht.
+     *
+     * @param string  $key  normalisierter Gruppenschlüssel (siehe groupBy)
+     * @param ?string $text Originaltext für die Anzeige (null = nicht mitführen)
+     * @return array<string, mixed>
+     */
+    private static function duplicateContext(string $key, ?string $text = null): array
+    {
+        $ctx = ['group' => substr(sha1($key), 0, 10)];
+        if ($text === null || trim($text) === '') {
+            return $ctx;
+        }
+
+        $short = trim($text);
+        if (mb_strlen($short) > self::DUPLICATE_TEXT_MAX) {
+            $short = mb_substr($short, 0, self::DUPLICATE_TEXT_MAX - 1) . '…';
+        }
+        $ctx['text'] = $short;
+
+        return $ctx;
     }
 
     /**
