@@ -7,12 +7,12 @@
 # it. This has happened before (frontend/src/stores/linkScan.js), which is why
 # this hook exists.
 #
-# The check reuses Git's OWN classification instead of scanning for NUL bytes by
-# hand: `git diff --cached --numstat` prints "-" for added and deleted lines
-# exactly when Git considers a blob binary — including whatever .gitattributes
-# says. What the hook adds is the judgement call: for the extensions listed in
-# TEXT_PATTERN, binary is always a mistake. Real binaries (images, fonts,
-# archives) carry other extensions and pass untouched.
+# Judged is the CONTENT of the staged blob, not the diff against HEAD: Git calls
+# a diff binary as soon as EITHER side is, so a file whose previous version still
+# carries a NUL byte would stay blocked forever — the hook would refuse the very
+# commit that repairs it. Extensions listed in TEXT_PATTERN must be free of NUL
+# bytes; real binaries (images, fonts, archives) carry other extensions and pass
+# untouched.
 #
 # Install once per clone:
 #     git config core.hooksPath bin/hooks
@@ -28,26 +28,30 @@ TEXT_PATTERN='\.(js|mjs|cjs|ts|vue|php|css|scss|html|json|md|sh|ini|beispiel|con
 
 offenders=()
 
-# --no-renames keeps the third column a plain path; a detected rename would print
-# "old => new" and break the split below.
-while IFS=$'\t' read -r added deleted path; do
-    [[ "$added" == "-" && "$deleted" == "-" ]] || continue
+# Added, copied, modified and renamed entries; deletions have no content to check.
+while IFS= read -r path; do
     [[ "$path" =~ $TEXT_PATTERN ]] || continue
-    offenders+=("$path")
-done < <(git diff --cached --numstat --no-renames)
+
+    # A NUL byte cannot travel through a shell variable, so compare sizes: the
+    # raw blob against the same blob with every NUL removed. Works with any
+    # POSIX tr — no GNU-only grep -P needed for the detection itself.
+    raw=$(git cat-file -s ":$path" 2>/dev/null) || continue
+    stripped=$(git cat-file blob ":$path" 2>/dev/null | tr -d '\000' | wc -c)
+    [[ "$raw" -ne "$stripped" ]] && offenders+=("$path")
+done < <(git diff --cached --name-only --diff-filter=ACMR)
 
 [[ ${#offenders[@]} -eq 0 ]] && exit 0
 
-echo "pre-commit: refusing to commit — Git sees these text files as binary:" >&2
+echo "pre-commit: refusing to commit — NUL bytes in text files:" >&2
 echo >&2
 for path in "${offenders[@]}"; do
     # Locate the first NUL byte so the message points at a line, not just a file.
     # grep -P is GNU-only; without it the file name alone has to do.
-    location=$(git show ":$path" | grep -anP '\x00' 2>/dev/null | head -1 | cut -d: -f1)
+    location=$(git cat-file blob ":$path" | grep -anP '\x00' 2>/dev/null | head -1 | cut -d: -f1)
     if [[ -n "$location" ]]; then
         echo "  $path:$location — NUL byte (0x00)" >&2
     else
-        echo "  $path — binary content" >&2
+        echo "  $path — contains NUL bytes" >&2
     fi
 done
 echo >&2
