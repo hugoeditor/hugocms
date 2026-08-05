@@ -84,6 +84,21 @@ async function saveEdit() {
   }
 }
 
+// Hinweistext „Stand vor der Verbesserung". Geprüfte Seiten nennen das
+// Prüfdatum; ohne Prüfung vorgemerkte Seiten (kein Urteil, nur Vorschläge und
+// Anweisung) nennen stattdessen das Vormerkdatum. Fehlt beides — denkbar bei
+// Einträgen aus älteren Ständen —, bleibt die knappe Fassung ohne Datum.
+const preImproveNote = computed(() => {
+  const improved = formatDate(entry.value?.improvedAt)
+  if (entry.value?.checkedAt) {
+    return t('contentQuality.preImproveNote', [formatDate(entry.value.checkedAt), improved])
+  }
+  if (entry.value?.queuedAt) {
+    return t('contentQuality.preImproveNoteQueued', [formatDate(entry.value.queuedAt), improved])
+  }
+  return t('contentQuality.preImproveNotePlain', [improved])
+})
+
 function scoreColor(score) {
   if (score == null) return 'grey'
   if (score >= 70) return 'success'
@@ -182,13 +197,13 @@ function openHelp(ruleId) {
 
         <!-- Ergebnis (geprüft) ODER Vormerkung ohne Prüfung -->
         <template v-else-if="entry">
-          <!-- Wurde die Seite nach der Prüfung von der KI verbessert, beschreibt
-               der ganze Bericht den Textstand VOR dieser Bearbeitung: Die
-               Verbesserung setzt nur den improvedAt-Vermerk, sie schreibt weder
-               Bewertung noch Befunde fort. Der Hinweis steht deshalb ganz oben,
-               vor dem Score. Alte Einträge ohne improvedAt zeigen ihn nicht. -->
+          <!-- Wurde die Seite von der KI verbessert, beschreibt der ganze Bericht
+               den Textstand VOR dieser Bearbeitung: Die Verbesserung setzt nur den
+               improvedAt-Vermerk, sie schreibt weder Bewertung noch Befunde fort.
+               Der Hinweis steht deshalb ganz oben, vor dem Score. Alte Einträge
+               ohne improvedAt zeigen ihn nicht. -->
           <v-alert
-            v-if="entry.improvedAt && verdict"
+            v-if="entry.improvedAt"
             type="warning"
             variant="tonal"
             density="comfortable"
@@ -196,9 +211,7 @@ function openHelp(ruleId) {
             prepend-icon="mdi-history"
           >
             <div class="font-weight-medium mb-1">{{ $t('contentQuality.preImproveTitle') }}</div>
-            <div class="text-body-2">
-              {{ $t('contentQuality.preImproveNote', [formatDate(entry.checkedAt), formatDate(entry.improvedAt)]) }}
-            </div>
+            <div class="text-body-2">{{ preImproveNote }}</div>
           </v-alert>
 
           <!-- Qualitätsurteil nur, wenn geprüft. -->
@@ -239,9 +252,12 @@ function openHelp(ruleId) {
             </template>
           </template>
 
-          <!-- Ohne Prüfung vorgemerkt: Hinweis statt Urteil. -->
+          <!-- Ohne Prüfung vorgemerkt: Hinweis statt Urteil — aber nur, solange
+               die Verbesserung noch aussteht. Ist sie erfolgt, beschreibt der
+               Hinweis oben („Stand vor der Verbesserung") die Lage bereits
+               vollständig, samt Vormerkdatum. -->
           <v-alert
-            v-else
+            v-else-if="!entry.improvedAt"
             type="info"
             density="compact"
             variant="tonal"

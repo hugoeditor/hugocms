@@ -1080,6 +1080,10 @@ export default {
     preImproveTitle: 'State before the improvement',
     preImproveNote:
       'This report comes from the check on {0}; the AI improvement followed on {1}. Rating, findings and suggestions describe the text as it was before that edit, not the current file. Re-check for an up-to-date assessment.',
+    preImproveNoteQueued:
+      'This page was queued without a quality check on {0}; the AI improvement followed on {1}. Suggestions and instruction describe the text as it was before that edit, not the current file. Re-check for an assessment of the current version.',
+    preImproveNotePlain:
+      'The AI improvement took place on {0}. This report describes the text as it was before that edit, not the current file. Re-check for an assessment of the current version.',
     requeue: 'Re-queue',
     filterAll: 'All',
     filterToImprove: 'To improve',
