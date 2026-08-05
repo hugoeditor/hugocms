@@ -139,10 +139,12 @@ function formatDate(iso) {
 }
 
 // Zur Quelldatei springen (Live-Stand im Editor). Bei neuen Seiten fehlt sie ggf.
+// Die Warteschlange wird dabei NICHT geschlossen: Der Editor legt sich nur
+// darüber (höherer z-index), und beim Schließen erscheint der Diff wieder —
+// sonst landete man nach jedem Blick in die Quelle im Dateimanager.
 async function toSource() {
   const id = store.current?.fileId
   if (!id) return
-  store.closeQueue()
   try {
     await files.openFileById(id)
   } catch {
@@ -437,11 +439,15 @@ async function toSource() {
 </template>
 
 <style scoped>
-/* Overlay über dem Arbeitsbereich, z-index wie das SEO-Audit (unter dem Editor). */
+/* Overlay über dem Arbeitsbereich, aber UNTER dem Editor (z-index kleiner als
+   .editor-overlay = 10) — wie das SEO-Audit: Eine aus dem Diff geöffnete
+   Quelldatei legt sich darüber, und beim Schließen erscheint die Warteschlange
+   wieder. Die Ansicht wird nur aus der Werkzeugschiene geöffnet, die den Editor
+   ohnehin verlässt; sie muss also nie über ihm liegen. */
 .rev-overlay {
   position: absolute;
   inset: 0;
-  z-index: 12;
+  z-index: 9;
   display: flex;
   flex-direction: column;
   background: var(--mint-content);

@@ -86,13 +86,24 @@ function start() {
   store.start(input.value)
 }
 
-// Zur Fundstelle springen: Overlay schließen, Datei im Editor öffnen. Nur
-// möglich, wenn die Datei in einem Mount liegt (sonst fehlt die fileId — das
-// betrifft vor allem den gebauten Ordner, der nicht eingebunden sein muss).
+// Zur Fundstelle springen. Die Trefferliste wird dabei bewusst NICHT
+// geschlossen: Der Editor legt sich nur darüber (höherer z-index), und beim
+// Schließen erscheint die Liste unverändert wieder — sonst landete man nach
+// jeder Korrektur im Dateimanager und müsste neu suchen. Genauso hält es der
+// SEO-Check mit seinen Funden.
+//
+// Möglich ist der Sprung nur, wenn die Datei in einem Mount liegt (sonst fehlt
+// die ID — das betrifft vor allem den gebauten Ordner, der nicht eingebunden
+// sein muss).
 async function openFile(id) {
   if (!id) return
-  store.close()
-  await files.openFileById(id)
+  try {
+    await files.openFileById(id)
+  } catch (e) {
+    // Datei zwischenzeitlich verschoben oder gelöscht: Grund oben anzeigen,
+    // die Trefferliste bleibt stehen.
+    store.error = e
+  }
 }
 </script>
 
@@ -290,11 +301,15 @@ async function openFile(id) {
 </template>
 
 <style scoped>
-/* Overlay über dem Arbeitsbereich, z-index wie SEO-Audit und Warteschlange. */
+/* Overlay über dem Arbeitsbereich, aber UNTER dem Editor (z-index kleiner als
+   .editor-overlay = 10) — wie beim SEO-Audit: Eine aus der Trefferliste
+   geöffnete Datei legt sich darüber, und beim Schließen des Editors erscheint
+   die Trefferliste wieder, mit unverändertem Filter und Scrollstand. So lassen
+   sich mehrere Fundstellen nacheinander abarbeiten. */
 .ls-overlay {
   position: absolute;
   inset: 0;
-  z-index: 12;
+  z-index: 9;
   display: flex;
   flex-direction: column;
   background: var(--mint-content);

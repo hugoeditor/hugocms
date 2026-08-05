@@ -8,7 +8,7 @@
 // So kann sich die Hilfe-Ansicht (höherer z-index) über den Bericht legen, wenn
 // man aus einem SEO-Fund die Regel-Hilfe öffnet — ihr Zurück-Button bringt den
 // Bericht wieder zum Vorschein. Ein v-dialog läge über der Hilfe und verdeckte sie.
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useDisplay } from 'vuetify'
 import { useI18n } from 'vue-i18n'
 import { useAuditContentStore } from '../stores/auditContent'
@@ -43,6 +43,31 @@ const audit = computed(() => store.current?.audit ?? null)
 const fileId = computed(() => store.current?.file?.fileId ?? null)
 // Schlüssel (sha1) des Berichts — Adresse für Speicher-/Verwaltungsbefehle.
 const reportKey = computed(() => entry.value?.key ?? null)
+
+// --- Lage zum Editor -------------------------------------------------------
+// Der Bericht liegt normalerweise ÜBER dem Editor: Er wird auch AUS ihm heraus
+// geöffnet („Qualität prüfen") und müsste sonst unsichtbar darunter liegen.
+// Springt man dagegen VON hier zu einer Datei, kehrt sich die Ordnung um — der
+// Editor legt sich darüber, und beim Schließen erscheint der Bericht wieder,
+// statt den Benutzer im Dateimanager abzusetzen.
+const belowEditor = ref(false)
+
+// Zurück nach oben, sobald der Editor zu ist …
+watch(
+  () => files.openFile,
+  (file) => {
+    if (!file) belowEditor.value = false
+  },
+)
+// … und ebenso, wenn ein Bericht neu geholt wird (Prüflauf oder gespeichertes
+// Ergebnis). Das ist der Weg aus dem Editor heraus: Der Bericht ist dann bereits
+// offen, nur eben verdeckt, und muss wieder nach vorn.
+watch(
+  () => store.busy || store.loading,
+  (active) => {
+    if (active) belowEditor.value = false
+  },
+)
 
 // --- Bearbeiten: Benutzer korrigiert Vorschläge + Freitext-Anweisung, bevor
 // die KI den Bericht abruft. Die KI-Befunde bleiben schreibgeschützt.
@@ -133,14 +158,20 @@ function doRecheck() {
   store.recheck(fileId.value, store.current?.file?.title, locale.value)
 }
 
-// Zur Quelldatei springen: Editor öffnen, Dialog schließen. Die ID VOR dem
-// Schließen festhalten — closeDialog() leert store.current, wovon das
-// fileId-Computed abhängt.
+// Zur Quelldatei springen: Editor öffnen, Bericht offen lassen. Er rückt dabei
+// unter den Editor (siehe belowEditor) und erscheint beim Schließen wieder — mit
+// unverändertem Bearbeitungsstand.
 async function toSource() {
   const id = fileId.value
   if (!id) return
-  store.closeDialog()
-  await files.openFileById(id)
+  belowEditor.value = true
+  try {
+    await files.openFileById(id)
+  } catch (e) {
+    // Datei nicht mehr vorhanden: Bericht wieder nach vorn, Grund anzeigen.
+    belowEditor.value = false
+    store.error = e
+  }
 }
 
 // Von der KI verbessern lassen: Dialog schließen, Assistenten-Panel öffnen und
@@ -153,11 +184,17 @@ function improve() {
   assistant.improve(id, locale.value)
 }
 
-// SEO-Fund: zur Quelle springen bzw. ausführliche Regel-Hilfe öffnen.
+// SEO-Fund: zur Quelle springen bzw. ausführliche Regel-Hilfe öffnen. Wie bei
+// toSource() bleibt der Bericht offen und rückt unter den Editor.
 async function openIssueSource(issue) {
   if (!issue.fileId) return
-  store.closeDialog()
-  await files.openFileById(issue.fileId)
+  belowEditor.value = true
+  try {
+    await files.openFileById(issue.fileId)
+  } catch (e) {
+    belowEditor.value = false
+    store.error = e
+  }
 }
 
 function openHelp(ruleId) {
@@ -166,7 +203,7 @@ function openHelp(ruleId) {
 </script>
 
 <template>
-  <div v-if="store.dialogOpen" class="cq-overlay">
+  <div v-if="store.dialogOpen" class="cq-overlay" :class="{ 'cq-overlay--below': belowEditor }">
     <!-- Kopfzeile: Zurück + Titel (wie Hilfe/Editor). Der Pfeil schließt den
          Bericht und gibt die darunterliegende Ansicht wieder frei. -->
     <header class="cq-head nemo-noselect">
@@ -523,7 +560,9 @@ function openHelp(ruleId) {
 <style scoped>
 /* Overlay-Ansicht über dem Arbeitsbereich (wie Editor/Audit/Hilfe). Der z-index
    liegt zwischen Editor (10) und Hilfe (15): So legt sich die Hilfe zu einem
-   SEO-Fund darüber; ihr Zurück-Button bringt den Bericht wieder zum Vorschein. */
+   SEO-Fund darüber; ihr Zurück-Button bringt den Bericht wieder zum Vorschein.
+   Über dem Editor muss er liegen, weil dessen Knopf „Qualität prüfen" den
+   Bericht öffnet, ohne den Editor zu schließen. */
 .cq-overlay {
   position: absolute;
   inset: 0;
@@ -532,6 +571,10 @@ function openHelp(ruleId) {
   flex-direction: column;
   background: var(--mint-content);
 }
+/* Umgekehrte Lage, nachdem der Bericht selbst eine Datei geöffnet hat: unter dem
+   Editor (wie das SEO-Audit mit 9), damit dessen Schließen zum Bericht
+   zurückführt statt in den Dateimanager. Siehe belowEditor im Skript. */
+.cq-overlay--below { z-index: 9; }
 
 .cq-head {
   display: flex;
