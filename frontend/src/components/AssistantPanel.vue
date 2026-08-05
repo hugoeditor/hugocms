@@ -133,6 +133,11 @@ const diff = computed(() => {
   return lineDiff(p.oldContent, p.input?.content ?? '')
 })
 
+// Hat der letzte Zug einen Entwurf zur Freigabe erzeugt (Modus auto oder die
+// Antwort „Später veröffentlichen")? Dann bleibt die Live-Datei unverändert —
+// das sagt der Hinweis, damit niemand die Änderung auf der Webseite sucht.
+const stashedDraft = computed(() => assistant.actions.some((a) => a.draft))
+
 // Tool-Notiz lesbar machen (Werkzeugname → übersetzter Text mit Pfad).
 function toolText(b) {
   const key = `assistant.tool.${b.tool}`
@@ -360,9 +365,35 @@ watch(
           <v-card-actions>
             <v-spacer />
             <v-btn variant="text" size="small" :disabled="assistant.busy" @click="resolve('reject')">{{ $t('assistant.reject') }}</v-btn>
+            <!-- Ja mit Aufschub: Der Vorschlag geht als Entwurf in die
+                 Freigabe-Warteschlange, die Live-Datei bleibt unverändert. Dort
+                 wird er freigegeben oder terminiert. Nur beim Schreiben einer
+                 Datei und nur mit Hugo-Projekt (canDraft vom Server). -->
+            <v-btn
+              v-if="assistant.pending.canDraft"
+              variant="tonal"
+              size="small"
+              prepend-icon="mdi-clock-outline"
+              :disabled="assistant.busy"
+              :title="$t('assistant.approveLaterHint')"
+              @click="resolve('draft')"
+            >
+              {{ $t('assistant.approveLater') }}
+            </v-btn>
             <v-btn color="primary" variant="flat" size="small" :loading="assistant.busy" @click="resolve('allow')">{{ $t('assistant.approve') }}</v-btn>
           </v-card-actions>
         </v-card>
+
+        <!-- Ergebnis liegt in der Freigabe-Warteschlange, nicht in der Datei. -->
+        <v-alert
+          v-if="stashedDraft && !assistant.busy && !assistant.pending"
+          type="info"
+          density="compact"
+          variant="tonal"
+          class="my-2"
+        >
+          {{ $t('assistant.draftStashed') }}
+        </v-alert>
 
         <!-- Zug an der Schrittgrenze abgebrochen: Fortsetzen anbieten. -->
         <div v-if="assistant.aborted && !assistant.busy && !assistant.pending" class="my-2">

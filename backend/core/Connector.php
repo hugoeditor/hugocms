@@ -1692,8 +1692,10 @@ final class Connector
             throw ApiException::badRequest('PARAM-MISSING', ['messages']);
         }
         $locale = (string) ($request['locale'] ?? 'de');
+        // „draft" ist ein Ja mit Aufschub: ausführen, aber als Entwurf zur
+        // Freigabe statt live (siehe AssistantService::resolvePending).
         $confirm = $request['confirm'] ?? null;
-        if ($confirm !== null && !in_array($confirm, ['allow', 'reject'], true)) {
+        if ($confirm !== null && !in_array($confirm, ['allow', 'draft', 'reject'], true)) {
             throw ApiException::badRequest('PARAM-INVALID', ['confirm']);
         }
         // Optionaler Kontext: im Editor geöffnete Datei und im Dateimanager
@@ -1766,12 +1768,15 @@ final class Connector
             ? fn (string $fileId) => $this->markFileImproved($fileId, $model)
             : null;
 
-        // Gestaffelte Veröffentlichung: Im Modus auto (Cron oder so konfigurierter
-        // interaktiver Assistent) und mit Hugo-Projekt geht ein Schreibvorgang
-        // nicht live, sondern als Entwurf zur Freigabe. Ohne Hugo-Projekt gibt es
-        // kein draft/publishDate — dann schreibt auto wie bisher direkt.
+        // Entwurfsweg der gestaffelten Veröffentlichung. Er wird bereitgestellt,
+        // sobald ein Hugo-Projekt existiert — ohne eines gibt es kein
+        // draft/publishDate und damit keine Warteschlange. GENUTZT wird er
+        // entweder immer (Modus auto: Cron oder so konfigurierter interaktiver
+        // Assistent) oder auf ausdrücklichen Wunsch je Schreibvorgang (Modus
+        // confirm, Antwort „draft" — „später veröffentlichen"). Diese
+        // Unterscheidung trifft der AssistantService anhand des Schreibmodus.
         $mode = $writeModeOverride ?? $this->ai['writeMode'];
-        $draftSink = ($mode === 'auto' && $this->hugo !== null)
+        $draftSink = $this->hugo !== null
             ? fn (Mount $m, string $rel, string $abs, string $content) => $this->stashDraft($m, $rel, $abs, $content, $draftOrigin, $model)
             : null;
 

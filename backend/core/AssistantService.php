@@ -43,10 +43,14 @@ final class AssistantService
      *        KI-Bearbeitung am Content-Qualitäts-Eintrag zu vermerken). Fehler
      *        dort dürfen den Schreibvorgang nicht kippen.
      * @param ?\Closure(Mount, string, string, string): void $draftSink Ist er
-     *        gesetzt (gestaffelte Veröffentlichung im Modus auto), landet ein
-     *        write_file NICHT in der Datei, sondern als Entwurf zur Freigabe;
-     *        die Live-Datei bleibt unangetastet. Aufruf mit
-     *        (Mount, rel, abs, content). onWrite entfällt dann.
+     *        gesetzt, KANN ein write_file als Entwurf zur Freigabe abgelegt
+     *        werden statt in die Datei zu gehen; die Live-Datei bleibt dann
+     *        unangetastet und onWrite entfällt (der Vermerk greift erst bei der
+     *        Freigabe). Aufruf mit (Mount, rel, abs, content). Ob der Weg
+     *        genommen wird, entscheidet der Schreibmodus: `auto` legt IMMER
+     *        Entwürfe an (gestaffelte Veröffentlichung), in `confirm` wählt der
+     *        Benutzer je Schreibvorgang mit der Antwort `draft`. null → kein
+     *        Entwurfsweg (kein Hugo-Projekt, also kein draft/publishDate).
      * @param bool $forceAdaptiveThinking Erzwingt adaptives Thinking auch für
      *        Modelle außerhalb der Positivliste (globale Einstellung [ai]
      *        force_thinking). Für ein Modell, das es doch nicht kann, lehnt die
@@ -69,8 +73,11 @@ final class AssistantService
      * Führt einen Assistenten-Zug aus.
      *
      * @param array<int, mixed> $messages Verlauf im Anthropic-Format
-     * @param ?string $confirm 'allow' | 'reject' beantwortet eine pending
-     *                         Schreibaktion; null für einen normalen Zug
+     * @param ?string $confirm 'allow' | 'draft' | 'reject' beantwortet eine
+     *                         pending Schreibaktion; null für einen normalen
+     *                         Zug. 'draft' legt den Vorschlag als Entwurf zur
+     *                         Freigabe ab, statt live zu schreiben — nur bei
+     *                         write_file und nur mit gesetztem draftSink
      * @param string $locale Sprachkürzel für die Antwort
      * @return array{messages: array, reply: string, actions: array, pending: ?array}
      */
@@ -181,13 +188,20 @@ final class AssistantService
     }
 
     /**
-     * true, wenn dieser Schreibvorgang als Freigabe-Entwurf statt live gelandet
-     * ist (gestaffelte Veröffentlichung). Der Client frischt daraufhin die
-     * Warteschlange auf; nur write_file geht über den Entwurfs-Weg.
+     * true, wenn dieser Schreibvorgang als Freigabe-Entwurf statt live landet.
+     * Der Client frischt daraufhin die Warteschlange auf. Nur write_file geht
+     * über den Entwurfs-Weg — für Umbenennen, Verschieben, Löschen und Anlegen
+     * eines Verzeichnisses gibt es keinen Entwurfsbegriff.
+     *
+     * Zwei Wege führen dorthin: der Modus `auto` (gestaffelte Veröffentlichung,
+     * jeder Schreibvorgang wird Entwurf) und die ausdrückliche Antwort `draft`
+     * auf eine Bestätigung im Modus `confirm` ($asDraft).
      */
-    private function isDraftWrite(string $tool): bool
+    private function isDraftWrite(string $tool, bool $asDraft = false): bool
     {
-        return $tool === 'write_file' && $this->draftSink !== null;
+        return $tool === 'write_file'
+            && $this->draftSink !== null
+            && ($asDraft || $this->writeMode === 'auto');
     }
 
     /** Hinweistext, wenn die Schrittgrenze eines Zugs erreicht wurde. */
@@ -209,15 +223,18 @@ final class AssistantService
             throw ApiException::badRequest('AI-NO-PENDING');
         }
 
-        if ($confirm === 'allow') {
+        // 'draft' ist ein Ja mit Aufschub: ausführen, aber als Entwurf zur
+        // Freigabe statt in die Live-Datei.
+        if ($confirm === 'allow' || $confirm === 'draft') {
             $name = (string) ($toolUse['name'] ?? '');
             $input = is_array($toolUse['input'] ?? null) ? $toolUse['input'] : [];
-            [$resultText, $isError] = $this->executeTool($name, $input);
+            $asDraft = $confirm === 'draft';
+            [$resultText, $isError] = $this->executeTool($name, $input, $asDraft);
             if (!$isError) {
                 $actions[] = [
                     'tool' => $name,
                     'path' => (string) ($input['path'] ?? ''),
-                    'draft' => $this->isDraftWrite($name),
+                    'draft' => $this->isDraftWrite($name, $asDraft),
                 ];
             }
         } else {
@@ -237,16 +254,18 @@ final class AssistantService
      * Werkzeugergebnis (is_error) an Claude zurückgegeben, damit es sich
      * korrigieren kann.
      *
+     * @param bool $asDraft Der Benutzer hat diesen einen Schreibvorgang als
+     *                      Entwurf zur Freigabe bestätigt (siehe resolvePending).
      * @return array{0: string, 1: bool} Ergebnistext und Fehler-Flag
      */
-    private function executeTool(string $name, array $input): array
+    private function executeTool(string $name, array $input, bool $asDraft = false): array
     {
         try {
             $text = match ($name) {
                 'list_dir' => $this->toolListDir($input),
                 'read_file' => $this->toolReadFile($input),
                 'get_file_report' => $this->toolGetFileReport($input),
-                'write_file' => $this->toolWriteFile($input),
+                'write_file' => $this->toolWriteFile($input, $asDraft),
                 'create_dir' => $this->toolCreateDir($input),
                 'rename' => $this->toolRename($input),
                 'delete' => $this->toolDelete($input),
@@ -303,16 +322,17 @@ final class AssistantService
         return $json === false ? '{}' : $json;
     }
 
-    private function toolWriteFile(array $input): string
+    private function toolWriteFile(array $input, bool $asDraft = false): string
     {
         $path = (string) ($input['path'] ?? '');
         $r = $this->resolvePath($path, false, 'write');
         $content = (string) ($input['content'] ?? '');
 
-        // Gestaffelte Veröffentlichung: statt live zu schreiben, den Vorschlag als
-        // Entwurf zur Freigabe ablegen. Die Live-Datei bleibt unangetastet, der
-        // Bearbeitungs-Vermerk (onWrite) entfällt — er greift erst bei Freigabe.
-        if ($this->draftSink !== null) {
+        // Statt live zu schreiben, den Vorschlag als Entwurf zur Freigabe
+        // ablegen — im Modus auto immer, im Modus confirm auf ausdrücklichen
+        // Wunsch. Die Live-Datei bleibt unangetastet, der Bearbeitungs-Vermerk
+        // (onWrite) entfällt: Er greift erst bei der Freigabe.
+        if ($this->isDraftWrite('write_file', $asDraft)) {
             ($this->draftSink)($r['mount'], $r['rel'], $r['abs'], $content);
 
             return 'Als Entwurf zur Freigabe vorgemerkt: ' . $path;
@@ -422,11 +442,19 @@ final class AssistantService
     private function buildPending(array $toolUse): array
     {
         $input = is_array($toolUse['input'] ?? null) ? $toolUse['input'] : [];
-        $pending = ['tool' => (string) ($toolUse['name'] ?? ''), 'input' => $input];
+        $name = (string) ($toolUse['name'] ?? '');
+        $pending = [
+            'tool' => $name,
+            'input' => $input,
+            // Darf der Benutzer statt „jetzt live" auch „als Entwurf zur
+            // Freigabe" wählen? Nur bei write_file und nur mit Entwurfsweg
+            // (Hugo-Projekt vorhanden) — der Client blendet den Knopf danach ein.
+            'canDraft' => $this->isDraftWrite($name, true),
+        ];
 
         // Für write_file den bisherigen Inhalt mitgeben, damit der Client einen
         // Diff zeigen kann (null = neue Datei).
-        if (($toolUse['name'] ?? '') === 'write_file') {
+        if ($name === 'write_file') {
             $pending['oldContent'] = null;
             try {
                 $r = $this->resolvePath((string) ($input['path'] ?? ''), true, 'read');

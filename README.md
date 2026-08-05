@@ -435,6 +435,13 @@ Grundlage der KI-Verbesserung (siehe „SEO-Check & Content-Qualität").
 
 Im `confirm`-Modus zeigt das Panel vor dem Schreiben eine Vorschau: bei einer
 bestehenden Datei einen zeilenweisen Diff, bei einer neuen Datei den Inhalt.
+Bestätigen lässt sich auf zwei Arten: **Übernehmen** schreibt sofort in die
+Datei, **Später veröffentlichen** legt denselben Vorschlag als Entwurf in die
+Freigabe-Warteschlange (die Live-Datei bleibt unverändert; dort wird er
+freigegeben oder terminiert). Der zweite Knopf erscheint nur beim Schreiben einer
+Datei und nur bei konfiguriertem Hugo-Projekt — ohne eines gibt es kein
+`draft`/`publishDate` und damit keine Warteschlange. Umbenennen, Verschieben und
+Löschen kennen keinen Entwurf und bleiben bei Übernehmen/Ablehnen.
 
 **Editor- und Dateiverwaltungs-Anbindung.** Der Assistent erhält bei jedem Zug den
 Kontext der Oberfläche: die im **Editor** geöffnete Datei (für „diese Datei")
@@ -742,11 +749,13 @@ zur Freigabe unangetastet.
 - **Was landet als Entwurf?** Schreibvorgänge im KI-Schreibmodus `auto` (der
   Cron-Verbesserer, oder ein so konfigurierter interaktiver Assistent) gehen bei
   einem konfigurierten Hugo-Projekt nicht in die Datei, sondern als Entwurf in
-  die Warteschlange — die veröffentlichte Seite bleibt unangetastet. Zusätzlich
-  legt der **Entwurf-Knopf** neben „Speichern" den aktuellen Editor-Stand
-  manuell als Entwurf ab. `confirm`/`readonly` und normales Speichern sind nicht
-  betroffen. Nur Schreib-/Anlege-Vorgänge werden gestaffelt, keine Löschungen
-  oder Umbenennungen.
+  die Warteschlange — die veröffentlichte Seite bleibt unangetastet. Im Modus
+  `confirm` entscheidet der Benutzer je Schreibvorgang: „Übernehmen" schreibt
+  live, **„Später veröffentlichen"** legt denselben Vorschlag als Entwurf ab
+  (Antwort `draft` auf die Bestätigung). Zusätzlich legt der **Entwurf-Knopf**
+  neben „Speichern" den aktuellen Editor-Stand manuell als Entwurf ab. Normales
+  Speichern ist nicht betroffen. Nur Schreib-/Anlege-Vorgänge werden gestaffelt,
+  keine Löschungen oder Umbenennungen.
 - **Freigabe.** Die Warteschlange (Werkzeugschiene) zeigt jeden Entwurf mit
   einem Zeilen-Diff gegen den Live-Stand. Der Benutzer gibt frei — **sofort** oder
   **terminiert** — oder verwirft.
@@ -873,7 +882,7 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `restore`  | POST    | `mount`, `names` (Liste)             | Aus dem Papierkorb wiederherstellen    |
 | `emptytrash`| POST   | `mount`?                             | Papierkorb endgültig leeren            |
 | `build`    | POST    | –                                    | Hugo aufrufen (Webseite erzeugen)      |
-| `assistant`| POST    | `messages`, `locale`?, `confirm`?, `openFilePath`?, `openDirPath`? | KI-Assistent: einen Zug ausführen (Werkzeug-Schleife) |
+| `assistant`| POST    | `messages`, `locale`?, `confirm`?, `openFilePath`?, `openDirPath`? | KI-Assistent: einen Zug ausführen (Werkzeug-Schleife). `confirm`: `allow` \| `draft` (als Entwurf ablegen) \| `reject` |
 | `config`   | GET     | –                                    | Aktuelle Konfigurationswerte inkl. AI-Status (ohne Geheimnisse) |
 | `reconfigure`| POST  | `authDriver`?, `sessionPath`, `logFile`, `logLevel`, `hugoBin`?, `aiApiKey`?, `aiModel`?, `aiWriteMode`? | hugocms.ini ändern (Anmeldeverfahren/Verzeichnisse/Log/Hugo/AI). Verlangt `config.manage` — ebenso `aimodels` und `activate`. `config` (lesen) und `projectconfig`/`projectreconfigure` nicht |
 | `account`  | POST    | `currentPassword`, `username`, `password`? | Anmeldedaten ändern (danach Neuanmeldung) |
