@@ -121,18 +121,55 @@ function issueLocation(issue) {
 // Dienstes (ReportExport::detail), damit auch künftige Befundtypen ihre Details
 // zeigen, ohne dass der Client nachziehen muss. Bekannte Schlüssel bekommen eine
 // lesbare Beschriftung, unbekannte den Rohnamen.
+//
+// Listenwertige Felder (`urls` bei doppelten Titeln/Descriptions, `examples` bei
+// den Sitemap-Abgleich-Befunden) sind dafür zu lang und stehen deshalb als
+// eigener Block untereinander, nicht in der Fließzeile.
 const ISSUE_STD_FIELDS = ['type', 'severity', 'title', 'fix', 'url', 'host']
+function issueFieldLabel(key) {
+  return te(`liveAnalysis.issueField.${key}`) ? t(`liveAnalysis.issueField.${key}`) : key
+}
 function issueDetails(issue) {
   return Object.entries(issue)
-    .filter(([k]) => !ISSUE_STD_FIELDS.includes(k))
+    .filter(([k, v]) => !ISSUE_STD_FIELDS.includes(k) && !Array.isArray(v))
+    .map(([k, v]) => ({ key: k, label: issueFieldLabel(k), value: String(v) }))
+}
+
+// Listenfelder eines Befunds. Der Dienst kappt sie (8 bzw. 20 Einträge) und
+// führt die Gesamtzahl in `count` mit — die Differenz wird ausgewiesen, damit
+// die Liste nicht als vollständig missverstanden wird.
+function issueLists(issue) {
+  return Object.entries(issue)
+    .filter(([k, v]) => !ISSUE_STD_FIELDS.includes(k) && Array.isArray(v) && v.length)
     .map(([k, v]) => ({
       key: k,
-      label: te(`liveAnalysis.issueField.${k}`) ? t(`liveAnalysis.issueField.${k}`) : k,
-      value: Array.isArray(v) ? v.join(', ') : String(v),
+      label: issueFieldLabel(k),
+      values: v,
+      more: typeof issue.count === 'number' && issue.count > v.length ? issue.count - v.length : 0,
     }))
 }
 
 const SEVERITIES = ['critical', 'warning', 'info']
+
+// Abgleich Sitemap ⇄ Crawl aus dem crawlability-Block, aufbereitet für eine
+// Faktenzeile. Der Dienst liefert ihn auch bei voller Deckung — dort entsteht
+// KEIN Befund, die Zeile ist dann die einzige Rückmeldung, dass geprüft wurde.
+// `checked: false` (kein Abgleich möglich, etwa bei gekappter Sitemap) und
+// `orphans: null` (Crawl unvollständig, Verwaiste nicht bewertbar) sind eigene
+// Zustände, keine Nullwerte.
+const sitemapMatch = computed(() => {
+  const sm = live.result?.crawlability?.sitemap_match
+  if (!sm || sm.checked !== true) return null
+  return {
+    inSync: sm.in_sync === true,
+    detail: t('liveAnalysis.crawl.sitemapMatchDetail', [
+      sm.crawled_pages ?? 0,
+      sm.sitemap_pages ?? 0,
+      sm.missing ?? 0,
+      sm.orphans === null || sm.orphans === undefined ? t('liveAnalysis.crawl.sitemapNa') : sm.orphans,
+    ]),
+  }
+})
 
 // Befundtypen mit Anzahl (aus summary.by_type), häufigste zuerst — treibt den
 // Typ-Filter neben dem Schweregrad-Filter.
@@ -514,6 +551,15 @@ function fmtDate(iso) {
                   <span class="la-detail-k">{{ d.label }}:</span> {{ d.value }}
                 </span>
               </div>
+              <!-- Listenfelder (betroffene Seiten, Beispiel-URLs) untereinander;
+                   der Dienst kappt sie, der Rest wird als Anzahl ausgewiesen. -->
+              <div v-for="l in issueLists(issue)" :key="l.key" class="la-issue-list">
+                <span class="la-detail-k">{{ l.label }}:</span>
+                <ul class="la-issue-urls">
+                  <li v-for="(v, j) in l.values" :key="j">{{ v }}</li>
+                  <li v-if="l.more" class="la-muted">{{ $t('liveAnalysis.issueListMore', [l.more]) }}</li>
+                </ul>
+              </div>
               <div v-if="issue.fix" class="la-issue-fix">{{ issue.fix }}</div>
             </div>
           </li>
@@ -560,11 +606,27 @@ function fmtDate(iso) {
           <div class="la-fact">
             <span class="la-fact-k">robots.txt</span><span :class="live.result.crawlability.robots_txt ? 'la-yes' : 'la-no'">{{ live.result.crawlability.robots_txt ? $t('liveAnalysis.yes') : $t('liveAnalysis.no') }}</span>
           </div>
-          <div class="la-fact">
+          <div class="la-fact la-fact-wide">
             <span class="la-fact-k">Sitemap</span><span :class="live.result.crawlability.sitemap ? 'la-yes' : 'la-no'">{{ live.result.crawlability.sitemap ? $t('liveAnalysis.yes') : $t('liveAnalysis.no') }}</span>
             <span v-if="live.result.crawlability.sitemap_urls" class="la-muted">
               · {{ $t('liveAnalysis.crawl.sitemapUrls', [live.result.crawlability.sitemap_urls]) }}
             </span>
+            <!-- Bei einem <sitemapindex> löst der Dienst die Kind-Sitemaps auf;
+                 bei Kappung ist die Zahl eine Untergrenze — das muss dranstehen. -->
+            <span v-if="live.result.crawlability.sitemap_index" class="la-muted">
+              · {{ $t('liveAnalysis.crawl.sitemapDocs', [live.result.crawlability.sitemap_docs ?? 0]) }}
+            </span>
+            <span v-if="live.result.crawlability.sitemap_truncated" class="la-no">
+              · {{ $t('liveAnalysis.crawl.sitemapTruncated') }}
+            </span>
+          </div>
+          <!-- Abgleich Sitemap ⇄ Crawl (nur wenn der Dienst ihn bewerten konnte). -->
+          <div v-if="sitemapMatch" class="la-fact la-fact-wide">
+            <span class="la-fact-k">{{ $t('liveAnalysis.crawl.sitemapMatch') }}</span>
+            <span :class="sitemapMatch.inSync ? 'la-yes' : 'la-no'">
+              {{ sitemapMatch.inSync ? $t('liveAnalysis.crawl.sitemapInSync') : $t('liveAnalysis.crawl.sitemapDiff') }}
+            </span>
+            <span class="la-muted">· {{ sitemapMatch.detail }}</span>
           </div>
           <template v-if="live.result.crawlability.page">
             <div class="la-fact la-fact-wide">
@@ -841,6 +903,9 @@ function fmtDate(iso) {
 /* Zusatzfelder eines Befunds (source, status, …) — kompakt unter dem Ort. */
 .la-issue-details { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 3px; }
 .la-issue-detail { font-size: 0.78rem; color: var(--mint-text); word-break: break-all; }
+.la-issue-list { font-size: 0.78rem; color: var(--mint-text); margin-top: 3px; }
+.la-issue-urls { list-style: none; margin: 1px 0 0; padding: 0 0 0 10px; }
+.la-issue-urls li { word-break: break-all; line-height: 1.45; }
 .la-detail-k { color: var(--mint-text-muted); }
 
 .la-typefilters { margin-top: -4px; }
