@@ -13,7 +13,7 @@
 set -euo pipefail
 
 # Pinned version — extended variant (SCSS/SASS). Change here when bumping.
-HUGO_VERSION="0.125.1"
+HUGO_VERSION="0.164.0"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HUGO_DIR="$SCRIPT_DIR/hugo"
