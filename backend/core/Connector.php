@@ -4513,9 +4513,55 @@ final class Connector
                 ],
             ],
             'license' => $this->license()->info(),
+            'hugo' => $this->hugoVersionInfo(),
             'cron' => $this->cronStatusList(),
             'tasks' => $this->pendingCronTasks(),
         ];
+    }
+
+    /**
+     * Version des hinterlegten Hugo-Binärprogramms für die Versionsangaben im
+     * Systemstatus. Ein lokaler Prozessaufruf (`hugo version`), kein Aufruf nach
+     * außen. Schlägt er fehl — kein Binärprogramm hinterlegt, Datei fehlt, `exec`
+     * auf dem Hosting gesperrt — bleibt `version` null; der Status selbst darf
+     * daran nie scheitern.
+     *
+     * @return array{configured: bool, version: ?string, extended: bool, platform: ?string}
+     */
+    private function hugoVersionInfo(): array
+    {
+        $info = [
+            'configured' => $this->hugoBin !== null,
+            'version' => null,
+            'extended' => false,
+            'platform' => null,
+        ];
+
+        $bin = $this->hugoBin;
+        if ($bin === null || !is_file($bin) || !is_executable($bin) || !function_exists('exec')) {
+            return $info;
+        }
+
+        $lines = [];
+        $exitCode = 1;
+        @exec(escapeshellarg($bin) . ' version 2>&1', $lines, $exitCode);
+        if ($exitCode !== 0) {
+            return $info;
+        }
+
+        // Ausgabeform: „hugo v0.151.0-<hash>+extended linux/amd64 BuildDate=…“.
+        // Nur die reine Versionsnummer anzeigen; Commit-Kürzel und Baudatum sind
+        // für den Überblick ohne Wert.
+        $first = trim((string) ($lines[0] ?? ''));
+        if (preg_match('/^hugo v(\d\S*)/', $first, $m) === 1) {
+            $info['version'] = (string) preg_replace('/[-+].*$/', '', $m[1]);
+            $info['extended'] = str_contains($m[1], '+extended');
+        }
+        if (preg_match('~\s([a-z0-9]+/[a-z0-9]+)\s~i', $first, $m) === 1) {
+            $info['platform'] = $m[1];
+        }
+
+        return $info;
     }
 
     /**

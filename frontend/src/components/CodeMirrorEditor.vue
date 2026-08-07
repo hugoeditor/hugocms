@@ -5,7 +5,7 @@ import { EditorView, basicSetup } from 'codemirror'
 import { EditorState, Prec } from '@codemirror/state'
 import { keymap } from '@codemirror/view'
 import { StreamLanguage, foldAll, unfoldAll } from '@codemirror/language'
-import { undo, redo, undoDepth, redoDepth, indentMore, indentLess, toggleComment } from '@codemirror/commands'
+import { undo, redo, undoDepth, redoDepth, indentMore, indentLess, insertTab, toggleComment } from '@codemirror/commands'
 import { openSearchPanel, gotoLine } from '@codemirror/search'
 import { html } from '@codemirror/lang-html'
 import { markdown } from '@codemirror/lang-markdown'
@@ -28,6 +28,26 @@ const emit = defineEmits(['update:modelValue', 'save', 'cursor', 'language', 'hi
 const { locale } = useI18n()
 const host = ref(null)
 let view = null
+
+// Tab setzt im Quelltext ein Tabulator-Zeichen an der Cursorposition; ist etwas
+// markiert, rückt es die Auswahl ein (insertTab). Umschalt+Tab rückt aus.
+// CodeMirror belegt die Taste von Haus aus nicht, der Fokus wanderte sonst zum
+// nächsten Bedienelement. Damit die Tastaturbedienung nicht in der
+// Schreibfläche gefangen bleibt, gibt Escape die Taste für den nächsten Druck
+// wieder frei: Escape, dann Tab wechselt das Bedienelement.
+let tabReleased = false
+
+const tabRelease = EditorView.domEventHandlers({
+  keydown: (event) => {
+    if (event.key === 'Escape') tabReleased = true
+    else if (event.key !== 'Tab') tabReleased = false
+    return false
+  },
+  blur: () => {
+    tabReleased = false
+    return false
+  },
+})
 
 // Deutsche Texte für die eingebauten CodeMirror-Panels (Suche, Gehe zu
 // Zeile, Diagnosen). Die Schlüssel sind von CodeMirror vorgegeben.
@@ -185,6 +205,19 @@ onMounted(() => {
       { key: 'Mod-s', preventDefault: true, run: () => { emit('save'); return true } },
     ]),
   )
+  const tabKeymap = keymap.of([
+    {
+      key: 'Tab',
+      run: (v) => !tabReleased && insertTab(v),
+      // Auch dann als behandelt melden, wenn nichts auszurücken ist — sonst
+      // verschöbe der Browser bei einer Zeile ohne Einzug den Fokus.
+      shift: (v) => {
+        if (tabReleased) return false
+        indentLess(v)
+        return true
+      },
+    },
+  ])
   const updateListener = EditorView.updateListener.of((v) => {
     if (v.docChanged) {
       emit('update:modelValue', v.state.doc.toString())
@@ -202,6 +235,8 @@ onMounted(() => {
         ...(locale.value === 'de' ? [EditorState.phrases.of(PHRASES_DE)] : []),
         basicSetup,
         saveKeymap,
+        tabKeymap,
+        tabRelease,
         updateListener,
         EditorView.lineWrapping,
         ...lang.extensions,

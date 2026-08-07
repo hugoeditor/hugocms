@@ -93,8 +93,56 @@ const MarkdownLink = Link.extend({
   },
 })
 
+// --- Tabulator in der Schreibfläche ---------------------------------------
+// Ohne eigene Behandlung reicht Tab den Fokus an das nächste Bedienelement
+// weiter. Die Taste setzt jetzt ein Tabulator-Zeichen an der Cursorposition,
+// Umschalt+Tab nimmt einen Einzug zurück. Ausnahme Listen: dort rückt die
+// Taste den Listenpunkt eine Ebene ein beziehungsweise aus.
+// Escape gibt die Taste für den nächsten Druck frei, damit die
+// Tastaturbedienung nicht in der Schreibfläche gefangen bleibt.
+let tabReleased = false
+
+// Entfernt vor dem Cursor einen Tabulator oder bis zu vier Leerzeichen. Steht
+// dort nichts dergleichen, bleibt der Text unverändert.
+function outdent(ed) {
+  const { $from, empty } = ed.state.selection
+  if (!empty) return
+  const before = $from.parent.textBetween(0, $from.parentOffset)
+  const match = before.match(/(\t| {1,4})$/)
+  if (!match) return
+  ed.view.dispatch(ed.state.tr.delete($from.pos - match[0].length, $from.pos))
+}
+
+function handleKeyDown(view, event) {
+  if (event.key === 'Escape') {
+    tabReleased = true
+    return false
+  }
+  if (event.key !== 'Tab') {
+    tabReleased = false
+    return false
+  }
+  const ed = editor.value
+  if (tabReleased || !ed) return false
+  // Ab hier gilt die Taste als behandelt (Rückgabe true), auch wenn sie nichts
+  // bewirkt — sonst verschöbe der Browser den Fokus, sobald gerade nichts
+  // ein- oder auszurücken ist (etwa Umschalt+Tab am Zeilenanfang).
+  if (ed.isActive('listItem')) {
+    if (event.shiftKey) ed.commands.liftListItem('listItem')
+    else ed.commands.sinkListItem('listItem')
+  } else if (event.shiftKey) {
+    outdent(ed)
+  } else {
+    // insertText statt insertContent: letzteres schickt die Zeichenkette durch
+    // den HTML-Parser, der den Tabulator zu einem Leerzeichen zusammenzieht.
+    ed.view.dispatch(ed.state.tr.insertText('\t'))
+  }
+  return true
+}
+
 const editor = useEditor({
   content: props.modelValue,
+  editorProps: { handleKeyDown },
   extensions: [
     StarterKit,
     // Zurückhaltend konfiguriert: keine Automatik, die aus getipptem oder
@@ -320,6 +368,11 @@ const tools = computed(() => {
   min-height: 100%;
   padding: 24px 32px 48px;
   outline: none;
+  /* Aus dem Standard-Stil von prosemirror-view (den TipTap nicht mitbringt):
+     ohne pre-wrap zöge der Browser einen mit Tab gesetzten Tabulator zu einem
+     Leerzeichen zusammen — er stünde im Markdown, wäre aber nicht zu sehen. */
+  white-space: pre-wrap;
+  word-wrap: break-word;
   font-size: 0.95rem;
   line-height: 1.6;
   color: var(--mint-text);

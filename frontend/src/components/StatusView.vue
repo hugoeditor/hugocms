@@ -53,6 +53,17 @@ const PRO_JOBS = ['improve', 'healthcheck']
 const keys = computed(() => store.data?.keys ?? {})
 const license = computed(() => store.data?.license ?? null)
 
+// Version des Hugo-Binärprogramms neben der Buildnummer. Ohne hinterlegtes
+// Binärprogramm entfällt die Angabe ganz; ist es hinterlegt, lässt sich aber
+// nicht aufrufen (Datei fehlt, `exec` gesperrt), steht dort der Hinweis, dass
+// die Version unbekannt ist — das ist selbst eine nützliche Auskunft.
+const hugoVersionText = computed(() => {
+  const h = store.data?.hugo
+  if (!h?.configured) return null
+  if (!h.version) return t('version.hugoUnknown')
+  return h.extended ? `${h.version} (extended)` : h.version
+})
+
 const CRON_ICON = {
   build: 'mdi-hammer',
   improve: 'mdi-creation',
@@ -268,6 +279,9 @@ function scoreColor(score) {
             <div class="st-about-line">
               <span class="st-about-name">{{ $t('app.title') }}</span>
               <span class="st-about-build">{{ $t('version.build') }} {{ buildNumber }}</span>
+              <span v-if="hugoVersionText" class="st-about-build">
+                {{ $t('version.hugo') }} {{ hugoVersionText }}
+              </span>
             </div>
             <div class="st-about-credit">
               <a :href="HUGOCMS_URL" target="_blank" rel="noopener noreferrer">{{ $t('app.title') }}</a>
