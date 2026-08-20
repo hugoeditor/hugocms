@@ -1074,6 +1074,7 @@ export default {
     empty: 'Keine offenen Entwürfe.',
     newPage: 'neue Seite',
     toSource: 'Zur Quelldatei',
+    preview: 'Vorschau',
     discard: 'Verwerfen',
     schedule: 'Terminieren…',
     reschedule: 'Umplanen…',

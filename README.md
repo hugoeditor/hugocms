@@ -384,9 +384,16 @@ Ausführrechte auf das Binary und Schreibrechte im Ziel.
 ### Seitenvorschau
 
 Im Editor gibt es für Dateien im Content-Ordner einen **Seitenvorschau**-Knopf
-(`mdi-eye-outline`). Er zeigt die Seite so, wie das Theme sie später darstellt —
-einschließlich des **ungespeicherten** Editor-Stands. Die Datei auf der Platte
-und der Publish-Ordner bleiben dabei unangetastet (`PreviewService`).
+(`mdi-eye-outline`) — im Quelltext-Modus in der Werkzeugleiste, im visuellen
+Modus in der Formatleiste. Er zeigt die Seite so, wie das Theme sie später
+darstellt, einschließlich des **ungespeicherten** Editor-Stands. Die Datei auf
+der Platte und der Publish-Ordner bleiben dabei unangetastet
+(`PreviewService`).
+
+Denselben Knopf trägt die **Freigabe-Warteschlange**: Dort zeigt er den
+vorgeschlagenen Stand eines Entwurfs, ohne ihn freizugeben. Das gilt auch für
+Entwürfe **neuer** Seiten, die es im Projekt noch gar nicht gibt — der Entwurf
+bringt Pfad und Inhalt selbst mit, und das Overlay genügt Hugo als Quelle.
 
 Hugo kann keine einzelne Seite bauen; es liest immer das ganze Projekt. Zwei
 Werkzeuge machen die Vorschau trotzdem leichtgewichtig:
@@ -949,7 +956,7 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `restore`  | POST    | `mount`, `names` (Liste)             | Aus dem Papierkorb wiederherstellen    |
 | `emptytrash`| POST   | `mount`?                             | Papierkorb endgültig leeren            |
 | `build`    | POST    | –                                    | Hugo aufrufen (Webseite erzeugen)      |
-| `previewbuild`| POST | `id`, `content`?, `draftKey`?        | Vorschau EINER Content-Seite bauen; `content` = ungespeicherter Editor-Stand, `draftKey` = Freigabe-Entwurf. Antwort: Einmal-Token |
+| `previewbuild`| POST | `id` \| `draftKey`, `content`?       | Vorschau EINER Content-Seite bauen. Entweder `id` (Datei; `content` = ungespeicherter Editor-Stand) oder `draftKey` (Freigabe-Entwurf, liefert Pfad und Inhalt selbst — auch für Seiten, die es live noch nicht gibt). Antwort: Einmal-Token |
 | `preview`  | GET     | `token`                              | Gebaute Vorschau als HTML ausliefern (nur angemeldet, Token gilt einmal, `X-Robots-Tag: noindex`) |
 | `assistant`| POST    | `messages`, `locale`?, `confirm`?, `publishDate`?, `openFilePath`?, `openDirPath`? | KI-Assistent: einen Zug ausführen (Werkzeug-Schleife). `confirm`: `allow` \| `draft` (als Entwurf ablegen) \| `reject`; `publishDate` terminiert den Entwurf |
 | `config`   | GET     | –                                    | Aktuelle Konfigurationswerte inkl. AI-Status (ohne Geheimnisse) |

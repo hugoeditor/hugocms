@@ -1350,29 +1350,33 @@ final class Connector
             throw new ApiException('ECONFIG', 500, 'HUGO-BIN-NOT-CONFIGURED');
         }
 
-        $r = $this->resolver->resolve($this->requireParam($request, 'id'), true);
-        if (!$this->isHugoContentPath($r['abs'])) {
-            throw ApiException::badRequest('PREVIEW-NOT-CONTENT');
-        }
-        // Lesen genügt: Geschrieben wird nichts, auch nicht mit Editor-Text.
-        if (!$r['mount']->allows('read')) {
-            throw ApiException::denied('OPERATION-NOT-ALLOWED', ['read']);
+        // Zwei Wege: ein Freigabe-Entwurf (dann liefert er Pfad UND Inhalt —
+        // die Datei muss dafür live noch nicht existieren) oder eine Datei aus
+        // dem Dateimanager, wahlweise mit ungespeichertem Editor-Text.
+        $draftKey = (string) ($request['draftKey'] ?? '');
+        if ($draftKey !== '') {
+            $draft = $this->reviewStore()->get($draftKey);
+            $mount = $this->resolver->get((string) ($draft['mount'] ?? ''));
+            $abs = $mount->root() . '/' . (string) ($draft['rel'] ?? '');
+            $content = (string) ($draft['proposedContent'] ?? '');
+        } else {
+            $r = $this->resolver->resolve($this->requireParam($request, 'id'), true);
+            // Lesen genügt: Geschrieben wird nichts, auch nicht mit Editor-Text.
+            if (!$r['mount']->allows('read')) {
+                throw ApiException::denied('OPERATION-NOT-ALLOWED', ['read']);
+            }
+            $abs = $r['abs'];
+            $content = is_string($request['content'] ?? null)
+                ? (string) $request['content']
+                : (string) $this->files->readText($r['mount'], $abs)['content'];
         }
 
-        // Vorrang: ausdrücklich mitgegebener Text, dann ein Freigabe-Entwurf,
-        // sonst der gespeicherte Dateiinhalt.
-        $override = null;
-        if (is_string($request['content'] ?? null)) {
-            $override = (string) $request['content'];
-        } elseif (is_string($request['draftKey'] ?? null) && $request['draftKey'] !== '') {
-            $draft = $this->reviewStore()->get((string) $request['draftKey']);
-            $override = (string) ($draft['proposedContent'] ?? '');
-        }
+        $rel = $this->relativeToHugoContent($abs);
 
         // Drei kurze Hugo-Läufe (Konfiguration, Adressliste, Bau).
         @set_time_limit(120);
 
-        $token = $this->previewService()->build($r['abs'], $override);
+        $token = $this->previewService()->build($rel, $content);
 
         return [
             'token' => $token,
@@ -1405,6 +1409,28 @@ final class Connector
         header('Content-Length: ' . (string) strlen($html));
         echo $html;
         exit;
+    }
+
+    /**
+     * Pfad einer Content-Datei relativ zum Hugo-Content-Ordner
+     * ("blog/beitrag.md"). Bewusst ohne realpath auf die Datei selbst: Ein
+     * Freigabe-Entwurf kann eine Seite betreffen, die es live noch nicht gibt.
+     */
+    private function relativeToHugoContent(string $abs): string
+    {
+        $content = $this->hugoContentDirReal();
+        $normalized = preg_replace('#/+#', '/', $abs) ?? $abs;
+        if ($content === null || !str_starts_with($normalized, $content . '/')) {
+            throw ApiException::badRequest('PREVIEW-NOT-CONTENT');
+        }
+        $rel = substr($normalized, strlen($content) + 1);
+        // Ausbrüche über .. kann es hinter MountResolver nicht geben; die
+        // Prüfung kostet nichts und hält den Pfad auch für den Entwurfsweg dicht.
+        if ($rel === '' || str_contains($rel, '../')) {
+            throw ApiException::badRequest('PREVIEW-NOT-CONTENT');
+        }
+
+        return $rel;
     }
 
     /** Vorschau-Dienst für die konfigurierte Webseite. */

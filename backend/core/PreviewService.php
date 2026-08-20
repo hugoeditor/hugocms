@@ -58,19 +58,19 @@ final class PreviewService
     /**
      * Baut die Vorschau und gibt das Token zurück, unter dem sie abrufbar ist.
      *
-     * @param string  $contentAbs      absoluter Pfad der Content-Datei im Projekt
-     * @param ?string $overrideContent Text, der statt des Dateiinhalts gelten
-     *                                 soll (ungespeicherter Editor-Stand oder
-     *                                 ein Freigabe-Entwurf); null = Datei wie
-     *                                 gespeichert
+     * @param string $relInContent Pfad der Seite relativ zum content-Ordner
+     *                             (z. B. "blog/beitrag.md"). Die Datei MUSS
+     *                             dort nicht existieren — ein Freigabe-Entwurf
+     *                             für eine noch nicht angelegte Seite lässt
+     *                             sich so ebenfalls zeigen.
+     * @param string $content      Text, der gezeigt werden soll
      */
-    public function build(string $contentAbs, ?string $overrideContent = null): string
+    public function build(string $relInContent, string $content): string
     {
         $this->purgeExpired();
 
         $config = $this->hugoConfig();
-        $relInContent = $this->relativeToContentDir($contentAbs, $config);
-        $urlPath = $this->urlPathFor($contentAbs);
+        $contentDir = trim((string) ($config['contentDir'] ?? 'content'), '/');
 
         $token = bin2hex(random_bytes(16));
         $work = $this->storageDir . '/' . $token . '.work';
@@ -83,18 +83,29 @@ final class PreviewService
             // seiten) kommt weiterhin aus dem echten Projekt.
             $overlayFile = $work . '/content/' . $relInContent;
             $this->makeDir(dirname($overlayFile));
-            $text = $overrideContent ?? (string) @file_get_contents($contentAbs);
-            if (@file_put_contents($overlayFile, $text) === false) {
+            if (@file_put_contents($overlayFile, $content) === false) {
                 throw new ApiException('EIO', 500, 'PREVIEW-STORAGE-FAILED');
             }
 
+            // Erst die Mounts, dann die Adressliste: Sie läuft BEREITS mit dem
+            // Overlay, damit auch eine Seite gefunden wird, die es im Projekt
+            // noch gar nicht gibt.
             $configFile = $work . '/preview.json';
-            if (@file_put_contents(
-                $configFile,
-                json_encode($this->previewConfig($config, $work . '/content', $urlPath), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
-            ) === false) {
-                throw new ApiException('EIO', 500, 'PREVIEW-STORAGE-FAILED');
-            }
+            $base = $this->previewConfig($config, $work . '/content');
+            $this->writeJson($configFile, $base);
+
+            // Hugo benennt die Datei je nach Herkunft unterschiedlich: aus dem
+            // Projekt heraus relativ ("content/blog/x.md"), aus einem Mount
+            // außerhalb absolut. Da das Overlay gewinnt, gilt in aller Regel
+            // die zweite Form — geprüft werden beide.
+            $urlPath = $this->urlPathFor($configFile, [
+                $work . '/content/' . $relInContent,
+                $contentDir . '/' . $relInContent,
+            ]);
+
+            // Zweiter Durchgang mit Segment: jetzt steht fest, was zu rendern ist.
+            $base['segments'] = ['preview' => ['includes' => [['path' => $this->segmentPattern($urlPath)]]]];
+            $this->writeJson($configFile, $base);
 
             $this->runHugo($configFile, $out);
 
@@ -149,39 +160,23 @@ final class PreviewService
     }
 
     /**
-     * Pfad der Datei relativ zum content-Ordner (z. B. "blog/beitrag.md").
-     *
-     * @param array<string, mixed> $config
-     */
-    private function relativeToContentDir(string $contentAbs, array $config): string
-    {
-        $contentDir = trim((string) ($config['contentDir'] ?? 'content'), '/');
-        $root = realpath($this->source . '/' . $contentDir);
-        $file = realpath($contentAbs);
-        if ($root === false || $file === false || !str_starts_with($file, $root . '/')) {
-            throw ApiException::badRequest('PREVIEW-NOT-CONTENT');
-        }
-
-        return substr($file, strlen($root) + 1);
-    }
-
-    /**
-     * Fragt Hugo nach der Adresse, unter der die Datei erscheint, und gibt den
+     * Fragt Hugo nach der Adresse, unter der die Seite erscheint, und gibt den
      * Pfad-Anteil zurück ("/blog/beitrag/"). `hugo list all` liefert je Seite
-     * `path,…,permalink`; die Zuordnung stammt damit von Hugo selbst.
+     * `path,…,permalink`; die Zuordnung stammt damit von Hugo selbst — slug,
+     * url im Front Matter und die permalinks-Konfiguration gehen ein.
+     *
+     * Der Lauf nutzt bereits die Vorschau-Konfiguration und sieht damit auch
+     * eine Seite, die nur im Overlay existiert.
+     *
+     * @param list<string> $paths Schreibweisen, unter denen die Seite in Hugos
+     *                            Liste stehen kann (siehe Aufrufstelle)
      */
-    private function urlPathFor(string $contentAbs): string
+    private function urlPathFor(string $configFile, array $paths): string
     {
-        $sourceReal = realpath($this->source);
-        $fileReal = realpath($contentAbs);
-        if ($sourceReal === false || $fileReal === false || !str_starts_with($fileReal, $sourceReal . '/')) {
-            throw ApiException::badRequest('PREVIEW-NOT-CONTENT');
-        }
-        $relToProject = substr($fileReal, strlen($sourceReal) + 1);
-
-        // Entwürfe und künftige Termine müssen mitgelistet werden, sonst fehlt
-        // genau die Seite, die man sehen will.
-        $cmd = escapeshellarg($this->hugoBin) . ' list all -s ' . escapeshellarg($this->source) . ' 2>/dev/null';
+        $cmd = escapeshellarg($this->hugoBin)
+            . ' list all -s ' . escapeshellarg($this->source)
+            . ' --config ' . escapeshellarg($this->configFileName() . ',' . $configFile)
+            . ' 2>/dev/null';
         $raw = @shell_exec($cmd);
         if (!is_string($raw) || $raw === '') {
             throw new ApiException('EHUGO', 500, 'PREVIEW-BUILD-FAILED', ['hugo list all']);
@@ -199,7 +194,7 @@ final class PreviewService
             }
             $pathCol = $header['path'] ?? 0;
             $linkCol = $header['permalink'] ?? (count($cols) - 1);
-            if (($cols[$pathCol] ?? '') !== $relToProject) {
+            if (!in_array((string) ($cols[$pathCol] ?? ''), $paths, true)) {
                 continue;
             }
             $path = parse_url((string) ($cols[$linkCol] ?? ''), PHP_URL_PATH);
@@ -217,7 +212,8 @@ final class PreviewService
 
     /**
      * Vorschau-Konfiguration: Overlay-Mount voran, static-Mount der Webseite
-     * weglassen, und das Segment auf die eine Adresse begrenzen.
+     * weglassen. Das Segment kommt erst im zweiten Durchgang dazu, sobald die
+     * Adresse feststeht.
      *
      * Sobald Mounts gesetzt werden, gelten NUR noch die aufgeführten — die
      * bestehenden werden deshalb übernommen, nicht neu erfunden.
@@ -225,7 +221,7 @@ final class PreviewService
      * @param array<string, mixed> $config
      * @return array<string, mixed>
      */
-    private function previewConfig(array $config, string $overlayDir, string $urlPath): array
+    private function previewConfig(array $config, string $overlayDir): array
     {
         $mounts = [['source' => $overlayDir, 'target' => 'content']];
         $existing = $config['module']['mounts'] ?? null;
@@ -243,14 +239,24 @@ final class PreviewService
             $mounts[] = $mount;
         }
 
-        $trimmed = rtrim($urlPath, '/');
-        // Startseite: kein "/**", das würde die ganze Webseite einschließen.
-        $pattern = $trimmed === '' ? '/' : '{' . $trimmed . ',' . $trimmed . '/**}';
+        return ['module' => ['mounts' => $mounts]];
+    }
 
-        return [
-            'module' => ['mounts' => $mounts],
-            'segments' => ['preview' => ['includes' => [['path' => $pattern]]]],
-        ];
+    /** Segment-Muster für genau diese Adresse (Seite plus ihre Unterseiten). */
+    private function segmentPattern(string $urlPath): string
+    {
+        $trimmed = rtrim($urlPath, '/');
+
+        // Startseite: kein "/**", das würde die ganze Webseite einschließen.
+        return $trimmed === '' ? '/' : '{' . $trimmed . ',' . $trimmed . '/**}';
+    }
+
+    /** @param array<string, mixed> $data */
+    private function writeJson(string $path, array $data): void
+    {
+        if (@file_put_contents($path, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)) === false) {
+            throw new ApiException('EIO', 500, 'PREVIEW-STORAGE-FAILED');
+        }
     }
 
     /** Führt den Vorschau-Bau aus; wirft bei Misserfolg mit Hugos Ausgabe. */

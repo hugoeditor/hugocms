@@ -1071,6 +1071,7 @@ export default {
     empty: 'No pending drafts.',
     newPage: 'new page',
     toSource: 'Go to source file',
+    preview: 'Preview',
     discard: 'Discard',
     schedule: 'Schedule…',
     reschedule: 'Reschedule…',

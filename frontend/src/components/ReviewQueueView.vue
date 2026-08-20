@@ -15,6 +15,7 @@ import { useReviewStore } from '../stores/review'
 import { useFilesStore } from '../stores/files'
 import { useAuthStore } from '../stores/auth'
 import { errorText } from '../i18n/apiMessage'
+import { api, apiUrl } from '../api/client'
 import { lineDiff } from '../util/lineDiff'
 import { useConfirm } from '../util/confirm'
 
@@ -149,6 +150,36 @@ async function toSource() {
     await files.openFileById(id)
   } catch {
     // Neue Seite: existiert live noch nicht — kein Sprungziel.
+  }
+}
+
+// Vorschau des Entwurfs: zeigt den vorgeschlagenen Stand so, wie das Theme ihn
+// darstellen würde — ohne ihn freizugeben. Auch für neue Seiten, die es live
+// noch gar nicht gibt: Der Server überlagert das Projekt nur für diesen einen
+// Hugo-Lauf (siehe PreviewService).
+const previewing = ref(false)
+const canPreview = computed(() => auth.buildable && !!store.current?.key)
+
+async function previewDraft() {
+  const key = store.current?.key
+  if (!key || previewing.value) return
+  previewing.value = true
+  // Fenster vor dem Bau öffnen, sonst blockiert der Browser es als
+  // ungefragtes Aufklappen.
+  const win = window.open('', '_blank')
+  try {
+    const { token } = await api.post('previewbuild', { draftKey: key })
+    const url = apiUrl('preview', { token })
+    if (win) {
+      win.location.href = url
+    } else {
+      window.open(url, '_blank')
+    }
+  } catch (e) {
+    win?.close()
+    store.error = e // roh ablegen — die Ansicht übersetzt ihn
+  } finally {
+    previewing.value = false
   }
 }
 </script>
@@ -310,6 +341,30 @@ async function toSource() {
           @click="toSource"
         >
           {{ $t('review.toSource') }}
+        </v-btn>
+      </template>
+
+      <!-- Vorschau des vorgeschlagenen Stands. Anders als „Zur Quelle" auch bei
+           neuen Seiten sinnvoll: Der Entwurf trägt seinen Inhalt selbst. -->
+      <template v-if="canPreview">
+        <v-btn
+          v-if="smAndDown"
+          icon="mdi-eye-outline"
+          :title="$t('review.preview')"
+          variant="text"
+          :disabled="store.busy || previewing"
+          :loading="previewing"
+          @click="previewDraft"
+        />
+        <v-btn
+          v-else
+          prepend-icon="mdi-eye-outline"
+          variant="text"
+          :disabled="store.busy || previewing"
+          :loading="previewing"
+          @click="previewDraft"
+        >
+          {{ $t('review.preview') }}
         </v-btn>
       </template>
 
