@@ -1719,8 +1719,11 @@ final class Connector
             : false;
         $draftPublishAt = ($publishTs !== false && $publishTs > time()) ? gmdate('c', $publishTs) : null;
 
-        // Der Werkzeug-Loop kann mehrere API-Aufrufe nacheinander machen.
-        @set_time_limit(180);
+        // Der Werkzeug-Loop kann mehrere API-Aufrufe nacheinander machen, und
+        // ein einzelner Schreibvorgang läuft bei langen Seiten mehrere Minuten
+        // (der AnthropicClient streamt und bricht erst bei echtem Stillstand
+        // ab). Großzügig bemessen; die harte Grenze setzt ohnehin der Webserver.
+        @set_time_limit(600);
 
         return $this->assistantService($writeModeOverride, $modelOverride, 'ai', null, $draftPublishAt)->run(
             $messages,
@@ -3127,7 +3130,7 @@ final class Connector
     private function improveInstruction(string $path, string $locale): string
     {
         if (str_starts_with(strtolower($locale), 'en')) {
-            return "Improve the existing content file `{$path}`. Steps: (1) call get_file_report for this path and act on BOTH parts — the content-quality verdict AND the SEO findings; (2) read the file; (3) fix the reported issues and write the improved version in a SINGLE write_file call. If the report contains a non-empty `userInstruction` field, it is an explicit instruction from the site owner and OVERRIDES conflicting findings or suggestions — follow it exactly. Adopt the file's existing front-matter format.\n\n"
+            return "Improve the existing content file `{$path}`. Steps: (1) call get_file_report for this path and act on BOTH parts — the content-quality verdict AND the SEO findings; (2) read the file; (3) fix the reported issues — prefer replace_in_file per section, and use a SINGLE write_file call only when you rework the page as a whole. If the report contains a non-empty `userInstruction` field, it is an explicit instruction from the site owner and OVERRIDES conflicting findings or suggestions — follow it exactly. Adopt the file's existing front-matter format.\n\n"
                 . "The SEO findings are NOT optional — work through `audit.issues` completely:\n"
                 . "- Fix EVERY finding marked `fixable: true`. These are fixable from this content file alone.\n"
                 . "- `audit.rules` explains what each rule requires — consult it instead of guessing from the rule ID.\n"
@@ -3137,7 +3140,7 @@ final class Connector
                 . "If a SEO finding depends on which front-matter field the theme reads (e.g. og:image), you MAY READ the relevant layout/partial to find the correct field — but WRITE only this content file. Keep the front matter valid and preserve the author's meaning.";
         }
 
-        return "Verbessere die bestehende Content-Datei `{$path}`. Vorgehen: (1) rufe get_file_report für diesen Pfad auf und beachte BEIDE Teile — das Qualitätsurteil UND die SEO-Funde; (2) lies die Datei; (3) behebe die gemeldeten Probleme und schreibe die verbesserte Fassung in EINEM write_file-Aufruf. Enthält der Bericht ein nicht leeres Feld `userInstruction`, ist das eine ausdrückliche Anweisung des Betreibers und hat VORRANG vor widersprechenden Funden oder Vorschlägen — befolge sie genau. Übernimm das vorhandene Front-Matter-Format der Datei.\n\n"
+        return "Verbessere die bestehende Content-Datei `{$path}`. Vorgehen: (1) rufe get_file_report für diesen Pfad auf und beachte BEIDE Teile — das Qualitätsurteil UND die SEO-Funde; (2) lies die Datei; (3) behebe die gemeldeten Probleme — bevorzugt je Abschnitt mit replace_in_file; EINEN write_file-Aufruf nur, wenn du die Seite als Ganzes überarbeitest. Enthält der Bericht ein nicht leeres Feld `userInstruction`, ist das eine ausdrückliche Anweisung des Betreibers und hat VORRANG vor widersprechenden Funden oder Vorschlägen — befolge sie genau. Übernimm das vorhandene Front-Matter-Format der Datei.\n\n"
             . "Die SEO-Funde sind NICHT optional — arbeite `audit.issues` vollständig ab:\n"
             . "- Behebe JEDEN Fund mit `fixable: true`. Diese Funde lassen sich allein über diese Content-Datei beheben.\n"
             . "- `audit.rules` erklärt, was die jeweilige Regel verlangt — sieh dort nach, statt aus der Regel-ID zu raten.\n"
@@ -3305,8 +3308,8 @@ final class Connector
 
         $lines[] = '';
         $lines[] = $en
-            ? "Steps: (1) read `{$path}`; (2) fix this ONE issue and write the file back in a SINGLE write_file call. Keep the existing front-matter format valid, preserve the author's meaning, and leave everything unrelated to this rule untouched. If the cause is not in this file but in the theme, do NOT write — explain what has to change in which layout instead."
-            : "Vorgehen: (1) lies `{$path}`; (2) behebe DIESEN einen Fund und schreibe die Datei in EINEM write_file-Aufruf zurück. Halte das vorhandene Front-Matter-Format gültig, bewahre die Aussage des Autors und lass alles unangetastet, was mit dieser Regel nichts zu tun hat. Liegt die Ursache nicht in dieser Datei, sondern im Theme, schreibe NICHT — erkläre stattdessen, was in welchem Layout zu ändern ist.";
+            ? "Steps: (1) read `{$path}`; (2) fix this ONE issue with a replace_in_file call on the affected section — use write_file only if the change really spans the whole file. Keep the existing front-matter format valid, preserve the author's meaning, and leave everything unrelated to this rule untouched. If the cause is not in this file but in the theme, do NOT write — explain what has to change in which layout instead."
+            : "Vorgehen: (1) lies `{$path}`; (2) behebe DIESEN einen Fund mit einem replace_in_file-Aufruf auf den betroffenen Abschnitt — write_file nur, wenn die Änderung wirklich die ganze Datei betrifft. Halte das vorhandene Front-Matter-Format gültig, bewahre die Aussage des Autors und lass alles unangetastet, was mit dieser Regel nichts zu tun hat. Liegt die Ursache nicht in dieser Datei, sondern im Theme, schreibe NICHT — erkläre stattdessen, was in welchem Layout zu ändern ist.";
 
         return implode("\n", $lines);
     }

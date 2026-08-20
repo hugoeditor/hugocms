@@ -794,6 +794,7 @@ export default {
     oldContent: 'Bisheriger Inhalt',
     diffNewFile: 'Neue Datei: {0}',
     diffOverwrite: 'Überschreibt: {0}',
+    diffReplace: 'Ändert einen Abschnitt in: {0}',
     mode: {
       readonly: 'Nur lesen',
       confirm: 'Mit Bestätigung',
@@ -803,6 +804,7 @@ export default {
       read_file: 'liest {0}',
       list_dir: 'sieht {0} durch',
       write_file: 'schreibt {0}',
+      replace_in_file: 'ändert einen Abschnitt in {0}',
       create_dir: 'legt Ordner {0} an',
       rename: 'benennt {0} um',
       delete: 'löscht {0}',

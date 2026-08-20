@@ -27,7 +27,10 @@ final class AssistantService
     private const MAX_TOKENS = 16000;
 
     /** Werkzeuge, die schreiben (im Modus confirm bestätigungspflichtig). */
-    private const WRITE_TOOLS = ['write_file', 'create_dir', 'rename', 'delete', 'move'];
+    private const WRITE_TOOLS = ['write_file', 'replace_in_file', 'create_dir', 'rename', 'delete', 'move'];
+
+    /** Werkzeuge, die den Inhalt EINER Datei setzen (Entwurfsweg, Diff-Vorschau). */
+    private const CONTENT_TOOLS = ['write_file', 'replace_in_file'];
 
     /** Projektweite Anweisungsdatei (im Wurzelverzeichnis eines Mounts). */
     private const INSTRUCTION_FILE = '.hugocms-assistant.md';
@@ -190,9 +193,10 @@ final class AssistantService
 
     /**
      * true, wenn dieser Schreibvorgang als Freigabe-Entwurf statt live landet.
-     * Der Client frischt daraufhin die Warteschlange auf. Nur write_file geht
-     * über den Entwurfs-Weg — für Umbenennen, Verschieben, Löschen und Anlegen
-     * eines Verzeichnisses gibt es keinen Entwurfsbegriff.
+     * Der Client frischt daraufhin die Warteschlange auf. Nur die inhaltlichen
+     * Werkzeuge (write_file, replace_in_file) gehen über den Entwurfs-Weg — für
+     * Umbenennen, Verschieben, Löschen und Anlegen eines Verzeichnisses gibt es
+     * keinen Entwurfsbegriff.
      *
      * Zwei Wege führen dorthin: der Modus `auto` (gestaffelte Veröffentlichung,
      * jeder Schreibvorgang wird Entwurf) und die ausdrückliche Antwort `draft`
@@ -200,7 +204,7 @@ final class AssistantService
      */
     private function isDraftWrite(string $tool, bool $asDraft = false): bool
     {
-        return $tool === 'write_file'
+        return in_array($tool, self::CONTENT_TOOLS, true)
             && $this->draftSink !== null
             && ($asDraft || $this->writeMode === 'auto');
     }
@@ -267,6 +271,7 @@ final class AssistantService
                 'read_file' => $this->toolReadFile($input),
                 'get_file_report' => $this->toolGetFileReport($input),
                 'write_file' => $this->toolWriteFile($input, $asDraft),
+                'replace_in_file' => $this->toolReplaceInFile($input, $asDraft),
                 'create_dir' => $this->toolCreateDir($input),
                 'rename' => $this->toolRename($input),
                 'delete' => $this->toolDelete($input),
@@ -327,13 +332,61 @@ final class AssistantService
     {
         $path = (string) ($input['path'] ?? '');
         $r = $this->resolvePath($path, false, 'write');
-        $content = (string) ($input['content'] ?? '');
 
+        return $this->storeContent('write_file', $path, $r, (string) ($input['content'] ?? ''), $asDraft);
+    }
+
+    /**
+     * Ersetzt genau EIN Vorkommen von `old_text` durch `new_text`. Gedacht für
+     * Änderungen an bestehenden Dateien: Das Modell gibt nur den betroffenen
+     * Abschnitt aus statt der ganzen Datei. Bei großen Seiten ist das der
+     * Unterschied zwischen ein paar hundert und mehreren tausend Tokens Ausgabe
+     * — und damit zwischen einem zügigen Zug und einer Zeitüberschreitung.
+     *
+     * Nicht eindeutige Treffer werden abgelehnt statt geraten: Ein zweimal
+     * vorkommender Abschnitt würde sonst an der falschen Stelle geändert. Das
+     * Modell bekommt den Fehler zurück und kann mit mehr Kontext erneut
+     * ansetzen.
+     */
+    private function toolReplaceInFile(array $input, bool $asDraft = false): string
+    {
+        $path = (string) ($input['path'] ?? '');
+        $oldText = (string) ($input['old_text'] ?? '');
+        $newText = (string) ($input['new_text'] ?? '');
+        if ($oldText === '') {
+            throw ApiException::badRequest('AI-REPLACE-EMPTY', [$path]);
+        }
+
+        // Datei muss existieren; Schreibrecht wie bei write_file.
+        $r = $this->resolvePath($path, true, 'write');
+        $content = (string) $this->files->readText($r['mount'], $r['abs'])['content'];
+
+        $count = substr_count($content, $oldText);
+        if ($count === 0) {
+            throw ApiException::badRequest('AI-REPLACE-NOT-FOUND', [$path]);
+        }
+        if ($count > 1) {
+            throw ApiException::badRequest('AI-REPLACE-NOT-UNIQUE', [$count, $path]);
+        }
+
+        $updated = str_replace($oldText, $newText, $content);
+
+        return $this->storeContent('replace_in_file', $path, $r, $updated, $asDraft);
+    }
+
+    /**
+     * Gemeinsamer Speicherweg der inhaltlichen Werkzeuge: entweder als Entwurf
+     * zur Freigabe oder live in die Datei.
+     *
+     * @param array{mount: Mount, abs: string, rel: string} $r aufgelöster Pfad
+     */
+    private function storeContent(string $tool, string $path, array $r, string $content, bool $asDraft): string
+    {
         // Statt live zu schreiben, den Vorschlag als Entwurf zur Freigabe
         // ablegen — im Modus auto immer, im Modus confirm auf ausdrücklichen
         // Wunsch. Die Live-Datei bleibt unangetastet, der Bearbeitungs-Vermerk
         // (onWrite) entfällt: Er greift erst bei der Freigabe.
-        if ($this->isDraftWrite('write_file', $asDraft)) {
+        if ($this->isDraftWrite($tool, $asDraft)) {
             ($this->draftSink)($r['mount'], $r['rel'], $r['abs'], $content);
 
             return 'Als Entwurf zur Freigabe vorgemerkt: ' . $path;
@@ -453,15 +506,30 @@ final class AssistantService
             'canDraft' => $this->isDraftWrite($name, true),
         ];
 
-        // Für write_file den bisherigen Inhalt mitgeben, damit der Client einen
-        // Diff zeigen kann (null = neue Datei).
-        if ($name === 'write_file') {
+        // Für die inhaltlichen Werkzeuge den bisherigen Inhalt mitgeben, damit
+        // der Client einen Diff zeigen kann (null = neue Datei).
+        if (in_array($name, self::CONTENT_TOOLS, true)) {
             $pending['oldContent'] = null;
             try {
                 $r = $this->resolvePath((string) ($input['path'] ?? ''), true, 'read');
                 $pending['oldContent'] = (string) $this->files->readText($r['mount'], $r['abs'])['content'];
             } catch (Throwable) {
                 // existiert noch nicht — bleibt null
+            }
+        }
+
+        // Bei replace_in_file steht der künftige Inhalt nicht in der Werkzeug-
+        // eingabe (die trägt nur den ausgetauschten Abschnitt). Ihn hier
+        // berechnen, damit der Client denselben Diff zeigt wie beim
+        // Überschreiben. Bleibt null, wenn der Abschnitt nicht eindeutig
+        // auffindbar ist — dann scheitert die Ausführung ohnehin, und der
+        // Client zeigt statt des Diffs die Kurzfassung.
+        if ($name === 'replace_in_file') {
+            $pending['newContent'] = null;
+            $oldText = (string) ($input['old_text'] ?? '');
+            $current = $pending['oldContent'];
+            if (is_string($current) && $oldText !== '' && substr_count($current, $oldText) === 1) {
+                $pending['newContent'] = str_replace($oldText, (string) ($input['new_text'] ?? ''), $current);
             }
         }
 
@@ -542,8 +610,21 @@ final class AssistantService
 
         $tools[] = [
             'name' => 'write_file',
-            'description' => 'Create a file or overwrite an existing one with "content". "path" is "<mount>/<relative path>". Read the file first before overwriting it.',
+            'description' => 'Create a file or overwrite an existing one with "content". "path" is "<mount>/<relative path>". Read the file first before overwriting it. For editing part of an existing file, prefer replace_in_file — rewriting a whole page costs far more output and can hit the request time limit.',
             'input_schema' => ['type' => 'object', 'properties' => ['path' => ['type' => 'string'], 'content' => ['type' => 'string']], 'required' => ['path', 'content']],
+        ];
+        $tools[] = [
+            'name' => 'replace_in_file',
+            'description' => 'Replace one section of an existing file: "old_text" must appear EXACTLY ONCE in the file and is replaced by "new_text" (empty "new_text" deletes the section). "path" is "<mount>/<relative path>". This is the preferred way to edit an existing file — output only the section you change, not the whole file. Read the file first and copy "old_text" verbatim, including indentation. Errors: AI-REPLACE-NOT-FOUND (no match — check whitespace and copy again from the file you read), AI-REPLACE-NOT-UNIQUE (several matches — include more surrounding lines to make it unique). Repeat the call per section to change several places.',
+            'input_schema' => [
+                'type' => 'object',
+                'properties' => [
+                    'path' => ['type' => 'string'],
+                    'old_text' => ['type' => 'string'],
+                    'new_text' => ['type' => 'string'],
+                ],
+                'required' => ['path', 'old_text', 'new_text'],
+            ],
         ];
         $tools[] = [
             'name' => 'create_dir',
@@ -648,7 +729,7 @@ final class AssistantService
         Configured mounts:
         {$mounts}
 
-        {$writeNote} Write each file exactly once: decide on its complete, final content first and write it in a SINGLE write_file call. Never create a file and then immediately overwrite it again in the same task — in confirmation mode that would force the user to confirm the same file twice.{$openNote}
+        {$writeNote} To change part of an existing file, use replace_in_file on the section you are changing — never rewrite a whole page to edit a few passages. Reserve write_file for a new file or a genuine rewrite of the whole file; then decide on its complete, final content first and write it in a SINGLE call. Never create a file and then immediately overwrite it again in the same task — in confirmation mode that would force the user to confirm the same file twice. When several passages of one file need changing, group them into as few replace_in_file calls as the content allows: each write is confirmed separately, and every turn has a step limit.{$openNote}
 
         Answer in the user's language (locale: {$locale}). Be concise and practical — prefer concrete edits and exact Hugo syntax over long explanations.
         SYS;

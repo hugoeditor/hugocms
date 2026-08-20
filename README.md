@@ -415,9 +415,20 @@ Werkzeug-Schleife aus und gibt den fortgeschriebenen Verlauf zurück. Die
 Claude-API wird über **cURL** angesprochen (`AnthropicClient`) — kein SDK, kein
 Composer. Modell-Standard: `claude-opus-5`.
 
+Die Anfrage an die API läuft im **Streaming-Modus**, die Antwort an den Client
+bleibt aber eine gewöhnliche JSON-Antwort (kein SSE, kein Zustand): Ohne
+Streaming schickt die API bis zum Ende der Generierung kein Byte, und ein
+längerer Schreibvorgang lief in die Zeitüberschreitung. Abgebrochen wird deshalb
+nicht nach fester Gesamtdauer, sondern erst bei echtem Stillstand
+(`CURLOPT_LOW_SPEED_*`); `assembleStream()` setzt die Teile wieder zur
+vollständigen Antwort zusammen.
+
 **Werkzeuge und Sicherheit.** Der Assistent greift ausschließlich über
 `FileService`/`MountResolver` zu (`list_dir`, `read_file`, `write_file`,
-`create_dir`, `rename`, `delete` → Papierkorb, `move`). Damit gelten für ihn
+`replace_in_file`, `create_dir`, `rename`, `delete` → Papierkorb, `move`).
+`replace_in_file` tauscht genau ein — eindeutig auffindbares — Textstück aus und
+ist der bevorzugte Weg für Änderungen an bestehenden Dateien: Das Modell gibt
+nur den betroffenen Abschnitt aus statt der ganzen Seite. Damit gelten für ihn
 **dieselben Grenzen** wie für die Oberfläche: Einsperrung pro Mount,
 `permissions`/`readonly` und erlaubte Endungen. Der API-Schlüssel verlässt das
 Backend nie (wie der Passwort-Hash); im Formular heißt „Feld leer = unverändert".

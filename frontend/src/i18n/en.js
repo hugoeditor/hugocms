@@ -793,6 +793,7 @@ export default {
     oldContent: 'Current content',
     diffNewFile: 'New file: {0}',
     diffOverwrite: 'Overwrites: {0}',
+    diffReplace: 'Changes a section in: {0}',
     mode: {
       readonly: 'Read-only',
       confirm: 'With confirmation',
@@ -802,6 +803,7 @@ export default {
       read_file: 'reads {0}',
       list_dir: 'browses {0}',
       write_file: 'writes {0}',
+      replace_in_file: 'changes a section in {0}',
       create_dir: 'creates directory {0}',
       rename: 'renames {0}',
       delete: 'deletes {0}',

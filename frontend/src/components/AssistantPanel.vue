@@ -124,13 +124,24 @@ function isUsageLimitError(err) {
   return ['AI-USAGE-LIMIT', 'AI-USAGE-LIMIT-UNKNOWN'].includes(err?.key)
 }
 
-// Inline-Diff für eine ausstehende write_file-Aktion auf einer BESTEHENDEN
-// Datei. null bei neuer Datei oder zu großem Inhalt → Panel zeigt dann die
-// einfache Inhalts-Vorschau.
+// Künftiger Inhalt einer ausstehenden Schreibaktion: bei write_file steht er in
+// der Werkzeugeingabe, bei replace_in_file rechnet ihn der Server aus (die
+// Eingabe trägt dort nur den ausgetauschten Abschnitt).
+const pendingContent = computed(() => {
+  const p = assistant.pending
+  if (!p) return null
+  if (p.tool === 'write_file') return p.input?.content ?? ''
+  if (p.tool === 'replace_in_file') return p.newContent ?? null
+  return null
+})
+
+// Inline-Diff für eine ausstehende Schreibaktion auf einer BESTEHENDEN Datei.
+// null bei neuer Datei oder zu großem Inhalt → Panel zeigt dann die einfache
+// Inhalts-Vorschau.
 const diff = computed(() => {
   const p = assistant.pending
-  if (!p || p.tool !== 'write_file' || p.oldContent == null) return null
-  return lineDiff(p.oldContent, p.input?.content ?? '')
+  if (!p || p.oldContent == null || pendingContent.value == null) return null
+  return lineDiff(p.oldContent, pendingContent.value)
 })
 
 // Hat der letzte Zug einen Entwurf zur Freigabe erzeugt (Modus auto oder die
@@ -386,9 +397,14 @@ watch(
             {{ $t('assistant.pendingTitle') }}
           </v-card-title>
           <v-card-text class="py-2">
-            <template v-if="assistant.pending.tool === 'write_file'">
+            <template v-if="assistant.pending.tool === 'write_file' || assistant.pending.tool === 'replace_in_file'">
               <div class="text-body-2 mb-1">
-                {{ assistant.pending.oldContent === null ? $t('assistant.diffNewFile', [assistant.pending.input.path]) : $t('assistant.diffOverwrite', [assistant.pending.input.path]) }}
+                <template v-if="assistant.pending.tool === 'replace_in_file'">
+                  {{ $t('assistant.diffReplace', [assistant.pending.input.path]) }}
+                </template>
+                <template v-else>
+                  {{ assistant.pending.oldContent === null ? $t('assistant.diffNewFile', [assistant.pending.input.path]) : $t('assistant.diffOverwrite', [assistant.pending.input.path]) }}
+                </template>
               </div>
               <!-- Überschreiben: zeilenweiser Diff (alt rot, neu grün, Kontext grau). -->
               <div v-if="diff" class="assistant-diff">
@@ -399,8 +415,9 @@ watch(
                   :class="`assistant-diff__line--${l.t}`"
                 ><span class="assistant-diff__sign">{{ l.t === 'add' ? '+' : l.t === 'del' ? '-' : ' ' }}</span>{{ l.text }}</div>
               </div>
-              <!-- Neue Datei oder zu großer Diff: einfache Inhalts-Vorschau. -->
-              <pre v-else class="assistant-preview">{{ assistant.pending.input.content }}</pre>
+              <!-- Neue Datei, zu großer Diff oder ein Abschnitt, der sich nicht
+                   eindeutig zuordnen ließ: einfache Inhalts-Vorschau. -->
+              <pre v-else class="assistant-preview">{{ pendingContent ?? assistant.pending.input.new_text ?? assistant.pending.input.content }}</pre>
             </template>
             <div v-else-if="assistant.pending.tool === 'create_dir'" class="text-body-2">
               {{ $t('assistant.pendingDir', [assistant.pending.input.path]) }}
