@@ -74,6 +74,11 @@ final class PreviewService
 
         $token = bin2hex(random_bytes(16));
         $work = $this->storageDir . '/' . $token . '.work';
+        $this->makeDir($work);
+        // Pfad bereinigen (der Aufrufer reicht ihn mit /../ herein). Hugo führt
+        // gemountete Dateien mit ihrem AUFGELÖSTEN Pfad in der Adressliste — ein
+        // unbereinigter Vergleichswert fände die Seite dort nie wieder.
+        $work = realpath($work) ?: $work;
         $out = $work . '/out';
         $this->makeDir($out);
 
