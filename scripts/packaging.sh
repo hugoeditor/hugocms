@@ -4,8 +4,10 @@
 #
 # Erzeugt/erneuert die Struktur direkt im Repo-Wurzelverzeichnis:
 #   hugocms-release/
-#   ├── app/                 (gebautes Frontend = Client; inkl. .htaccess für das
-#   │                         Caching der App-Hülle; URL-Pfad via Installationsroutine)
+#   ├── app/                 (gebautes Frontend = Client; inkl. .htaccess für
+#   │                         Caching und CSP der App — eine im Wurzel-
+#   │                         verzeichnis, eine in assets/; URL-Pfad via
+#   │                         Installationsroutine)
 #   ├── bin/
 #   │     ├── get-hugo.sh          (lädt das Hugo-Binary nach bin/hugo/)
 #   │     ├── install.sh           (richtet eine Webseite ein: Kopie + mounts/<hash>.ini)
@@ -109,30 +111,81 @@ rm -rf "$PKG/edit" "$PKG/hugocms-app" "$PKG/app"
 mkdir -p "$PKG/app"
 cp -r "$PROJECT_DIR/frontend/dist/." "$PKG/app/"
 
-# 2b. Cache-Steuerung fürs App-Verzeichnis (Apache). Die App-Hülle wird unter
+# 2b. Header-Steuerung fürs App-Verzeichnis (Apache). Die App-Hülle wird unter
 #     /edit/ ausgeliefert; install.sh kopiert app/ dorthin (cp -a, inkl. Dot-
-#     dateien). index.html MUSS bei jedem Laden revalidiert werden, damit ein
-#     neuer Build sofort erscheint; die content-gehashten Assets tragen je Build
-#     einen neuen Dateinamen und dürfen daher unbegrenzt zwischengespeichert
-#     werden. Nginx wertet diese Datei NICHT aus — dort die location-Blöcke aus
-#     beispiel-konfigurationen/nginx.conf verwenden.
-echo "2b. Cache-.htaccess -> $PKG/app/.htaccess"
+#     dateien). Zwei Dateien, weil zwei Regeln gelten: im Wurzelverzeichnis der
+#     App die CSP und der no-cache für index.html, in assets/ das dauerhafte
+#     Zwischenspeichern der gehashten Dateien. Nginx wertet beide NICHT aus —
+#     dort die location-Blöcke aus beispiel-konfigurationen/nginx.conf
+#     verwenden.
+echo "2b. Header-.htaccess -> $PKG/app/.htaccess + $PKG/app/assets/.htaccess"
 cat > "$PKG/app/.htaccess" <<'HT'
-# App-Hülle (URL /edit/) — Caching-Steuerung.
-#
-# index.html: bei jedem Laden revalidieren (der Browser prüft per ETag), damit
-# ein neuer Build sofort erscheint. Content-gehashte Assets tragen je Build
-# einen neuen Dateinamen und werden daher unbegrenzt zwischengespeichert.
+# App-Hülle (URL /edit/) — Caching und Content-Security-Policy.
 #
 # Nginx wertet diese Datei NICHT aus — dort die location-Blöcke aus
 # beispiel-konfigurationen/nginx.conf verwenden.
+#
+# ----------------------------------------------------------------------------
+# Warum jede Regel hier mit "unset" beginnt
+# ----------------------------------------------------------------------------
+# Apache führt zwei Header-Tabellen: "Header set" schreibt in die eine (nur bei
+# erfolgreichen Antworten), "Header always set" in die andere (bei allen).
+# Beide werden bei einer 200er-Antwort gesendet. Setzt die Webseite denselben
+# Header in der anderen Tabelle als diese Datei, bekommt der Browser ZWEI
+# Header — bei der CSP gilt dann deren Schnittmenge, die Ausnahme für die App
+# bliebe wirkungslos.
+#
+# Deshalb werden beide Tabellen zuerst geleert und der Wert dann neu gesetzt.
+# Das Ergebnis hängt damit NICHT davon ab, wie die Webseite ihre eigenen Header
+# setzt: Diese Datei ist für alle Installationen identisch und muss nie
+# angepasst werden, wenn sich die Konfiguration der Webseite ändert.
 <IfModule mod_headers.c>
+    # index.html bei jedem Laden revalidieren (der Browser prüft per ETag),
+    # damit ein neuer Build sofort erscheint. Ohne diese Regel erbt die Datei
+    # die Cache-Vorgabe der Webseite — steht dort ein langes max-age, erreicht
+    # ein Update den Browser praktisch nie. Winzige Datei, vernachlässigbare
+    # Kosten. Die gehashten Dateien regelt assets/.htaccess.
     <Files "index.html">
-        Header set Cache-Control "no-cache"
+        Header unset Cache-Control
+        Header always unset Cache-Control
+        Header always set Cache-Control "no-cache"
     </Files>
-    <FilesMatch "\.(js|css|woff2?|ttf|eot|svg|png|jpe?g|gif|webp|avif|ico)$">
-        Header set Cache-Control "public, max-age=0, must-revalidate"
-    </FilesMatch>
+
+    # Die App ist ein eigenständiges Programm, keine Seite der Webseite — ihre
+    # CSP steht deshalb hier und nicht in der Webseiten-Konfiguration.
+    # Zu den beiden Lockerungen:
+    #   'unsafe-inline' bei style-src — Vuetify und eigene :style-Bindungen
+    #   setzen laufend style-Attribute.
+    #   'unsafe-eval' bei script-src — der Nachrichten-Compiler von vue-i18n
+    #   erzeugt die Übersetzungsfunktionen zur Laufzeit über Function().
+    # Setzt die Webseite "require-trusted-types-for 'script'", wird das hier
+    # mit ersetzt — die App könnte sonst nicht laufen.
+    Header unset Content-Security-Policy
+    Header always unset Content-Security-Policy
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+</IfModule>
+HT
+
+mkdir -p "$PKG/app/assets"
+cat > "$PKG/app/assets/.htaccess" <<'HT'
+# Gebaute Dateien der App (URL /edit/assets/) — dauerhaft zwischenspeichern.
+#
+# Jede Datei hier trägt den Hash ihres Inhalts im Namen (index-Cp6X38FY.js);
+# ändert sich der Inhalt, ändert sich der Name, und die stets frisch geladene
+# index.html verweist auf den neuen. Ein Update kann also nicht hängen bleiben,
+# und der Browser spart sich bei jedem Start die Rückfragen.
+#
+# Bewusst dieses Verzeichnis statt einer Regel über Dateiendungen im
+# übergeordneten Verzeichnis: Nur was hier liegt, ist gehasht. Eine Datei aus
+# frontend/public/ landet ungehasht im Wurzelverzeichnis der App und würde von
+# einer Endungsregel ein Jahr lang festgehalten.
+#
+# Zum "unset" siehe die Erläuterung in ../.htaccess. Die dortigen CSP-Regeln
+# gelten hier mit; nur Cache-Control wird überschrieben.
+<IfModule mod_headers.c>
+    Header unset Cache-Control
+    Header always unset Cache-Control
+    Header always set Cache-Control "public, max-age=31536000, immutable"
 </IfModule>
 HT
 
