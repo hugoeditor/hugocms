@@ -12,8 +12,8 @@ under `backend/cli/` and can be started **there only** — not through the brows
 - **Build website** (`cron-build.php`) — publishes any scheduled releases that
   have come due and builds the site with Hugo. It builds only when a release was
   actually due; otherwise the run is skipped (use `--force` to always build). No
-  Pro license required. Optionally (project settings, Pro) the run then creates a
-  Git commit — see below.
+  Pro license required. Optionally (project settings, Pro) the run then saves a
+  version state — see below.
 - **Improve content** (`cron-improve.php`) — lets the AI revise reviewed pages.
   Pro feature.
 - **Health check** (`cron-healthcheck.php`) — checks the published website and
@@ -79,23 +79,23 @@ If the **build** is paused, scheduled releases do not go live — the review que
 points this out. If the **improver** is paused, the “to improve” list is not
 processed.
 
-## Automatic commit during the build (Pro)
+## Automatic version state during the build (Pro)
 
-If the source directory is a Git repository, the cron build can create commits
-automatically. Enable it in the **project settings** under “Commit
-automatically”; one toggle, two messages (each pre-filled with a sensible
-suggestion, and the date is appended):
+If the source directory is under Git versioning, the cron build can save version
+states automatically. Enable it in the **project settings** under “Save version
+state automatically”; one toggle, two descriptions (each pre-filled with a
+sensible suggestion, and the date is appended):
 
-- **Before the build**, the cron secures pending, still-uncommitted changes in
-  the source directory with the first message — but only if any exist. This
+- **Before the build**, the cron secures pending, not yet versioned changes in
+  the source directory with the first description — but only if any exist. This
   check runs on every cron build, even without a due release.
-- **After publishing** due releases, the second commit follows with the
-  publication message.
+- **After publishing** due releases, the second version state follows with the
+  publication description.
 
-The split keeps the publication commit limited to the published files, so stray
-direct edits do not slip in. As with a manual commit, it includes all pending
-changes in the source directory. Requires a valid Pro license; if a commit
-fails, the build does not abort — it is only logged.
+The split keeps the publication state limited to the published files, so stray
+direct edits do not slip in. As when saving by hand, it includes all pending
+changes in the source directory. Requires a valid Pro license; if saving fails,
+the build does not abort — it is only logged.
 
 ## The special part: automatic improvement
 

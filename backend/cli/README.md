@@ -77,9 +77,9 @@ Hugo läuft bewusst **ohne** `--buildFuture` und `--buildDrafts`: Seiten mit
 künftigem `publishDate` oder `draft: true` bleiben unveröffentlicht. Minify,
 Zielordner und `--cleanDestinationDir` stammen aus der `[hugo]`-Konfiguration.
 
-**Automatischer Commit (optional, Pro).** Ist in den Projekteinstellungen der
-Auto-Commit aktiviert und das Quellverzeichnis ein Git-Repository, legt der Lauf
-zwei Commits an (`git add -A`, wie der manuelle Commit — also alle offenen
+**Automatischer Versionsstand (optional, Pro).** Ist in den Projekteinstellungen
+„Versionsstand automatisch sichern" aktiviert und das Quellverzeichnis ein
+Git-Repository, legt der Lauf zwei Commits an (`git add -A`, wie von Hand — alle offenen
 Änderungen): **vor** dem Build werden offene, noch unversionierte Änderungen
 gesichert (`commit_message_pending`, nur wenn welche vorliegen — die Prüfung
 läuft bei jedem Lauf), **nach** dem Einspielen fälliger Freigaben folgt der

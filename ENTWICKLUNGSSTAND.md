@@ -82,7 +82,8 @@ jeweils getestete Fassung liegt fertig gebaut im Repo
 - **Content-Qualität**: KI-Urteil je Inhaltsdatei (Punktzahl, Befunde,
   Vorschläge), Gesamt-Bericht aus Qualitätsurteil und SEO-Funden, direkte
   KI-Verbesserung der Datei, Arbeitsliste „Zu verbessern".
-- **Git-Versionierung**: Status, Verlauf, Diff, Commit, Push, Zurücksetzen.
+- **Git-Versionierung**: Status, Verlauf, Diff, Versionsstand sichern,
+  Änderungen hochladen, Zurücksetzen.
 - **Mehrbenutzer mit Rollen** (`driver = multiuser`): mehrere Konten mit den
   Rollen `admin` und `editor`, je Konto eine INI-Datei, Zuordnung zu Webseiten
   über den Host. Benutzerverwaltung in der Oberfläche (anlegen, Rolle und

@@ -28,15 +28,15 @@ final class AnthropicClient
      * claude-opus-4-5, nicht claude-opus-4-5-20251101) und braucht Pflege,
      * sobald eine Generation nachrückt.
      *
-     * claude-fable-5 steht bewusst hier: doppelter Preis gegenüber Opus 4.8 und
-     * abweichendes API-Verhalten (u. a. der Abbruchgrund „refusal", den der
-     * AssistantService nicht behandelt).
+     * claude-fable-5 ist bewusst NICHT mehr ausgefiltert — es steht als
+     * stärkstes Modell zur Wahl. Zu beachten: doppelter Preis gegenüber Opus 5
+     * und der zusätzliche Abbruchgrund „refusal", bei dem der AssistantService
+     * eine leere Antwort zurückgibt.
      */
     private const HIDDEN_MODELS = [
         'claude-opus-4-5',
         'claude-opus-4-1',
         'claude-sonnet-4-5',
-        'claude-fable-5',
     ];
 
     public function __construct(

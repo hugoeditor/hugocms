@@ -83,9 +83,9 @@ final class Connector
      */
     private array $ai = [
         'apiKey' => null,
-        'model' => 'claude-opus-4-8',
-        'modelCron' => 'claude-opus-4-8',
-        'modelAudit' => 'claude-opus-4-8',
+        'model' => 'claude-opus-5',
+        'modelCron' => 'claude-opus-5',
+        'modelAudit' => 'claude-opus-5',
         'writeMode' => 'confirm',
         'forceThinking' => false,
         'forceThinkingCron' => false,
@@ -3640,7 +3640,7 @@ final class Connector
         $aiKeyNew = self::cleanConfigValue($request['aiApiKey'] ?? '', 'aiApiKey', false);
         $existingAi = Config::raw($this->configPath)['ai'] ?? [];
         $apiKey = $aiKeyNew !== '' ? $aiKeyNew : trim((string) ($existingAi['api_key'] ?? ''));
-        $model = $aiModel !== '' ? $aiModel : (trim((string) ($existingAi['model'] ?? '')) ?: 'claude-opus-4-8');
+        $model = $aiModel !== '' ? $aiModel : (trim((string) ($existingAi['model'] ?? '')) ?: 'claude-opus-5');
 
         // Cron-/Audit-Modell nur schreiben, wenn ausdrücklich gewählt; leer
         // bedeutet „wie Assistenten-Modell" — dann bleibt der Schlüssel weg und

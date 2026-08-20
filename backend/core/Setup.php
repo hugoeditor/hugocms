@@ -66,7 +66,7 @@ final class Setup
                 'logLevel'    => self::DEFAULT_LOG_LEVEL,
                 'logLevels'   => self::LOG_LEVELS,
                 'hugoBin'     => self::DEFAULT_HUGO_BIN,
-                'aiModel'     => 'claude-opus-4-8',
+                'aiModel'     => 'claude-opus-5',
                 'aiModelCron' => '',
                 'aiModelAudit' => '',
                 'aiWriteMode' => 'confirm',
@@ -126,7 +126,7 @@ final class Setup
             // bedeutet „wie Assistenten-Modell" (Fallback in Config::aiSection).
             $ai = [
                 'api_key' => $aiApiKey,
-                'model' => $aiModel !== '' ? $aiModel : 'claude-opus-4-8',
+                'model' => $aiModel !== '' ? $aiModel : 'claude-opus-5',
             ];
             if ($aiModelCron !== '') {
                 $ai['model_cron'] = $aiModelCron;

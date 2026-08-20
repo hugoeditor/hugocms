@@ -30,7 +30,7 @@ const hugoClean = ref(false)
 // KI-Assistent. Der Schlüssel wird nie geladen (Geheimnis); leeres Feld lässt
 // ihn unverändert. aiConfigured zeigt nur an, ob bereits einer gesetzt ist.
 const aiApiKey = ref('')
-const aiModel = ref('claude-opus-4-8')
+const aiModel = ref('claude-opus-5')
 // Cron-Verbesserer und Content-Qualität: leerer Wert = „wie Assistenten-Modell“.
 const aiModelCron = ref('')
 const aiModelAudit = ref('')
@@ -181,7 +181,7 @@ watch(model, async (open) => {
     hugoBin.value = cfg.hugoBin ?? ''
     hugoClean.value = !!cfg.hugoClean
     aiApiKey.value = ''
-    aiModel.value = cfg.aiModel || 'claude-opus-4-8'
+    aiModel.value = cfg.aiModel || 'claude-opus-5'
     aiModelCron.value = cfg.aiModelCron || ''
     aiModelAudit.value = cfg.aiModelAudit || ''
     aiWriteMode.value = cfg.aiWriteMode || 'confirm'

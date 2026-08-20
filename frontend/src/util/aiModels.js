@@ -7,8 +7,10 @@
 // In der hugocms.ini lässt sich zusätzlich jede andere Modell-ID von Hand
 // eintragen (das Panel zeigt sie dann als weitere Option).
 export const AI_MODELS = [
-  'claude-opus-4-8', // leistungsfähigstes Modell, Standard des Assistenten
-  'claude-opus-4-7', // Vorgängergeneration, weiterhin verfügbar
+  'claude-opus-5', // Standard des Assistenten
+  'claude-fable-5', // stärkstes Modell, doppelter Preis — für schwierige Fälle
+  'claude-opus-4-8', // Vorgängergeneration, weiterhin verfügbar
+  'claude-opus-4-7', // ältere Generation, weiterhin verfügbar
   'claude-sonnet-5', // ausgewogen: nahe an Opus, günstiger
   'claude-haiku-4-5', // schnell und günstig für einfache Aufgaben
 ]

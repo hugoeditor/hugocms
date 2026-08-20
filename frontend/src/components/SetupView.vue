@@ -23,7 +23,7 @@ const hugoBin = ref(defaults.hugoBin ?? '../bin/hugo/hugo')
 
 // KI-Assistent (optional). Ohne API-Schlüssel bleibt er deaktiviert.
 const aiApiKey = ref('')
-const aiModel = ref(defaults.aiModel ?? 'claude-opus-4-8')
+const aiModel = ref(defaults.aiModel ?? 'claude-opus-5')
 // Cron-Verbesserer und Content-Qualität: leerer Wert = „wie Assistenten-Modell“.
 const aiModelCron = ref(defaults.aiModelCron ?? '')
 const aiModelAudit = ref(defaults.aiModelAudit ?? '')

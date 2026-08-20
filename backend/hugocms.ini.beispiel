@@ -116,7 +116,7 @@ bin = ../bin/hugo/hugo
 ; Lässt sich auch über das Einrichtungs-/Konfigurationsformular setzen.
 ;   api_key     Anthropic API-Schlüssel (Geheimnis; Datei mit 0640 schützen).
 ;   model       Claude-Modell des interaktiven Assistenten. Standard:
-;               claude-opus-4-8. Dient zugleich als Rückfall für die beiden
+;               claude-opus-5. Dient zugleich als Rückfall für die beiden
 ;               folgenden Modelle.
 ;   model_cron  Modell des CLI-/Cron-Verbesserers (cron-improve.php). Optional;
 ;               ohne Angabe wie `model`.
@@ -133,8 +133,8 @@ bin = ../bin/hugo/hugo
 ;   write_mode  readonly = nur lesen | confirm = vor dem Schreiben bestätigen
 ;               | auto = Schreibaktionen direkt ausführen. Standard: confirm.
 ;api_key = "sk-ant-..."
-;model = claude-opus-4-8
-;models = claude-opus-4-8,claude-sonnet-5,claude-haiku-4-5
+;model = claude-opus-5
+;models = claude-opus-5,claude-fable-5,claude-opus-4-8,claude-sonnet-5,claude-haiku-4-5
 ;model_cron = claude-sonnet-5
 ;model_audit = claude-haiku-4-5
 ;write_mode = confirm

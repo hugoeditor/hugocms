@@ -37,7 +37,7 @@ offensichtlich ist — die ausführliche Funktionsübersicht steht in der README
   zurückgegeben; in Formularen heißt „Feld leer = unverändert".
 - **KI-Assistent**: `AssistantService` (Tool-Loop, 3 Schreibmodi
   readonly/confirm/auto), `AnthropicClient` (cURL). Modell-Default
-  `claude-opus-4-8`. Tools sind dünne Hüllen um `FileService`.
+  `claude-opus-5`. Tools sind dünne Hüllen um `FileService`.
 
 ## Verifikation
 

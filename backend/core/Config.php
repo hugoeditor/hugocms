@@ -329,7 +329,7 @@ final class Config
      * Drei Aufgaben können getrennte Modelle nutzen: der interaktive Assistent
      * (`model`), der Cron-Verbesserer (`model_cron`) und die
      * Content-Qualitätsprüfung (`model_audit`). `model_cron`/`model_audit`
-     * fallen bei leerem Wert auf `model` zurück, `model` auf claude-opus-4-8 —
+     * fallen bei leerem Wert auf `model` zurück, `model` auf claude-opus-5 —
      * so laufen bestehende Installationen mit nur `model` unverändert weiter.
      *
      * `models` (kommagetrennt) überschreibt die Auswahlliste der Oberfläche;
@@ -351,7 +351,7 @@ final class Config
     {
         $section = is_array($section) ? $section : [];
         $apiKey = trim((string) ($section['api_key'] ?? ''));
-        $model = trim((string) ($section['model'] ?? '')) ?: 'claude-opus-4-8';
+        $model = trim((string) ($section['model'] ?? '')) ?: 'claude-opus-5';
         $modelCron = trim((string) ($section['model_cron'] ?? '')) ?: $model;
         $modelAudit = trim((string) ($section['model_audit'] ?? '')) ?: $model;
         $writeMode = strtolower(trim((string) ($section['write_mode'] ?? 'confirm')));

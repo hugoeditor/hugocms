@@ -13,8 +13,8 @@ starten — nicht über den Browser.
 - **Webseite bauen** (`cron-build.php`) — veröffentlicht fällige terminierte
   Freigaben und baut die Webseite mit Hugo. Gebaut wird nur, wenn tatsächlich
   eine Freigabe fällig war; sonst wird der Lauf übersprungen (mit `--force` immer
-  bauen). Keine Pro-Lizenz nötig. Optional (Projekteinstellungen, Pro) legt der
-  Lauf danach einen Git-Commit an — siehe unten.
+  bauen). Keine Pro-Lizenz nötig. Optional (Projekteinstellungen, Pro) sichert
+  der Lauf danach einen Versionsstand — siehe unten.
 - **Inhalte verbessern** (`cron-improve.php`) — lässt die KI geprüfte Seiten
   überarbeiten. Pro-Funktion.
 - **Gesundheitscheck** (`cron-healthcheck.php`) — prüft die veröffentlichte
@@ -84,24 +84,26 @@ Ist der **Build** pausiert, gehen terminierte Freigaben nicht live — die
 Freigabe-Warteschlange weist darauf hin. Ist der **Verbesserer** pausiert, wird
 die Liste „zu verbessern" nicht abgearbeitet.
 
-## Automatischer Commit beim Build (Pro)
+## Automatischer Versionsstand beim Build (Pro)
 
-Ist das Quellverzeichnis ein Git-Repository, kann der Cron-Build automatisch
-Commits anlegen. Das schaltet man in den **Projekteinstellungen** unter
-„Automatisch committen" ein; ein Schalter, zwei Nachrichten (jeweils mit einem
-sinnvollen Vorschlag als Vorgabe, an die das Datum angehängt wird):
+Steht das Quellverzeichnis unter Git-Versionierung, kann der Cron-Build
+automatisch Versionsstände sichern. Das schaltet man in den
+**Projekteinstellungen** unter „Versionsstand automatisch sichern" ein; ein
+Schalter, zwei Beschreibungen (jeweils mit einem sinnvollen Vorschlag als
+Vorgabe, an die das Datum angehängt wird):
 
 - **Vor dem Build** sichert der Cron offene, noch unversionierte Änderungen im
-  Quellverzeichnis mit der ersten Nachricht — aber nur, wenn welche vorliegen.
-  Diese Prüfung läuft bei jedem Cron-Build-Lauf, auch ohne fällige Freigabe.
-- **Nach der Veröffentlichung** fälliger Freigaben folgt der zweite Commit mit
-  der Nachricht für die Veröffentlichung.
+  Quellverzeichnis mit der ersten Beschreibung — aber nur, wenn welche
+  vorliegen. Diese Prüfung läuft bei jedem Cron-Build-Lauf, auch ohne fällige
+  Freigabe.
+- **Nach der Veröffentlichung** fälliger Freigaben folgt der zweite
+  Versionsstand mit der Beschreibung für die Veröffentlichung.
 
-Die Trennung sorgt dafür, dass der Veröffentlichungs-Commit nur die publizierten
-Dateien enthält und verstreute Direktbearbeitungen nicht mit hineinrutschen.
-Übernommen werden — wie beim Commit von Hand — alle offenen Änderungen im
-Quellverzeichnis. Setzt eine gültige Pro-Lizenz voraus; scheitert ein Commit,
-bricht der Build nicht ab, sondern vermerkt es nur im Protokoll.
+Die Trennung sorgt dafür, dass der Versionsstand der Veröffentlichung nur die
+publizierten Dateien enthält und verstreute Direktbearbeitungen nicht mit
+hineinrutschen. Übernommen werden — wie beim Sichern von Hand — alle offenen
+Änderungen im Quellverzeichnis. Setzt eine gültige Pro-Lizenz voraus; scheitert
+das Sichern, bricht der Build nicht ab, sondern vermerkt es nur im Protokoll.
 
 ## Die Besonderheit: automatische Verbesserung
 

@@ -163,7 +163,8 @@ final class AssistantService
 
     /**
      * Kann das Modell adaptives Thinking (thinking.type=adaptive)? Das gibt es
-     * erst ab der 4.6-Generation (Opus 4.6/4.7/4.8, Sonnet 5/4.6, Fable/Mythos 5);
+     * erst ab der 4.6-Generation (Opus 5 und 4.6/4.7/4.8, Sonnet 5/4.6,
+     * Fable/Mythos 5);
      * ältere Modelle und die Haiku-Reihe lehnen den Parameter mit einem 400 ab.
      * Konservativ per Positivliste — unbekannte Modelle senden kein thinking.
      * Die globale Einstellung [ai] force_thinking übergeht die Liste und erzwingt
@@ -179,7 +180,7 @@ final class AssistantService
         if (str_contains($m, 'haiku')) {
             return false;
         }
-        foreach (['opus-4-6', 'opus-4-7', 'opus-4-8', 'sonnet-5', 'sonnet-4-6', 'fable-5', 'mythos-5'] as $family) {
+        foreach (['opus-5', 'opus-4-6', 'opus-4-7', 'opus-4-8', 'sonnet-5', 'sonnet-4-6', 'fable-5', 'mythos-5'] as $family) {
             if (str_contains($m, $family)) {
                 return true;
             }

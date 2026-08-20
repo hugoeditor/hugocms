@@ -153,7 +153,7 @@ bin = ../bin/hugo/hugo
 [ai]
 ; KI-Assistent (Claude), optional. Ohne api_key ist der Assistent aus.
 api_key    = "sk-ant-..."     ; Anthropic-Schlüssel (Geheimnis; Datei mit 0640 schützen)
-model      = claude-opus-4-8  ; Claude-Modell (Standard: claude-opus-4-8)
+model      = claude-opus-5    ; Claude-Modell (Standard: claude-opus-5)
 write_mode = confirm          ; readonly | confirm | auto (Standard: confirm)
 ```
 
@@ -413,7 +413,7 @@ ein: Der Client hält den Gesprächsverlauf (Anthropic-Nachrichtenformat) und
 schickt ihn bei jedem Zug mit; das Backend (`AssistantService`) führt die
 Werkzeug-Schleife aus und gibt den fortgeschriebenen Verlauf zurück. Die
 Claude-API wird über **cURL** angesprochen (`AnthropicClient`) — kein SDK, kein
-Composer. Modell-Standard: `claude-opus-4-8`.
+Composer. Modell-Standard: `claude-opus-5`.
 
 **Werkzeuge und Sicherheit.** Der Assistent greift ausschließlich über
 `FileService`/`MountResolver` zu (`list_dir`, `read_file`, `write_file`,
@@ -482,15 +482,22 @@ KI-Verbesserung brauchen zusätzlich einen **KI-Schlüssel** (`[ai] api_key`).
 
 ### Git-Versionierung
 
-Status (Branch, geänderte Dateien), Commit-Verlauf, Diff eines Commits, Commit,
-Push und Zurücksetzen des Arbeitsbaums. Ist eine Webseite freigeschaltet,
-erscheint in der Titelleiste ein **Repository-Knopf** (`mdi-source-branch`), der
-den Git-Dialog öffnet. Git arbeitet im **Hugo-Projektverzeichnis** der Webseite
-— dort liegt das Repository.
+Status (Branch, geänderte Dateien), Verlauf der Versionsstände, Diff eines
+Versionsstands, Sichern eines Versionsstands, Hochladen der Änderungen (Push)
+und Zurücksetzen des Arbeitsbaums. Ist eine Webseite freigeschaltet, erscheint in der Titelleiste ein
+**Versionierungs-Knopf** (`mdi-source-branch`), der den Git-Dialog öffnet. Git
+arbeitet im **Hugo-Projektverzeichnis** der Webseite — dort liegt die
+Versionierung.
+
+In der Oberfläche heißt die Funktion durchgängig **Versionierung**, ein
+einzelner Commit **Versionsstand** und der Push **Änderungen hochladen**; im
+Code und in der API bleiben die Git-Begriffe (`gitcommit`, `gitpush`, `sha`)
+erhalten.
 
 Voraussetzungen: `git` ist auf dem Server installiert, das Projektverzeichnis
-ist ein Git-Repository, und für `push` sind die Zugangsdaten der Gegenstelle in
-der Serverumgebung eingerichtet (SSH-Schlüssel bzw. Credential-Helper).
+steht unter Git-Versionierung, und für `push` sind die Zugangsdaten der
+Gegenstelle in der Serverumgebung eingerichtet (SSH-Schlüssel bzw.
+Credential-Helper).
 
 ### Mehrbenutzer (`driver = multiuser`)
 
@@ -580,7 +587,7 @@ verläuft entlang SCHREIBEN, nicht LESEN:
 |---|---|---|
 | `config` | ja | reines Lesen; die Antwort führt keine Geheimnisse, Schlüssel und Passwörter erscheinen nur als `…Configured`-Flag |
 | `reconfigure`, `aimodels`, `activate` | nein | verändern die Installation bzw. die Lizenz (`requireConfigAdmin()`) |
-| `projectconfig`, `projectreconfigure` | ja | Einstellungen EINER Webseite (SEO-Ausschlüsse, Verbesserer, Cron-Pausen, Auto-Commit, Analyse-Adressen) — redaktionelle Arbeit |
+| `projectconfig`, `projectreconfigure` | ja | Einstellungen EINER Webseite (SEO-Ausschlüsse, Verbesserer, Cron-Pausen, automatischer Versionsstand, Analyse-Adressen) — redaktionelle Arbeit |
 | `users…` | nein | Kontenverwaltung (`users.manage`) |
 
 Entsprechend melden `reconfigurable` und `projectConfigurable` nur, ob es
@@ -622,7 +629,7 @@ zugehörige private Schlüssel ist nicht Teil dieses Repos.
    (host-eigene `mounts/<hash>.ini` oder der Rückfall `mounts.ini` — letzterer
    greift bei Einzelprojekt-Installationen und in der Entwicklung). Die übrigen
    Sektionen bleiben unverändert. Die Pro-Funktionen greifen ab der nächsten
-   Anfrage; der Repository-Knopf erscheint.
+   Anfrage; der Versionierungs-Knopf erscheint.
 
 Ein für eine andere Domain ausgestellter Schlüssel wird abgewiesen
 (`LICENSE-INVALID`); ohne gültige Lizenz sind die Pro-Befehle gesperrt
@@ -902,10 +909,10 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `license`  | GET     | –                                    | Lizenzstatus (Edition, Lizenznehmer, Domain) |
 | `activate` | POST    | `key`                                | Pro-Lizenz aktivieren (schreibt `mounts/<hash>.ini`) |
 | `gitstatus`| GET     | –                                    | **Pro:** Git-Status (Branch, geänderte Dateien) |
-| `gitlog`   | GET     | `page`?, `perPage`?                  | **Pro:** Commit-Verlauf (seitenweise)  |
-| `gitdiff`  | GET     | `sha`                                | **Pro:** Diff eines Commits            |
-| `gitcommit`| POST    | `message`                            | **Pro:** alle Änderungen committen     |
-| `gitpush`  | POST    | –                                    | **Pro:** zum konfigurierten Remote pushen |
+| `gitlog`   | GET     | `page`?, `perPage`?                  | **Pro:** Verlauf der Versionsstände (seitenweise) |
+| `gitdiff`  | GET     | `sha`                                | **Pro:** Diff eines Versionsstands     |
+| `gitcommit`| POST    | `message`                            | **Pro:** alle Änderungen als Versionsstand sichern |
+| `gitpush`  | POST    | –                                    | **Pro:** Änderungen zur konfigurierten Gegenstelle hochladen |
 | `gitreset` | POST    | `ref`?                               | **Pro:** Arbeitsbaum zurücksetzen (Standard: `HEAD`) |
 | `assistantimprove`| POST | `id` (Datei-ID), `locale`?         | **Pro:** KI-Verbesserung einer Datei starten (nutzt `get_file_report`) |
 | `assistantfix`| POST | `runId`, `ruleId`, `url`?, `mode`?, `locale`? | **Pro:** KI-Micro-Auftrag zu genau einem Fund des SEO-Berichts (`mode`: `fix` behebt, `diagnose` erklärt nur) |
