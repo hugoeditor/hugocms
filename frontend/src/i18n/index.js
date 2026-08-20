@@ -4,6 +4,7 @@
 import { createI18n } from 'vue-i18n'
 import de from './de'
 import en from './en'
+import { compileMessage } from './messageCompiler'
 
 export const SUPPORTED_LOCALES = ['de', 'en']
 const STORAGE_KEY = 'hugocms_lang'
@@ -32,6 +33,10 @@ export const i18n = createI18n({
   locale: detectLocale(),
   fallbackLocale: FALLBACK,
   messages: { de, en },
+  // Eigener Compiler statt des eingebauten: Der erzeugt seine Funktionen über
+  // `new Function(...)` und zwänge die Content-Security-Policy der App zu
+  // 'unsafe-eval'. Siehe i18n/messageCompiler.js.
+  messageCompiler: compileMessage,
 })
 
 document.documentElement.lang = i18n.global.locale.value

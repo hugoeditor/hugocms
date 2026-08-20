@@ -153,16 +153,18 @@ cat > "$PKG/app/.htaccess" <<'HT'
 
     # Die App ist ein eigenständiges Programm, keine Seite der Webseite — ihre
     # CSP steht deshalb hier und nicht in der Webseiten-Konfiguration.
-    # Zu den beiden Lockerungen:
-    #   'unsafe-inline' bei style-src — Vuetify und eigene :style-Bindungen
-    #   setzen laufend style-Attribute.
-    #   'unsafe-eval' bei script-src — der Nachrichten-Compiler von vue-i18n
-    #   erzeugt die Übersetzungsfunktionen zur Laufzeit über Function().
+    #
+    # Der Client kommt ohne 'unsafe-eval' aus: Die einzige Stelle, die Code zur
+    # Laufzeit erzeugt hätte, war der Nachrichten-Compiler von vue-i18n — er ist
+    # durch src/i18n/messageCompiler.js ersetzt und gar nicht erst im Bündel.
+    # Einzige Lockerung ist 'unsafe-inline' bei style-src: Vuetify und eigene
+    # :style-Bindungen setzen laufend style-Attribute.
+    #
     # Setzt die Webseite "require-trusted-types-for 'script'", wird das hier
     # mit ersetzt — die App könnte sonst nicht laufen.
     Header unset Content-Security-Policy
     Header always unset Content-Security-Policy
-    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 </IfModule>
 HT
 

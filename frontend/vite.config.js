@@ -38,6 +38,14 @@ export default defineConfig(({ command }) => {
       // Ohne dedupe kann Vite mehrere React-Kopien laden → 'Invalid hook call'.
       // Eine einzige Instanz erzwingen.
       dedupe: ['react', 'react-dom'],
+      alias: {
+        // vue-i18n OHNE seinen Nachrichten-Compiler einbinden. Der erzeugt die
+        // Übersetzungsfunktionen zur Laufzeit über `new Function(...)` und war
+        // die einzige Stelle im Client, für die die Content-Security-Policy
+        // 'unsafe-eval' hätte erlauben müssen. Übersetzt wird stattdessen mit
+        // src/i18n/messageCompiler.js.
+        'vue-i18n': 'vue-i18n/dist/vue-i18n.runtime.esm-bundler.js',
+      },
     },
     optimizeDeps: {
       // filerobot-image-editor wird nur per dynamischem import() geladen; Vites
