@@ -764,6 +764,7 @@ export default {
     voiceRecord: 'Start voice recording',
     voiceStop: 'Stop recording and transcribe',
     openLimits: 'Open limits in the Claude Console',
+    errorRepeat: 'Occurred {0} times in a row',
     checking: 'Checking connection to the Claude API …',
     ready: 'I am ready.',
     thinking: 'Assistant is working …',

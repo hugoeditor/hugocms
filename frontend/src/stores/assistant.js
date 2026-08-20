@@ -2,12 +2,6 @@ import { defineStore } from 'pinia'
 import { api } from '../api/client'
 import { useReviewStore } from './review'
 
-// Fehlermeldungen des Assistenten blenden sich nach dieser Frist selbst aus
-// (analog zu util/transientError). Ein modul-weiter Timer genügt, da es je
-// Sitzung nur einen Assistenten gibt.
-const ERROR_TIMEOUT = 8000
-let errorTimer = null
-
 // KI-Assistent. Hält den Gesprächsverlauf im Anthropic-Nachrichtenformat
 // (role + content-Blöcke) und schickt ihn bei jedem Zug ans Backend. Das
 // Backend ist zustandslos und gibt den fortgeschriebenen Verlauf zurück.
@@ -22,7 +16,12 @@ export const useAssistantStore = defineStore('assistant', {
     checking: false, // Bereitschaftsprüfung (assistantping) läuft
     ready: false, // Claude-API zuletzt erfolgreich erreicht
     readyChecked: false, // Prüfung in dieser Sitzung bereits durchgeführt
-    error: null, // ApiError oder null
+    // Fehler stehen im Gesprächsverlauf statt in einer eigenen, sich selbst
+    // ausblendenden Meldung: Wer nach einem gescheiterten Zug zurückkommt, soll
+    // noch sehen, woran er gescheitert ist. Je Eintrag { at, error } — `at` ist
+    // die Länge von `history` zum Zeitpunkt des Fehlers und bestimmt, an welcher
+    // Stelle des Verlaufs die Meldung erscheint.
+    notices: [],
     // Sitzungsbezogene Auswahl aus dem Panel. null = noch nicht gesetzt; das
     // Panel belegt beide beim Öffnen mit dem konfigurierten Standard (auth.ai).
     // Werden bei jedem Zug mitgeschickt und übersteuern die INI nur zur Laufzeit
@@ -34,9 +33,18 @@ export const useAssistantStore = defineStore('assistant', {
   getters: {
     // Aus dem rohen Verlauf eine anzeigbare Liste ableiten. Thinking- und
     // tool_result-Blöcke werden ausgeblendet; tool_use als kompakte Notiz.
+    // Fehlermeldungen (notices) werden an ihrer Position eingemischt, damit sie
+    // dort stehen, wo der Zug gescheitert ist.
     bubbles: (s) => {
       const out = []
-      for (const m of s.history) {
+      const noticesAt = (at) => {
+        for (const n of s.notices) {
+          if (n.at === at) out.push({ kind: 'error', error: n.error, count: n.count ?? 1 })
+        }
+      }
+      noticesAt(0) // Fehler vor dem ersten Zug (z. B. Bereitschaftsprüfung)
+      for (let i = 0; i < s.history.length; i++) {
+        const m = s.history[i]
         if (m.role === 'user') {
           if (typeof m.content === 'string') out.push({ kind: 'user', text: m.content })
           // Array-Content (tool_results) wird nicht angezeigt.
@@ -49,27 +57,38 @@ export const useAssistantStore = defineStore('assistant', {
             }
           }
         }
+        noticesAt(i + 1)
+      }
+      // Sicherheitsnetz: Wurde der Verlauf nachträglich kürzer, ginge eine
+      // Meldung sonst still verloren — solche Einträge kommen ans Ende.
+      for (const n of s.notices) {
+        if (n.at > s.history.length) out.push({ kind: 'error', error: n.error, count: n.count ?? 1 })
       }
       return out
     },
   },
 
   actions: {
-    // Setzt die Fehlermeldung und blendet sie nach ERROR_TIMEOUT selbst wieder
-    // aus; null löscht sie sofort. Zentral für alle Assistant-Fehler (Chat,
-    // Transkription, Mikrofon).
-    setError(err) {
-      this.error = err
-      if (errorTimer) {
-        clearTimeout(errorTimer)
-        errorTimer = null
+    // Hängt einen Fehler als Eintrag an den Verlauf. Zentral für alle
+    // Assistant-Fehler (Chat, Bereitschaftsprüfung, Transkription, Mikrofon).
+    // Die Meldung bleibt stehen, bis der Verlauf geleert wird.
+    noteError(err) {
+      if (!err) return
+      // Wiederholt sich derselbe Fehler an derselben Stelle — etwa ein zweiter
+      // Versuch, der erneut in die Zeitüberschreitung läuft —, wird nicht
+      // gestapelt, sondern gezählt. Unterdrücken wäre falsch: Der Verlauf sähe
+      // danach unverändert aus, und der Fehlversuch bliebe unsichtbar.
+      const last = this.notices[this.notices.length - 1]
+      const same = last
+        && last.at === this.history.length
+        && (last.error?.key ?? null) === (err.key ?? null)
+        && (last.error?.code ?? null) === (err.code ?? null)
+      if (same) {
+        last.count = (last.count ?? 1) + 1
+        last.error = err // frischere Parameter übernehmen (z. B. neue Limit-Zeit)
+        return
       }
-      if (err) {
-        errorTimer = setTimeout(() => {
-          this.error = null
-          errorTimer = null
-        }, ERROR_TIMEOUT)
-      }
+      this.notices.push({ at: this.history.length, error: err, count: 1 })
     },
 
     // Sendet eine neue Nutzernachricht. Rückgabe: true bei Erfolg. Bei Fehler
@@ -77,7 +96,6 @@ export const useAssistantStore = defineStore('assistant', {
     // Rollen bleiben gültig) und der Aufrufer kann den Text erneut anbieten.
     // ctx: { openFilePath, openDirPath } — Kontext aus Editor und Dateimanager.
     async send(text, locale, ctx = {}) {
-      this.setError(null)
       this.history.push({ role: 'user', content: text })
       this.busy = true
       try {
@@ -93,7 +111,7 @@ export const useAssistantStore = defineStore('assistant', {
         return true
       } catch (e) {
         this.history.pop() // Rollback der unbeantworteten Nachricht
-        this.setError(e)
+        this.noteError(e)
         return false
       } finally {
         this.busy = false
@@ -104,9 +122,8 @@ export const useAssistantStore = defineStore('assistant', {
     // der Schlüssel gültig ist (GET /v1/models, ohne Token-Verbrauch). Der Merker
     // `readyChecked` wird NUR bei Erfolg gesetzt, damit die Prüfung pro Sitzung
     // einmal gelingt, aber nach einem Fehler beim nächsten Öffnen erneut läuft.
-    // Setzt `ready` bzw. legt bei Fehlern den ApiError in `error` ab.
+    // Setzt `ready` bzw. legt bei Fehlern eine Meldung in den Verlauf.
     async checkReady() {
-      this.setError(null)
       this.ready = false
       this.checking = true
       try {
@@ -115,7 +132,7 @@ export const useAssistantStore = defineStore('assistant', {
         this.readyChecked = this.ready
         return this.ready
       } catch (e) {
-        this.setError(e)
+        this.noteError(e)
         return false
       } finally {
         this.checking = false
@@ -135,7 +152,7 @@ export const useAssistantStore = defineStore('assistant', {
         this.apply(data)
         return true
       } catch (e) {
-        this.setError(e)
+        this.noteError(e)
         return false
       } finally {
         this.busy = false
@@ -158,7 +175,7 @@ export const useAssistantStore = defineStore('assistant', {
         this.apply(data)
         return true
       } catch (e) {
-        this.setError(e)
+        this.noteError(e)
         return false
       } finally {
         this.busy = false
@@ -170,7 +187,6 @@ export const useAssistantStore = defineStore('assistant', {
     // ab. Zu 'draft' kann ein Termin (ISO 8601) mitgegeben werden — dann ist der
     // Entwurf gleich terminiert und die Live-Datei bleibt bis dahin unverändert.
     async resolve(decision, locale, ctx = {}, publishDate = '') {
-      this.setError(null)
       this.busy = true
       try {
         const data = await api.post('assistant', {
@@ -186,7 +202,7 @@ export const useAssistantStore = defineStore('assistant', {
         this.apply(data)
         return true
       } catch (e) {
-        this.setError(e)
+        this.noteError(e)
         return false
       } finally {
         this.busy = false
@@ -225,7 +241,7 @@ export const useAssistantStore = defineStore('assistant', {
       this.pending = null
       this.actions = []
       this.aborted = false
-      this.setError(null)
+      this.notices = []
       // `ready`/`readyChecked` bleiben erhalten: die Prüfung gilt sitzungsweit.
     },
   },

@@ -62,10 +62,10 @@ async function toggleVoice() {
         input.value = input.value.trim() ? `${input.value.trimEnd()} ${text}` : text
       } else {
         // Antwort ohne Text (z. B. nichts erkannt) — nicht still übergehen.
-        assistant.setError({ code: 'ESPEECH', key: 'SPEECH-NO-RESULT' })
+        assistant.noteError({ code: 'ESPEECH', key: 'SPEECH-NO-RESULT' })
       }
     } catch (e) {
-      assistant.setError(e)
+      assistant.noteError(e)
     } finally {
       transcribing.value = false
     }
@@ -74,7 +74,7 @@ async function toggleVoice() {
       await startVoice()
     } catch {
       // Mikrofon-Zugriff abgelehnt oder kein Gerät.
-      assistant.setError({ code: 'ESPEECH', key: 'SPEECH-MIC-DENIED' })
+      assistant.noteError({ code: 'ESPEECH', key: 'SPEECH-MIC-DENIED' })
     }
   }
 }
@@ -120,9 +120,9 @@ onBeforeUnmount(() => {
 const writeModeLabel = computed(() => t(`assistant.mode.${assistant.writeMode ?? 'confirm'}`))
 
 // Nutzungslimit-Fehler des KI-Kontos: blendet zusätzlich den Console-Link ein.
-const isUsageLimitError = computed(() =>
-  ['AI-USAGE-LIMIT', 'AI-USAGE-LIMIT-UNKNOWN'].includes(assistant.error?.key),
-)
+function isUsageLimitError(err) {
+  return ['AI-USAGE-LIMIT', 'AI-USAGE-LIMIT-UNKNOWN'].includes(err?.key)
+}
 
 // Inline-Diff für eine ausstehende write_file-Aktion auf einer BESTEHENDEN
 // Datei. null bei neuer Datei oder zu großem Inhalt → Panel zeigt dann die
@@ -281,7 +281,7 @@ watch(
         <v-spacer />
         <v-tooltip :text="$t('assistant.clear')" location="bottom">
           <template #activator="{ props }">
-            <v-btn v-bind="props" icon="mdi-broom" variant="text" size="small" :disabled="assistant.busy || !assistant.history.length" @click="assistant.reset()" />
+            <v-btn v-bind="props" icon="mdi-broom" variant="text" size="small" :disabled="assistant.busy || !assistant.bubbles.length" @click="assistant.reset()" />
           </template>
         </v-tooltip>
         <v-btn icon="mdi-close" variant="text" size="small" @click="assistant.open = false" />
@@ -347,10 +347,10 @@ watch(
       <!-- Verlauf -->
       <div ref="scroller" class="flex-grow-1 pa-3 assistant-scroll">
         <!-- Bereitschaftsprüfung: solange kein Gespräch läuft. -->
-        <div v-if="!assistant.bubbles.length && assistant.checking" class="d-flex align-center text-caption text-medium-emphasis my-2">
+        <div v-if="!assistant.history.length && assistant.checking" class="d-flex align-center text-caption text-medium-emphasis my-2">
           <v-progress-circular indeterminate size="16" width="2" class="mr-2" />{{ $t('assistant.checking') }}
         </div>
-        <div v-else-if="!assistant.bubbles.length && assistant.ready" class="d-flex align-center text-body-2 text-medium-emphasis my-2">
+        <div v-else-if="!assistant.history.length && assistant.ready" class="d-flex align-center text-body-2 text-medium-emphasis my-2">
           <v-icon icon="mdi-check-circle-outline" size="small" color="success" class="mr-2" />{{ $t('assistant.ready') }}
         </div>
 
@@ -361,6 +361,17 @@ watch(
           <div v-else-if="b.kind === 'assistant'" class="d-flex mb-2">
             <div class="assistant-bubble assistant-bubble--bot">{{ b.text }}</div>
           </div>
+          <!-- Gescheiterter Zug: bleibt als Teil des Verlaufs stehen, damit
+               nachvollziehbar ist, warum an dieser Stelle nichts geschah. -->
+          <v-alert v-else-if="b.kind === 'error'" type="error" density="compact" variant="tonal" class="my-2">
+            {{ errorText(t, b.error) }}
+            <!-- Mehrere gleiche Fehlversuche hintereinander: gezählt statt
+                 gestapelt, damit auch der zweite Versuch sichtbar bleibt. -->
+            <div v-if="b.count > 1" class="text-caption mt-1">{{ $t('assistant.errorRepeat', [b.count]) }}</div>
+            <div v-if="isUsageLimitError(b.error)" class="mt-1">
+              <a href="https://platform.claude.com/settings/limits" target="_blank" rel="noopener noreferrer">{{ $t('assistant.openLimits') }}</a>
+            </div>
+          </v-alert>
           <div v-else class="text-caption text-medium-emphasis mb-1 d-flex align-center">
             <v-icon icon="mdi-wrench-outline" size="x-small" class="mr-1" />{{ toolText(b) }}
           </div>
@@ -464,12 +475,6 @@ watch(
         <div v-if="assistant.busy" class="d-flex align-center text-caption text-medium-emphasis my-2">
           <v-progress-circular indeterminate size="16" width="2" class="mr-2" />{{ $t('assistant.thinking') }}
         </div>
-        <v-alert v-if="assistant.error" type="error" density="compact" class="my-2">
-          {{ errorText(t, assistant.error) }}
-          <div v-if="isUsageLimitError" class="mt-1">
-            <a href="https://platform.claude.com/settings/limits" target="_blank" rel="noopener noreferrer">{{ $t('assistant.openLimits') }}</a>
-          </div>
-        </v-alert>
       </div>
 
       <!-- Eingabe -->
