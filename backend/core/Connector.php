@@ -489,6 +489,8 @@ final class Connector
                 'restore' => $this->cmdRestore($request),
                 'emptytrash' => $this->cmdEmptyTrash($request),
                 'build' => $this->cmdBuild(),
+                'previewbuild' => $this->cmdPreviewBuild($request),
+                'preview' => $this->cmdPreview($request),
                 'assistant' => $this->cmdAssistant($request),
                 'assistantping' => $this->cmdAssistantPing(),
                 'assistantimprove' => $this->cmdAssistantImprove($request),
@@ -1323,6 +1325,102 @@ final class Connector
         }
 
         return $this->runHugoBuild();
+    }
+
+    /**
+     * Baut die Vorschau EINER Content-Seite und gibt das Token zurück, unter
+     * dem sie abrufbar ist ({@see cmdPreview}).
+     *
+     * Anzeigen lässt sich wahlweise der gespeicherte Stand, ein noch nicht
+     * gespeicherter Text aus dem Editor (`content`) oder ein Freigabe-Entwurf
+     * (`draftKey`). In allen Fällen bleibt die Datei auf der Platte unberührt —
+     * der Text wird dem Projekt beim Bauen nur überlagert.
+     *
+     * Zwei Schritte, weil der Editor-Text zu groß für eine Adresszeile ist: Der
+     * Bau läuft als POST, das Ergebnis holt ein GET in einem eigenen Fenster.
+     */
+    private function cmdPreviewBuild(array $request): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+        if ($this->hugo === null) {
+            throw new ApiException('ECONFIG', 409, 'PREVIEW-NO-PROJECT');
+        }
+        if ($this->hugoBin === null) {
+            throw new ApiException('ECONFIG', 500, 'HUGO-BIN-NOT-CONFIGURED');
+        }
+
+        $r = $this->resolver->resolve($this->requireParam($request, 'id'), true);
+        if (!$this->isHugoContentPath($r['abs'])) {
+            throw ApiException::badRequest('PREVIEW-NOT-CONTENT');
+        }
+        // Lesen genügt: Geschrieben wird nichts, auch nicht mit Editor-Text.
+        if (!$r['mount']->allows('read')) {
+            throw ApiException::denied('OPERATION-NOT-ALLOWED', ['read']);
+        }
+
+        // Vorrang: ausdrücklich mitgegebener Text, dann ein Freigabe-Entwurf,
+        // sonst der gespeicherte Dateiinhalt.
+        $override = null;
+        if (is_string($request['content'] ?? null)) {
+            $override = (string) $request['content'];
+        } elseif (is_string($request['draftKey'] ?? null) && $request['draftKey'] !== '') {
+            $draft = $this->reviewStore()->get((string) $request['draftKey']);
+            $override = (string) ($draft['proposedContent'] ?? '');
+        }
+
+        // Drei kurze Hugo-Läufe (Konfiguration, Adressliste, Bau).
+        @set_time_limit(120);
+
+        $token = $this->previewService()->build($r['abs'], $override);
+
+        return [
+            'token' => $token,
+            // Fertige Adresse für den Client — er kennt den Endpunkt-Pfad
+            // ohnehin, aber so bleibt die Zusammensetzung an einer Stelle.
+            'url' => '?cmd=preview&token=' . $token,
+        ];
+    }
+
+    /**
+     * Liefert eine gebaute Vorschau als HTML aus — nur an eine angemeldete
+     * Sitzung und nur einmal je Token.
+     *
+     * Die Seite liegt bewusst NICHT im Web-Wurzelverzeichnis, sondern unter
+     * backend/var/preview/. Für Suchmaschinen ist sie damit nicht auffindbar;
+     * X-Robots-Tag und das eingefügte meta-robots sichern den Fall ab, dass
+     * jemand die Adresse weitergibt oder die Datei speichert.
+     */
+    private function cmdPreview(array $request): never
+    {
+        $this->requireAuth();
+        $this->requireMethod('GET');
+
+        $html = $this->previewService()->fetch((string) ($request['token'] ?? ''));
+
+        header('Content-Type: text/html; charset=utf-8');
+        header('X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex');
+        header('X-Content-Type-Options: nosniff');
+        header('Cache-Control: no-store, max-age=0, private');
+        header('Content-Length: ' . (string) strlen($html));
+        echo $html;
+        exit;
+    }
+
+    /** Vorschau-Dienst für die konfigurierte Webseite. */
+    private function previewService(): PreviewService
+    {
+        if ($this->hugo === null || $this->hugoBin === null) {
+            throw new ApiException('ECONFIG', 409, 'PREVIEW-NO-PROJECT');
+        }
+        $source = (string) $this->hugo['source'];
+
+        return new PreviewService(
+            $this->hugoBin,
+            $source,
+            __DIR__ . '/../var/preview/' . sha1($source),
+            $this->logger,
+        );
     }
 
     /**

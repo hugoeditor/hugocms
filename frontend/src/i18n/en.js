@@ -962,6 +962,7 @@ export default {
     storageLocation: 'Storage location: {0}',
     save: 'Save (Ctrl+S)',
     saveDraft: 'Save as draft for review',
+    preview: 'Page preview',
     savedAsDraft: 'Saved as a draft for review.',
     publishDraft: 'Draft — will not be published on the next build (draft).',
     publishScheduled: 'Scheduled to publish: {0} (hidden until then).',
@@ -1510,6 +1511,13 @@ export default {
     'HUGO-BIN-NOT-CONFIGURED': 'The Hugo binary is not configured ([hugo] bin in hugocms.ini).',
     'HUGO-BIN-MISSING': 'Hugo binary not found or not executable: {0}',
     'HUGO-SOURCE-MISSING': 'Hugo project directory not found: {0}',
+
+    'PREVIEW-NO-PROJECT': 'No Hugo project is configured for this site — no page can be generated without it.',
+    'PREVIEW-NOT-CONTENT': 'This file is not in the content directory and therefore has no page of its own.',
+    'PREVIEW-NO-URL': 'This file does not produce a page of its own (e.g. a resource inside a page bundle).',
+    'PREVIEW-BUILD-FAILED': 'The preview could not be generated: {0}',
+    'PREVIEW-STORAGE-FAILED': 'The preview could not be stored — check write permissions in the runtime directory.',
+    'PREVIEW-EXPIRED': 'This preview has expired or was already opened. Please generate it again.',
 
     ELICENSE: 'License error.',
     EGIT: 'Git error.',

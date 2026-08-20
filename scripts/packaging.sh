@@ -206,7 +206,7 @@ cp -r "$PROJECT_DIR/backend/." "$PKG/backend/"
 #    Entwicklungsinhalte (Logdatei, Session-Dateien, site-spezifische
 #    mounts/<hash>.ini) sowie aus dem früheren Layout verbliebene log/ und var/
 #    im Paket-Wurzelverzeichnis werden entfernt.
-echo "4. Laufzeitverzeichnisse sicherstellen (backend/log/, backend/var/sessions/, backend/mounts/)"
+echo "4. Laufzeitverzeichnisse sicherstellen (backend/log/, backend/var/sessions/, backend/mounts/; .htaccess für log/ und var/)"
 rm -rf "$PKG/backend/log" "$PKG/backend/var" "$PKG/log" "$PKG/var"
 rm -f "$PKG/backend/mounts/"*.ini
 mkdir -p "$PKG/backend/log" "$PKG/backend/var/sessions" "$PKG/backend/mounts"
@@ -226,6 +226,17 @@ cat > "$PKG/backend/log/.htaccess" <<'HT'
 # Nginx wertet diese Datei NICHT aus — dort den location-Block aus
 # beispiel-konfigurationen/nginx.conf verwenden oder das Log-Verzeichnis
 # außerhalb des Web-Wurzelverzeichnisses ablegen.
+Require all denied
+HT
+
+cat > "$PKG/backend/var/.htaccess" <<'HT'
+# Apache: kein direkter Zugriff auf die Laufzeitdaten. Hier liegen Sitzungen,
+# Freigabe-Entwürfe, Berichte und die gebauten Seitenvorschauen — letztere
+# zeigen unveröffentlichte Stände und dürfen weder abrufbar noch auffindbar
+# sein. Normalerweise liegt backend/ ohnehin außerhalb des Web-Wurzel-
+# verzeichnisses; diese Datei sichert die Fälle ab, in denen das nicht so ist.
+# Nginx wertet sie NICHT aus — dort den location-Block aus
+# beispiel-konfigurationen/nginx.conf verwenden.
 Require all denied
 HT
 

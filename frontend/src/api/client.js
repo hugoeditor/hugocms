@@ -73,6 +73,16 @@ async function handle(response) {
   return payload.data
 }
 
+/**
+ * Vollständige Adresse eines GET-Befehls — für Ziele, die der Browser selbst
+ * lädt statt fetch: ein neues Fenster (Seitenvorschau) oder ein src-Attribut.
+ * @param {string} cmd
+ * @param {Record<string, string>} params
+ */
+export function apiUrl(cmd, params = {}) {
+  return `${BASE}?${new URLSearchParams({ cmd, ...params }).toString()}`
+}
+
 export const api = {
   // Lesebefehle als GET.
   async get(cmd, params = {}) {

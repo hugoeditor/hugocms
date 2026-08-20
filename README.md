@@ -381,6 +381,48 @@ Ausführrechte auf das Binary und Schreibrechte im Ziel.
 > übersteht, legt `install.sh` sie zusätzlich im `static/`-Verzeichnis ab —
 > Hugo spiegelt `static/` bei jedem Build in den Publish-Ordner.
 
+### Seitenvorschau
+
+Im Editor gibt es für Dateien im Content-Ordner einen **Seitenvorschau**-Knopf
+(`mdi-eye-outline`). Er zeigt die Seite so, wie das Theme sie später darstellt —
+einschließlich des **ungespeicherten** Editor-Stands. Die Datei auf der Platte
+und der Publish-Ordner bleiben dabei unangetastet (`PreviewService`).
+
+Hugo kann keine einzelne Seite bauen; es liest immer das ganze Projekt. Zwei
+Werkzeuge machen die Vorschau trotzdem leichtgewichtig:
+
+- **Overlay-Mount**: Der anzuzeigende Text landet in einem Arbeitsverzeichnis
+  unter `backend/var/preview/`, das dem `content`-Ordner **vorangestellt** wird.
+  Der erste Mount gewinnt — die eine Datei wird überlagert, alles andere kommt
+  unverändert aus dem echten Projekt (Theme, Menüs, Nachbarseiten, Bilder eines
+  Seitenordners). Die bestehenden Mounts liest der Dienst über `hugo config`
+  aus, statt Standardwerte anzunehmen.
+- **Segments** (`--renderSegments`, Hugo ab 0.124): Gerendert wird nur die eine
+  Adresse. Welche das ist, sagt `hugo list all` (Spalte `permalink`) — `slug`,
+  `url` im Front Matter und die `permalinks`-Konfiguration bestimmen sie. Bei
+  älteren Hugo-Fassungen entfällt das Segment, gebaut wird dann vollständig.
+
+Gebaut wird mit `--buildDrafts --buildFuture --buildExpired`, denn gerade
+Entwürfe und terminierte Fassungen will man vorher sehen. `--noBuildLock`
+verhindert die Kollision mit einem parallel laufenden Cron-Build. Der statische
+Ordner der Webseite bleibt außen vor: Hugo schreibt wurzelrelative Adressen, die
+Vorschau lädt CSS, Schriften und Bilder also von der veröffentlichten Seite.
+Verweise in der Vorschau führen ebenfalls dorthin — ein Hinweisband am oberen
+Rand sagt das.
+
+**Nicht auffindbar für Suchmaschinen** — der ausdrückliche Zweck dieses Aufbaus:
+
+1. Das Ergebnis liegt nie im Web-Wurzelverzeichnis, sondern unter
+   `backend/var/preview/` (per `.htaccess` gesperrt, bei Nginx über den
+   `location`-Block). Es steht damit in keiner Sitemap und ist nicht crawlbar.
+2. Ausgeliefert wird nur an eine angemeldete Sitzung (`cmd=preview`).
+3. Die Antwort trägt `X-Robots-Tag: noindex, nofollow, noarchive, nosnippet,
+   noimageindex` und `Cache-Control: no-store`.
+4. Zusätzlich steht ein `<meta name="robots" content="noindex,nofollow">` im
+   ausgelieferten HTML — für den Fall, dass jemand die Seite speichert.
+5. Jedes Token (`random_bytes(16)`) gilt genau einmal und höchstens zehn
+   Minuten; abgelaufene Reste räumt der nächste Lauf weg.
+
 ### Konfiguration im laufenden Betrieb ändern
 
 Die `hugocms.ini` lässt sich auch nach der Einrichtung über die Oberfläche
@@ -907,6 +949,8 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `restore`  | POST    | `mount`, `names` (Liste)             | Aus dem Papierkorb wiederherstellen    |
 | `emptytrash`| POST   | `mount`?                             | Papierkorb endgültig leeren            |
 | `build`    | POST    | –                                    | Hugo aufrufen (Webseite erzeugen)      |
+| `previewbuild`| POST | `id`, `content`?, `draftKey`?        | Vorschau EINER Content-Seite bauen; `content` = ungespeicherter Editor-Stand, `draftKey` = Freigabe-Entwurf. Antwort: Einmal-Token |
+| `preview`  | GET     | `token`                              | Gebaute Vorschau als HTML ausliefern (nur angemeldet, Token gilt einmal, `X-Robots-Tag: noindex`) |
 | `assistant`| POST    | `messages`, `locale`?, `confirm`?, `publishDate`?, `openFilePath`?, `openDirPath`? | KI-Assistent: einen Zug ausführen (Werkzeug-Schleife). `confirm`: `allow` \| `draft` (als Entwurf ablegen) \| `reject`; `publishDate` terminiert den Entwurf |
 | `config`   | GET     | –                                    | Aktuelle Konfigurationswerte inkl. AI-Status (ohne Geheimnisse) |
 | `reconfigure`| POST  | `authDriver`?, `sessionPath`, `logFile`, `logLevel`, `hugoBin`?, `aiApiKey`?, `aiModel`?, `aiWriteMode`? | hugocms.ini ändern (Anmeldeverfahren/Verzeichnisse/Log/Hugo/AI). Verlangt `config.manage` — ebenso `aimodels` und `activate`. `config` (lesen) und `projectconfig`/`projectreconfigure` nicht |

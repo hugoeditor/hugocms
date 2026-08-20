@@ -965,6 +965,7 @@ export default {
     storageLocation: 'Speicherort: {0}',
     save: 'Speichern (Strg+S)',
     saveDraft: 'Als Entwurf zur Freigabe',
+    preview: 'Seitenvorschau',
     savedAsDraft: 'Als Entwurf zur Freigabe abgelegt.',
     publishDraft: 'Entwurf — wird beim nächsten Build nicht veröffentlicht (draft).',
     publishScheduled: 'Geplante Veröffentlichung: {0} (bis dahin nicht sichtbar).',
@@ -1515,6 +1516,13 @@ export default {
     'HUGO-BIN-NOT-CONFIGURED': 'Hugo-Programm ist nicht konfiguriert ([hugo] bin in der hugocms.ini).',
     'HUGO-BIN-MISSING': 'Hugo-Programm nicht gefunden oder nicht ausführbar: {0}',
     'HUGO-SOURCE-MISSING': 'Hugo-Projektverzeichnis nicht gefunden: {0}',
+
+    'PREVIEW-NO-PROJECT': 'Für diese Webseite ist kein Hugo-Projekt konfiguriert — ohne das lässt sich keine Seite erzeugen.',
+    'PREVIEW-NOT-CONTENT': 'Diese Datei liegt nicht im Content-Ordner und ergibt daher keine eigene Seite.',
+    'PREVIEW-NO-URL': 'Für diese Datei entsteht keine eigene Seite (z. B. eine Ressource innerhalb eines Seitenordners).',
+    'PREVIEW-BUILD-FAILED': 'Die Vorschau konnte nicht erzeugt werden: {0}',
+    'PREVIEW-STORAGE-FAILED': 'Die Vorschau konnte nicht abgelegt werden — Schreibrechte im Laufzeitverzeichnis prüfen.',
+    'PREVIEW-EXPIRED': 'Diese Vorschau ist abgelaufen oder wurde bereits geöffnet. Bitte neu erzeugen.',
 
     ELICENSE: 'Lizenzfehler.',
     EGIT: 'Git-Fehler.',

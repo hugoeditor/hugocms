@@ -6,6 +6,7 @@ import { useAuthStore } from '../stores/auth'
 import { useAuditContentStore } from '../stores/auditContent'
 import { useAssistantStore } from '../stores/assistant'
 import { errorText } from '../i18n/apiMessage'
+import { api, apiUrl } from '../api/client'
 import CodeMirrorEditor from './CodeMirrorEditor.vue'
 import { setEditorSaver, flushEditor } from '../util/editorBridge'
 import WysiwygEditor from './WysiwygEditor.vue'
@@ -81,8 +82,46 @@ async function confirmQueue(instruction) {
 const draft = ref('')
 const saving = ref(false)
 const savingDraft = ref(false)
+const previewing = ref(false)
+
+// Vorschau nur für Dateien im Content-Ordner eines Hugo-Projekts; Layouts,
+// Konfiguration oder Bilder ergeben keine eigene Seite. Gilt für beide
+// Bearbeitungsarten — im visuellen Modus trägt die Formatleiste den Knopf.
+const canPreview = computed(() => auth.buildable && !!files.openFile?.contentFile)
 const error = useTransientError() // blendet sich nach kurzer Zeit selbst aus
 const notice = useTransientError(4000) // kurzlebige Erfolgsmeldung (z. B. Entwurf abgelegt)
+
+// Vorschau der offenen Seite in einem neuen Fenster. Gezeigt wird der Stand im
+// Editor — auch ungespeichert: Der Text geht mit und überlagert die Datei nur
+// für diesen einen Hugo-Lauf; auf der Platte ändert sich nichts.
+//
+// Zwei Schritte, weil der Text zu groß für eine Adresszeile wäre: Der POST baut
+// die Seite und liefert ein Token, das neue Fenster holt sie damit ab. Das
+// Fenster wird VOR dem Bau geöffnet — ein window.open nach dem Warten auf die
+// Antwort gilt dem Browser als ungefragtes Aufklappen und wird blockiert.
+async function previewPage() {
+  const file = files.openFile
+  if (!file || previewing.value) return
+  previewing.value = true
+  const win = window.open('', '_blank')
+  try {
+    const { token } = await api.post('previewbuild', {
+      id: file.id,
+      content: files.dirty ? draft.value : undefined,
+    })
+    const url = apiUrl('preview', { token })
+    if (win) {
+      win.location.href = url
+    } else {
+      window.open(url, '_blank') // Fenster unterdrückt: zweiter Versuch
+    }
+  } catch (e) {
+    win?.close()
+    error.value = errorText(t, e)
+  } finally {
+    previewing.value = false
+  }
+}
 
 // --- Visueller Markdown-Modus (Stufe 4) -----------------------------------
 // Nur für Markdown-Dateien. Das Front-Matter (--- … ---) wird VOR TipTap
@@ -286,6 +325,15 @@ const tools = computed(() => [
     disabled: !files.dirty,
     loading: savingDraft.value,
     action: saveAsDraft,
+  }] : []),
+  // Vorschau der Seite (im visuellen Modus sitzt derselbe Knopf in der
+  // Formatleiste des WysiwygEditor).
+  ...(canPreview.value ? [{
+    name: 'preview',
+    icon: 'mdi-eye-outline',
+    label: t('editor.preview'),
+    loading: previewing.value,
+    action: previewPage,
   }] : []),
   { divider: true },
   { name: 'undo', icon: 'mdi-undo', label: t('editor.undo'), disabled: !history.value.undo },
@@ -684,11 +732,14 @@ onBeforeUnmount(() => {
             :save-disabled="!files.dirty"
             :saving="saving"
             :saving-draft="savingDraft"
+            :can-preview="canPreview"
+            :previewing="previewing"
             class="flex-grow-1"
             style="min-height: 0"
             @update:model-value="onWysiwygInput"
             @save="save"
             @save-draft="saveAsDraft"
+            @preview="previewPage"
             @clipboard-denied="error = t('editor.clipboardDenied')"
           />
         </template>

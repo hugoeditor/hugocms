@@ -19,10 +19,14 @@ const props = defineProps({
   saving: { type: Boolean, default: false },
   // Wird ein Entwurf gerade abgelegt? (Ladezustand des Entwurf-Knopfs.)
   savingDraft: { type: Boolean, default: false },
+  // Seitenvorschau anbieten? Nur für Content-Dateien eines Hugo-Projekts; das
+  // entscheidet das EditorPanel, hier zählt nur der Zustand des Knopfs.
+  canPreview: { type: Boolean, default: false },
+  previewing: { type: Boolean, default: false },
 })
 
 const authStore = useAuthStore()
-const emit = defineEmits(['update:modelValue', 'clipboard-denied', 'save', 'save-draft'])
+const emit = defineEmits(['update:modelValue', 'clipboard-denied', 'save', 'save-draft', 'preview'])
 const { t } = useI18n()
 
 // tiptap-markdown maskiert beim Serialisieren jedes < und > eines Text-Knotens
@@ -242,6 +246,15 @@ const tools = computed(() => {
       active: false,
       disabled: props.saveDisabled || props.savingDraft,
       run: () => emit('save-draft'),
+    }] : []),
+    // Seitenvorschau — zeigt auch den ungespeicherten Stand, daher ohne
+    // Abhängigkeit vom Speichern-Zustand.
+    ...(props.canPreview ? [{
+      icon: 'mdi-eye-outline',
+      label: t('editor.preview'),
+      active: false,
+      disabled: props.previewing,
+      run: () => emit('preview'),
     }] : []),
     { divider: true },
     { icon: 'mdi-undo', label: t('editor.undo'), active: false, disabled: !ed.can().undo(), run: () => ed.chain().focus().undo().run() },
