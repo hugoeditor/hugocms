@@ -23,6 +23,18 @@ final class GitService
     /** Maximale Länge einer Commit-Nachricht. */
     private const int MAX_MESSAGE = 1000;
 
+    /** Maximale Länge eines Tag-Namens. */
+    private const int MAX_TAG = 100;
+
+    /**
+     * Präfix der automatisch vorgeschlagenen Versionsnummern (v1, v2, …).
+     * Der nächste Wert wird NICHT gespeichert, sondern aus den vorhandenen Tags
+     * des Repositorys abgeleitet ({@see nextTag()}) — so bleibt das Repository
+     * die einzige Quelle der Wahrheit und ein Umzug, ein Klon oder ein von Hand
+     * gesetztes Tag kann keine Kollision erzeugen.
+     */
+    private const string TAG_PREFIX = 'v';
+
     /** Obergrenze für die Seitengröße der Commit-Liste. */
     private const int MAX_PER_PAGE = 100;
 
@@ -36,9 +48,10 @@ final class GitService
 
     /**
      * Arbeitsbaum-Status: aktueller Branch und die Liste der Änderungen, jede
-     * Datei mit ihrer Art (siehe classifyStatus).
+     * Datei mit ihrer Art (siehe classifyStatus). `nextTag` ist die
+     * vorgeschlagene nächste Versionsnummer für das Sichern-Formular.
      *
-     * @return array{branch: string, clean: bool, entries: list<array{path: string, status: string, from: string|null}>}
+     * @return array{branch: string, clean: bool, nextTag: string, entries: list<array{path: string, status: string, from: string|null}>}
      */
     public function status(): array
     {
@@ -73,8 +86,29 @@ final class GitService
         return [
             'branch' => $branchName,
             'clean' => $entries === [],
+            'nextTag' => $this->nextTag(),
             'entries' => $entries,
         ];
+    }
+
+    /**
+     * Nächste freie Versionsnummer im Schema v1, v2, v3 … — abgeleitet aus den
+     * vorhandenen Tags, nicht aus einem gespeicherten Zähler. Gezählt wird die
+     * höchste rein numerische Nummer; abweichend benannte Tags (etwa `v1.2.0`
+     * oder `release-alt`) bleiben unberücksichtigt und stören nicht.
+     */
+    public function nextTag(): string
+    {
+        $res = $this->run(['tag', '--list', self::TAG_PREFIX . '[0-9]*']);
+        $pattern = '/^' . preg_quote(self::TAG_PREFIX, '/') . '(\d+)$/';
+        $max = 0;
+        foreach ($res['lines'] as $line) {
+            if (preg_match($pattern, trim($line), $m) === 1) {
+                $max = max($max, (int) $m[1]);
+            }
+        }
+
+        return self::TAG_PREFIX . ($max + 1);
     }
 
     /**
@@ -112,9 +146,31 @@ final class GitService
     }
 
     /**
-     * Seitenweise Commit-Liste des aktuellen Branches.
+     * Zieht die Tag-Namen aus der Ref-Liste eines Commits (`%D`). Die Liste
+     * enthält auch Branches und den HEAD-Zeiger; Tags sind daran zu erkennen,
+     * dass git ihnen `tag: ` voranstellt.
      *
-     * @return array{commits: list<array{sha: string, shortSha: string, author: string, email: string, date: string, message: string}>, page: int, perPage: int, total: int}
+     * @return list<string>
+     */
+    private function parseTags(string $refs): array
+    {
+        $tags = [];
+        foreach (explode(',', $refs) as $ref) {
+            $ref = trim($ref);
+            if (str_starts_with($ref, 'tag: ')) {
+                $tags[] = trim(substr($ref, 5));
+            }
+        }
+
+        return $tags;
+    }
+
+    /**
+     * Seitenweise Commit-Liste des aktuellen Branches. Jeder Commit trägt die
+     * auf ihn zeigenden Tags (`tags`) — sie kommen über `%D` aus demselben
+     * log-Aufruf, kosten also keinen zusätzlichen Prozess je Seite.
+     *
+     * @return array{commits: list<array{sha: string, shortSha: string, author: string, email: string, date: string, tags: list<string>, message: string}>, page: int, perPage: int, total: int}
      */
     public function log(int $page, int $perPage): array
     {
@@ -130,12 +186,17 @@ final class GitService
             return ['commits' => [], 'page' => $page, 'perPage' => $perPage, 'total' => 0];
         }
 
-        $format = implode(self::FIELD_SEP, ['%H', '%h', '%an', '%ae', '%aI', '%s']) . self::RECORD_SEP;
+        // %D trägt die Ref-Namen des Commits („HEAD -> main, tag: v3, …“); die
+        // Nachricht bleibt das letzte Feld, damit ein leeres %D den Datensatz
+        // nicht verkürzt. --decorate=short legt die Schreibweise fest, sonst
+        // könnte eine log.decorate-Einstellung des Servers sie verändern.
+        $format = implode(self::FIELD_SEP, ['%H', '%h', '%an', '%ae', '%aI', '%D', '%s']) . self::RECORD_SEP;
         $res = $this->run([
             'log',
             '--skip=' . (($page - 1) * $perPage),
             '--max-count=' . $perPage,
             '--no-color',
+            '--decorate=short',
             '--pretty=format:' . $format,
         ]);
 
@@ -146,7 +207,7 @@ final class GitService
                 continue;
             }
             $f = explode(self::FIELD_SEP, $record);
-            if (count($f) < 6) {
+            if (count($f) < 7) {
                 continue;
             }
             $commits[] = [
@@ -155,7 +216,8 @@ final class GitService
                 'author' => $f[2],
                 'email' => $f[3],
                 'date' => $f[4],
-                'message' => $f[5],
+                'tags' => $this->parseTags($f[5]),
+                'message' => $f[6],
             ];
         }
 
@@ -185,9 +247,15 @@ final class GitService
      * nichts zu committen, fehlende git-Identität) ist KEIN API-Fehler: Die
      * Antwort trägt success=false samt Git-Ausgabe.
      *
-     * @return array{success: bool, sha: ?string, output: string}
+     * Ist $tag gesetzt, bekommt der neue Commit zusätzlich ein annotiertes Tag
+     * als Versionsnummer. Name und Verfügbarkeit werden VOR dem Commit geprüft
+     * und werfen bei einem Problem — sonst stünde der Commit bereits und ließe
+     * sich nicht zurücknehmen. Scheitert erst das Tag selbst, bleibt der Commit
+     * gültig; die Antwort weist das über `tagged` getrennt aus.
+     *
+     * @return array{success: bool, sha: ?string, output: string, tag: ?string, tagged: bool, tagOutput: string}
      */
-    public function commit(string $message): array
+    public function commit(string $message, ?string $tag = null): array
     {
         $this->assertRepo();
         $message = trim($message);
@@ -198,21 +266,44 @@ final class GitService
             throw ApiException::badRequest('GIT-MESSAGE-TOO-LONG', [self::MAX_MESSAGE]);
         }
 
+        $tag = $tag === null ? '' : trim($tag);
+        if ($tag !== '') {
+            $tag = $this->requireTagName($tag);
+            if ($this->tagExists($tag)) {
+                throw ApiException::badRequest('GIT-TAG-EXISTS', [$tag]);
+            }
+        }
+
+        $failed = ['success' => false, 'sha' => null, 'tag' => null, 'tagged' => false, 'tagOutput' => ''];
         $add = $this->run(['add', '-A']);
         if ($add['exit'] !== 0) {
-            return ['success' => false, 'sha' => null, 'output' => $add['output']];
+            return [...$failed, 'output' => $add['output']];
         }
         $commit = $this->run(['commit', '-m', $message]);
         if ($commit['exit'] !== 0) {
-            return ['success' => false, 'sha' => null, 'output' => $commit['output']];
+            return [...$failed, 'output' => $commit['output']];
         }
         $head = $this->run(['rev-parse', 'HEAD']);
 
-        return [
+        $result = [
             'success' => true,
             'sha' => $head['exit'] === 0 ? trim($head['output']) : null,
             'output' => $commit['output'],
+            'tag' => null,
+            'tagged' => false,
+            'tagOutput' => '',
         ];
+
+        if ($tag !== '') {
+            // Annotiert (-a -m): Nur so nimmt `push --follow-tags` das Tag mit,
+            // und es trägt Autor, Datum und die Beschreibung des Versionsstands.
+            $res = $this->run(['tag', '-a', $tag, '-m', $message]);
+            $result['tagged'] = $res['exit'] === 0;
+            $result['tag'] = $result['tagged'] ? $tag : null;
+            $result['tagOutput'] = $res['output'];
+        }
+
+        return $result;
     }
 
     /**
@@ -220,12 +311,16 @@ final class GitService
      * Credential-Helper) muss in der Serverumgebung eingerichtet sein. Ein
      * Fehlschlag (kein Remote, keine Berechtigung) ist KEIN API-Fehler.
      *
+     * `--follow-tags` überträgt die annotierten Tags der gepushten Commits mit —
+     * ohne den Schalter blieben die Versionsnummern lokal, denn ein einfaches
+     * `git push` schickt keine Tags.
+     *
      * @return array{success: bool, output: string}
      */
     public function push(): array
     {
         $this->assertRepo();
-        $res = $this->run(['push']);
+        $res = $this->run(['push', '--follow-tags']);
 
         return ['success' => $res['exit'] === 0, 'output' => $res['output']];
     }
@@ -274,6 +369,35 @@ final class GitService
         }
 
         return $sha;
+    }
+
+    /**
+     * Prüft den Namen einer Versionsnummer (Tag). Die eigene Whitelist hält den
+     * Namen bewusst enger, als git es täte — lesbar und ohne Sonderzeichen, die
+     * in einer Anzeige oder auf einem anderen Dateisystem Ärger machen. Das
+     * letzte Wort hat `check-ref-format`, damit auch Feinheiten wie ein
+     * abschließendes ".lock" verlässlich abgefangen werden.
+     */
+    private function requireTagName(string $name): string
+    {
+        $name = trim($name);
+        if (mb_strlen($name) > self::MAX_TAG) {
+            throw ApiException::badRequest('GIT-TAG-TOO-LONG', [self::MAX_TAG]);
+        }
+        if (str_contains($name, '..') || preg_match('/^[A-Za-z0-9][A-Za-z0-9._\/-]*$/', $name) !== 1) {
+            throw ApiException::badRequest('GIT-INVALID-TAG', [$name]);
+        }
+        if ($this->run(['check-ref-format', 'refs/tags/' . $name])['exit'] !== 0) {
+            throw ApiException::badRequest('GIT-INVALID-TAG', [$name]);
+        }
+
+        return $name;
+    }
+
+    /** true, wenn bereits ein Tag dieses Namens existiert. */
+    private function tagExists(string $name): bool
+    {
+        return $this->run(['rev-parse', '--verify', '--quiet', 'refs/tags/' . $name])['exit'] === 0;
     }
 
     /** Prüft einen Ref-Namen (inkl. HEAD~1, tag, branch); verbietet "..". */

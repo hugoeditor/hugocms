@@ -4995,9 +4995,21 @@ final class Connector
     {
         $this->requireMethod('POST');
         $git = $this->git();
-        $result = $git->commit((string) ($request['message'] ?? ''));
+        // Leere Versionsnummer heißt „ohne Tag“ — das Formular darf das Feld
+        // räumen, ohne dass der Commit daran scheitert.
+        $tag = trim((string) ($request['tag'] ?? ''));
+        $result = $git->commit((string) ($request['message'] ?? ''), $tag === '' ? null : $tag);
         if ($result['success']) {
-            $this->logger->info('Git-Commit erstellt: ' . ($result['sha'] ?? '?'));
+            $this->logger->info(sprintf(
+                'Git-Commit erstellt: %s%s',
+                $result['sha'] ?? '?',
+                $result['tagged'] ? ' (Versionsnummer ' . $result['tag'] . ')' : '',
+            ));
+            // Der Commit steht, nur das Tag kam nicht zustande. Eigener Eintrag,
+            // damit die fehlende Versionsnummer nicht unbemerkt bleibt.
+            if ($tag !== '' && !$result['tagged']) {
+                $this->logger->warning('Versionsnummer nicht vergeben: ' . trim($result['tagOutput']));
+            }
         } else {
             $this->logger->warning('Git-Commit fehlgeschlagen: ' . $result['output']);
         }

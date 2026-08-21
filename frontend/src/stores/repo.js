@@ -6,10 +6,11 @@ import { api } from '../api/client'
 // Hugo-Projektverzeichnis der Webseite; der Server sperrt alle Aufrufe darauf ein.
 export const useRepoStore = defineStore('repo', {
   state: () => ({
-    // { branch, clean, entries[] }; entries: [{ path, status, from }] mit status
-    // modified|added|deleted|renamed|untracked|conflict (from nur bei renamed).
+    // { branch, clean, nextTag, entries[] }; entries: [{ path, status, from }] mit
+    // status modified|added|deleted|renamed|untracked|conflict (from nur bei
+    // renamed). nextTag ist die vorgeschlagene nächste Versionsnummer.
     status: null,
-    commits: [], // [{ sha, shortSha, author, email, date, message }]
+    commits: [], // [{ sha, shortSha, author, email, date, tags[], message }]
     total: 0, // Gesamtzahl der Commits
     page: 1,
     perPage: 20,
@@ -45,8 +46,10 @@ export const useRepoStore = defineStore('repo', {
 
     // Schreibbefehle geben das Roh-Ergebnis zurück ({ success, output, ... }) —
     // ein fehlgeschlagener Git-Vorgang ist kein API-Fehler, sondern Inhalt.
-    async commit(message) {
-      return api.post('gitcommit', { message })
+    // tag ist die Versionsnummer des Standes (annotiertes Git-Tag); leer heißt
+    // „ohne Versionsnummer sichern“.
+    async commit(message, tag = '') {
+      return api.post('gitcommit', { message, tag })
     },
 
     async push() {

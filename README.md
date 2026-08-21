@@ -572,6 +572,47 @@ einzelner Commit **Versionsstand** und der Push **Änderungen hochladen**; im
 Code und in der API bleiben die Git-Begriffe (`gitcommit`, `gitpush`, `sha`)
 erhalten.
 
+**Vorbelegte Beschreibung.** Das Beschreibungsfeld ist mit einem Gerüst gefüllt:
+erste Zeile die Zusammenfassung (`3 geändert, 1 neu`), danach eine Zeile je
+geänderter Datei mit ihrer Art. Die erste Zeile trägt bewusst die Zusammenfassung
+und keinen Dateipfad — git behandelt sie als Betreff, und genau sie zeigt die
+Spalte **Beschreibung** im Verlauf.
+
+Die Dateiliste wird an einem Zeichenbudget gekürzt (900 der 1000 zulässigen
+Zeichen; der Rest bleibt für eigene Ergänzungen). Ein Theme-Import oder ein Build
+kann hunderte Dateien umfassen, deren Pfade die Grenze sonst weit überschritten
+und den Versionsstand mit `GIT-MESSAGE-TOO-LONG` scheitern ließen. Was nicht mehr
+hineinpasst, weist die letzte Zeile als Anzahl aus (`… und 181 weitere Dateien`).
+
+Beschreibung und Versionsnummer werden nur überschrieben, solange dort nichts
+Eigenes steht: Ein selbst getippter Text bleibt erhalten, wenn der Verlauf
+zwischendurch neu geladen wird.
+
+**Versionsnummern.** Beim Sichern lässt sich eine Versionsnummer vergeben; das
+Feld ist mit dem nächsten freien Wert im Schema `v1`, `v2`, `v3` … vorbelegt und
+frei überschreibbar. Bleibt es leer, entsteht ein Versionsstand ohne Nummer. Im
+Verlauf zeigt die Spalte **Versionsstand** die Nummer, wo eine vergeben ist, und
+sonst den gekürzten Hash.
+
+Der Zähler wird **nicht gespeichert**: Der Vorschlag entsteht aus den vorhandenen
+Tags des Repositorys (höchste rein numerische Nummer + 1). Damit bleibt das
+Repository die einzige Quelle der Wahrheit — ein Umzug, ein Klon oder ein von
+Hand gesetztes Tag kann keine Kollision erzeugen. Abweichend benannte Tags (etwa
+`v1.2.0` oder `release-alt`) bleiben beim Zählen unberücksichtigt und stören
+nicht.
+
+Technisch sind die Nummern **annotierte Git-Tags**. Deshalb überträgt „Änderungen
+hochladen" sie mit (`push --follow-tags`) — ein einfaches `git push` schickt
+keine Tags. Name und Verfügbarkeit werden **vor** dem Commit geprüft: Eine
+bereits vergebene oder ungültige Nummer verhindert den Commit, statt ihn
+unwiderruflich mit fehlender Nummer stehen zu lassen. Scheitert erst das Tag
+selbst, bleibt der Versionsstand gültig und der Dialog weist die fehlende Nummer
+getrennt als Warnung aus.
+
+Der automatische Versionsstand des Cron (`[git] auto_commit`) vergibt **keine**
+Nummern — sonst wüchse die Liste mit jedem Lauf und die Nummern verlören ihre
+Aussagekraft. Versionsnummern setzt allein der Benutzer im Dialog.
+
 Voraussetzungen: `git` ist auf dem Server installiert, das Projektverzeichnis
 steht unter Git-Versionierung, und für `push` sind die Zugangsdaten der
 Gegenstelle in der Serverumgebung eingerichtet (SSH-Schlüssel bzw.
@@ -989,11 +1030,11 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `userdelete`| POST   | `username`                           | **Pro/multiuser:** Konto löschen        |
 | `license`  | GET     | –                                    | Lizenzstatus (Edition, Lizenznehmer, Domain) |
 | `activate` | POST    | `key`                                | Pro-Lizenz aktivieren (schreibt `mounts/<hash>.ini`) |
-| `gitstatus`| GET     | –                                    | **Pro:** Git-Status (Branch, geänderte Dateien) |
-| `gitlog`   | GET     | `page`?, `perPage`?                  | **Pro:** Verlauf der Versionsstände (seitenweise) |
+| `gitstatus`| GET     | –                                    | **Pro:** Git-Status (Branch, geänderte Dateien, nächste freie Versionsnummer) |
+| `gitlog`   | GET     | `page`?, `perPage`?                  | **Pro:** Verlauf der Versionsstände samt Versionsnummern (seitenweise) |
 | `gitdiff`  | GET     | `sha`                                | **Pro:** Diff eines Versionsstands     |
-| `gitcommit`| POST    | `message`                            | **Pro:** alle Änderungen als Versionsstand sichern |
-| `gitpush`  | POST    | –                                    | **Pro:** Änderungen zur konfigurierten Gegenstelle hochladen |
+| `gitcommit`| POST    | `message`, `tag`?                    | **Pro:** alle Änderungen als Versionsstand sichern; `tag` vergibt die Versionsnummer (leer = ohne) |
+| `gitpush`  | POST    | –                                    | **Pro:** Änderungen samt Versionsnummern zur konfigurierten Gegenstelle hochladen |
 | `gitreset` | POST    | `ref`?                               | **Pro:** Arbeitsbaum zurücksetzen (Standard: `HEAD`) |
 | `assistantimprove`| POST | `id` (Datei-ID), `locale`?         | **Pro:** KI-Verbesserung einer Datei starten (nutzt `get_file_report`) |
 | `assistantfix`| POST | `runId`, `ruleId`, `url`?, `mode`?, `locale`? | **Pro:** KI-Micro-Auftrag zu genau einem Fund des SEO-Berichts (`mode`: `fix` behebt, `diagnose` erklärt nur) |

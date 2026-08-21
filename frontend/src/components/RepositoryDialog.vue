@@ -21,6 +21,13 @@ const emit = defineEmits(['activate-license'])
 const model = defineModel({ type: Boolean, default: false })
 
 const message = ref('')
+// Versionsnummer des zu sichernden Standes (annotiertes Git-Tag). Vorbelegt mit
+// dem Vorschlag des Servers, der aus den vorhandenen Tags abgeleitet wird.
+const tag = ref('')
+// Die zuletzt eingesetzten Vorschläge für Beschreibung und Nummer. Sie sind
+// keine Anzeigewerte, sondern der Vergleichsmaßstab in applySuggestions() —
+// deshalb ein einfaches Objekt statt reaktiver Refs.
+const suggested = { tag: '', message: '' }
 const loading = ref(false)
 // Diff wird in einem eigenen, überlagernden Dialog gezeigt (auf dem Smartphone
 // im Vollbild), damit die Auswahl unabhängig von der Scrollposition sichtbar ist.
@@ -41,16 +48,34 @@ watch(model, async (open) => {
   error.value = null
   action.value = null
   message.value = ''
+  tag.value = ''
+  suggested.tag = ''
+  suggested.message = ''
   repo.clearDiff()
   loading.value = true
   try {
     await repo.refresh()
+    applySuggestions()
   } catch (e) {
     error.value = errorText(t, e)
   } finally {
     loading.value = false
   }
 })
+
+// Belegt Beschreibung und Versionsnummer mit den aktuellen Vorschlägen — aber
+// nur, wo noch nichts Eigenes steht. `suggested` hält je Feld den zuletzt
+// eingesetzten Vorschlag fest; weicht der Inhalt davon ab, hat der Benutzer ihn
+// bearbeitet und er bleibt beim Neuladen unangetastet.
+function applySuggestions() {
+  const nextTag = repo.status?.nextTag ?? ''
+  if (tag.value === '' || tag.value === suggested.tag) tag.value = nextTag
+  suggested.tag = nextTag
+
+  const nextMessage = buildMessage()
+  if (message.value === '' || message.value === suggested.message) message.value = nextMessage
+  suggested.message = nextMessage
+}
 
 // Anzeige-Gruppen der Arbeitsbaum-Änderungen. Das Backend meldet den Git-Status
 // je Datei; `added` (bereits vorgemerkt) und `untracked` (noch nicht vorgemerkt)
@@ -95,6 +120,54 @@ const summary = computed(() => {
   return GROUP_ORDER.filter((g) => counts.has(g)).map((g) => ({ group: g, count: counts.get(g) }))
 })
 
+// Obergrenze der Beschreibung — dieselbe wie GitService::MAX_MESSAGE. Wird sie
+// überschritten, weist das Backend den Versionsstand mit GIT-MESSAGE-TOO-LONG ab.
+const MESSAGE_MAX = 1000
+// Die Vorbelegung schöpft das Budget bewusst nicht aus: Der Rest bleibt für
+// eigene Ergänzungen, und der Zähler am Feld schlägt nicht sofort an.
+const MESSAGE_BUDGET = 900
+
+/**
+ * Baut die vorgeschlagene Beschreibung: erste Zeile die Zusammenfassung, danach
+ * eine Zeile je geänderter Datei.
+ *
+ * Die erste Zeile trägt bewusst die Zusammenfassung und keinen Dateipfad — git
+ * behandelt sie als Betreff, und genau sie zeigt die Spalte „Beschreibung“ im
+ * Verlauf. Die Dateiliste wird am Zeichenbudget gekürzt: Ein Theme-Import oder
+ * ein Build kann hunderte Dateien umfassen, deren Pfade die Grenze sonst weit
+ * überschritten. Was nicht mehr hineinpasst, weist die letzte Zeile als Anzahl aus.
+ */
+function buildMessage() {
+  const list = changes.value
+  if (list.length === 0) return ''
+
+  const subject = summary.value.map((s) => t(GROUP_META[s.group].count, [s.count])).join(', ')
+  // Abschlusszeile für den nicht gelisteten Rest. Eigener Schlüssel für die
+  // Einzahl, weil das Projekt keine i18n-Pluralformen verwendet.
+  const moreLine = (n) => (n === 1 ? t('repo.messageMoreOne') : t('repo.messageMore', [n]))
+  // Platz dafür freihalten, bevor die erste Datei zählt — sonst bliebe für den
+  // Hinweis auf den Rest womöglich keiner mehr übrig. Maßstab ist die längere
+  // der beiden Formulierungen.
+  const reserve = Math.max(moreLine(list.length).length, moreLine(1).length) + 1
+  let used = subject.length + 1
+  const lines = []
+
+  for (const [i, c] of list.entries()) {
+    const line = `- ${t(GROUP_META[c.group].label)}: ${c.path}`
+    // Nur die letzte Datei darf die Reserve mitbenutzen: Wenn sie noch passt,
+    // braucht es die Abschlusszeile nicht mehr.
+    const room = MESSAGE_BUDGET - (i === list.length - 1 ? 0 : reserve)
+    if (used + line.length + 1 > room) {
+      lines.push(moreLine(list.length - lines.length))
+      break
+    }
+    lines.push(line)
+    used += line.length + 1
+  }
+
+  return `${subject}\n\n${lines.join('\n')}`
+}
+
 // Diff in Zeilen mit Typ (Kontext/Hinzu/Weg/Kopf) für die Einfärbung.
 const diffLines = computed(() => {
   const text = repo.diff?.diff ?? ''
@@ -110,7 +183,7 @@ const diffLines = computed(() => {
 })
 
 const commitHeaders = computed(() => [
-  { title: t('repo.colSha'), key: 'shortSha', width: 90, sortable: false },
+  { title: t('repo.colSha'), key: 'shortSha', width: 120, sortable: false },
   { title: t('repo.colMessage'), key: 'message', sortable: false },
   { title: t('repo.colAuthor'), key: 'author', width: 140, sortable: false },
   { title: t('repo.colDate'), key: 'date', width: 170, sortable: false },
@@ -126,6 +199,7 @@ async function reload() {
   error.value = null
   try {
     await repo.refresh()
+    applySuggestions()
   } catch (e) {
     error.value = errorText(t, e)
   } finally {
@@ -137,12 +211,29 @@ async function doCommit() {
   if (committing.value || message.value.trim() === '') return
   committing.value = true
   action.value = null
+  error.value = null
+  const wanted = tag.value.trim()
   try {
-    const res = await repo.commit(message.value.trim())
-    action.value = { ok: res.success, key: res.success ? 'repo.commitOk' : 'repo.commitFail', output: res.output }
+    const res = await repo.commit(message.value.trim(), wanted)
+    if (!res.success) {
+      action.value = { type: 'error', key: 'repo.commitFail', output: res.output }
+    } else if (wanted !== '' && !res.tagged) {
+      // Der Stand ist gesichert, nur die Versionsnummer fehlt. Als Warnung, weil
+      // ein erneutes Sichern nichts brächte — hier hilft nur eine andere Nummer.
+      action.value = { type: 'warning', key: 'repo.tagFail', params: [wanted], output: res.tagOutput }
+    } else {
+      action.value = res.tagged
+        ? { type: 'success', key: 'repo.commitOkTagged', params: [res.tag], output: res.output }
+        : { type: 'success', key: 'repo.commitOk', output: res.output }
+    }
     if (res.success) {
+      // Beide Felder gelten nach dem Sichern wieder als unverändert, damit die
+      // frischen Vorschläge einrücken — der gesicherte Text hat sich erledigt.
       message.value = ''
+      suggested.message = ''
+      suggested.tag = tag.value
       await repo.refresh()
+      applySuggestions()
     }
   } catch (e) {
     error.value = errorText(t, e)
@@ -157,7 +248,11 @@ async function doPush() {
   action.value = null
   try {
     const res = await repo.push()
-    action.value = { ok: res.success, key: res.success ? 'repo.pushOk' : 'repo.pushFail', output: res.output }
+    action.value = {
+      type: res.success ? 'success' : 'error',
+      key: res.success ? 'repo.pushOk' : 'repo.pushFail',
+      output: res.output,
+    }
   } catch (e) {
     error.value = errorText(t, e)
   } finally {
@@ -177,8 +272,15 @@ async function doReset() {
   action.value = null
   try {
     const res = await repo.reset('HEAD')
-    action.value = { ok: res.success, key: res.success ? 'repo.resetOk' : 'repo.resetFail', output: res.output }
-    if (res.success) await repo.refresh()
+    action.value = {
+      type: res.success ? 'success' : 'error',
+      key: res.success ? 'repo.resetOk' : 'repo.resetFail',
+      output: res.output,
+    }
+    if (res.success) {
+      await repo.refresh()
+      applySuggestions()
+    }
   } catch (e) {
     error.value = errorText(t, e)
   } finally {
@@ -186,7 +288,12 @@ async function doReset() {
   }
 }
 
+// Bezeichnung des gewählten Standes für den Kopf des Diff-Dialogs: die
+// Versionsnummer, wenn eine vergeben ist, sonst der gekürzte Hash.
+const selectedLabel = ref('')
+
 async function onRowClick(_event, { item }) {
+  selectedLabel.value = item.tags?.[0] ?? item.shortSha
   diffDialog.value = true
   diffLoading.value = true
   try {
@@ -303,11 +410,26 @@ const busy = computed(() => committing.value || pushing.value || resetting.value
             prepend-inner-icon="mdi-message-text-outline"
             variant="outlined"
             density="comfortable"
-            rows="2"
+            rows="4"
             auto-grow
-            counter="1000"
+            max-rows="12"
+            :counter="MESSAGE_MAX"
             :disabled="repo.status?.clean"
             @keydown.enter.ctrl.prevent="doCommit"
+          />
+          <!-- Versionsnummer: vorbelegt mit dem fortlaufenden Vorschlag, aber
+               frei überschreibbar; leer sichert den Stand ohne Nummer. -->
+          <v-text-field
+            v-model="tag"
+            :label="$t('repo.tag')"
+            :hint="$t('repo.tagHint')"
+            persistent-hint
+            prepend-inner-icon="mdi-tag-outline"
+            variant="outlined"
+            density="comfortable"
+            :disabled="repo.status?.clean"
+            class="repo-tag mb-1"
+            @keydown.enter.prevent="doCommit"
           />
           <div class="d-flex align-center mb-2">
             <v-spacer />
@@ -327,13 +449,13 @@ const busy = computed(() => committing.value || pushing.value || resetting.value
           <!-- Ergebnis der letzten Aktion -->
           <v-alert
             v-if="action"
-            :type="action.ok ? 'success' : 'error'"
+            :type="action.type"
             density="compact"
             class="mb-3"
             closable
             @click:close="action = null"
           >
-            <div>{{ $t(action.key) }}</div>
+            <div>{{ $t(action.key, action.params ?? []) }}</div>
             <pre v-if="action.output" class="repo-output mt-1">{{ action.output }}</pre>
           </v-alert>
 
@@ -350,8 +472,23 @@ const busy = computed(() => committing.value || pushing.value || resetting.value
             class="repo-table"
             @click:row="onRowClick"
           >
+            <!-- Versionsnummer statt Hash, wo eine vergeben ist: Sie ist das,
+                 was der Benutzer selbst gesetzt hat und wiedererkennt. Ohne Tag
+                 bleibt der gekürzte Hash als einzige Kennung. -->
             <template #[`item.shortSha`]="{ item }">
-              <code>{{ item.shortSha }}</code>
+              <template v-if="item.tags?.length">
+                <v-chip
+                  v-for="tagName in item.tags"
+                  :key="tagName"
+                  size="x-small"
+                  color="primary"
+                  variant="tonal"
+                  prepend-icon="mdi-tag-outline"
+                  label
+                  class="mr-1"
+                >{{ tagName }}</v-chip>
+              </template>
+              <code v-else>{{ item.shortSha }}</code>
             </template>
             <template #[`item.date`]="{ item }">
               <span class="text-caption">{{ formatDate(item.date) }}</span>
@@ -395,7 +532,7 @@ const busy = computed(() => committing.value || pushing.value || resetting.value
     <v-card class="pa-2">
       <v-card-title class="d-flex align-center text-h6">
         <v-icon icon="mdi-file-compare" color="primary" class="mr-2" />
-        {{ $t('repo.diffOf', [repo.selectedSha?.slice(0, 7)]) }}
+        {{ $t('repo.diffOf', [selectedLabel]) }}
         <v-spacer />
         <v-btn icon="mdi-close" variant="text" size="small" @click="diffDialog = false" />
       </v-card-title>
@@ -432,6 +569,11 @@ const busy = computed(() => committing.value || pushing.value || resetting.value
 .repo-path {
   font-size: 0.82rem;
   word-break: break-all;
+}
+/* Die Versionsnummer ist kurz — ein Feld über die volle Dialogbreite ließe sie
+   verloren wirken und suggerierte einen langen Wert. */
+.repo-tag {
+  max-width: 260px;
 }
 .repo-output {
   font-size: 0.78rem;
