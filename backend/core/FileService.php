@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace HugoCMS\FileManager;
 
 use HugoCMS\FileManager\Exception\ApiException;
+use HugoCMS\FileManager\Review\FrontMatter;
 
 /**
  * Führt die eigentlichen Dateioperationen aus. Bekommt ausschließlich
@@ -24,6 +25,9 @@ final class FileService
 
     /** Obergrenze besuchter Einträge je Suche (Schutz vor Endlos-Bäumen). */
     private const SEARCH_VISIT_LIMIT = 20_000;
+
+    /** So viel vom Dateianfang genügt, um das Front Matter zu lesen. */
+    private const FRONT_MATTER_BYTES = 8192;
 
     /** @var list<string> Endungen, die der Texteditor öffnen darf. */
     private array $editable;
@@ -540,6 +544,75 @@ final class FileService
         }
 
         return $results;
+    }
+
+    /**
+     * Sucht ab einem Verzeichnis rekursiv alle Content-Dateien, deren Front
+     * Matter `draft: true` trägt — also Seiten, die Hugo NICHT veröffentlicht.
+     * Aufbau, Grenzen und Rückgabe wie search(); die Treffer tragen zusätzlich
+     * "path" (Pfad relativ zur Suchwurzel).
+     *
+     * Gelesen wird nur der Dateianfang: Das Front Matter steht dort, und eine
+     * ganze Seite einzulesen wäre für diese eine Frage verschwendet.
+     *
+     * @return list<array>
+     */
+    public function findDrafts(Mount $mount, string $rootRel, string $rootAbs): array
+    {
+        $results = [];
+        $visited = 0;
+        $stack = [['', $rootAbs]];
+
+        while ($stack !== [] && count($results) < self::SEARCH_LIMIT && $visited < self::SEARCH_VISIT_LIMIT) {
+            [$dirPath, $dirAbs] = array_pop($stack);
+            foreach (scandir($dirAbs) ?: [] as $name) {
+                if ($name === '' || $name[0] === '.') {
+                    continue;
+                }
+                $visited++;
+                $childPath = $dirPath === '' ? $name : $dirPath . '/' . $name;
+                $childAbs = $dirAbs . '/' . $name;
+
+                if (is_dir($childAbs)) {
+                    if (!is_link($childAbs)) {
+                        $stack[] = [$childPath, $childAbs];
+                    }
+                    continue;
+                }
+                if (!self::isContentName($name) || !self::hasDraftFlag($childAbs)) {
+                    continue;
+                }
+
+                $rel = $rootRel === '' ? $childPath : $rootRel . '/' . $childPath;
+                $entry = $this->entryInfo($mount, $rel, $childAbs);
+                $entry['path'] = $childPath;
+                $results[] = $entry;
+                if (count($results) >= self::SEARCH_LIMIT) {
+                    break;
+                }
+            }
+        }
+
+        return $results;
+    }
+
+    /** Dateiname einer Hugo-Content-Seite (Front Matter erwartbar)? */
+    private static function isContentName(string $name): bool
+    {
+        return preg_match('/\.(md|markdown|html?)$/i', $name) === 1;
+    }
+
+    /** Trägt der Front-Matter-Block der Datei `draft: true`? */
+    private static function hasDraftFlag(string $abs): bool
+    {
+        $handle = @fopen($abs, 'rb');
+        if ($handle === false) {
+            return false;
+        }
+        $head = (string) fread($handle, self::FRONT_MATTER_BYTES);
+        fclose($handle);
+
+        return FrontMatter::isTrue($head, 'draft');
     }
 
     // --- Hilfen ------------------------------------------------------------

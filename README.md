@@ -390,6 +390,13 @@ darstellt, einschließlich des **ungespeicherten** Editor-Stands. Die Datei auf
 der Platte und der Publish-Ordner bleiben dabei unangetastet
 (`PreviewService`).
 
+Im **Dateimanager** steht derselbe Weg im Kontextmenü einer Content-Datei
+(„Seitenvorschau"). Der Eintrag erscheint nur, wenn das angezeigte Verzeichnis
+im Content-Ordner liegt — dafür liefert der `list`-Befehl das Flag
+`cwd.contentDir` — und die Datei eine Content-Endung trägt. Gezeigt wird dort
+der gespeicherte Stand; einen ungespeicherten gibt es außerhalb des Editors
+nicht.
+
 Denselben Knopf trägt die **Freigabe-Warteschlange**: Dort zeigt er den
 vorgeschlagenen Stand eines Entwurfs, ohne ihn freizugeben. Das gilt auch für
 Entwürfe **neuer** Seiten, die es im Projekt noch gar nicht gibt — der Entwurf
@@ -408,6 +415,17 @@ Werkzeuge machen die Vorschau trotzdem leichtgewichtig:
   Adresse. Welche das ist, sagt `hugo list all` (Spalte `permalink`) — `slug`,
   `url` im Front Matter und die `permalinks`-Konfiguration bestimmen sie. Bei
   älteren Hugo-Fassungen entfällt das Segment, gebaut wird dann vollständig.
+
+Am oberen Rand sitzt ein Hinweisband („Vorschau — dieser Stand ist nicht
+veröffentlicht"). Unmittelbar rechts am Text schließt ein **Schließen**-Knopf
+an — beide zusammen mittig gesetzt, damit der Weg mit der Maus kurz bleibt —,
+der das Fenster schließt. Das gelingt nur, weil die App es selbst per `window.open` geöffnet
+hat; verdrahtet ist der Knopf über einen kurzen Skriptblock statt über ein
+`onclick`-Attribut. Damit eine strenge CSP der Webseite ihn nicht blockiert,
+erzeugt `install.sh` für den Endpunkt eine `cms-api/.htaccess`, die den
+CSP-Header dort aus beiden Header-Tabellen entfernt (bei Nginx: siehe den
+Hinweis im `/cms-api/`-Block der Beispielkonfiguration). Die Sprache des Bands
+folgt der Oberfläche.
 
 Gebaut wird mit `--buildDrafts --buildFuture --buildExpired`, denn gerade
 Entwürfe und terminierte Fassungen will man vorher sehen. `--noBuildLock`
@@ -951,6 +969,7 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `raw`      | GET     | `target` (ID)                        | Bild inline ausliefern (Betrachter)    |
 | `thumb`    | GET     | `target` (ID), `size`?               | Bildvorschau (GD; ohne GD das Original)|
 | `search`   | GET     | `target` (Ordner-ID), `q` (≥ 2 Z.)   | Rekursive Namenssuche (max. 200)       |
+| `draftsearch`| GET  | `target`                             | Entwurfsfilter: alle Content-Dateien ab `target` mit `draft: true` im Front Matter (rekursiv, gleiche Antwortform wie `search`) |
 | `linkscan` | GET     | `url` (≥ 2 Z.), `cursor`?            | Hyperlink-Suche in `content/` und im gebauten Ordner — EIN Segment je Aufruf (siehe „Hyperlink-Suche") |
 | `trashlist`| GET     | –                                    | Papierkörbe aller Mounts auflisten     |
 | `restore`  | POST    | `mount`, `names` (Liste)             | Aus dem Papierkorb wiederherstellen    |

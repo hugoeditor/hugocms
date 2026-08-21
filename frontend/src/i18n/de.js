@@ -105,6 +105,7 @@ export default {
     newFolder: 'Neuer Ordner',
     newFile: 'Neue Datei',
     download: 'Herunterladen',
+    preview: 'Seitenvorschau',
     upload: 'Dateien hochladen …',
     contentQuality: 'Qualität mit KI prüfen',
     queueImprove: 'Mit KI später verbessern',
@@ -122,6 +123,9 @@ export default {
     none: 'Keine Treffer für „{0}“',
     truncated: 'Nur die ersten {0} Treffer werden angezeigt.',
     leave: 'Suche verlassen',
+    draftsHint: 'Nur Entwürfe zeigen (draft: true)',
+    draftsResults: 'Entwürfe: {0} Seiten mit draft: true',
+    draftsNone: 'Keine Seite ab diesem Ordner trägt draft: true.',
   },
 
   site: {

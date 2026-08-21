@@ -26,6 +26,41 @@ final class FrontMatter
         return self::set($raw, 'draft', $value);
     }
 
+    /**
+     * Steht der boolesche Schlüssel im Front Matter auf true? Gegenstück zu
+     * set(): dieselbe Formaterkennung, nur lesend. Fehlt der Schlüssel, ist er
+     * false oder gibt es gar kein Front Matter, lautet die Antwort false.
+     *
+     * Es genügt der ANFANG der Datei (der Front-Matter-Block); wer nur diese
+     * Frage stellt, muss keine ganze Seite einlesen.
+     */
+    public static function isTrue(string $raw, string $key): bool
+    {
+        if (str_starts_with($raw, "\xEF\xBB\xBF")) {
+            $raw = substr($raw, 3);
+        }
+
+        // YAML (---) oder TOML (+++). Der schließende Begrenzer darf fehlen,
+        // wenn nur der Dateianfang vorliegt — der Block bis dahin genügt.
+        if (preg_match('/^(---|\+\+\+)\R(.*?)(?:\R\1[ \t]*(?:\R|$)|$)/s', $raw, $m) === 1) {
+            return preg_match(
+                '/^[ \t]*' . preg_quote($key, '/') . '[ \t]*[:=][ \t]*(?:"true"|\'true\'|true)[ \t]*$/mi',
+                $m[2],
+            ) === 1;
+        }
+
+        // JSON-Front-Matter: führendes { … }-Objekt.
+        $json = self::extractJsonObject($raw);
+        if ($json !== null) {
+            $data = json_decode($json[0], true);
+            if (is_array($data)) {
+                return ($data[$key] ?? null) === true;
+            }
+        }
+
+        return false;
+    }
+
     /** Setzt einen booleschen Schlüssel im führenden Front-Matter-Block. */
     public static function set(string $raw, string $key, bool $value): string
     {

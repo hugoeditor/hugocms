@@ -64,8 +64,9 @@ final class PreviewService
      *                             für eine noch nicht angelegte Seite lässt
      *                             sich so ebenfalls zeigen.
      * @param string $content      Text, der gezeigt werden soll
+     * @param string $locale       Sprache des Hinweisbands ('de' | 'en')
      */
-    public function build(string $relInContent, string $content): string
+    public function build(string $relInContent, string $content, string $locale = 'de'): string
     {
         $this->purgeExpired();
 
@@ -116,7 +117,7 @@ final class PreviewService
 
             $html = $this->readRendered($out, $urlPath);
             $target = $this->storageDir . '/' . $token . '.html';
-            if (@file_put_contents($target, $this->decorate($html)) === false) {
+            if (@file_put_contents($target, $this->decorate($html, $locale)) === false) {
                 throw new ApiException('EIO', 500, 'PREVIEW-STORAGE-FAILED');
             }
         } finally {
@@ -353,17 +354,36 @@ final class PreviewService
      * angemeldete Sitzung und mit X-Robots-Tag — aber eine gespeicherte oder
      * weitergereichte Datei trägt den Hinweis dann bei sich.
      */
-    private function decorate(string $html): string
+    private function decorate(string $html, string $locale): string
     {
         $meta = '<meta name="robots" content="noindex,nofollow,noarchive">';
         $html = preg_replace('/<head\b[^>]*>/i', '$0' . "\n" . $meta, $html, 1) ?? $html;
 
+        $english = str_starts_with(strtolower($locale), 'en');
+        $note = $english
+            ? 'Preview — this version is not published. Links lead to the live website.'
+            : 'Vorschau — dieser Stand ist nicht veröffentlicht. Verweise führen auf die Live-Webseite.';
+        $close = $english ? 'Close' : 'Schließen';
+
         // Bewusst schlicht und mit eigenen Farben: Das Band soll sich nicht auf
-        // das Aussehen der Seite verlassen und nichts überdecken.
+        // das Aussehen der Seite verlassen und nichts überdecken. Der Knopf
+        // schließt das Fenster — das gelingt dem Browser nur, weil die App es
+        // selbst per window.open geöffnet hat.
+        // Text und Knopf bilden EINE zentrierte Gruppe: Der Knopf schließt direkt
+        // an den Text an, statt am rechten Rand zu kleben — das verkürzt den Weg
+        // mit der Maus. Auf schmalen Schirmen darf die Gruppe umbrechen.
         $banner = '<div style="position:sticky;top:0;z-index:2147483647;background:#3c8527;color:#fff;'
-            . 'font:14px/1.4 system-ui,sans-serif;padding:6px 12px;text-align:center">'
-            . 'Vorschau — dieser Stand ist nicht veröffentlicht. Verweise führen auf die Live-Webseite.'
-            . '</div>';
+            . 'font:14px/1.4 system-ui,sans-serif;padding:6px 12px;display:flex;align-items:center;'
+            . 'justify-content:center;flex-wrap:wrap;gap:10px">'
+            . '<span>' . $note . '</span>'
+            . '<button type="button" id="hugocms-preview-close" style="flex:none;background:rgba(255,255,255,.15);'
+            . 'color:#fff;border:1px solid rgba(255,255,255,.5);border-radius:4px;padding:3px 12px;'
+            . 'font:inherit;cursor:pointer">' . $close . '</button>'
+            . '</div>'
+            // Verdrahtung als eigener Block statt als onclick-Attribut: So
+            // genügt der Seite ein CSP ohne 'unsafe-inline' für Attribute.
+            . '<script>document.getElementById("hugocms-preview-close")'
+            . '.addEventListener("click",function(){window.close()});</script>';
 
         return preg_replace('/<body\b[^>]*>/i', '$0' . "\n" . $banner, $html, 1) ?? $html;
     }

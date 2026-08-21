@@ -484,6 +484,7 @@ final class Connector
                 'raw' => $this->cmdRaw($request),
                 'thumb' => $this->cmdThumb($request),
                 'search' => $this->cmdSearch($request),
+                'draftsearch' => $this->cmdDraftSearch($request),
                 'linkscan' => $this->cmdLinkScan($request),
                 'trashlist' => $this->cmdTrashList(),
                 'restore' => $this->cmdRestore($request),
@@ -865,6 +866,10 @@ final class Connector
         $cwd['path'] = $target['rel'] === ''
             ? $target['mount']->name()
             : $target['mount']->name() . '/' . $target['rel'];
+        // Liegt das angezeigte Verzeichnis im Hugo-Content-Ordner? Nur dort
+        // bietet der Dateimanager die Seitenvorschau an — alles andere ergibt
+        // keine eigene Seite.
+        $cwd['contentDir'] = $this->isHugoContentPath($target['abs']);
 
         return [
             'cwd' => $cwd,
@@ -1167,6 +1172,36 @@ final class Connector
     }
 
     /**
+     * Entwurfsfilter: listet ab dem aktuellen Verzeichnis rekursiv alle
+     * Content-Dateien mit `draft: true` im Front Matter — also Seiten, die Hugo
+     * nicht veröffentlicht.
+     *
+     * NICHT zu verwechseln mit den Freigabe-Entwürfen der gestaffelten
+     * Veröffentlichung ({@see cmdReviewList}): Die liegen im Index-Store und
+     * betreffen vorgeschlagene Fassungen, hier geht es um das Front Matter der
+     * Datei selbst.
+     *
+     * Antwortform wie {@see cmdSearch}, damit der Client dieselbe
+     * Ergebnisansicht nutzt.
+     */
+    private function cmdDraftSearch(array $request): array
+    {
+        $this->requireAuth();
+        $target = $this->resolver->resolve($this->requireParam($request, 'target'));
+        $this->requirePermission($target['mount'], 'read');
+        if (!is_dir($target['abs'])) {
+            throw ApiException::badRequest('NOT-A-DIRECTORY');
+        }
+
+        // Front Matter jeder Content-Datei lesen — bei großen Bäumen spürbar.
+        @set_time_limit(120);
+
+        $results = $this->files->findDrafts($target['mount'], $target['rel'], $target['abs']);
+
+        return ['entries' => $results, 'truncated' => count($results) >= FileService::SEARCH_LIMIT];
+    }
+
+    /**
      * Hyperlink-Suche in den Hugo-Quellen (content/) und im gebauten Ergebnis
      * (public/) — ein SEGMENT je Aufruf. Der Client ruft den Befehl mit dem
      * zurückgegebenen `cursor` erneut auf, bis `done` gesetzt ist; so bleibt das
@@ -1373,10 +1408,14 @@ final class Connector
 
         $rel = $this->relativeToHugoContent($abs);
 
+        // Sprache nur für das Hinweisband der Vorschau; die Seite selbst baut
+        // Hugo in der Sprache des Projekts.
+        $locale = strtolower(trim((string) ($request['locale'] ?? 'de')));
+
         // Drei kurze Hugo-Läufe (Konfiguration, Adressliste, Bau).
         @set_time_limit(120);
 
-        $token = $this->previewService()->build($rel, $content);
+        $token = $this->previewService()->build($rel, $content, $locale);
 
         return [
             'token' => $token,

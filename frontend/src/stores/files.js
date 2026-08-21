@@ -42,6 +42,14 @@ export const useFilesStore = defineStore('files', {
     searchQuery: '',
     searchResults: [],
     searchTruncated: false,
+    // Entwurfsfilter: zeigt ab dem aktuellen Verzeichnis alle Content-Dateien
+    // mit `draft: true` im Front Matter. Nutzt dieselbe Ergebnisliste wie die
+    // Suche — die beiden schließen einander aus.
+    draftFilter: false,
+    draftBusy: false, // Lauf läuft (Front Matter jeder Datei wird gelesen)
+    // Fehler des Entwurfsfilters. Ausgelöst wird er in der Werkzeugleiste,
+    // angezeigt im Dateimanager — deshalb der Umweg über den Store.
+    searchError: null,
 
     // Papierkorb-Ansicht (Stufe 4).
     trashMode: false,
@@ -283,16 +291,55 @@ export const useFilesStore = defineStore('files', {
       if (!this.cwd || q.length < 2) return
       const data = await api.get('search', { target: this.cwd.id, q })
       this.searchQuery = data.query
+      this.draftFilter = false // Suche und Entwurfsfilter schließen einander aus
       this.searchResults = data.entries
       this.searchTruncated = data.truncated
       this.selectedIds = []
       this.selectionAnchor = null
     },
 
+    // Alle nicht veröffentlichten Seiten (draft: true) ab dem aktuellen
+    // Verzeichnis. Die Treffer landen in derselben Liste wie Suchergebnisse,
+    // die Ansicht unterscheidet sie über draftFilter.
+    async searchDrafts() {
+      if (!this.cwd || this.draftBusy) return
+      this.draftBusy = true
+      this.searchError = null
+      try {
+        const data = await api.get('draftsearch', { target: this.cwd.id })
+        this.searchQuery = ''
+        this.draftFilter = true
+        this.searchResults = data.entries
+        this.searchTruncated = data.truncated
+        this.selectedIds = []
+        this.selectionAnchor = null
+      } catch (e) {
+        this.searchError = e
+      } finally {
+        this.draftBusy = false
+      }
+    },
+
+    // Räumt NUR den Suchzustand ab. Für den Rückweg in die Ordneransicht ist
+    // exitSearch() zuständig — hier bleiben Filtertext und Liste unberührt,
+    // weil auch _list(), openTrash() und openAudit() diese Aktion nutzen.
     leaveSearch() {
       this.searchQuery = ''
+      this.draftFilter = false
       this.searchResults = []
       this.searchTruncated = false
+    },
+
+    /**
+     * Zurück aus Suchergebnissen oder Entwurfsfilter in die Ordneransicht:
+     * Suchzustand abräumen, das Eingabefeld leeren — sonst wirkt der stehen
+     * gebliebene Text weiter als Schnellfilter — und das Verzeichnis frisch
+     * laden, weil sich währenddessen etwas geändert haben kann.
+     */
+    async exitSearch() {
+      this.leaveSearch()
+      this.filter = ''
+      await this.refresh()
     },
 
     async openTrash() {

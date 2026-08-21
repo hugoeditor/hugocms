@@ -14,6 +14,16 @@ function onSearch() {
   const q = files.filter.trim()
   if (q.length >= 2) files.search(q)
 }
+
+// Entwurfsfilter umschalten: zeigt alle Seiten mit `draft: true` ab dem
+// aktuellen Ordner, ein zweiter Klick führt zurück zur Ordneransicht.
+function toggleDrafts() {
+  if (files.draftFilter) {
+    files.exitSearch()
+  } else {
+    files.searchDrafts()
+  }
+}
 </script>
 
 <template>
@@ -135,9 +145,25 @@ function onSearch() {
         class="nemo-filter-input"
         @input="files.setFilter($event.target.value)"
         @keydown.enter="onSearch"
-        @keydown.escape="files.setFilter(''); files.leaveSearch()"
+        @keydown.escape="files.exitSearch()"
       />
     </div>
+
+    <!-- Entwurfsfilter: alle Seiten mit draft: true ab dem aktuellen Ordner -->
+    <v-tooltip v-if="files.cwd" :text="t('search.draftsHint')" location="bottom">
+      <template #activator="{ props }">
+        <button
+          v-bind="props"
+          class="nemo-iconbtn"
+          :class="{ active: files.draftFilter }"
+          :disabled="files.draftBusy"
+          :aria-pressed="files.draftFilter"
+          @click="toggleDrafts"
+        >
+          <v-icon :icon="files.draftBusy ? 'mdi-timer-sand' : 'mdi-file-document-alert-outline'" size="18" />
+        </button>
+      </template>
+    </v-tooltip>
 
     <!-- Ansichtsumschalter -->
     <div class="nemo-viewtoggle">

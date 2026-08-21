@@ -44,6 +44,27 @@ declare(strict_types=1);
 require '$BACKEND_DIR/core/hugocms.php';
 PHP
 
+    # Header rules for the endpoint directory (Apache). Nginx ignores this file
+    # -- see beispiel-konfigurationen/nginx.conf.
+    cat > "$base/$API_DIR/.htaccess" <<'HT'
+# HugoCMS – API-Endpunkt (von install.sh/update.sh erzeugt).
+#
+# Die Antworten hier sind JSON; nur die Seitenvorschau (cmd=preview) liefert
+# HTML — mit einem kurzen eigenen Skript für den Schließen-Knopf im Hinweisband.
+# Eine strenge CSP der Webseite (script-src 'self' ohne 'unsafe-inline', erst
+# recht require-trusted-types-for) würde dieses Skript blockieren. Sie wird
+# deshalb hier aus BEIDEN Header-Tabellen entfernt; zur Erläuterung von "always"
+# siehe die .htaccess der App unter /edit/.
+#
+# Für JSON-Antworten spielt eine CSP ohnehin keine Rolle, und die Vorschau ist
+# nur mit angemeldeter Sitzung erreichbar und zeigt Inhalte des eigenen
+# Projekts.
+<IfModule mod_headers.c>
+    Header unset Content-Security-Policy
+    Header always unset Content-Security-Policy
+</IfModule>
+HT
+
     # Remove leftovers of a former symlink install.
     if [ -L "$base/$API_DIR/$BACKEND_LINK" ]; then
         rm "$base/$API_DIR/$BACKEND_LINK"

@@ -168,7 +168,7 @@ async function previewDraft() {
   // ungefragtes Aufklappen.
   const win = window.open('', '_blank')
   try {
-    const { token } = await api.post('previewbuild', { draftKey: key })
+    const { token } = await api.post('previewbuild', { draftKey: key, locale: locale.value })
     const url = apiUrl('preview', { token })
     if (win) {
       win.location.href = url

@@ -4,8 +4,10 @@ import { useI18n } from 'vue-i18n'
 import { useFilesStore } from '../stores/files'
 import { useAuditContentStore } from '../stores/auditContent'
 import { useAssistantStore } from '../stores/assistant'
+import { useAuthStore } from '../stores/auth'
 import { formatSize, formatDate, iconFor } from '../util/format'
 import { errorText } from '../i18n/apiMessage'
+import { api, apiUrl } from '../api/client'
 import ImageViewer from './ImageViewer.vue'
 import ImageEditor from './ImageEditor.vue'
 import QueueImproveDialog from './QueueImproveDialog.vue'
@@ -16,6 +18,7 @@ const { t, locale } = useI18n()
 const files = useFilesStore()
 const auditContent = useAuditContentStore()
 const assistant = useAssistantStore()
+const auth = useAuthStore()
 const requireAi = useAiGate() // KI-Zugangsschranke (Hinweis + Konfiguration)
 const error = useTransientError() // blendet sich nach kurzer Zeit selbst aus
 const notice = useTransientError() // Erfolgsmeldung (grün), ebenfalls selbstlöschend
@@ -25,7 +28,50 @@ function isMarkdown(entry) {
   return entry?.type === 'file' && /\.(md|markdown)$/i.test(entry.name || '')
 }
 
+// Seite, die Hugo aus dieser Datei erzeugt — Voraussetzung für die Vorschau:
+// ein Hugo-Projekt, das angezeigte Verzeichnis im Content-Ordner (Flag aus dem
+// list-Befehl) und eine Content-Endung. Bei aktiver Suche stammen die Treffer
+// aus anderen Verzeichnissen, dann sagt cwd nichts über den Eintrag aus.
+function isContentPage(entry) {
+  return auth.buildable
+    && !!files.cwd?.contentDir
+    && !files.searchQuery
+    && entry?.type === 'file'
+    && /\.(md|markdown|html?)$/i.test(entry.name || '')
+}
+
+// Vorschau der Seite in einem neuen Fenster. Anders als im Editor gibt es hier
+// keinen ungespeicherten Text — gezeigt wird die Datei, wie sie auf der Platte
+// liegt. Das Fenster wird VOR dem Bau geöffnet, sonst wertet der Browser es als
+// ungefragtes Aufklappen und blockiert es.
+async function previewEntry(entry) {
+  const win = window.open('', '_blank')
+  try {
+    const { token } = await api.post('previewbuild', { id: entry.id, locale: locale.value })
+    const url = apiUrl('preview', { token })
+    if (win) {
+      win.location.href = url
+    } else {
+      window.open(url, '_blank')
+    }
+  } catch (e) {
+    win?.close()
+    error.value = errorText(t, e)
+  }
+}
+
 const entries = computed(() => files.visibleEntries)
+
+// Der Entwurfsfilter wird in der Werkzeugleiste ausgelöst, die keine eigene
+// Meldezeile hat — der Fehler kommt deshalb über den Store hierher.
+watch(
+  () => files.searchError,
+  (e) => {
+    if (!e) return
+    error.value = errorText(t, e)
+    files.searchError = null
+  },
+)
 
 // Ausgewählte Markdown-Dateien (IDs) für das Vormerken zur KI-Verbesserung.
 // Die Auswahl liegt immer im aktuellen Verzeichnis, also reichen die sichtbaren
@@ -104,6 +150,14 @@ function buildItems(entry) {
     }
     if (entry.type === 'file' && sel === 1) {
       items.push({ icon: 'mdi-download', label: t('ctx.download'), action: () => files.download(entry) })
+    }
+    // Seitenvorschau — nur für Content-Dateien eines Hugo-Projekts.
+    if (sel === 1 && isContentPage(entry)) {
+      items.push({ icon: 'mdi-eye-outline', label: t('ctx.preview'), action: () => previewEntry(entry) })
+      // Trennt die Vorschau von den KI-Einträgen darunter — aber nur, wenn
+      // welche folgen, sonst stünde die Linie doppelt vor dem Trenner, der die
+      // Zwischenablage abgrenzt.
+      if (isMarkdown(entry) || markdownSelection.value.length) items.push({ divider: true })
     }
     // LLM-Content-Qualität: für einzelne Markdown-Dateien immer angeboten, damit
     // die Funktion auffindbar ist. Fehlt der KI-Schlüssel, meldet sich requireAi()
@@ -368,23 +422,25 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
           <span>{{ $t('dnd.dropHint') }}</span>
         </div>
 
-        <!-- Suchergebnisse (Serversuche, Stufe 4) -->
-        <template v-if="files.searchQuery">
+        <!-- Ergebnisliste: Serversuche (Stufe 4) oder Entwurfsfilter -->
+        <template v-if="files.searchQuery || files.draftFilter">
           <div class="nemo-search-head nemo-noselect">
-            <v-icon icon="mdi-magnify" size="18" />
-            <span>{{ $t('search.resultsFor', [files.searchQuery]) }}</span>
+            <v-icon :icon="files.draftFilter ? 'mdi-file-document-alert-outline' : 'mdi-magnify'" size="18" />
+            <span v-if="files.draftFilter">{{ $t('search.draftsResults', [files.searchResults.length]) }}</span>
+            <span v-else>{{ $t('search.resultsFor', [files.searchQuery]) }}</span>
             <span v-if="files.searchTruncated" class="nemo-search-trunc">
               {{ $t('search.truncated', [files.searchResults.length]) }}
             </span>
             <div style="flex: 1 1 auto" />
-            <button class="nemo-search-leave" @click="files.leaveSearch()">
+            <button class="nemo-search-leave" @click="files.exitSearch()">
               <v-icon icon="mdi-close" size="16" class="mr-1" />{{ $t('search.leave') }}
             </button>
           </div>
 
           <div v-if="files.searchResults.length === 0" class="nemo-empty">
             <v-icon icon="mdi-file-search-outline" size="56" class="nemo-empty-icon" />
-            <p>{{ $t('search.none', [files.searchQuery]) }}</p>
+            <p v-if="files.draftFilter">{{ $t('search.draftsNone') }}</p>
+            <p v-else>{{ $t('search.none', [files.searchQuery]) }}</p>
           </div>
 
           <table v-else class="nemo-list">
@@ -493,14 +549,14 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 
       <!-- Statusleiste -->
       <footer class="nemo-statusbar nemo-noselect">
-        <span v-if="files.searchQuery">
+        <span v-if="files.searchQuery || files.draftFilter">
           {{ files.searchResults.length === 1 ? $t('status.itemOne') : $t('status.items', [files.searchResults.length]) }}
         </span>
         <span v-else>
           {{ files.entries.length === 1 ? $t('status.itemOne') : $t('status.items', [files.entries.length]) }}
         </span>
         <span v-if="files.selectedCount" class="nemo-status-sel">· {{ $t('status.selected', [files.selectedCount]) }}</span>
-        <span v-if="files.filter && !files.searchQuery" class="nemo-status-sel">· {{ entries.length }}/{{ files.entries.length }}</span>
+        <span v-if="files.filter && !files.searchQuery && !files.draftFilter" class="nemo-status-sel">· {{ entries.length }}/{{ files.entries.length }}</span>
       </footer>
     </template>
 

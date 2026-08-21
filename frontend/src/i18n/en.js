@@ -105,6 +105,7 @@ export default {
     newFolder: 'New folder',
     newFile: 'New file',
     download: 'Download',
+    preview: 'Page preview',
     upload: 'Upload files …',
     contentQuality: 'Check quality with AI',
     queueImprove: 'Improve with AI later',
@@ -122,6 +123,9 @@ export default {
     none: 'No results for “{0}”',
     truncated: 'Only the first {0} results are shown.',
     leave: 'Leave search',
+    draftsHint: 'Show drafts only (draft: true)',
+    draftsResults: 'Drafts: {0} pages with draft: true',
+    draftsNone: 'No page below this folder carries draft: true.',
   },
 
   site: {

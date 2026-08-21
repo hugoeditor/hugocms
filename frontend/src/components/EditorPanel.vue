@@ -108,6 +108,7 @@ async function previewPage() {
     const { token } = await api.post('previewbuild', {
       id: file.id,
       content: files.dirty ? draft.value : undefined,
+      locale: locale.value, // nur für das Hinweisband der Vorschau
     })
     const url = apiUrl('preview', { token })
     if (win) {
