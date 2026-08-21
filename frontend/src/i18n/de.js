@@ -13,6 +13,7 @@ export default {
     retry: 'Erneut prüfen',
     setupWarningTitle: 'Server-Hinweis zur Einrichtung',
     close: 'Schließen',
+    cancel: 'Abbrechen',
     sessionExpired: 'Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.',
     resizeWindow: 'Fensterbreite ziehen (Doppelklick: zurücksetzen)',
   },
@@ -432,6 +433,26 @@ export default {
     pageOf: 'Seite {0} von {1}',
     diffOf: 'Änderungen von {0}',
     diffEmpty: 'Dieser Versionsstand enthält keine Änderungen am Inhalt.',
+    diffFiles: 'Dateien in diesem Stand',
+    // Rückkehr zu einem alten Stand. Die Texte vermeiden Git-Begriffe und
+    // betonen, dass nichts verlorengeht — das trägt die Entscheidung.
+    restore: 'Diesen Stand wiederherstellen',
+    restoreTitle: 'Stand {0} wiederherstellen?',
+    restoreExplain: 'Alle Dateien werden auf den Stand {0} zurückgesetzt und als neuer Versionsstand gesichert. Die späteren Stände bleiben vollständig erhalten — Sie können jederzeit wieder zu ihnen zurückkehren.',
+    restorePresaveNote: 'Sie haben noch nicht gesicherte Änderungen. Diese werden zuvor als eigener Versionsstand gesichert, damit nichts verlorengeht.',
+    restoreAffected: 'Das ändert sich',
+    restoreNoChange: 'Dieser Stand entspricht bereits dem aktuellen — es gibt nichts zurückzuholen.',
+    restoreAction: 'Wiederherstellen',
+    restoreMessage: 'Stand {0} wiederhergestellt',
+    restorePresaveMessage: 'Offene Änderungen vor der Wiederherstellung gesichert',
+    restoreOk: 'Stand {0} wurde wiederhergestellt.',
+    restoreOkPresaved: 'Stand {0} wurde wiederhergestellt. Ihre offenen Änderungen wurden zuvor als eigener Versionsstand gesichert.',
+    restoreFail: 'Der Stand konnte nicht wiederhergestellt werden.',
+    restoreBuildHint: 'Die veröffentlichte Seite zeigt noch den bisherigen Inhalt, bis sie neu erzeugt wurde.',
+    restoreBuild: 'Seite jetzt neu erzeugen',
+    restoreFile: '{0} aus diesem Stand zurückholen',
+    restoreFileOk: '{0} wurde zurückgeholt. Die Datei liegt als offene Änderung vor und kann nun gesichert werden.',
+    restoreFileFail: '{0} konnte nicht zurückgeholt werden.',
   },
 
   help: {
@@ -1552,6 +1573,9 @@ export default {
     'GIT-INVALID-TAG': 'Ungültige Versionsnummer: {0}',
     'GIT-TAG-TOO-LONG': 'Die Versionsnummer ist zu lang (höchstens {0} Zeichen).',
     'GIT-TAG-EXISTS': 'Die Versionsnummer {0} ist bereits vergeben.',
+    'GIT-RESTORE-NO-CHANGE': 'Der Stand {0} entspricht bereits dem aktuellen — es gibt nichts zurückzuholen.',
+    'GIT-FILE-NOT-IN-COMMIT': 'Die Datei {0} gibt es im Stand {1} nicht.',
+    'GIT-INVALID-PATH': 'Ungültiger Pfad: {0}',
 
     'LINKSCAN-NO-PROJECT': 'Für diese Webseite ist kein Hugo-Projekt konfiguriert — die Hyperlink-Suche braucht content/ und den gebauten Ordner.',
 

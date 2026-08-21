@@ -532,6 +532,9 @@ final class Connector
                 'gitcommit' => $this->cmdGitCommit($request),
                 'gitpush' => $this->cmdGitPush(),
                 'gitreset' => $this->cmdGitReset($request),
+                'gitrestorepreview' => $this->cmdGitRestorePreview($request),
+                'gitrestore' => $this->cmdGitRestore($request),
+                'gitrestorefile' => $this->cmdGitRestoreFile($request),
                 'audit' => $this->cmdAudit(),
                 'auditlist' => $this->cmdAuditList(),
                 'auditget' => $this->cmdAuditGet($request),
@@ -5034,6 +5037,65 @@ final class Connector
         $ref = trim((string) ($request['ref'] ?? 'HEAD'));
 
         return $this->git()->reset($ref);
+    }
+
+    /** Vorschau: was eine Wiederherstellung dieses Standes ändern würde. */
+    private function cmdGitRestorePreview(array $request): array
+    {
+        return $this->git()->restorePreview($this->requireParam($request, 'sha'));
+    }
+
+    /**
+     * Kehrt zu einem alten Versionsstand zurück. Die Beschreibungen kommen vom
+     * Client, nicht aus dem Backend: Sie sind sichtbarer Text und damit
+     * sprachabhängig — hier gilt dieselbe Aufteilung wie bei `gitcommit`.
+     */
+    private function cmdGitRestore(array $request): array
+    {
+        $this->requireMethod('POST');
+        $tag = trim((string) ($request['tag'] ?? ''));
+        $result = $this->git()->restore(
+            $this->requireParam($request, 'sha'),
+            (string) ($request['message'] ?? ''),
+            $tag === '' ? null : $tag,
+            (string) ($request['presaveMessage'] ?? ''),
+        );
+
+        if ($result['success']) {
+            $this->logger->info(sprintf(
+                'Versionsstand %s wiederhergestellt als %s%s%s',
+                substr((string) ($request['sha'] ?? ''), 0, 7),
+                $result['sha'] ?? '?',
+                $result['tagged'] ? ' (Versionsnummer ' . $result['tag'] . ')' : '',
+                $result['presaved'] ? '; offene Änderungen zuvor gesichert' : '',
+            ));
+        } else {
+            $this->logger->warning('Wiederherstellung fehlgeschlagen: ' . $result['output']);
+        }
+
+        return $result;
+    }
+
+    /** Holt EINE Datei aus einem alten Stand in den Arbeitsbaum (ohne Commit). */
+    private function cmdGitRestoreFile(array $request): array
+    {
+        $this->requireMethod('POST');
+        $result = $this->git()->restoreFile(
+            $this->requireParam($request, 'sha'),
+            $this->requireParam($request, 'path'),
+        );
+
+        if ($result['success']) {
+            $this->logger->info(sprintf(
+                'Datei %s aus Versionsstand %s zurückgeholt.',
+                $result['path'],
+                substr($result['sha'], 0, 7),
+            ));
+        } else {
+            $this->logger->warning('Datei konnte nicht zurückgeholt werden: ' . $result['output']);
+        }
+
+        return $result;
     }
 
     // --- SEO-Audit (Pro-Funktion) -----------------------------------------

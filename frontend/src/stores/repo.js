@@ -62,6 +62,24 @@ export const useRepoStore = defineStore('repo', {
       return api.post('gitreset', { ref })
     },
 
+    // Was eine Wiederherstellung ändern würde — Einträge in derselben Form wie
+    // im Status, damit die Vorschau dieselbe Darstellung nutzen kann.
+    async restorePreview(sha) {
+      return api.get('gitrestorepreview', { sha })
+    },
+
+    // Kehrt zu einem alten Stand zurück und sichert ihn als NEUEN Versionsstand.
+    // Die Beschreibungen kommen von hier, weil sie sprachabhängig sind.
+    async restore(sha, message, tag, presaveMessage) {
+      return api.post('gitrestore', { sha, message, tag, presaveMessage })
+    },
+
+    // Holt EINE Datei zurück; sie erscheint als offene Änderung und wird über
+    // das gewohnte Formular gesichert.
+    async restoreFile(sha, path) {
+      return api.post('gitrestorefile', { sha, path })
+    },
+
     // Status, Verlauf und ggf. Diff nach einer Aktion auffrischen.
     async refresh() {
       await Promise.all([this.fetchStatus(), this.fetchLog(this.page)])

@@ -13,6 +13,7 @@ export default {
     retry: 'Check again',
     setupWarningTitle: 'Server setup notice',
     close: 'Close',
+    cancel: 'Cancel',
     sessionExpired: 'Your session has expired. Please sign in again.',
     resizeWindow: 'Drag to resize window (double-click to reset)',
   },
@@ -431,6 +432,26 @@ export default {
     pageOf: 'Page {0} of {1}',
     diffOf: 'Changes of {0}',
     diffEmpty: 'This version state contains no content changes.',
+    diffFiles: 'Files in this version state',
+    // Returning to an older state. The wording avoids git terms and stresses
+    // that nothing is lost — that is what carries the decision.
+    restore: 'Restore this version state',
+    restoreTitle: 'Restore state {0}?',
+    restoreExplain: 'All files are reset to state {0} and saved as a new version state. The later states remain fully intact — you can return to them at any time.',
+    restorePresaveNote: 'You have unsaved changes. They are saved as their own version state first, so nothing is lost.',
+    restoreAffected: 'What changes',
+    restoreNoChange: 'This state already matches the current one — there is nothing to restore.',
+    restoreAction: 'Restore',
+    restoreMessage: 'Restored state {0}',
+    restorePresaveMessage: 'Saved open changes before restoring',
+    restoreOk: 'State {0} has been restored.',
+    restoreOkPresaved: 'State {0} has been restored. Your open changes were saved as their own version state first.',
+    restoreFail: 'The state could not be restored.',
+    restoreBuildHint: 'The published site still shows the previous content until it is generated again.',
+    restoreBuild: 'Generate site now',
+    restoreFile: 'Restore {0} from this state',
+    restoreFileOk: '{0} has been restored. The file is now an open change and can be saved.',
+    restoreFileFail: '{0} could not be restored.',
   },
 
   help: {
@@ -1547,6 +1568,9 @@ export default {
     'GIT-INVALID-TAG': 'Invalid version number: {0}',
     'GIT-TAG-TOO-LONG': 'The version number is too long (at most {0} characters).',
     'GIT-TAG-EXISTS': 'The version number {0} is already in use.',
+    'GIT-RESTORE-NO-CHANGE': 'State {0} already matches the current one — there is nothing to restore.',
+    'GIT-FILE-NOT-IN-COMMIT': 'The file {0} does not exist in state {1}.',
+    'GIT-INVALID-PATH': 'Invalid path: {0}',
 
     'LINKSCAN-NO-PROJECT': 'No Hugo project is configured for this site — the hyperlink search needs content/ and the built folder.',
 

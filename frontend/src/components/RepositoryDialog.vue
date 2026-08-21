@@ -14,8 +14,10 @@ const repo = useRepoStore()
 const auth = useAuthStore()
 const confirm = useConfirm()
 
-// Die Lizenzaktivierung liegt in App.vue — von hier nur angestoßen.
-const emit = defineEmits(['activate-license'])
+// Lizenzaktivierung und Hugo-Build liegen in App.vue — von hier nur angestoßen.
+// Der Build hat dort bereits Fortschrittsanzeige und Ergebnisdialog; ihn hier
+// noch einmal zu bauen, brächte einen zweiten, abweichenden Ablauf.
+const emit = defineEmits(['activate-license', 'build'])
 
 // Sichtbarkeit als v-model (Vue 3.4+). Ein Knopf in der Titelleiste öffnet.
 const model = defineModel({ type: Boolean, default: false })
@@ -36,6 +38,14 @@ const diffLoading = ref(false)
 const committing = ref(false)
 const pushing = ref(false)
 const resetting = ref(false)
+// Wiederherstellung eines alten Standes: eigener Bestätigungsdialog, weil er
+// eine Vorschau der betroffenen Dateien zeigt und nicht nur einen Satz Text.
+const restoreDialog = ref(false)
+const restorePreview = ref(null) // { sha, entries[] } oder null
+const restorePreviewLoading = ref(false)
+const restoring = ref(false)
+// Pfad der Datei, die gerade einzeln zurückgeholt wird (für die Ladeanzeige).
+const restoringFile = ref('')
 const error = ref(null)
 // Ergebnis einer Schreibaktion (Commit/Push/Reset): { ok, key, output }.
 const action = ref(null)
@@ -303,6 +313,103 @@ async function doReset() {
 // Versionsnummer, wenn eine vergeben ist, sonst der gekürzte Hash.
 const selectedLabel = ref('')
 
+// --- Zu einem alten Versionsstand zurückkehren --------------------------
+
+// Öffnet die Vorschau. Sie zeigt vor der Bestätigung, welche Dateien betroffen
+// wären — für Benutzer ohne Git-Kenntnisse ist das aussagekräftiger als die
+// Frage „Sind Sie sicher?“, auf die niemand fundiert antworten kann.
+async function askRestore() {
+  restoreDialog.value = true
+  restorePreview.value = null
+  restorePreviewLoading.value = true
+  error.value = null
+  try {
+    restorePreview.value = await repo.restorePreview(repo.selectedSha)
+  } catch (e) {
+    error.value = errorText(t, e)
+    restoreDialog.value = false
+  } finally {
+    restorePreviewLoading.value = false
+  }
+}
+
+// Änderungen der Vorschau in derselben Gruppierung wie die offenen Änderungen —
+// gleiche Abzeichen, gleiche Reihenfolge, nichts Neues zu lernen.
+const restoreChanges = computed(() =>
+  (restorePreview.value?.entries ?? [])
+    .map((e) => ({ ...e, group: STATUS_GROUP[e.status] ?? 'modified' }))
+    .sort(
+      (a, b) =>
+        GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group) || a.path.localeCompare(b.path),
+    ),
+)
+
+async function doRestore() {
+  if (restoring.value) return
+  restoring.value = true
+  error.value = null
+  const label = selectedLabel.value
+  try {
+    const res = await repo.restore(
+      repo.selectedSha,
+      t('repo.restoreMessage', [label]),
+      repo.status?.nextTag ?? '',
+      t('repo.restorePresaveMessage'),
+    )
+    if (!res.success) {
+      action.value = { type: 'error', key: 'repo.restoreFail', output: res.output }
+    } else {
+      // Die Live-Seite zeigt bis zum nächsten Bauen noch den alten Inhalt —
+      // deshalb trägt der Erfolgshinweis den Build-Knopf.
+      action.value = {
+        type: 'success',
+        key: res.presaved ? 'repo.restoreOkPresaved' : 'repo.restoreOk',
+        params: [label],
+        output: res.output,
+        offerBuild: true,
+      }
+    }
+    restoreDialog.value = false
+    diffDialog.value = false
+    if (res.success) {
+      message.value = ''
+      suggested.message = ''
+      suggested.tag = tag.value
+      await repo.refresh()
+      applySuggestions()
+    }
+  } catch (e) {
+    error.value = errorText(t, e)
+    restoreDialog.value = false
+  } finally {
+    restoring.value = false
+  }
+}
+
+// Einzelne Datei zurückholen: bewusst OHNE eigenen Versionsstand. Sie erscheint
+// als offene Änderung und wird über dasselbe Formular gesichert wie jede andere
+// Bearbeitung — der häufigere und harmlosere Fall („der Text war gestern besser“).
+async function doRestoreFile(path) {
+  if (restoringFile.value !== '') return
+  restoringFile.value = path
+  error.value = null
+  try {
+    const res = await repo.restoreFile(repo.selectedSha, path)
+    action.value = res.success
+      ? { type: 'success', key: 'repo.restoreFileOk', params: [path], output: '' }
+      : { type: 'error', key: 'repo.restoreFileFail', params: [path], output: res.output }
+    if (res.success) {
+      diffDialog.value = false
+      await repo.refresh()
+      applySuggestions()
+    }
+  } catch (e) {
+    error.value = errorText(t, e)
+  } finally {
+    restoringFile.value = ''
+  }
+}
+
 async function onRowClick(_event, { item }) {
   selectedLabel.value = item.tags?.[0] ?? item.shortSha
   diffDialog.value = true
@@ -317,7 +424,9 @@ async function onRowClick(_event, { item }) {
   }
 }
 
-const busy = computed(() => committing.value || pushing.value || resetting.value)
+const busy = computed(
+  () => committing.value || pushing.value || resetting.value || restoring.value,
+)
 </script>
 
 <template>
@@ -467,6 +576,22 @@ const busy = computed(() => committing.value || pushing.value || resetting.value
             @click:close="action = null"
           >
             <div>{{ $t(action.key, action.params ?? []) }}</div>
+            <!-- Nach einer Wiederherstellung zeigt die veröffentlichte Seite
+                 noch den alten Inhalt. Der Build wird angeboten, nicht
+                 automatisch ausgelöst — er dauert und ist eine eigene
+                 Entscheidung. -->
+            <div v-if="action.offerBuild && auth.buildable" class="mt-2">
+              <div class="text-caption mb-1">{{ $t('repo.restoreBuildHint') }}</div>
+              <v-btn
+                size="small"
+                variant="tonal"
+                color="primary"
+                prepend-icon="mdi-cloud-upload-outline"
+                @click="model = false; emit('build')"
+              >
+                {{ $t('repo.restoreBuild') }}
+              </v-btn>
+            </div>
             <pre v-if="action.output" class="repo-output mt-1">{{ action.output }}</pre>
           </v-alert>
 
@@ -545,6 +670,17 @@ const busy = computed(() => committing.value || pushing.value || resetting.value
         <v-icon icon="mdi-file-compare" color="primary" class="mr-2" />
         {{ $t('repo.diffOf', [selectedLabel]) }}
         <v-spacer />
+        <v-btn
+          v-if="!diffLoading"
+          variant="tonal"
+          size="small"
+          color="warning"
+          prepend-icon="mdi-history"
+          class="mr-2"
+          @click="askRestore"
+        >
+          {{ $t('repo.restore') }}
+        </v-btn>
         <v-btn icon="mdi-close" variant="text" size="small" @click="diffDialog = false" />
       </v-card-title>
 
@@ -563,6 +699,43 @@ const busy = computed(() => committing.value || pushing.value || resetting.value
               class="repo-message text-medium-emphasis mt-1"
             >{{ commitMessage.body }}</pre>
           </div>
+          <!-- Die Dateien dieses Standes, jede einzeln zurückholbar. Das ist
+               der häufigere Wunsch: eine Datei auf den alten Inhalt bringen,
+               ohne die ganze Seite anzufassen. -->
+          <div v-if="repo.diff?.files?.length" class="mb-3">
+            <div class="text-subtitle-2 mb-1">{{ $t('repo.diffFiles') }}</div>
+            <div
+              v-for="f in repo.diff.files"
+              :key="f.path"
+              class="d-flex align-center py-1"
+            >
+              <v-chip
+                :color="GROUP_META[STATUS_GROUP[f.status] ?? 'modified'].color"
+                :prepend-icon="GROUP_META[STATUS_GROUP[f.status] ?? 'modified'].icon"
+                size="x-small"
+                variant="tonal"
+                label
+                class="repo-badge mr-2"
+              >
+                {{ $t(GROUP_META[STATUS_GROUP[f.status] ?? 'modified'].label) }}
+              </v-chip>
+              <span class="repo-path">{{ f.path }}</span>
+              <v-spacer />
+              <!-- Gelöschte Dateien gibt es in diesem Stand nicht mehr; sie
+                   lassen sich daraus auch nicht zurückholen. -->
+              <v-btn
+                v-if="f.status !== 'deleted'"
+                icon="mdi-file-restore-outline"
+                variant="text"
+                size="x-small"
+                :loading="restoringFile === f.path"
+                :disabled="restoringFile !== '' || busy"
+                :title="$t('repo.restoreFile', [f.path])"
+                @click="doRestoreFile(f.path)"
+              />
+            </div>
+          </div>
+
           <div v-if="diffLines.length === 0" class="text-medium-emphasis text-body-2 pa-2">
             {{ $t('repo.diffEmpty') }}
           </div>
@@ -573,6 +746,80 @@ const busy = computed(() => committing.value || pushing.value || resetting.value
 </template></pre>
         </template>
       </v-card-text>
+    </v-card>
+  </v-dialog>
+
+  <!-- Bestätigung der Wiederherstellung. Ein eigener Dialog statt des globalen
+       useConfirm, weil er die betroffenen Dateien zeigt: Ein Benutzer ohne
+       Git-Kenntnisse kann „Sind Sie sicher?“ nicht beantworten, eine Liste
+       dessen, was sich ändert, dagegen schon. -->
+  <v-dialog v-model="restoreDialog" width="640" scrollable>
+    <v-card class="pa-2">
+      <v-card-title class="d-flex align-center text-h6">
+        <v-icon icon="mdi-history" color="warning" class="mr-2" />
+        {{ $t('repo.restoreTitle', [selectedLabel]) }}
+      </v-card-title>
+
+      <v-card-text style="max-height: 60vh">
+        <div v-if="restorePreviewLoading" class="d-flex justify-center pa-6">
+          <v-progress-circular indeterminate color="primary" />
+        </div>
+        <template v-else>
+          <!-- Zuerst die Zusage: Es geht nichts verloren. Das ist der Punkt,
+               der die Entscheidung trägt. -->
+          <p class="text-body-2 mb-3">{{ $t('repo.restoreExplain', [selectedLabel]) }}</p>
+          <v-alert
+            v-if="!repo.status?.clean"
+            type="info"
+            density="compact"
+            variant="tonal"
+            class="mb-3"
+          >
+            {{ $t('repo.restorePresaveNote') }}
+          </v-alert>
+
+          <div v-if="restoreChanges.length === 0" class="text-medium-emphasis text-body-2">
+            {{ $t('repo.restoreNoChange') }}
+          </div>
+          <template v-else>
+            <div class="text-subtitle-2 mb-1">{{ $t('repo.restoreAffected') }}</div>
+            <div
+              v-for="c in restoreChanges"
+              :key="c.path"
+              class="d-flex align-center py-1"
+            >
+              <v-chip
+                :color="GROUP_META[c.group].color"
+                :prepend-icon="GROUP_META[c.group].icon"
+                size="x-small"
+                variant="tonal"
+                label
+                class="repo-badge mr-2"
+              >
+                {{ $t(GROUP_META[c.group].label) }}
+              </v-chip>
+              <span class="repo-path">{{ c.path }}</span>
+            </div>
+          </template>
+        </template>
+      </v-card-text>
+
+      <v-card-actions>
+        <v-spacer />
+        <v-btn variant="text" :disabled="restoring" @click="restoreDialog = false">
+          {{ $t('app.cancel') }}
+        </v-btn>
+        <v-btn
+          color="warning"
+          variant="flat"
+          prepend-icon="mdi-history"
+          :loading="restoring"
+          :disabled="restorePreviewLoading || restoreChanges.length === 0"
+          @click="doRestore"
+        >
+          {{ $t('repo.restoreAction') }}
+        </v-btn>
+      </v-card-actions>
     </v-card>
   </v-dialog>
 </template>

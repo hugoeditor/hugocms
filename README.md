@@ -617,6 +617,45 @@ Der automatische Versionsstand des Cron (`[git] auto_commit`) vergibt **keine**
 Nummern — sonst wüchse die Liste mit jedem Lauf und die Nummern verlören ihre
 Aussagekraft. Versionsnummern setzt allein der Benutzer im Dialog.
 
+**Zu einem alten Stand zurückkehren.** Der Diff-Dialog trägt „Diesen Stand
+wiederherstellen". Die Rückkehr geht bewusst **vorwärts**: Der alte Inhalt wird
+geholt und als *neuer* Versionsstand gesichert. Die Historie bleibt vollständig,
+jeder Stand bleibt erreichbar, und die Wiederherstellung selbst lässt sich
+genauso zurücknehmen. Ein `reset --hard` würde stattdessen die späteren Stände
+auslöschen und den Push nur noch mit Gewalt zulassen — für Benutzer ohne
+Git-Kenntnisse die falsche Zusage.
+
+Der Ablauf im Einzelnen:
+
+1. **Vorschau statt Warnung.** Vor der Bestätigung zeigt der Dialog die
+   betroffenen Dateien mit denselben Abzeichen wie die Liste der offenen
+   Änderungen. „Sind Sie sicher?" kann niemand fundiert beantworten, eine Liste
+   dessen, was sich ändert, dagegen schon.
+2. **Offene Änderungen werden zuvor gesichert**, als eigener Versionsstand. So
+   kann die Wiederherstellung nichts vernichten, was noch nicht in der Historie
+   steht. Der Dialog sagt es an, bevor er es tut.
+3. **Holen und sichern.** Technisch `git read-tree -u --reset <sha>`, dann ein
+   Commit. Ein `checkout <sha> -- .` wäre falsch: Es überschreibt nur, was im
+   alten Stand existiert, und ließe alles seither Hinzugekommene liegen — das
+   Ergebnis wäre ein Mischzustand, den es nie gab. `read-tree` entfernt diese
+   Dateien und lässt zugleich unversionierte Verzeichnisse (`public/`,
+   `resources/`) unangetastet.
+4. **Hinweis auf den Build.** Die veröffentlichte Seite zeigt bis zum nächsten
+   Erzeugen noch den bisherigen Inhalt; der Erfolgshinweis bietet den Build
+   direkt an, löst ihn aber nicht selbst aus.
+
+**Einzelne Datei zurückholen.** Der Diff-Dialog listet die Dateien des Standes
+und stellt jeder ein `mdi-file-restore-outline` zur Seite. Diese Datei landet
+als *offene Änderung* im Arbeitsbaum — ohne eigenen Commit — und wird über
+dasselbe Formular gesichert wie jede andere Bearbeitung. Das deckt den
+häufigeren und harmloseren Wunsch ab: eine Datei auf den alten Inhalt bringen,
+ohne die ganze Seite anzufassen.
+
+Der Freigabe-Entwurfsspeicher liegt außerhalb des Repositorys
+(`backend/var/review/<hash>`) und bleibt von einer Wiederherstellung unberührt.
+Ein bereits terminierter Entwurf kann danach allerdings inhaltlich veraltet
+sein, weil er auf einer zurückgesetzten Datei aufbaut.
+
 Voraussetzungen: `git` ist auf dem Server installiert, das Projektverzeichnis
 steht unter Git-Versionierung, und für `push` sind die Zugangsdaten der
 Gegenstelle in der Serverumgebung eingerichtet (SSH-Schlüssel bzw.
@@ -1040,6 +1079,9 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `gitcommit`| POST    | `message`, `tag`?                    | **Pro:** alle Änderungen als Versionsstand sichern; `tag` vergibt die Versionsnummer (leer = ohne) |
 | `gitpush`  | POST    | –                                    | **Pro:** Änderungen samt Versionsnummern zur konfigurierten Gegenstelle hochladen |
 | `gitreset` | POST    | `ref`?                               | **Pro:** Arbeitsbaum zurücksetzen (Standard: `HEAD`) |
+| `gitrestorepreview` | GET | `sha`                            | **Pro:** Vorschau — welche Dateien eine Wiederherstellung ändern würde |
+| `gitrestore` | POST  | `sha`, `message`, `tag`?, `presaveMessage` | **Pro:** zu einem alten Stand zurückkehren; sichert ihn als neuen Versionsstand |
+| `gitrestorefile` | POST | `sha`, `path`                    | **Pro:** EINE Datei aus einem alten Stand zurückholen (ohne eigenen Commit) |
 | `assistantimprove`| POST | `id` (Datei-ID), `locale`?         | **Pro:** KI-Verbesserung einer Datei starten (nutzt `get_file_report`) |
 | `assistantfix`| POST | `runId`, `ruleId`, `url`?, `mode`?, `locale`? | **Pro:** KI-Micro-Auftrag zu genau einem Fund des SEO-Berichts (`mode`: `fix` behebt, `diagnose` erklärt nur) |
 | `audit`    | POST    | –                                    | **Pro:** SEO-Check-Lauf ausführen (Bericht)            |

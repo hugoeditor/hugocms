@@ -1029,7 +1029,11 @@ async function build() {
 
     <!-- Pro-Lizenz aktivieren · Git-Versionierung (Pro-Funktion) -->
     <LicenseDialog v-model="licenseOpen" @activated="onLicenseActivated" />
-    <RepositoryDialog v-model="repositoryOpen" @activate-license="licenseOpen = true" />
+    <RepositoryDialog
+      v-model="repositoryOpen"
+      @activate-license="licenseOpen = true"
+      @build="build"
+    />
 
     <!-- KI-Assistent (rechtes Seitenpanel) -->
     <AssistantPanel v-if="auth.ai.enabled" @activate-license="licenseOpen = true" />

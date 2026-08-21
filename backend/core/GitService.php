@@ -236,7 +236,13 @@ final class GitService
      * Diff, getrennt durch RECORD_SEP. Getrennt wird am ERSTEN Vorkommen, damit
      * ein Steuerzeichen im Diff selbst nichts verschieben kann.
      *
-     * @return array{sha: string, message: string, diff: string}
+     * `files` listet die geänderten Dateien einzeln auf — Grundlage dafür, eine
+     * einzelne Datei aus diesem Stand zurückzuholen. Sie kommen aus einem
+     * eigenen Aufruf statt aus einem weiteren Trennzeichen im selben: Der Diff
+     * ist beliebiger Text, und ein zweiter Marker darin wäre nicht sicher vom
+     * Inhalt zu unterscheiden.
+     *
+     * @return array{sha: string, message: string, diff: string, files: list<array{path: string, status: string}>}
      */
     public function diff(string $sha): array
     {
@@ -256,7 +262,35 @@ final class GitService
             // Der Diff beginnt hinter dem Trennzeichen; der Zeilenumbruch, den
             // git dahinter setzt, gehört nicht dazu.
             'diff' => ltrim($parts[1] ?? '', "\r\n"),
+            'files' => $this->changedFiles($sha),
         ];
+    }
+
+    /**
+     * Die in einem Commit geänderten Dateien mit ihrer Art. Beim ersten Commit
+     * eines Repositorys gibt es keinen Vorgänger; `--root` sorgt dafür, dass
+     * auch dort die Dateien erscheinen statt einer leeren Liste.
+     *
+     * @return list<array{path: string, status: string}>
+     */
+    private function changedFiles(string $sha): array
+    {
+        $res = $this->run(['show', '--name-status', '--format=', '--no-color', '--root', $sha]);
+        $files = [];
+        foreach ($res['lines'] as $line) {
+            if ($line === '' || !str_contains($line, "\t")) {
+                continue;
+            }
+            $parts = explode("\t", $line);
+            $files[] = [
+                // Bei Umbenennungen nennt git Quelle UND Ziel; gezeigt wird das
+                // Ziel, denn nur dieses lässt sich zurückholen.
+                'path' => $this->unquotePath($parts[count($parts) - 1]),
+                'status' => $this->classifyStatus(substr($parts[0], 0, 1)),
+            ];
+        }
+
+        return $files;
     }
 
     /**
@@ -343,9 +377,174 @@ final class GitService
     }
 
     /**
+     * Was eine Wiederherstellung von $sha am Arbeitsbaum ändern würde — dieselbe
+     * Form wie {@see status()}, damit die Vorschau dieselbe Darstellung nutzen
+     * kann wie die Liste der offenen Änderungen.
+     *
+     * Verglichen wird der ARBEITSBAUM gegen $sha, nicht HEAD gegen $sha: Die
+     * Vorschau soll zeigen, was der Benutzer am Ende vorfindet — offene
+     * Änderungen gehen dabei ebenso zurück und gehören deshalb in die Liste.
+     *
+     * `-R` dreht die Richtung um. `git diff <sha>` liefe von $sha zum
+     * Arbeitsbaum und meldete eine seither hinzugekommene Datei als
+     * hinzugefügt; beim Zurückgehen wird sie aber entfernt.
+     *
+     * @return array{sha: string, entries: list<array{path: string, status: string, from: null}>}
+     */
+    public function restorePreview(string $sha): array
+    {
+        $this->assertRepo();
+        $sha = $this->requireCommit($sha);
+
+        $res = $this->run(['diff', '--name-status', '--no-color', '-R', $sha]);
+        $entries = [];
+        foreach ($res['lines'] as $line) {
+            if ($line === '') {
+                continue;
+            }
+            // „<Code>\t<Pfad>“; bei Umbenennungen folgt ein zweiter Pfad, der
+            // hier nicht gebraucht wird — gezeigt wird stets das Ziel.
+            $parts = explode("\t", $line);
+            $code = $parts[0];
+            $path = $parts[count($parts) - 1];
+            $entries[] = [
+                'path' => $this->unquotePath($path),
+                'status' => $this->classifyStatus(substr($code, 0, 1)),
+                'from' => null,
+            ];
+        }
+
+        // `git diff` kennt nur versionierte Dateien. Noch unversionierte
+        // verschwinden bei der Wiederherstellung trotzdem: Das Vorab-Sichern
+        // nimmt sie mit `add -A` auf, danach entfernt `read-tree` sie, weil es
+        // sie im alten Stand nicht gibt. Ohne diesen Zusatz verschwiegen die
+        // Vorschau genau die Dateien, an denen der Benutzer zuletzt saß.
+        $known = array_column($entries, 'path');
+        foreach ($this->status()['entries'] as $entry) {
+            if ($entry['status'] === 'untracked' && !in_array($entry['path'], $known, true)) {
+                $entries[] = ['path' => $entry['path'], 'status' => 'deleted', 'from' => null];
+            }
+        }
+
+        return ['sha' => $sha, 'entries' => $entries];
+    }
+
+    /**
+     * Kehrt zu einem alten Versionsstand zurück — vorwärts, nicht rückwärts:
+     * Der alte Inhalt wird geholt und als NEUER Versionsstand gesichert. Die
+     * Historie bleibt vollständig, jeder Stand bleibt erreichbar, und die
+     * Wiederherstellung selbst lässt sich genauso wieder zurücknehmen. Ein
+     * `reset --hard` würde stattdessen die späteren Stände auslöschen und den
+     * Push nur noch mit Gewalt zulassen — für Benutzer ohne Git-Kenntnisse die
+     * falsche Zusage.
+     *
+     * Offene Änderungen werden ZUVOR als eigener Stand gesichert, damit die
+     * Wiederherstellung nichts vernichten kann, was noch nicht in der Historie
+     * steht.
+     *
+     * Geholt wird mit `read-tree -u --reset`. Ein `checkout <sha> -- .` wäre
+     * falsch: Es überschreibt nur, was im alten Stand existiert, und ließe alles
+     * seither Hinzugekommene liegen — das Ergebnis wäre ein Mischzustand, den es
+     * nie gab. `read-tree` entfernt diese Dateien und lässt zugleich
+     * unversionierte Verzeichnisse (`public/`, `resources/`) unangetastet.
+     *
+     * @return array{success: bool, sha: ?string, output: string, tag: ?string, tagged: bool, tagOutput: string, presaved: bool, presavedSha: ?string}
+     */
+    public function restore(string $sha, string $message, ?string $tag, string $presaveMessage): array
+    {
+        $this->assertRepo();
+        $sha = $this->requireCommit($sha);
+
+        // Offene Änderungen zuerst in die Historie bringen.
+        $presaved = false;
+        $presavedSha = null;
+        if (empty($this->status()['clean'])) {
+            $pre = $this->commit($presaveMessage);
+            if (!$pre['success']) {
+                return [
+                    'success' => false,
+                    'sha' => null,
+                    'output' => $pre['output'],
+                    'tag' => null,
+                    'tagged' => false,
+                    'tagOutput' => '',
+                    'presaved' => false,
+                    'presavedSha' => null,
+                ];
+            }
+            $presaved = true;
+            $presavedSha = $pre['sha'];
+        }
+
+        // Erst jetzt prüfen, ob es überhaupt etwas zu holen gibt: Vor dem
+        // Vorab-Sichern hätte ein inhaltsgleicher Stand trotz offener Änderungen
+        // fälschlich als „nichts zu tun“ gegolten.
+        if ($this->run(['diff', '--quiet', 'HEAD', $sha])['exit'] === 0) {
+            throw ApiException::badRequest('GIT-RESTORE-NO-CHANGE', [substr($sha, 0, 7)]);
+        }
+
+        $read = $this->run(['read-tree', '-u', '--reset', $sha]);
+        if ($read['exit'] !== 0) {
+            return [
+                'success' => false,
+                'sha' => null,
+                'output' => $read['output'],
+                'tag' => null,
+                'tagged' => false,
+                'tagOutput' => '',
+                'presaved' => $presaved,
+                'presavedSha' => $presavedSha,
+            ];
+        }
+
+        // Der Arbeitsbaum trägt jetzt den alten Inhalt; ihn als neuen Stand
+        // festschreiben. Schlägt das fehl, bleibt der Inhalt als offene
+        // Änderung stehen — verloren ist nichts, alles liegt in der Historie.
+        $res = $this->commit($message, $tag);
+
+        return [...$res, 'presaved' => $presaved, 'presavedSha' => $presavedSha];
+    }
+
+    /**
+     * Holt EINE Datei aus einem alten Versionsstand in den Arbeitsbaum. Bewusst
+     * ohne eigenen Commit: Die Datei erscheint als offene Änderung, und der
+     * Benutzer sichert sie über dasselbe Formular wie jede andere Bearbeitung.
+     *
+     * Ein Fehlschlag ist KEIN API-Fehler; dass die Datei in jenem Stand gar
+     * nicht existiert, schon — das wäre ein Bedienfehler und keine Störung.
+     *
+     * @return array{success: bool, sha: string, path: string, output: string}
+     */
+    public function restoreFile(string $sha, string $path): array
+    {
+        $this->assertRepo();
+        $sha = $this->requireCommit($sha);
+        $path = $this->requirePath($path);
+
+        // Existiert die Datei in jenem Stand überhaupt? Sonst legte `checkout`
+        // sie nicht an und meldete nur eine wenig sprechende git-Fehlzeile.
+        if ($this->run(['cat-file', '-e', $sha . ':' . $path])['exit'] !== 0) {
+            throw ApiException::notFound('GIT-FILE-NOT-IN-COMMIT', [$path, substr($sha, 0, 7)]);
+        }
+
+        // `--` trennt den Pfad verlässlich von den Optionen.
+        $res = $this->run(['checkout', $sha, '--', $path]);
+
+        return [
+            'success' => $res['exit'] === 0,
+            'sha' => $sha,
+            'path' => $path,
+            'output' => $res['output'],
+        ];
+    }
+
+    /**
      * Stellt den Arbeitsbaum auf einen Ref zurück (Standard: HEAD — verwirft
      * nicht committete Änderungen an verfolgten Dateien). HEAD selbst wird nicht
      * verschoben. Ein Fehlschlag ist KEIN API-Fehler.
+     *
+     * Für die Rückkehr zu einem ALTEN Stand ist dieser Weg ungeeignet — siehe
+     * {@see restore()}.
      *
      * @return array{success: bool, output: string}
      */
@@ -386,6 +585,47 @@ final class GitService
         }
 
         return $sha;
+    }
+
+    /**
+     * Prüft einen Commit-Hash UND dass er in diesem Repository auf einen Commit
+     * zeigt. `^{commit}` schließt aus, dass ein gültig aussehender Hash auf ein
+     * Blob oder einen Tree verweist — beides ließe die folgenden Befehle
+     * Merkwürdiges tun statt sauber zu scheitern.
+     */
+    private function requireCommit(string $sha): string
+    {
+        $sha = $this->requireHash($sha);
+        if ($this->run(['rev-parse', '--verify', '--quiet', $sha . '^{commit}'])['exit'] !== 0) {
+            throw ApiException::notFound('GIT-COMMIT-NOT-FOUND', [$sha]);
+        }
+
+        return $sha;
+    }
+
+    /**
+     * Prüft einen Pfad innerhalb des Repositorys. Die Einsperrung leistet hier
+     * nicht der MountResolver, sondern diese Prüfung: absolute Pfade und jedes
+     * „..“-Segment sind verboten, damit kein Pfad aus dem Projektverzeichnis
+     * herausführt. Der Aufruf setzt zusätzlich `--` vor den Pfad, sodass er auch
+     * nicht als Option gelesen werden kann.
+     */
+    private function requirePath(string $path): string
+    {
+        $path = trim($path);
+        if ($path === '') {
+            throw ApiException::badRequest('PARAM-MISSING', ['path']);
+        }
+        if (str_starts_with($path, '/') || str_contains($path, "\0")) {
+            throw ApiException::badRequest('GIT-INVALID-PATH', [$path]);
+        }
+        foreach (explode('/', str_replace('\\', '/', $path)) as $segment) {
+            if ($segment === '..') {
+                throw ApiException::badRequest('GIT-INVALID-PATH', [$path]);
+            }
+        }
+
+        return $path;
     }
 
     /**
