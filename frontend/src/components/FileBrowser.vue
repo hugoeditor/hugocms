@@ -550,12 +550,12 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
       <!-- Statusleiste -->
       <footer class="nemo-statusbar nemo-noselect">
         <span v-if="files.searchQuery || files.draftFilter">
-          {{ files.searchResults.length === 1 ? $t('status.itemOne') : $t('status.items', [files.searchResults.length]) }}
+          {{ files.searchResults.length === 1 ? $t('statusbar.itemOne') : $t('statusbar.items', [files.searchResults.length]) }}
         </span>
         <span v-else>
-          {{ files.entries.length === 1 ? $t('status.itemOne') : $t('status.items', [files.entries.length]) }}
+          {{ files.entries.length === 1 ? $t('statusbar.itemOne') : $t('statusbar.items', [files.entries.length]) }}
         </span>
-        <span v-if="files.selectedCount" class="nemo-status-sel">· {{ $t('status.selected', [files.selectedCount]) }}</span>
+        <span v-if="files.selectedCount" class="nemo-status-sel">· {{ $t('statusbar.selected', [files.selectedCount]) }}</span>
         <span v-if="files.filter && !files.searchQuery && !files.draftFilter" class="nemo-status-sel">· {{ entries.length }}/{{ files.entries.length }}</span>
       </footer>
     </template>

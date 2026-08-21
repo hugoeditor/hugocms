@@ -89,7 +89,10 @@ export default {
     filter: 'Im Ordner filtern …',
   },
 
-  status: {
+  // Statusleiste des Dateimanagers. Eigener Namensraum, NICHT `status` —
+  // den belegt der Systemstatus-Dialog weiter unten, und der spätere Block
+  // überschriebe diesen hier vollständig.
+  statusbar: {
     items: '{0} Elemente',
     itemOne: '1 Element',
     selected: '{0} ausgewählt',

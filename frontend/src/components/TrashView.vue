@@ -129,9 +129,9 @@ async function emptyAll() {
 
     <footer class="nemo-statusbar nemo-noselect">
       <span>
-        {{ files.trashEntries.length === 1 ? $t('status.itemOne') : $t('status.items', [files.trashEntries.length]) }}
+        {{ files.trashEntries.length === 1 ? $t('statusbar.itemOne') : $t('statusbar.items', [files.trashEntries.length]) }}
       </span>
-      <span v-if="files.trashSelected.length">· {{ $t('status.selected', [files.trashSelected.length]) }}</span>
+      <span v-if="files.trashSelected.length">· {{ $t('statusbar.selected', [files.trashSelected.length]) }}</span>
     </footer>
   </section>
 </template>
