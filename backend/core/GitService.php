@@ -225,21 +225,38 @@ final class GitService
     }
 
     /**
-     * Diff eines Commits (ohne Commit-Kopf, nur die Änderungen).
+     * Diff eines Commits samt seiner VOLLSTÄNDIGEN Beschreibung.
      *
-     * @return array{sha: string, diff: string}
+     * Der Verlauf zeigt nur die erste Zeile (`%s`), weil die Tabellenspalte
+     * einzeilig ist. Alles Weitere — bei den hier erzeugten Versionsständen die
+     * Aufzählung der geänderten Dateien — steht nur in `%B` und wäre sonst in
+     * der Oberfläche nirgends zu sehen.
+     *
+     * Beides kommt aus einem einzigen `show`: Die Beschreibung steht vor dem
+     * Diff, getrennt durch RECORD_SEP. Getrennt wird am ERSTEN Vorkommen, damit
+     * ein Steuerzeichen im Diff selbst nichts verschieben kann.
+     *
+     * @return array{sha: string, message: string, diff: string}
      */
     public function diff(string $sha): array
     {
         $this->assertRepo();
         $sha = $this->requireHash($sha);
 
-        $res = $this->run(['show', '--format=', '--no-color', $sha]);
+        $res = $this->run(['show', '--format=%B' . self::RECORD_SEP, '--no-color', $sha]);
         if ($res['exit'] !== 0) {
             throw ApiException::notFound('GIT-COMMIT-NOT-FOUND', [$sha]);
         }
 
-        return ['sha' => $sha, 'diff' => $res['output']];
+        $parts = explode(self::RECORD_SEP, $res['output'], 2);
+
+        return [
+            'sha' => $sha,
+            'message' => trim($parts[0]),
+            // Der Diff beginnt hinter dem Trennzeichen; der Zeilenumbruch, den
+            // git dahinter setzt, gehört nicht dazu.
+            'diff' => ltrim($parts[1] ?? '', "\r\n"),
+        ];
     }
 
     /**

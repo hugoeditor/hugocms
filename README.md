@@ -588,6 +588,10 @@ Beschreibung und Versionsnummer werden nur überschrieben, solange dort nichts
 Eigenes steht: Ein selbst getippter Text bleibt erhalten, wenn der Verlauf
 zwischendurch neu geladen wird.
 
+Der Verlauf zeigt in der Spalte **Beschreibung** nur die erste Zeile — die Spalte
+ist einzeilig. Die **vollständige** Beschreibung samt Dateiliste steht im
+Diff-Dialog über den Änderungen; `gitdiff` liefert sie dafür als `message` mit.
+
 **Versionsnummern.** Beim Sichern lässt sich eine Versionsnummer vergeben; das
 Feld ist mit dem nächsten freien Wert im Schema `v1`, `v2`, `v3` … vorbelegt und
 frei überschreibbar. Bleibt es leer, entsteht ein Versionsstand ohne Nummer. Im
@@ -1032,7 +1036,7 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `activate` | POST    | `key`                                | Pro-Lizenz aktivieren (schreibt `mounts/<hash>.ini`) |
 | `gitstatus`| GET     | –                                    | **Pro:** Git-Status (Branch, geänderte Dateien, nächste freie Versionsnummer) |
 | `gitlog`   | GET     | `page`?, `perPage`?                  | **Pro:** Verlauf der Versionsstände samt Versionsnummern (seitenweise) |
-| `gitdiff`  | GET     | `sha`                                | **Pro:** Diff eines Versionsstands     |
+| `gitdiff`  | GET     | `sha`                                | **Pro:** Diff eines Versionsstands samt vollständiger Beschreibung (`message`) |
 | `gitcommit`| POST    | `message`, `tag`?                    | **Pro:** alle Änderungen als Versionsstand sichern; `tag` vergibt die Versionsnummer (leer = ohne) |
 | `gitpush`  | POST    | –                                    | **Pro:** Änderungen samt Versionsnummern zur konfigurierten Gegenstelle hochladen |
 | `gitreset` | POST    | `ref`?                               | **Pro:** Arbeitsbaum zurücksetzen (Standard: `HEAD`) |

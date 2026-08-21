@@ -168,6 +168,17 @@ function buildMessage() {
   return `${subject}\n\n${lines.join('\n')}`
 }
 
+// Vollständige Beschreibung des gewählten Standes, zerlegt in Betreff (erste
+// Zeile) und Körper. Getrennt, weil git die erste Zeile als Betreff behandelt
+// und genau sie im Verlauf steht — der Körper ist das, was dort fehlt.
+const commitMessage = computed(() => {
+  const text = repo.diff?.message ?? ''
+  const nl = text.indexOf('\n')
+  if (nl === -1) return { subject: text, body: '' }
+
+  return { subject: text.slice(0, nl), body: text.slice(nl + 1).trim() }
+})
+
 // Diff in Zeilen mit Typ (Kontext/Hinzu/Weg/Kopf) für die Einfärbung.
 const diffLines = computed(() => {
   const text = repo.diff?.diff ?? ''
@@ -541,14 +552,26 @@ const busy = computed(() => committing.value || pushing.value || resetting.value
         <div v-if="diffLoading" class="d-flex justify-center pa-6">
           <v-progress-circular indeterminate color="primary" />
         </div>
-        <div v-else-if="diffLines.length === 0" class="text-medium-emphasis text-body-2 pa-2">
-          {{ $t('repo.diffEmpty') }}
-        </div>
-        <pre v-else class="repo-diff nemo-scroll"><template
+        <template v-else>
+          <!-- Die vollständige Beschreibung steht vor dem Diff: Der Verlauf
+               zeigt nur ihre erste Zeile, hier ist der einzige Ort in der
+               Oberfläche, an dem auch die Aufzählung der Dateien zu sehen ist. -->
+          <div v-if="commitMessage.subject" class="mb-3">
+            <div class="text-subtitle-2">{{ commitMessage.subject }}</div>
+            <pre
+              v-if="commitMessage.body"
+              class="repo-message text-medium-emphasis mt-1"
+            >{{ commitMessage.body }}</pre>
+          </div>
+          <div v-if="diffLines.length === 0" class="text-medium-emphasis text-body-2 pa-2">
+            {{ $t('repo.diffEmpty') }}
+          </div>
+          <pre v-else class="repo-diff nemo-scroll"><template
           v-for="(l, i) in diffLines"
           :key="i"
-        ><span :class="'diff-' + l.kind">{{ l.line }}</span>
+          ><span :class="'diff-' + l.kind">{{ l.line }}</span>
 </template></pre>
+        </template>
       </v-card-text>
     </v-card>
   </v-dialog>
@@ -574,6 +597,15 @@ const busy = computed(() => committing.value || pushing.value || resetting.value
    verloren wirken und suggerierte einen langen Wert. */
 .repo-tag {
   max-width: 260px;
+}
+/* Der Körper der Beschreibung — meist die Aufzählung der geänderten Dateien.
+   Umbrüche bleiben erhalten, aber ohne Rahmen und Hintergrund: Es ist der Text
+   zum Versionsstand, nicht selbst Code. */
+.repo-message {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .repo-output {
   font-size: 0.78rem;

@@ -14,7 +14,9 @@ export const useRepoStore = defineStore('repo', {
     total: 0, // Gesamtzahl der Commits
     page: 1,
     perPage: 20,
-    diff: null, // { sha, diff } des ausgewählten Commits
+    // { sha, message, diff } des ausgewählten Commits. message ist die
+    // VOLLSTÄNDIGE Beschreibung; die Verlaufsliste kennt nur deren erste Zeile.
+    diff: null,
     selectedSha: null,
   }),
 
