@@ -40,6 +40,7 @@ hugocms-2026/                     # Quell-Repo (Entwicklung)
 │   │   ├── AnthropicClient.php   # Claude-API über cURL (ohne SDK)
 │   │   ├── License.php           # Pro-Lizenz prüfen (Ed25519, domaingebunden)
 │   │   ├── GitService.php        # Pro: Git-Versionierung
+│   │   ├── ChangelogService.php  # Änderungsprotokoll (content/changelog.md)
 │   │   ├── Audit/                # Pro: SEO-Check & Content-Qualität
 │   │   │   ├── AuditService.php      # SEO-Check-Läufe (Bericht je Webseite)
 │   │   │   ├── AuditRunner.php       # gebautes public/ parsen & Regeln prüfen
@@ -616,6 +617,44 @@ getrennt als Warnung aus.
 Der automatische Versionsstand des Cron (`[git] auto_commit`) vergibt **keine**
 Nummern — sonst wüchse die Liste mit jedem Lauf und die Nummern verlören ihre
 Aussagekraft. Versionsnummern setzt allein der Benutzer im Dialog.
+
+**Änderungsprotokoll.** Bei jedem Versionsstand bekommt die Seite
+`changelog.md` im Content-Mount einen Abschnitt dazu — Überschrift aus
+Versionsnummer und Datum, darunter die Beschreibung samt Dateiliste. Neue
+Einträge stehen oben, damit niemand an das Ende einer wachsenden Seite scrollen
+muss. Die Seite entsteht beim ersten Mal von selbst, mit Front Matter und dem
+Titel „Änderungen"; danach wird nur noch ihr `lastmod` fortgeschrieben, während
+der übrige Kopf und der vorhandene Text unangetastet bleiben.
+
+Geschrieben wird **vor** `git add -A` ([GitService.php](backend/core/GitService.php),
+Parameter `$beforeAdd` von `commit()`). Die Seite liegt selbst im Repository und
+muss deshalb in genau dem Stand landen, den sie beschreibt — sonst bliebe sie
+nach jedem Sichern als offene Änderung liegen und der Arbeitsbaum würde nie
+sauber. Der Zugriff läuft über `FileService`/`MountResolver`, sodass Einsperrung,
+Schreibrechte und erlaubte Endungen des Mounts genauso greifen wie bei jeder
+anderen Bearbeitung.
+
+Einen Eintrag bekommen **alle** Versionsstände, die HugoCMS anlegt: das Sichern
+von Hand, beide Commits einer Wiederherstellung und der automatische Commit des
+Cron. Bei der Wiederherstellung wird der Stand der Seite vorher festgehalten
+(`ChangelogService::pin()`), denn `read-tree` setzte sonst auch sie auf den alten
+Inhalt zurück und das Protokoll verlöre genau die Einträge, die es festhalten
+soll.
+
+Da die Seite unter `content/` liegt, wird sie von Hugo gebaut und ist im Web
+öffentlich lesbar — mitsamt der Dateipfade. Wer das nicht möchte, ergänzt im
+Front Matter `draft: true` oder `headless: true`; die Fortschreibung lässt beides
+unangetastet. Ein Fehlschlag beim Schreiben (kein Content-Mount, schreibgeschützt)
+wird protokolliert und lässt den Versionsstand unberührt — das Protokoll ist
+Beiwerk, der Versionsstand die Hauptsache.
+
+Abschalten lässt es sich je Webseite über `[git] changelog = false` in der
+Mount-Konfiguration, in der Oberfläche über den Schalter **Änderungsprotokoll
+führen** in den Projekteinstellungen. Die Vorgabe ist **an**: Der Schalter dient
+zum Abschalten, nicht zum Einschalten — eine Bestandsinstallation ohne den
+Schlüssel führt das Protokoll also mit. Er hängt bewusst *nicht* an
+`auto_commit`, denn das Protokoll entsteht bei jedem Versionsstand, nicht nur bei
+denen des Cron.
 
 **Zu einem alten Stand zurückkehren.** Der Diff-Dialog trägt „Diesen Stand
 wiederherstellen". Die Rückkehr geht bewusst **vorwärts**: Der alte Inhalt wird

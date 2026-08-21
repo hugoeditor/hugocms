@@ -180,12 +180,17 @@ final class Connector
      * Einspielen fälliger Freigaben mit `commitMessage` (+ Datum) und sichert
      * VOR dem Build offene Änderungen mit `commitMessagePending` (+ Datum).
      *
-     * @var array{autoCommit: bool, commitMessage: string, commitMessagePending: string}
+     * `changelog` steuert getrennt davon das Änderungsprotokoll — die Seite
+     * changelog.md im Content-Mount, die bei JEDEM Versionsstand fortgeschrieben
+     * wird, nicht nur bei denen des Cron.
+     *
+     * @var array{autoCommit: bool, commitMessage: string, commitMessagePending: string, changelog: bool}
      */
     private array $gitAuto = [
         'autoCommit' => false,
         'commitMessage' => MountConfig::GIT_COMMIT_MESSAGE_DEFAULT,
         'commitMessagePending' => MountConfig::GIT_COMMIT_MESSAGE_PENDING_DEFAULT,
+        'changelog' => true,
     ];
 
     /**
@@ -1670,7 +1675,7 @@ final class Connector
             if ($skipWhenClean && !empty($git->status()['clean'])) {
                 return null;
             }
-            $res = $git->commit($message);
+            $res = $git->commit($message, null, $this->changelogHook());
         } catch (Throwable $e) {
             // Etwa GIT-NOT-A-REPO: kein Repository → nichts zu committen.
             $this->logger->info('Auto-Commit übersprungen: ' . $e->getMessage());
@@ -4058,6 +4063,8 @@ final class Connector
             'autoCommit' => (bool) $this->gitAuto['autoCommit'],
             'commitMessage' => (string) $this->gitAuto['commitMessage'],
             'commitMessagePending' => (string) $this->gitAuto['commitMessagePending'],
+            // Änderungsprotokoll (unabhängig vom Auto-Commit des Cron).
+            'changelog' => (bool) $this->gitAuto['changelog'],
             // Ist die Quelle ein Git-Repository? Für den Hinweis im Formular.
             'gitRepo' => $this->sourceIsGitRepo(),
         ];
@@ -4157,6 +4164,9 @@ final class Connector
             'auto_commit' => !empty($request['autoCommit']) ? 'true' : 'false',
             'commit_message' => $message === '' ? MountConfig::GIT_COMMIT_MESSAGE_DEFAULT : $message,
             'commit_message_pending' => $pending === '' ? MountConfig::GIT_COMMIT_MESSAGE_PENDING_DEFAULT : $pending,
+            // Immer geschrieben, damit der Zustand in der Datei ablesbar bleibt
+            // — die Vorgabe „an“ gilt nur, solange nichts dasteht.
+            'changelog' => !empty($request['changelog']) ? 'true' : 'false',
         ];
     }
 
@@ -4974,6 +4984,35 @@ final class Connector
         return new GitService($source);
     }
 
+    /**
+     * Der Haken, den {@see GitService::commit()} unmittelbar vor `git add -A`
+     * ruft: Er schreibt den Abschnitt ins Änderungsprotokoll, damit dieser in
+     * genau dem Versionsstand liegt, den er beschreibt.
+     *
+     * Das Schreiben gehört bewusst hierher und nicht in den GitService: Nur der
+     * Connector kennt Mounts und FileService, und nur über diese Schicht greifen
+     * Einsperrung, Schreibrechte und erlaubte Endungen.
+     *
+     * $pin ist für die Wiederherstellung: Dort setzt `read-tree` auch die
+     * Protokollseite auf den alten Inhalt zurück. Wird ihr Stand vorher
+     * festgehalten, überdauern die zwischenzeitlichen Einträge den Vorgang —
+     * sonst verlöre das Protokoll genau die Geschichte, die es festhalten soll.
+     */
+    private function changelogHook(bool $pin = false): ?callable
+    {
+        if (empty($this->gitAuto['changelog'])) {
+            return null;
+        }
+        $changelog = new ChangelogService($this->resolver, $this->files, $this->logger);
+        if ($pin) {
+            $changelog->pin();
+        }
+
+        return function (string $message, ?string $tag) use ($changelog): void {
+            $changelog->append($message, $tag);
+        };
+    }
+
     private function cmdGitStatus(): array
     {
         return $this->git()->status();
@@ -5001,7 +5040,11 @@ final class Connector
         // Leere Versionsnummer heißt „ohne Tag“ — das Formular darf das Feld
         // räumen, ohne dass der Commit daran scheitert.
         $tag = trim((string) ($request['tag'] ?? ''));
-        $result = $git->commit((string) ($request['message'] ?? ''), $tag === '' ? null : $tag);
+        $result = $git->commit(
+            (string) ($request['message'] ?? ''),
+            $tag === '' ? null : $tag,
+            $this->changelogHook(),
+        );
         if ($result['success']) {
             $this->logger->info(sprintf(
                 'Git-Commit erstellt: %s%s',
@@ -5059,6 +5102,8 @@ final class Connector
             (string) ($request['message'] ?? ''),
             $tag === '' ? null : $tag,
             (string) ($request['presaveMessage'] ?? ''),
+            // pin: Das Protokoll soll die Wiederherstellung überdauern.
+            $this->changelogHook(true),
         );
 
         if ($result['success']) {

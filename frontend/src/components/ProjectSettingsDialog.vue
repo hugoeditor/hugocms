@@ -47,6 +47,10 @@ const commitMessage = ref('')
 // Zweite Nachricht: Vorab-Commit offener Änderungen vor dem Build (gleicher
 // Schalter autoCommit).
 const commitMessagePending = ref('')
+// Änderungsprotokoll (content/changelog.md). Unabhängig vom Auto-Commit: Es
+// wird bei JEDEM Versionsstand fortgeschrieben, nicht nur bei denen des Cron.
+// Vorgabe an — der Schalter dient zum Abschalten.
+const changelog = ref(true)
 const gitRepo = ref(false)
 // Auto-Commit ist nur einstellbar, wenn Git nutzbar (Pro + Projekt) UND das
 // Quellverzeichnis ein Repository ist.
@@ -104,6 +108,7 @@ watch(model, async (open) => {
     autoCommit.value = !!cfg.autoCommit
     commitMessage.value = cfg.commitMessage ?? ''
     commitMessagePending.value = cfg.commitMessagePending ?? ''
+    changelog.value = !!cfg.changelog
     gitRepo.value = !!cfg.gitRepo
   } catch (e) {
     error.value = errorText(t, e)
@@ -139,6 +144,7 @@ async function submit() {
       autoCommit: autoCommit.value,
       commitMessage: commitMessage.value,
       commitMessagePending: commitMessagePending.value,
+      changelog: changelog.value,
     })
     // Der Schalter in der Liste „zu verbessern“ liest denselben Zustand aus
     // whoami — nach dem Speichern nachziehen.
@@ -378,7 +384,21 @@ async function submit() {
             maxlength="200"
             :hint="$t('projectConfig.commitMessagePendingHint')"
             persistent-hint
+            class="mb-2"
           />
+          <!-- Bewusst NICHT an autoCommit gekoppelt: Das Protokoll entsteht bei
+               jedem Versionsstand, auch bei denen von Hand. -->
+          <v-switch
+            v-model="changelog"
+            :label="$t('projectConfig.changelog')"
+            :disabled="!gitCommitAvailable"
+            color="primary"
+            density="compact"
+            hide-details
+          />
+          <div class="text-caption text-medium-emphasis mb-2">
+            {{ $t('projectConfig.changelogHint') }}
+          </div>
 
           <v-alert v-if="error" type="error" density="compact" class="mt-2">{{ error }}</v-alert>
           <div class="text-caption text-medium-emphasis mt-3">{{ $t('projectConfig.note') }}</div>

@@ -194,6 +194,8 @@ export default {
     commitMessageHint: 'For the published releases. The date (server time) is appended automatically.',
     commitMessagePending: 'Description: pending changes before the build',
     commitMessagePendingHint: 'For changes already pending in the source directory. Only when any exist. The date (server time) is appended automatically.',
+    changelog: 'Keep a change log',
+    changelogHint: 'Extends the page changelog.md in the content directory with every version state — including those saved by hand. The page is built by Hugo and therefore publicly visible.',
     timeInvalid: 'Please enter a time, e.g. 07:00.',
   },
 

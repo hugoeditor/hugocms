@@ -194,6 +194,8 @@ export default {
     commitMessageHint: 'Für die veröffentlichten Freigaben. Das Datum (Serverzeit) wird automatisch angehängt.',
     commitMessagePending: 'Beschreibung: offene Änderungen vor dem Build',
     commitMessagePendingHint: 'Für vorher schon offene Änderungen im Quellverzeichnis. Nur wenn welche vorliegen. Das Datum (Serverzeit) wird automatisch angehängt.',
+    changelog: 'Änderungsprotokoll führen',
+    changelogHint: 'Schreibt die Seite changelog.md im Inhaltsverzeichnis bei jedem Versionsstand fort — auch bei denen von Hand. Die Seite wird von Hugo gebaut und ist damit öffentlich sichtbar.',
     timeInvalid: 'Bitte als Uhrzeit angeben, z. B. 07:00.',
   },
 

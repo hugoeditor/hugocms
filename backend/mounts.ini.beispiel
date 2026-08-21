@@ -152,7 +152,16 @@ label = Medien
 ;   auto_commit            true schaltet beide Auto-Commits ein. Standard: aus.
 ;   commit_message         Nachricht nach der Veröffentlichung (ohne Datum). Leer = Vorgabe.
 ;   commit_message_pending Nachricht für offene Änderungen vor dem Build (ohne Datum). Leer = Vorgabe.
+;
+; changelog steht unabhängig von auto_commit: Es führt die Seite changelog.md im
+; Content-Mount und schreibt sie bei JEDEM Versionsstand fort — beim Sichern von
+; Hand, bei der Wiederherstellung und beim Auto-Commit des Cron. Da die Seite
+; unter content/ liegt, wird sie von Hugo gebaut und ist öffentlich sichtbar;
+; wer das nicht möchte, setzt in ihrem Front Matter draft: true oder
+; headless: true — die Fortschreibung lässt beides unangetastet.
+;   changelog              false schaltet das Änderungsprotokoll ab. Standard: AN.
 ;[git]
 ;auto_commit = true
 ;commit_message = "Automatische Veröffentlichung terminierter Freigaben"
 ;commit_message_pending = "Offene Änderungen vor dem Build gesichert"
+;changelog = false

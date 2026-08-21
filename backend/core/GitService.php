@@ -304,9 +304,17 @@ final class GitService
      * sich nicht zurücknehmen. Scheitert erst das Tag selbst, bleibt der Commit
      * gültig; die Antwort weist das über `tagged` getrennt aus.
      *
+     * $beforeAdd läuft unmittelbar vor `git add -A` und bekommt Beschreibung und
+     * Versionsnummer. Darüber schreibt der Connector das Änderungsprotokoll:
+     * Die Seite liegt selbst im Repository, muss also VOR dem Vormerken
+     * entstehen, damit sie in genau dem Stand liegt, den sie beschreibt.
+     * GitService selbst bleibt dabei frei von Mount- und Dateikenntnis — das
+     * Schreiben gehört in die FileService-Schicht.
+     *
+     * @param ?callable(string, ?string): void $beforeAdd
      * @return array{success: bool, sha: ?string, output: string, tag: ?string, tagged: bool, tagOutput: string}
      */
-    public function commit(string $message, ?string $tag = null): array
+    public function commit(string $message, ?string $tag = null, ?callable $beforeAdd = null): array
     {
         $this->assertRepo();
         $message = trim($message);
@@ -326,6 +334,9 @@ final class GitService
         }
 
         $failed = ['success' => false, 'sha' => null, 'tag' => null, 'tagged' => false, 'tagOutput' => ''];
+        if ($beforeAdd !== null) {
+            $beforeAdd($message, $tag === '' ? null : $tag);
+        }
         $add = $this->run(['add', '-A']);
         if ($add['exit'] !== 0) {
             return [...$failed, 'output' => $add['output']];
@@ -448,10 +459,22 @@ final class GitService
      * nie gab. `read-tree` entfernt diese Dateien und lässt zugleich
      * unversionierte Verzeichnisse (`public/`, `resources/`) unangetastet.
      *
+     * $beforeAdd wird an BEIDE Commits durchgereicht — die Vorab-Sicherung ist
+     * ein eigener Versionsstand und gehört ebenso ins Protokoll. Für den Stand
+     * nach der Wiederherstellung greift der Aufruf erst hinter `read-tree`:
+     * Das Protokoll liegt selbst im Repository und würde sonst mit auf den alten
+     * Inhalt zurückgesetzt, samt des gerade geschriebenen Eintrags.
+     *
+     * @param ?callable(string, ?string): void $beforeAdd
      * @return array{success: bool, sha: ?string, output: string, tag: ?string, tagged: bool, tagOutput: string, presaved: bool, presavedSha: ?string}
      */
-    public function restore(string $sha, string $message, ?string $tag, string $presaveMessage): array
-    {
+    public function restore(
+        string $sha,
+        string $message,
+        ?string $tag,
+        string $presaveMessage,
+        ?callable $beforeAdd = null,
+    ): array {
         $this->assertRepo();
         $sha = $this->requireCommit($sha);
 
@@ -459,7 +482,7 @@ final class GitService
         $presaved = false;
         $presavedSha = null;
         if (empty($this->status()['clean'])) {
-            $pre = $this->commit($presaveMessage);
+            $pre = $this->commit($presaveMessage, null, $beforeAdd);
             if (!$pre['success']) {
                 return [
                     'success' => false,
@@ -500,7 +523,7 @@ final class GitService
         // Der Arbeitsbaum trägt jetzt den alten Inhalt; ihn als neuen Stand
         // festschreiben. Schlägt das fehl, bleibt der Inhalt als offene
         // Änderung stehen — verloren ist nichts, alles liegt in der Historie.
-        $res = $this->commit($message, $tag);
+        $res = $this->commit($message, $tag, $beforeAdd);
 
         return [...$res, 'presaved' => $presaved, 'presavedSha' => $presavedSha];
     }

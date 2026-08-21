@@ -76,6 +76,10 @@ use HugoCMS\FileManager\Exception\ApiException;
  *   auto_commit            (optional) true schaltet den Auto-Commit ein. Standard: aus.
  *   commit_message         (optional) Nachricht nach der Veröffentlichung (ohne Datum). Standard: siehe unten.
  *   commit_message_pending (optional) Nachricht für offene Änderungen vor dem Build (ohne Datum). Standard: siehe unten.
+ *   changelog              (optional) false schaltet das Änderungsprotokoll ab
+ *                          (die Seite changelog.md im Content-Mount, die bei
+ *                          jedem Versionsstand fortgeschrieben wird).
+ *                          Standard: an.
  */
 final class MountConfig
 {
@@ -147,6 +151,9 @@ final class MountConfig
             'autoCommit' => false,
             'commitMessage' => self::GIT_COMMIT_MESSAGE_DEFAULT,
             'commitMessagePending' => self::GIT_COMMIT_MESSAGE_PENDING_DEFAULT,
+            // Vorgabe an: Der Schalter dient zum Abschalten des Protokolls,
+            // nicht zum Einschalten — fehlt er, wird es geschrieben.
+            'changelog' => true,
         ];
         $warnings = [];
 
@@ -238,6 +245,7 @@ final class MountConfig
                     'autoCommit' => filter_var($section['auto_commit'] ?? false, FILTER_VALIDATE_BOOLEAN),
                     'commitMessage' => mb_substr($message, 0, self::GIT_MESSAGE_MAX),
                     'commitMessagePending' => mb_substr($pending, 0, self::GIT_MESSAGE_MAX),
+                    'changelog' => filter_var($section['changelog'] ?? true, FILTER_VALIDATE_BOOLEAN),
                 ];
                 continue;
             }
