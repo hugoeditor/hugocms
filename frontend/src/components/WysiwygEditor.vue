@@ -25,6 +25,10 @@ const props = defineProps({
   previewing: { type: Boolean, default: false },
 })
 
+// Hugos Auszugs-Trenner: Alles davor bildet die Zusammenfassung (.Summary),
+// die in Listen und Teasern erscheint.
+const MORE_DIVIDER = '<!--more-->'
+
 const authStore = useAuthStore()
 const emit = defineEmits(['update:modelValue', 'clipboard-denied', 'save', 'save-draft', 'preview'])
 const { t } = useI18n()
@@ -37,17 +41,22 @@ const { t } = useI18n()
 // wir sie direkt an den {{ / }}-Grenzen wieder auf die kanonische Form — das
 // stellt auch ein verlorengegangenes > wieder her. Einzelne <, > in normaler
 // Prosa bleiben unberührt; die Prozentform ({{% … %}}) ebenfalls.
-function restoreHugoShortcodes(md) {
+//
+// Denselben Schaden nimmt der Auszugs-Trenner <!--more-->; auch er trägt seine
+// Bedeutung in den Winkelklammern und wird deshalb auf die kanonische Form
+// zurückgeführt.
+function restoreHugoMarkup(md) {
   return md
     .replace(/\{\{(?:&lt;|&gt;|<|>)/g, '{{<')
     .replace(/(?:&lt;|&gt;|<|>)\}\}/g, '>}}')
+    .replace(/(?:&lt;|&gt;|<|>)!--\s*more\s*--(?:&lt;|&gt;|<|>)/g, '<!--more-->')
 }
 
 // Serialisierter Markdown-Body inklusive Shortcode-Wiederherstellung. In
 // onUpdate UND im modelValue-watch dieselbe Quelle nutzen, sonst löst der
 // Vergleich ein überflüssiges setContent aus (Cursor-Sprung bei jeder Eingabe).
 function currentMarkdown(ed) {
-  return restoreHugoShortcodes(ed.storage.markdown.getMarkdown())
+  return restoreHugoMarkup(ed.storage.markdown.getMarkdown())
 }
 
 // Zwischenablage: writeText/readText verlangen einen sicheren Kontext;
@@ -159,6 +168,15 @@ const editor = useEditor({
   ],
   onUpdate: ({ editor: ed }) => emit('update:modelValue', currentMarkdown(ed)),
 })
+
+// Auszugs-Trenner an der Cursorposition. insertText statt insertContent: Eine
+// Zeichenkette liefe bei insertContent durch den HTML-Parser, der einen
+// Kommentar verschluckt — als Text bleibt er erhalten (html:false) und geht
+// beim Serialisieren durch restoreHugoMarkup wieder kanonisch heraus.
+function insertMoreDivider(ed) {
+  ed.view.focus()
+  ed.view.dispatch(ed.state.tr.insertText(MORE_DIVIDER))
+}
 
 // --- Link einfügen/bearbeiten ---------------------------------------------
 const linkDialog = ref(false)
@@ -273,6 +291,7 @@ const tools = computed(() => {
     { icon: 'mdi-format-header-3', label: t('wysiwyg.h3'), active: ed.isActive('heading', { level: 3 }), run: () => ed.chain().focus().toggleHeading({ level: 3 }).run() },
     { divider: true },
     { icon: 'mdi-link-variant', label: ed.isActive('link') ? t('link.editTitle') : t('link.insertTitle'), active: ed.isActive('link'), run: () => openLinkDialog(ed) },
+    { icon: 'mdi-format-page-break', label: t('editor.insertMore'), active: false, run: () => insertMoreDivider(ed) },
     { icon: 'mdi-open-in-new', label: t('link.insertExternalTitle'), active: false, run: () => openExternalLinkDialog(ed) },
     { icon: 'mdi-link-variant-off', label: t('link.remove'), active: false, disabled: !ed.isActive('link'), run: removeLink },
     { divider: true },

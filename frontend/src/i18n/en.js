@@ -967,6 +967,7 @@ export default {
     save: 'Save (Ctrl+S)',
     saveDraft: 'Save as draft for review',
     preview: 'Page preview',
+    insertMore: 'Insert summary divider (<!--more-->)',
     savedAsDraft: 'Saved as a draft for review.',
     publishDraft: 'Draft — will not be published on the next build (draft).',
     publishScheduled: 'Scheduled to publish: {0} (hidden until then).',

@@ -970,6 +970,7 @@ export default {
     save: 'Speichern (Strg+S)',
     saveDraft: 'Als Entwurf zur Freigabe',
     preview: 'Seitenvorschau',
+    insertMore: 'Auszugs-Trenner einfügen (<!--more-->)',
     savedAsDraft: 'Als Entwurf zur Freigabe abgelegt.',
     publishDraft: 'Entwurf — wird beim nächsten Build nicht veröffentlicht (draft).',
     publishScheduled: 'Geplante Veröffentlichung: {0} (bis dahin nicht sichtbar).',

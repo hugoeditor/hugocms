@@ -307,6 +307,12 @@ function insertLink(values) {
   editorRef.value?.insertSnippet(snippet)
 }
 
+// Hugos Auszugs-Trenner an der Cursorposition: Alles davor bildet die
+// Zusammenfassung (.Summary), die in Listen und Teasern erscheint.
+function insertMoreDivider() {
+  editorRef.value?.insertSnippet('<!--more-->')
+}
+
 const tools = computed(() => [
   {
     name: 'save',
@@ -347,6 +353,7 @@ const tools = computed(() => [
     { divider: true },
     { name: 'insertLink', icon: 'mdi-link-variant', label: t('link.insertTitle'), action: openLinkDialog },
     { name: 'insertExternalLink', icon: 'mdi-open-in-new', label: t('link.insertExternalTitle'), action: openExternalLinkDialog },
+    { name: 'insertMore', icon: 'mdi-format-page-break', label: t('editor.insertMore'), action: insertMoreDivider },
   ] : []),
   { divider: true },
   { name: 'openSearchPanel', icon: 'mdi-magnify', label: t('editor.search') },
