@@ -225,6 +225,57 @@ final class GitService
     }
 
     /**
+     * Alle Versionsstände MIT Versionsnummer, neueste zuerst — Grundlage für
+     * das neu erzeugte Änderungsprotokoll.
+     *
+     * Gelesen wird die Historie von HEAD aus; Commits ohne Tag bleiben außen
+     * vor. Anders als {@see log()} kommt hier die vollständige Beschreibung
+     * (`%B`) mit, weil das Protokoll auch die Dateiliste darunter zeigt. Trägt
+     * ein Commit mehrere Tags, zählt das erste.
+     *
+     * @return list<array{sha: string, tag: string, date: string, message: string}>
+     */
+    public function taggedHistory(int $limit = 500): array
+    {
+        $this->assertRepo();
+
+        // %B endet auf einer Leerzeile — deshalb steht die Nachricht zuletzt,
+        // und der Datensatz-Trenner schließt sie ab.
+        $format = implode(self::FIELD_SEP, ['%H', '%D', '%aI', '%B']) . self::RECORD_SEP;
+        $res = $this->run([
+            'log',
+            '--max-count=' . max(1, $limit),
+            '--no-color',
+            '--decorate=short',
+            '--pretty=format:' . $format,
+        ]);
+
+        $out = [];
+        foreach (explode(self::RECORD_SEP, $res['output']) as $record) {
+            $record = trim($record, "\r\n");
+            if ($record === '') {
+                continue;
+            }
+            $f = explode(self::FIELD_SEP, $record);
+            if (count($f) < 4) {
+                continue;
+            }
+            $tags = $this->parseTags($f[1]);
+            if ($tags === []) {
+                continue; // ohne Versionsnummer kein Eintrag
+            }
+            $out[] = [
+                'sha' => $f[0],
+                'tag' => $tags[0],
+                'date' => $f[2],
+                'message' => trim($f[3]),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
      * Diff eines Commits samt seiner VOLLSTÄNDIGEN Beschreibung.
      *
      * Der Verlauf zeigt nur die erste Zeile (`%s`), weil die Tabellenspalte

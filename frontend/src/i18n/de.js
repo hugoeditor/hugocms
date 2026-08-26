@@ -419,6 +419,12 @@ export default {
     tag: 'Versionsnummer',
     // Wort vor der Nummer in der Überschrift des Änderungsprotokolls.
     tagLabel: 'Ausgabe',
+    changelog: 'Protokoll neu aufbauen',
+    changelogHint: 'Erzeugt changelog.md neu aus allen Ständen mit Versionsnummer.',
+    changelogTitle: 'Änderungsprotokoll neu aufbauen?',
+    changelogConfirm: 'Die Seite changelog.md wird vollständig aus der Versionsgeschichte neu erzeugt — berücksichtigt werden nur Stände mit Versionsnummer. Von Hand ergänzter Text darin geht verloren. Die Seite erscheint danach als offene Änderung und wird mit dem nächsten Versionsstand gesichert.',
+    changelogAction: 'Neu aufbauen',
+    changelogOk: 'Änderungsprotokoll neu erzeugt: {0} Abschnitte.',
     tagHint: 'Wird automatisch fortgezählt. Leer lassen, um ohne Nummer zu sichern.',
     tagFail: 'Der Versionsstand wurde gesichert, aber die Nummer {0} ließ sich nicht vergeben.',
     commit: 'Versionsstand sichern',

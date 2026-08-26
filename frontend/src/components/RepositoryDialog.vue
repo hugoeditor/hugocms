@@ -36,6 +36,7 @@ const loading = ref(false)
 const diffDialog = ref(false)
 const diffLoading = ref(false)
 const committing = ref(false)
+const rebuilding = ref(false)
 const pushing = ref(false)
 const resetting = ref(false)
 // Wiederherstellung eines alten Standes: eigener Bestätigungsdialog, weil er
@@ -263,6 +264,32 @@ async function doCommit() {
   }
 }
 
+// Änderungsprotokoll aus der Historie neu aufbauen. Ersetzt den bisherigen
+// Inhalt der Seite — deshalb die Rückfrage. Danach liegt sie als offene
+// Änderung vor und wird mit dem nächsten Versionsstand gesichert.
+async function doRebuildChangelog() {
+  if (rebuilding.value) return
+  const ok = await confirm({
+    title: t('repo.changelogTitle'),
+    message: t('repo.changelogConfirm'),
+    confirmText: t('repo.changelogAction'),
+    color: 'warning',
+  })
+  if (!ok) return
+  rebuilding.value = true
+  action.value = null
+  try {
+    const res = await repo.rebuildChangelog(t('repo.tagLabel'))
+    action.value = { type: 'success', key: 'repo.changelogOk', params: [res.sections] }
+    await repo.refresh()
+    applySuggestions()
+  } catch (e) {
+    error.value = errorText(t, e)
+  } finally {
+    rebuilding.value = false
+  }
+}
+
 async function doPush() {
   if (pushing.value) return
   pushing.value = true
@@ -426,7 +453,7 @@ async function onRowClick(_event, { item }) {
 }
 
 const busy = computed(
-  () => committing.value || pushing.value || resetting.value || restoring.value,
+  () => committing.value || pushing.value || resetting.value || restoring.value || rebuilding.value,
 )
 </script>
 
@@ -477,6 +504,20 @@ const busy = computed(
               </v-chip>
             </template>
             <v-spacer />
+            <!-- Protokoll aus der Historie neu aufbauen (nur Stände mit
+                 Versionsnummer). Schreibt nur die Datei; gesichert wird sie mit
+                 dem nächsten Versionsstand. -->
+            <v-btn
+              variant="text"
+              size="small"
+              prepend-icon="mdi-history"
+              :loading="rebuilding"
+              :disabled="busy"
+              :title="$t('repo.changelogHint')"
+              @click="doRebuildChangelog"
+            >
+              {{ $t('repo.changelog') }}
+            </v-btn>
             <v-btn
               variant="text"
               size="small"

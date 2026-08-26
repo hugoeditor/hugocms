@@ -540,6 +540,7 @@ final class Connector
                 'gitlog' => $this->cmdGitLog($request),
                 'gitdiff' => $this->cmdGitDiff($request),
                 'gitcommit' => $this->cmdGitCommit($request),
+                'gitchangelog' => $this->cmdGitChangelog($request),
                 'gitpush' => $this->cmdGitPush(),
                 'gitreset' => $this->cmdGitReset($request),
                 'gitrestorepreview' => $this->cmdGitRestorePreview($request),
@@ -5048,6 +5049,26 @@ final class Connector
         return function (string $message, ?string $tag) use ($changelog, $tagLabel): void {
             $changelog->append($message, $tag, $tagLabel);
         };
+    }
+
+    /**
+     * Erzeugt das Änderungsprotokoll (changelog.md) neu aus der Historie —
+     * berücksichtigt werden ausschließlich Versionsstände MIT Versionsnummer.
+     *
+     * Geschrieben wird nur die Datei; sie erscheint danach als offene Änderung
+     * und wird wie jede andere gesichert. Bewusst kein eigener Commit: Was in
+     * den Versionsstand geht, entscheidet der Benutzer.
+     */
+    private function cmdGitChangelog(array $request): array
+    {
+        $this->requireMethod('POST');
+        $states = $this->git()->taggedHistory();
+
+        $changelog = new ChangelogService($this->resolver, $this->files, $this->logger);
+        $sections = $changelog->rebuild($states, (string) ($request['tagLabel'] ?? ''));
+        $this->logger->info(sprintf('Änderungsprotokoll neu erzeugt: %d Abschnitte', $sections));
+
+        return ['sections' => $sections];
     }
 
     private function cmdGitStatus(): array

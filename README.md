@@ -627,6 +627,15 @@ Läufe in der Mount-Konfiguration (`[git] tag_label`, Vorgabe `Ausgabe`), weil
 beim Cron kein Client die Sprache kennt; im Dialog kommt es weiterhin aus der
 Oberfläche. Leerer Wert = nur die Nummer.
 
+**Protokoll neu aufbauen.** Der Knopf *Protokoll neu aufbauen* im
+Versionierungs-Dialog erzeugt `changelog.md` vollständig aus der Historie —
+berücksichtigt werden ausschließlich Stände **mit Versionsnummer**, in der
+Reihenfolge neueste zuerst, mit dem Datum des jeweiligen Standes. Der bisherige
+Inhalt wird ersetzt, von Hand ergänzter Text geht also verloren; der Dialog
+fragt deshalb vorher nach. Geschrieben wird nur die Datei: Sie erscheint danach
+als offene Änderung und geht mit dem nächsten Versionsstand mit — was in die
+Historie wandert, entscheidet der Benutzer.
+
 **Änderungsprotokoll.** Bei jedem Versionsstand bekommt die Seite
 `changelog.md` im Content-Mount einen Abschnitt dazu — Überschrift aus
 Versionsnummer und Datum (`## Ausgabe 3 — 26.08.2026 14:12`; auf Englisch
@@ -1129,6 +1138,7 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `gitdiff`  | GET     | `sha`                                | **Pro:** Diff eines Versionsstands samt vollständiger Beschreibung (`message`) |
 | `gitcommit`| POST    | `message`, `tag`?                    | **Pro:** alle Änderungen als Versionsstand sichern; `tag` vergibt die Versionsnummer (leer = ohne) |
 | `gitpush`  | POST    | –                                    | **Pro:** Änderungen samt Versionsnummern zur konfigurierten Gegenstelle hochladen |
+| `gitchangelog`| POST | `tagLabel`?                        | **Pro:** changelog.md aus der Historie neu erzeugen (nur Stände mit Versionsnummer); schreibt nur die Datei |
 | `gitreset` | POST    | `ref`?                               | **Pro:** Arbeitsbaum zurücksetzen (Standard: `HEAD`) |
 | `gitrestorepreview` | GET | `sha`                            | **Pro:** Vorschau — welche Dateien eine Wiederherstellung ändern würde |
 | `gitrestore` | POST  | `sha`, `message`, `tag`?, `presaveMessage` | **Pro:** zu einem alten Stand zurückkehren; sichert ihn als neuen Versionsstand |

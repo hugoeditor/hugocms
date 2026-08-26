@@ -123,6 +123,49 @@ final class ChangelogService
     }
 
     /**
+     * Erzeugt die Seite komplett NEU aus den übergebenen Versionsständen —
+     * neueste zuerst, ein Abschnitt je Stand. Der bisherige Inhalt wird dabei
+     * ersetzt; von Hand ergänzter Text geht verloren. Deshalb fragt der Client
+     * vorher nach.
+     *
+     * Anders als {@see append()} steht in jeder Überschrift das Datum des
+     * Standes, nicht die aktuelle Zeit — die Seite gibt die Historie wieder.
+     *
+     * @param list<array{tag: string, date: string, message: string}> $states
+     * @return int Anzahl geschriebener Abschnitte
+     */
+    public function rebuild(array $states, string $tagLabel = ''): int
+    {
+        $sections = [];
+        foreach ($states as $state) {
+            $message = trim((string) ($state['message'] ?? ''));
+            if ($message === '') {
+                continue;
+            }
+            $sections[] = $this->section(
+                $message,
+                (string) ($state['tag'] ?? ''),
+                $tagLabel,
+                (string) ($state['date'] ?? ''),
+            );
+        }
+
+        $page = $this->header() . "\n" . implode("\n", $sections);
+
+        try {
+            $target = $this->mounts->resolve($this->mounts->encodeId(self::MOUNT, self::FILE), false);
+            $this->files->writeText($target['mount'], $target['rel'], $target['abs'], $page);
+            $this->carry = $page;
+        } catch (ApiException | Throwable $e) {
+            $this->logger->warning('Änderungsprotokoll nicht erneuert: ' . $e->getMessage());
+
+            throw $e;
+        }
+
+        return count($sections);
+    }
+
+    /**
      * Fügt den neuen Abschnitt in die vorhandene Seite ein — oder legt sie an.
      * Der bestehende Rumpf bleibt wörtlich erhalten; angefasst wird nur das
      * `lastmod`-Datum im Front Matter, damit Hugo die Seite als aktualisiert
@@ -147,7 +190,7 @@ final class ChangelogService
     }
 
     /** Ein Abschnitt: Überschrift aus Versionsnummer und Datum, darunter der Text. */
-    private function section(string $message, ?string $tag, string $tagLabel): string
+    private function section(string $message, ?string $tag, string $tagLabel, string $date = ''): string
     {
         $lines = explode("\n", $message);
         $subject = trim(array_shift($lines));
@@ -160,9 +203,12 @@ final class ChangelogService
         $label = trim($tagLabel);
         $number = $tag !== null ? trim($tag) : '';
         $version = $number === '' ? '' : ($label === '' ? $number : $label . ' ' . $number);
+        // Beim Fortschreiben zählt der Augenblick, beim Neuerzeugen das Datum
+        // des Standes (ISO-8601 aus der Historie).
+        $stamp = $date === '' ? date('d.m.Y H:i') : self::formatDate($date);
         $heading = $version !== ''
-            ? sprintf('## %s — %s', $version, date('d.m.Y H:i'))
-            : sprintf('## %s', date('d.m.Y H:i'));
+            ? sprintf('## %s — %s', $version, $stamp)
+            : sprintf('## %s', $stamp);
 
         $section = $heading . "\n\n" . $subject . "\n";
         if ($rest !== '') {
@@ -170,6 +216,14 @@ final class ChangelogService
         }
 
         return $section;
+    }
+
+    /** ISO-8601-Zeitstempel in die Schreibweise der Überschriften bringen. */
+    private static function formatDate(string $iso): string
+    {
+        $ts = strtotime($iso);
+
+        return $ts === false ? date('d.m.Y H:i') : date('d.m.Y H:i', $ts);
     }
 
     /** Front Matter einer neu angelegten Seite. */

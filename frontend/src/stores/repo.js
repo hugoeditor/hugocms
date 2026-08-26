@@ -60,6 +60,13 @@ export const useRepoStore = defineStore('repo', {
       return api.post('gitpush')
     },
 
+    // Erzeugt das Änderungsprotokoll (changelog.md) neu — nur aus Ständen MIT
+    // Versionsnummer. Schreibt die Datei; gesichert wird sie danach wie jede
+    // andere offene Änderung.
+    async rebuildChangelog(tagLabel = '') {
+      return api.post('gitchangelog', { tagLabel })
+    },
+
     async reset(ref = 'HEAD') {
       return api.post('gitreset', { ref })
     },

@@ -418,6 +418,12 @@ export default {
     tag: 'Version number',
     // Word before the number in the changelog heading.
     tagLabel: 'Edition',
+    changelog: 'Rebuild changelog',
+    changelogHint: 'Regenerates changelog.md from every state that carries a version number.',
+    changelogTitle: 'Rebuild the changelog?',
+    changelogConfirm: 'The changelog.md page is regenerated entirely from the version history — only states with a version number are included. Any text added there by hand is lost. The page then shows up as a pending change and is saved with the next version state.',
+    changelogAction: 'Rebuild',
+    changelogOk: 'Changelog rebuilt: {0} sections.',
     tagHint: 'Counted up automatically. Leave empty to save without a number.',
     tagFail: 'The version state was saved, but the number {0} could not be assigned.',
     commit: 'Save version state',
