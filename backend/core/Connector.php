@@ -10,6 +10,7 @@ use HugoCMS\FileManager\Audit\ContentQualityService;
 use HugoCMS\FileManager\Audit\RuleCatalog;
 use HugoCMS\FileManager\Audit\SourceGuesser;
 use HugoCMS\FileManager\Auth\AuthInterface;
+use HugoCMS\FileManager\Auth\SessionCleaner;
 use HugoCMS\FileManager\Auth\SiteAwareInterface;
 use HugoCMS\FileManager\Auth\UserAdminInterface;
 use HugoCMS\FileManager\Auth\UserStore;
@@ -1500,6 +1501,27 @@ final class Connector
             __DIR__ . '/../var/preview/' . sha1($source),
             $this->logger,
         );
+    }
+
+    /**
+     * Räumt abgelaufene Sitzungsdateien weg. Aufgerufen vom Cron; im Web
+     * erledigt das der Sitzungsstart selbst (siehe SessionCleaner).
+     *
+     * Läuft der Cron unter einem anderen Konto als der Webserver, fehlen die
+     * Rechte — dann bleibt es folgenlos bei 0. Deshalb ist der Web-Weg der
+     * verlässliche und dieser hier die kostenlose Zugabe.
+     */
+    public function purgeSessions(): int
+    {
+        if ($this->sessionDir === null || !is_dir($this->sessionDir)) {
+            return 0;
+        }
+        $removed = SessionCleaner::purge($this->sessionDir);
+        if ($removed > 0) {
+            $this->logger->info(sprintf('Abgelaufene Sitzungsdateien entfernt: %d', $removed));
+        }
+
+        return $removed;
     }
 
     /**

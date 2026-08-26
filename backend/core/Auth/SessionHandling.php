@@ -19,6 +19,14 @@ trait SessionHandling
     /** Zeitstempel des letzten Zugriffs — Grundlage des Inaktivitäts-Limits. */
     private const LAST_SEEN_KEY = 'hugocms_fm_last_seen';
 
+    /**
+     * Zeitpunkt, zu dem DIESE Sitzung ungültig wird. Steht in der Sitzung
+     * selbst, weil die Dauer je Konto verschieden sein kann (Mehrbenutzer:
+     * prefs.session_lifetime). Nur so kann {@see SessionCleaner} eine fremde
+     * Sitzungsdatei beurteilen, ohne die Einstellungen aller Konten zu kennen.
+     */
+    private const EXPIRES_KEY = 'hugocms_fm_expires';
+
     /** Name des Sitzungs-Cookies (statt des Standards PHPSESSID). */
     private const SESSION_NAME = 'HUGOCMS';
 
@@ -46,6 +54,16 @@ trait SessionHandling
         ]);
         session_start();
 
+        // Gelegentlich abgelaufene Sitzungsdateien wegräumen — siehe
+        // SessionCleaner: PHPs Müllabfuhr greift im eigenen Verzeichnis nicht.
+        // Nur in etwa jedem hundertsten Request, und Fehler bleiben folgenlos.
+        if (random_int(1, 100) === 1) {
+            $dir = session_save_path();
+            if ($dir !== '' && is_dir($dir)) {
+                SessionCleaner::purge($dir);
+            }
+        }
+
         return true;
     }
 
@@ -64,5 +82,8 @@ trait SessionHandling
             session_regenerate_id(true);
         }
         $_SESSION[self::LAST_SEEN_KEY] = $now;
+        // Verfallszeitpunkt mitschreiben: Er wandert in die Sitzungsdatei und
+        // macht sie für den Aufräumer selbstauskunftsfähig.
+        $_SESSION[self::EXPIRES_KEY] = $now + $lifetime;
     }
 }

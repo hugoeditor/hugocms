@@ -76,6 +76,11 @@ $connector = null;
 try {
     $connector = new Connector(['config' => $configFile, 'logLevel' => 'info']);
     $connector->mountsFromFile($mountsFile);
+    // Abgelaufene Sitzungsdateien wegräumen, solange wir ohnehin laufen. Der
+    // Web-Zugang tut dasselbe gelegentlich selbst — hier ist es geschenkt.
+    // Fehlen dem Cron-Konto die Rechte an den Dateien des Webservers, bleibt es
+    // bei 0; die Aufgabe des Builds berührt das nicht.
+    $connector->purgeSessions();
     $result = $connector->buildSite($force);
 } catch (ApiException $e) {
     // Selbst abgefangene Ausnahmen lösen den globalen Exception-Handler nicht

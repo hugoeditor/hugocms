@@ -81,6 +81,12 @@ password_hash = "HIER-PASSWORT-HASH-EINTRAGEN"
 [session]
 ; Verzeichnis für die PHP-Sitzungsdateien (muss für den Webserver-Benutzer
 ; beschreibbar sein). Pflichtfeld — darf nicht leer sein.
+;
+; Abgelaufene Dateien räumt HugoCMS selbst weg (Auth\SessionCleaner): PHPs
+; eigene Müllabfuhr greift in einem eigenen Verzeichnis nicht — auf Debian und
+; Ubuntu steht session.gc_probability auf 0, und der System-Cron kennt nur den
+; Standardpfad. Gelöscht wird anhand des Verfallszeitpunkts IN der Sitzung, die
+; Sitzungsdauer je Konto bleibt also gewahrt.
 path = var/sessions
 
 [log]

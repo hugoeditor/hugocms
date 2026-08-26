@@ -1245,6 +1245,40 @@ Client:
    dem PHP-Code (Syntaxfehler, fehlende PHP-Erweiterung) – dann ins
    **Server-Log** schauen (`error_log` von PHP-FPM bzw. Apache/Nginx).
 
+## Sitzungen und ihre Bereinigung
+
+Die Sitzungen liegen in `backend/var/sessions` (`[session] path`), nicht im
+Standardverzeichnis von PHP. Das hat eine Folge, die man kennen muss: PHPs
+eigene Müllabfuhr räumt dort **nicht** auf. Auf Debian und Ubuntu steht
+`session.gc_probability` auf 0, weil ein System-Cron
+(`/usr/lib/php/sessionclean`) das Standardverzeichnis putzt — das eigene kennt er
+nicht. Ohne Gegenmaßnahme bleibt die Datei jedes Benutzers liegen, der einfach
+den Tab schließt.
+
+`Auth\SessionCleaner` übernimmt das. Zwei Dinge machen ihn nötig und zugleich
+unaufwendig:
+
+- **Jede Sitzung trägt ihren Verfallszeitpunkt selbst.** `enforceIdleTimeout()`
+  schreibt neben dem letzten Zugriff auch `hugocms_fm_expires`. Das ist
+  entscheidend, weil die Sitzungsdauer **je Konto** einstellbar ist
+  (`prefs.session_lifetime`, sonst `[user] session_lifetime`) und nach oben offen
+  ist: Eine feste Frist würde Konten mit langer Dauer aus dem Verzeichnis werfen
+  und die Betreffenden abmelden. Gelöscht wird nur, was laut eigener Angabe
+  abgelaufen ist — plus eine Stunde Gnadenfrist.
+- **Aufgeräumt wird im Web-Request**, in etwa jedem hundertsten, direkt nach
+  `session_start()`. Dort läuft der Code unter dem Benutzer, dem die Dateien
+  gehören — ein Cron unter einem anderen Konto dürfte sie unter Umständen gar
+  nicht löschen. Je Lauf höchstens 500 Löschungen, damit ein Request nicht an
+  einem großen Verzeichnis hängt; der Rest folgt beim nächsten Mal.
+
+Dateien **ohne** den Verfallszeitpunkt — Altbestände aus der Zeit vor dieser
+Änderung — verschwinden über eine bewusst großzügige Rückfall-Frist von 30 Tagen
+ohne Zugriff. Angefasst wird ausschließlich, was mit `sess_` beginnt.
+
+Zusätzlich ruft `cron-build.php` `Connector::purgeSessions()` auf: Läuft der Cron
+ohnehin alle paar Minuten und passen die Dateirechte, kostet das nichts. Der
+verlässliche Weg bleibt der im Web-Request.
+
 ## Sicherheit
 
 - **Einsperrung pro Mount:** Pfade werden mit `realpath()` aufgelöst und müssen
