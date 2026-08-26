@@ -449,6 +449,20 @@ Rand sagt das.
 5. Jedes Token (`random_bytes(16)`) gilt genau einmal und höchstens zehn
    Minuten; abgelaufene Reste räumt der nächste Lauf weg.
 
+### Editor-Werkzeuge
+
+Beide Bearbeitungsarten — Quelltext (CodeMirror) und der visuelle Markdown-Modus
+(TipTap) — tragen dieselben Einfüge-Werkzeuge: Link, externer Link und der
+**Auszugs-Trenner** `<!--more-->` (`mdi-format-page-break`). Alles vor dem
+Trenner bildet Hugos `.Summary`, also den Anreißer in Listen und Teasern.
+
+Im visuellen Modus ist dabei zweierlei zu beachten, beides bereits gelöst: Der
+Trenner wird als **Text** eingefügt (`insertText`), weil `insertContent` die
+Zeichenkette durch den HTML-Parser schickt, der einen Kommentar verschluckt. Und
+beim Serialisieren maskiert tiptap-markdown jedes `<`/`>` zu `&lt;`/`&gt;` —
+`restoreHugoMarkup()` in `WysiwygEditor.vue` führt Shortcode-Begrenzer **und**
+den Trenner wieder auf ihre kanonische Form zurück.
+
 ### Konfiguration im laufenden Betrieb ändern
 
 Die `hugocms.ini` lässt sich auch nach der Einrichtung über die Oberfläche
@@ -1042,6 +1056,25 @@ eindeutig zu genau einer Webpräsenz. Zwei Folgen für den Mehrfach-Betrieb:
   `mounts.ini` (mit Hinweis, siehe Mandantenfähigkeit). Teilen sich mehrere Hosts
   so dieselbe Quelle, teilen sie sich auch den Review-Ordner. Im sauber
   eingerichteten Mehrfach-Betrieb hat jede Domain ihre eigene Mount-Datei.
+
+## Entwurfsfilter im Dateimanager
+
+Rechts neben dem Suchfeld schaltet ein Knopf (`mdi-file-document-alert-outline`)
+die Ansicht auf **Entwürfe** um: alle Content-Dateien ab dem angezeigten
+Verzeichnis, deren Front Matter `draft: true` trägt — also die Seiten, die Hugo
+nicht veröffentlicht. Gesucht wird rekursiv über den Befehl `draftsearch`; die
+Treffer erscheinen in derselben Ergebnisliste wie die Namenssuche, samt
+Pfadspalte. Ein zweiter Klick führt zurück.
+
+Erkannt wird das Kennzeichen von `FrontMatter::isTrue()` — dieselbe
+Formaterkennung wie beim Setzen (YAML `---`, TOML `+++`, JSON), ohne zusätzlichen
+Parser. Gelesen werden nur die ersten 8 KB je Datei: Das Front Matter steht am
+Anfang, eine ganze Seite einzulesen wäre für diese Frage verschwendet. Grenzen
+wie bei der Namenssuche (200 Treffer, 20.000 besuchte Einträge).
+
+> Nicht zu verwechseln mit den **Freigabe-Entwürfen** der gestaffelten
+> Veröffentlichung: Die liegen im Index-Store und betreffen vorgeschlagene
+> Fassungen, hier geht es um das Front Matter der Datei selbst.
 
 ## Hyperlink-Suche
 
