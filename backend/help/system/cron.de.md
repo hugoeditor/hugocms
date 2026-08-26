@@ -99,6 +99,12 @@ Vorgabe, an die das Datum angehängt wird):
 - **Nach der Veröffentlichung** fälliger Freigaben folgt der zweite
   Versionsstand mit der Beschreibung für die Veröffentlichung.
 
+Der Versionsstand der Veröffentlichung bekommt außerdem die nächste freie
+**Versionsnummer** (1, 2, 3 …) und einen Abschnitt im Änderungsprotokoll
+(`changelog.md`). Die Vorab-Sicherung bleibt ohne Nummer — sie ist eine
+Zwischenablage, kein Ausgabestand. Das Wort vor der Nummer („Ausgabe 12")
+steht in den Projekteinstellungen; leer lassen schreibt nur die Nummer.
+
 Die Trennung sorgt dafür, dass der Versionsstand der Veröffentlichung nur die
 publizierten Dateien enthält und verstreute Direktbearbeitungen nicht mit
 hineinrutschen. Übernommen werden — wie beim Sichern von Hand — alle offenen

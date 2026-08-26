@@ -594,7 +594,7 @@ ist einzeilig. Die **vollständige** Beschreibung samt Dateiliste steht im
 Diff-Dialog über den Änderungen; `gitdiff` liefert sie dafür als `message` mit.
 
 **Versionsnummern.** Beim Sichern lässt sich eine Versionsnummer vergeben; das
-Feld ist mit dem nächsten freien Wert im Schema `v1`, `v2`, `v3` … vorbelegt und
+Feld ist mit dem nächsten freien Wert im Schema `1`, `2`, `3` … vorbelegt und
 frei überschreibbar. Bleibt es leer, entsteht ein Versionsstand ohne Nummer. Im
 Verlauf zeigt die Spalte **Versionsstand** die Nummer, wo eine vergeben ist, und
 sonst den gekürzten Hash.
@@ -603,8 +603,13 @@ Der Zähler wird **nicht gespeichert**: Der Vorschlag entsteht aus den vorhanden
 Tags des Repositorys (höchste rein numerische Nummer + 1). Damit bleibt das
 Repository die einzige Quelle der Wahrheit — ein Umzug, ein Klon oder ein von
 Hand gesetztes Tag kann keine Kollision erzeugen. Abweichend benannte Tags (etwa
-`v1.2.0` oder `release-alt`) bleiben beim Zählen unberücksichtigt und stören
+`1.2.0` oder `release-alt`) bleiben beim Zählen unberücksichtigt und stören
 nicht.
+
+Frühere Fassungen stellten den Nummern ein `v` voran (`v1`, `v2` …). Vergeben
+werden jetzt reine Zahlen; beim Weiterzählen wird die alte Form aber weiterhin
+GELESEN, damit ein Repository mit v-Tags nicht wieder bei 1 beginnt. Bestehende
+Tags werden nicht umbenannt.
 
 Technisch sind die Nummern **annotierte Git-Tags**. Deshalb überträgt „Änderungen
 hochladen" sie mit (`push --follow-tags`) — ein einfaches `git push` schickt
@@ -614,13 +619,20 @@ unwiderruflich mit fehlender Nummer stehen zu lassen. Scheitert erst das Tag
 selbst, bleibt der Versionsstand gültig und der Dialog weist die fehlende Nummer
 getrennt als Warnung aus.
 
-Der automatische Versionsstand des Cron (`[git] auto_commit`) vergibt **keine**
-Nummern — sonst wüchse die Liste mit jedem Lauf und die Nummern verlören ihre
-Aussagekraft. Versionsnummern setzt allein der Benutzer im Dialog.
+Der automatische Versionsstand des Cron (`[git] auto_commit`) vergibt die
+Nummern ebenfalls — allerdings nur für den Stand, der **veröffentlicht** wird.
+Die Vorab-Sicherung offener Änderungen vor dem Build bleibt ohne Nummer: Sie ist
+eine Zwischenablage, kein Ausgabestand. Das Wort vor der Nummer steht für diese
+Läufe in der Mount-Konfiguration (`[git] tag_label`, Vorgabe `Ausgabe`), weil
+beim Cron kein Client die Sprache kennt; im Dialog kommt es weiterhin aus der
+Oberfläche. Leerer Wert = nur die Nummer.
 
 **Änderungsprotokoll.** Bei jedem Versionsstand bekommt die Seite
 `changelog.md` im Content-Mount einen Abschnitt dazu — Überschrift aus
-Versionsnummer und Datum, darunter die Beschreibung samt Dateiliste. Neue
+Versionsnummer und Datum (`## Ausgabe 3 — 26.08.2026 14:12`; auf Englisch
+`Edition`), darunter die Beschreibung samt Dateiliste. Das Wort vor der Nummer
+schickt der Client mit (`tagLabel`), wie die Beschreibungen selbst — sichtbarer
+Text ist sprachabhängig und gehört deshalb nicht ins Backend. Neue
 Einträge stehen oben, damit niemand an das Ende einer wachsenden Seite scrollen
 muss. Die Seite entsteht beim ersten Mal von selbst, mit Front Matter und dem
 Titel „Änderungen"; danach wird nur noch ihr `lastmod` fortgeschrieben, während

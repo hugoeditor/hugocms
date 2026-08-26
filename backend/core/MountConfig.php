@@ -80,6 +80,11 @@ use HugoCMS\FileManager\Exception\ApiException;
  *                          (die Seite changelog.md im Content-Mount, die bei
  *                          jedem Versionsstand fortgeschrieben wird).
  *                          Standard: an.
+ *   tag_label              (optional) Wort vor der Versionsnummer in der
+ *                          Überschrift des Änderungsprotokolls („Ausgabe 12“).
+ *                          Sprachabhängiger Text und deshalb konfigurierbar —
+ *                          im Dialog kommt er vom Client, beim Cron von hier.
+ *                          Leer = nur die Nummer. Standard: siehe unten.
  */
 final class MountConfig
 {
@@ -98,6 +103,12 @@ final class MountConfig
 
     /** Vorgeschlagene Nachricht für den Vorab-Commit offener Änderungen. */
     public const string GIT_COMMIT_MESSAGE_PENDING_DEFAULT = 'Offene Änderungen vor dem Build gesichert';
+
+    /** Wort vor der Versionsnummer im Änderungsprotokoll. */
+    public const string GIT_TAG_LABEL_DEFAULT = 'Ausgabe';
+
+    /** Obergrenze dieses Wortes — es steht in einer Überschrift. */
+    private const int GIT_TAG_LABEL_MAX = 40;
 
     /** Obergrenze der Commit-Nachricht (vor dem Datum), damit sie handhabbar bleibt. */
     private const int GIT_MESSAGE_MAX = 200;
@@ -241,11 +252,17 @@ final class MountConfig
                 if ($pending === '') {
                     $pending = self::GIT_COMMIT_MESSAGE_PENDING_DEFAULT;
                 }
+                // Nicht gesetzt = Standard; ausdrücklich leer = ohne Wort
+                // vor der Nummer. array_key_exists trennt beides.
+                $label = array_key_exists('tag_label', $section)
+                    ? trim((string) $section['tag_label'])
+                    : self::GIT_TAG_LABEL_DEFAULT;
                 $git = [
                     'autoCommit' => filter_var($section['auto_commit'] ?? false, FILTER_VALIDATE_BOOLEAN),
                     'commitMessage' => mb_substr($message, 0, self::GIT_MESSAGE_MAX),
                     'commitMessagePending' => mb_substr($pending, 0, self::GIT_MESSAGE_MAX),
                     'changelog' => filter_var($section['changelog'] ?? true, FILTER_VALIDATE_BOOLEAN),
+                    'tagLabel' => mb_substr($label, 0, self::GIT_TAG_LABEL_MAX),
                 ];
                 continue;
             }

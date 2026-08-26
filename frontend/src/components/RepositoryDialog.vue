@@ -235,7 +235,7 @@ async function doCommit() {
   error.value = null
   const wanted = tag.value.trim()
   try {
-    const res = await repo.commit(message.value.trim(), wanted)
+    const res = await repo.commit(message.value.trim(), wanted, t('repo.tagLabel'))
     if (!res.success) {
       action.value = { type: 'error', key: 'repo.commitFail', output: res.output }
     } else if (wanted !== '' && !res.tagged) {
@@ -355,6 +355,7 @@ async function doRestore() {
       t('repo.restoreMessage', [label]),
       repo.status?.nextTag ?? '',
       t('repo.restorePresaveMessage'),
+      t('repo.tagLabel'),
     )
     if (!res.success) {
       action.value = { type: 'error', key: 'repo.restoreFail', output: res.output }

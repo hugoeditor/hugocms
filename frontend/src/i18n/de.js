@@ -193,6 +193,8 @@ export default {
     gitNeedsPro: 'Die Versionierung ist eine Pro-Funktion. Ohne gültige Lizenz für diese Domain wird kein Versionsstand gesichert.',
     gitNoRepo: 'Das Quellverzeichnis steht nicht unter Git-Versionierung — der automatische Versionsstand bliebe ohne Wirkung.',
     autoCommit: 'Versionsstand automatisch sichern',
+    tagLabel: 'Wort vor der Versionsnummer',
+    tagLabelHint: 'Steht im Änderungsprotokoll vor der Nummer („Ausgabe 12“). Leer lassen, um nur die Nummer zu schreiben.',
     commitMessage: 'Beschreibung: nach der Veröffentlichung',
     commitMessageHint: 'Für die veröffentlichten Freigaben. Das Datum (Serverzeit) wird automatisch angehängt.',
     commitMessagePending: 'Beschreibung: offene Änderungen vor dem Build',
@@ -415,6 +417,8 @@ export default {
     messageMore: '- … und {0} weitere Dateien',
     messageMoreOne: '- … und eine weitere Datei',
     tag: 'Versionsnummer',
+    // Wort vor der Nummer in der Überschrift des Änderungsprotokolls.
+    tagLabel: 'Ausgabe',
     tagHint: 'Wird automatisch fortgezählt. Leer lassen, um ohne Nummer zu sichern.',
     tagFail: 'Der Versionsstand wurde gesichert, aber die Nummer {0} ließ sich nicht vergeben.',
     commit: 'Versionsstand sichern',

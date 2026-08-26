@@ -49,9 +49,11 @@ export const useRepoStore = defineStore('repo', {
     // Schreibbefehle geben das Roh-Ergebnis zurück ({ success, output, ... }) —
     // ein fehlgeschlagener Git-Vorgang ist kein API-Fehler, sondern Inhalt.
     // tag ist die Versionsnummer des Standes (annotiertes Git-Tag); leer heißt
-    // „ohne Versionsnummer sichern“.
-    async commit(message, tag = '') {
-      return api.post('gitcommit', { message, tag })
+    // „ohne Versionsnummer sichern“. tagLabel ist das Wort, das im
+    // Änderungsprotokoll vor der Nummer steht („Ausgabe“ / „Edition“) — wie die
+    // Beschreibungen sprachabhängig und deshalb von hier.
+    async commit(message, tag = '', tagLabel = '') {
+      return api.post('gitcommit', { message, tag, tagLabel })
     },
 
     async push() {
@@ -70,8 +72,8 @@ export const useRepoStore = defineStore('repo', {
 
     // Kehrt zu einem alten Stand zurück und sichert ihn als NEUEN Versionsstand.
     // Die Beschreibungen kommen von hier, weil sie sprachabhängig sind.
-    async restore(sha, message, tag, presaveMessage) {
-      return api.post('gitrestore', { sha, message, tag, presaveMessage })
+    async restore(sha, message, tag, presaveMessage, tagLabel = '') {
+      return api.post('gitrestore', { sha, message, tag, presaveMessage, tagLabel })
     },
 
     // Holt EINE Datei zurück; sie erscheint als offene Änderung und wird über

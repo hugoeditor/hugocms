@@ -184,13 +184,18 @@ final class Connector
      * changelog.md im Content-Mount, die bei JEDEM Versionsstand fortgeschrieben
      * wird, nicht nur bei denen des Cron.
      *
-     * @var array{autoCommit: bool, commitMessage: string, commitMessagePending: string, changelog: bool}
+     * `tagLabel` ist das Wort vor der Versionsnummer im Änderungsprotokoll
+     * („Ausgabe 12“). Im Dialog schickt der Client es mit; beim Cron gibt es
+     * keinen Client, deshalb steht es in der Mount-Konfiguration.
+     *
+     * @var array{autoCommit: bool, commitMessage: string, commitMessagePending: string, changelog: bool, tagLabel: string}
      */
     private array $gitAuto = [
         'autoCommit' => false,
         'commitMessage' => MountConfig::GIT_COMMIT_MESSAGE_DEFAULT,
         'commitMessagePending' => MountConfig::GIT_COMMIT_MESSAGE_PENDING_DEFAULT,
         'changelog' => true,
+        'tagLabel' => MountConfig::GIT_TAG_LABEL_DEFAULT,
     ];
 
     /**
@@ -1612,6 +1617,7 @@ final class Connector
             (string) $this->gitAuto['commitMessage'],
             MountConfig::GIT_COMMIT_MESSAGE_DEFAULT,
             false,
+            true, // veröffentlichter Stand → Versionsnummer
         );
     }
 
@@ -1649,7 +1655,12 @@ final class Connector
      *
      * @return ?array{success: bool, sha: ?string}
      */
-    private function runAutoCommit(string $message, string $fallback, bool $skipWhenClean): ?array
+    private function runAutoCommit(
+        string $message,
+        string $fallback,
+        bool $skipWhenClean = true,
+        bool $withTag = false,
+    ): ?array
     {
         if (empty($this->gitAuto['autoCommit']) || $this->hugo === null) {
             return null;
@@ -1675,7 +1686,17 @@ final class Connector
             if ($skipWhenClean && !empty($git->status()['clean'])) {
                 return null;
             }
-            $res = $git->commit($message, null, $this->changelogHook());
+            // Versionsnummer nur für den Stand, der veröffentlicht wird: Die
+            // Vorab-Sicherung offener Änderungen ist eine Zwischenablage, kein
+            // Ausgabestand — bekäme sie eine Nummer, verlöre die Zählung ihre
+            // Aussage. Das Wort davor steht in der Mount-Konfiguration
+            // ([git] tag_label), weil beim Cron kein Client die Sprache kennt.
+            $tag = $withTag ? $git->nextTag() : null;
+            $res = $git->commit(
+                $message,
+                $tag,
+                $this->changelogHook(false, (string) $this->gitAuto['tagLabel']),
+            );
         } catch (Throwable $e) {
             // Etwa GIT-NOT-A-REPO: kein Repository → nichts zu committen.
             $this->logger->info('Auto-Commit übersprungen: ' . $e->getMessage());
@@ -1684,7 +1705,17 @@ final class Connector
         }
 
         if (!empty($res['success'])) {
-            $this->logger->info(sprintf('Auto-Commit %s: %s', substr((string) ($res['sha'] ?? ''), 0, 7), $message));
+            $this->logger->info(sprintf(
+                'Auto-Commit %s: %s%s',
+                substr((string) ($res['sha'] ?? ''), 0, 7),
+                $message,
+                !empty($res['tagged']) ? ' (Versionsnummer ' . $res['tag'] . ')' : '',
+            ));
+            // Der Commit steht, nur die Nummer kam nicht zustande — eigener
+            // Eintrag, damit die Lücke in der Zählung nicht unbemerkt bleibt.
+            if ($tag !== null && empty($res['tagged'])) {
+                $this->logger->warning('Versionsnummer nicht vergeben: ' . trim((string) ($res['tagOutput'] ?? '')));
+            }
         } else {
             // Häufigster Fall ohne Fehler: „nichts zu committen“. Als Warnung mit
             // Git-Ausgabe, damit ein echtes Problem (fehlende git-Identität)
@@ -4065,6 +4096,8 @@ final class Connector
             'commitMessagePending' => (string) $this->gitAuto['commitMessagePending'],
             // Änderungsprotokoll (unabhängig vom Auto-Commit des Cron).
             'changelog' => (bool) $this->gitAuto['changelog'],
+            // Wort vor der Versionsnummer im Protokoll (Cron-Läufe).
+            'tagLabel' => (string) $this->gitAuto['tagLabel'],
             // Ist die Quelle ein Git-Repository? Für den Hinweis im Formular.
             'gitRepo' => $this->sourceIsGitRepo(),
         ];
@@ -4167,6 +4200,10 @@ final class Connector
             // Immer geschrieben, damit der Zustand in der Datei ablesbar bleibt
             // — die Vorgabe „an“ gilt nur, solange nichts dasteht.
             'changelog' => !empty($request['changelog']) ? 'true' : 'false',
+            // Wort vor der Versionsnummer im Protokoll. Ausdrücklich leer heißt
+            // „nur die Nummer“ — deshalb wird der Wert übernommen, wie er kommt,
+            // und nicht auf die Vorgabe zurückgesetzt.
+            'tag_label' => trim((string) ($request['tagLabel'] ?? '')),
         ];
     }
 
@@ -4998,7 +5035,7 @@ final class Connector
      * festgehalten, überdauern die zwischenzeitlichen Einträge den Vorgang —
      * sonst verlöre das Protokoll genau die Geschichte, die es festhalten soll.
      */
-    private function changelogHook(bool $pin = false): ?callable
+    private function changelogHook(bool $pin = false, string $tagLabel = ''): ?callable
     {
         if (empty($this->gitAuto['changelog'])) {
             return null;
@@ -5008,8 +5045,8 @@ final class Connector
             $changelog->pin();
         }
 
-        return function (string $message, ?string $tag) use ($changelog): void {
-            $changelog->append($message, $tag);
+        return function (string $message, ?string $tag) use ($changelog, $tagLabel): void {
+            $changelog->append($message, $tag, $tagLabel);
         };
     }
 
@@ -5043,7 +5080,9 @@ final class Connector
         $result = $git->commit(
             (string) ($request['message'] ?? ''),
             $tag === '' ? null : $tag,
-            $this->changelogHook(),
+            // tagLabel: sichtbarer Text im Änderungsprotokoll („Ausgabe 3“),
+            // deshalb vom Client — wie die Beschreibung selbst.
+            $this->changelogHook(false, (string) ($request['tagLabel'] ?? '')),
         );
         if ($result['success']) {
             $this->logger->info(sprintf(
@@ -5103,7 +5142,7 @@ final class Connector
             $tag === '' ? null : $tag,
             (string) ($request['presaveMessage'] ?? ''),
             // pin: Das Protokoll soll die Wiederherstellung überdauern.
-            $this->changelogHook(true),
+            $this->changelogHook(true, (string) ($request['tagLabel'] ?? '')),
         );
 
         if ($result['success']) {

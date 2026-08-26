@@ -51,6 +51,10 @@ const commitMessagePending = ref('')
 // wird bei JEDEM Versionsstand fortgeschrieben, nicht nur bei denen des Cron.
 // Vorgabe an — der Schalter dient zum Abschalten.
 const changelog = ref(true)
+// Wort vor der Versionsnummer in der Überschrift des Protokolls („Ausgabe 12“).
+// Beim Sichern von Hand schickt der Client es aus der Oberflächensprache mit;
+// für die Cron-Läufe steht hier der Wert, weil dort keine Sprache bekannt ist.
+const tagLabel = ref('')
 const gitRepo = ref(false)
 // Auto-Commit ist nur einstellbar, wenn Git nutzbar (Pro + Projekt) UND das
 // Quellverzeichnis ein Repository ist.
@@ -109,6 +113,7 @@ watch(model, async (open) => {
     commitMessage.value = cfg.commitMessage ?? ''
     commitMessagePending.value = cfg.commitMessagePending ?? ''
     changelog.value = !!cfg.changelog
+    tagLabel.value = cfg.tagLabel ?? ''
     gitRepo.value = !!cfg.gitRepo
   } catch (e) {
     error.value = errorText(t, e)
@@ -145,6 +150,7 @@ async function submit() {
       commitMessage: commitMessage.value,
       commitMessagePending: commitMessagePending.value,
       changelog: changelog.value,
+      tagLabel: tagLabel.value,
     })
     // Der Schalter in der Liste „zu verbessern“ liest denselben Zustand aus
     // whoami — nach dem Speichern nachziehen.
@@ -399,6 +405,17 @@ async function submit() {
           <div class="text-caption text-medium-emphasis mb-2">
             {{ $t('projectConfig.changelogHint') }}
           </div>
+
+          <v-text-field
+            v-model="tagLabel"
+            :label="$t('projectConfig.tagLabel')"
+            :hint="$t('projectConfig.tagLabelHint')"
+            :disabled="!gitCommitAvailable || !changelog"
+            variant="outlined"
+            density="comfortable"
+            persistent-hint
+            class="mb-2"
+          />
 
           <v-alert v-if="error" type="error" density="compact" class="mt-2">{{ error }}</v-alert>
           <div class="text-caption text-medium-emphasis mt-3">{{ $t('projectConfig.note') }}</div>

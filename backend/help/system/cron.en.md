@@ -92,6 +92,12 @@ sensible suggestion, and the date is appended):
 - **After publishing** due releases, the second version state follows with the
   publication description.
 
+The published state also receives the next free **version number** (1, 2, 3 …)
+and a section in the changelog (`changelog.md`). The preliminary save stays
+without a number — it is a holding place, not a released state. The word before
+the number (“Edition 12”) is set in the project settings; leave it empty to
+write the number alone.
+
 The split keeps the publication state limited to the published files, so stray
 direct edits do not slip in. As when saving by hand, it includes all pending
 changes in the source directory. Requires a valid Pro license; if saving fails,

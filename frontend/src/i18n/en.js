@@ -193,6 +193,8 @@ export default {
     gitNeedsPro: 'Versioning is a Pro feature. Without a valid license for this domain, no version state is saved.',
     gitNoRepo: 'The source directory is not under Git versioning — the automatic version state would have no effect.',
     autoCommit: 'Save version state automatically',
+    tagLabel: 'Word before the version number',
+    tagLabelHint: 'Precedes the number in the changelog (“Edition 12”). Leave empty to write the number alone.',
     commitMessage: 'Description: after publishing',
     commitMessageHint: 'For the published releases. The date (server time) is appended automatically.',
     commitMessagePending: 'Description: pending changes before the build',
@@ -414,6 +416,8 @@ export default {
     messageMore: '- … and {0} more files',
     messageMoreOne: '- … and one more file',
     tag: 'Version number',
+    // Word before the number in the changelog heading.
+    tagLabel: 'Edition',
     tagHint: 'Counted up automatically. Leave empty to save without a number.',
     tagFail: 'The version state was saved, but the number {0} could not be assigned.',
     commit: 'Save version state',

@@ -27,13 +27,12 @@ final class GitService
     private const int MAX_TAG = 100;
 
     /**
-     * Präfix der automatisch vorgeschlagenen Versionsnummern (v1, v2, …).
-     * Der nächste Wert wird NICHT gespeichert, sondern aus den vorhandenen Tags
-     * des Repositorys abgeleitet ({@see nextTag()}) — so bleibt das Repository
-     * die einzige Quelle der Wahrheit und ein Umzug, ein Klon oder ein von Hand
-     * gesetztes Tag kann keine Kollision erzeugen.
+     * Frühere Fassungen stellten den Versionsnummern ein `v` voran (v1, v2, …).
+     * Vergeben werden jetzt reine Zahlen (1, 2, 3 …); die alte Form wird beim
+     * Weiterzählen aber weiterhin GELESEN, damit ein Repository mit v-Tags
+     * nicht wieder bei 1 beginnt.
      */
-    private const string TAG_PREFIX = 'v';
+    private const string LEGACY_TAG_PREFIX = 'v';
 
     /** Obergrenze für die Seitengröße der Commit-Liste. */
     private const int MAX_PER_PAGE = 100;
@@ -92,15 +91,16 @@ final class GitService
     }
 
     /**
-     * Nächste freie Versionsnummer im Schema v1, v2, v3 … — abgeleitet aus den
+     * Nächste freie Versionsnummer im Schema 1, 2, 3 … — abgeleitet aus den
      * vorhandenen Tags, nicht aus einem gespeicherten Zähler. Gezählt wird die
-     * höchste rein numerische Nummer; abweichend benannte Tags (etwa `v1.2.0`
-     * oder `release-alt`) bleiben unberücksichtigt und stören nicht.
+     * höchste rein numerische Nummer, wahlweise mit dem früheren `v` davor;
+     * abweichend benannte Tags (etwa `1.2.0` oder `release-alt`) bleiben
+     * unberücksichtigt und stören nicht.
      */
     public function nextTag(): string
     {
-        $res = $this->run(['tag', '--list', self::TAG_PREFIX . '[0-9]*']);
-        $pattern = '/^' . preg_quote(self::TAG_PREFIX, '/') . '(\d+)$/';
+        $res = $this->run(['tag', '--list']);
+        $pattern = '/^' . preg_quote(self::LEGACY_TAG_PREFIX, '/') . '?(\d+)$/';
         $max = 0;
         foreach ($res['lines'] as $line) {
             if (preg_match($pattern, trim($line), $m) === 1) {
@@ -108,7 +108,7 @@ final class GitService
             }
         }
 
-        return self::TAG_PREFIX . ($max + 1);
+        return (string) ($max + 1);
     }
 
     /**
