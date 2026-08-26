@@ -1255,8 +1255,14 @@ eigene Müllabfuhr räumt dort **nicht** auf. Auf Debian und Ubuntu steht
 nicht. Ohne Gegenmaßnahme bleibt die Datei jedes Benutzers liegen, der einfach
 den Tab schließt.
 
-`Auth\SessionCleaner` übernimmt das. Zwei Dinge machen ihn nötig und zugleich
-unaufwendig:
+**Auf der Kommandozeile entsteht gar keine Sitzung.** Die Cron-Skripte melden
+sich nicht an, PHP legte aber bei jedem Lauf trotzdem eine Datei an — bei einem
+Build-Cron alle 15 Minuten fast hundert am Tag, die nie jemand abholt.
+`startSession()` steigt deshalb bei `PHP_SAPI === 'cli'` sofort aus. Das
+Aufräumen selbst (`Connector::purgeSessions()`) läuft im Cron unverändert.
+
+`Auth\SessionCleaner` übernimmt den Rest. Zwei Dinge machen ihn nötig und
+zugleich unaufwendig:
 
 - **Jede Sitzung trägt ihren Verfallszeitpunkt selbst.** `enforceIdleTimeout()`
   schreibt neben dem letzten Zugriff auch `hugocms_fm_expires`. Das ist

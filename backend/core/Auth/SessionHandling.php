@@ -40,6 +40,13 @@ trait SessionHandling
      */
     private function startSession(int $lifetime): bool
     {
+        // Auf der Kommandozeile gibt es keine Sitzung: Die Cron-Skripte melden
+        // sich nicht an, PHP legte aber trotzdem bei JEDEM Lauf eine Datei im
+        // Sitzungsverzeichnis an — bei einem Build-Cron alle 15 Minuten sind das
+        // fast hundert Dateien am Tag, die nie jemand abholt.
+        if (PHP_SAPI === 'cli') {
+            return false;
+        }
         if (session_status() !== PHP_SESSION_NONE || headers_sent()) {
             return false;
         }
