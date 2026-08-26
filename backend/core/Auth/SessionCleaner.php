@@ -55,6 +55,41 @@ final class SessionCleaner
     /** Wie viele Dateien höchstens betrachtet werden (Schutz vor Endlosläufen). */
     private const MAX_VISITS = 20_000;
 
+    /** Merker des letzten Laufs; steuert den Abstand zwischen zwei Läufen. */
+    private const MARKER = '.hugocms-purge';
+
+    /** Mindestabstand zweier Läufe aus dem Web-Request heraus. */
+    private const INTERVAL = 3600;
+
+    /**
+     * Räumt auf, sofern der letzte Lauf lange genug her ist — der Weg für den
+     * Web-Request.
+     *
+     * Bewusst zeitgesteuert und nicht zufällig: Eine Wahrscheinlichkeit von
+     * 1:100 klingt sparsam, bedeutet bei einer Redaktion mit wenigen Zugriffen
+     * am Tag aber, dass tagelang gar nichts passiert — und niemand nachvollziehen
+     * kann, ob die Bereinigung überhaupt arbeitet. Mit einem Merker läuft sie
+     * verlässlich einmal je Stunde: Der erste Zugriff nach Ablauf des Fensters
+     * räumt auf, alle anderen sind sofort wieder draußen.
+     *
+     * Der Merker wird VOR dem Aufräumen aufgefrischt, damit zwei gleichzeitige
+     * Zugriffe nicht beide durch das Verzeichnis laufen.
+     */
+    public static function purgeDue(string $dir, int $now = 0): int
+    {
+        $now = $now > 0 ? $now : time();
+        $marker = $dir . '/' . self::MARKER;
+        $last = @filemtime($marker);
+        if ($last !== false && $last + self::INTERVAL > $now) {
+            return 0;
+        }
+        if (@touch($marker) === false) {
+            return 0; // kein Schreibrecht — dann lieber gar nicht erst laufen
+        }
+
+        return self::purge($dir, $now);
+    }
+
     /**
      * Löscht abgelaufene Sitzungsdateien und liefert deren Anzahl.
      *

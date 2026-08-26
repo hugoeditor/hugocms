@@ -54,14 +54,12 @@ trait SessionHandling
         ]);
         session_start();
 
-        // Gelegentlich abgelaufene Sitzungsdateien wegräumen — siehe
-        // SessionCleaner: PHPs Müllabfuhr greift im eigenen Verzeichnis nicht.
-        // Nur in etwa jedem hundertsten Request, und Fehler bleiben folgenlos.
-        if (random_int(1, 100) === 1) {
-            $dir = session_save_path();
-            if ($dir !== '' && is_dir($dir)) {
-                SessionCleaner::purge($dir);
-            }
+        // Abgelaufene Sitzungsdateien wegräumen — siehe SessionCleaner: PHPs
+        // Müllabfuhr greift im eigenen Verzeichnis nicht. purgeDue() begrenzt
+        // sich selbst auf einen Lauf je Stunde; Fehler bleiben folgenlos.
+        $dir = session_save_path();
+        if ($dir !== '' && is_dir($dir)) {
+            SessionCleaner::purgeDue($dir);
         }
 
         return true;

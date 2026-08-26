@@ -1265,11 +1265,17 @@ unaufwendig:
   ist: Eine feste Frist würde Konten mit langer Dauer aus dem Verzeichnis werfen
   und die Betreffenden abmelden. Gelöscht wird nur, was laut eigener Angabe
   abgelaufen ist — plus eine Stunde Gnadenfrist.
-- **Aufgeräumt wird im Web-Request**, in etwa jedem hundertsten, direkt nach
-  `session_start()`. Dort läuft der Code unter dem Benutzer, dem die Dateien
-  gehören — ein Cron unter einem anderen Konto dürfte sie unter Umständen gar
-  nicht löschen. Je Lauf höchstens 500 Löschungen, damit ein Request nicht an
-  einem großen Verzeichnis hängt; der Rest folgt beim nächsten Mal.
+- **Aufgeräumt wird im Web-Request**, direkt nach `session_start()`. Dort läuft
+  der Code unter dem Benutzer, dem die Dateien gehören — ein Cron unter einem
+  anderen Konto dürfte sie unter Umständen gar nicht löschen. `purgeDue()`
+  begrenzt sich über einen Merker (`.hugocms-purge`) auf **einen Lauf je
+  Stunde**: Der erste Zugriff nach Ablauf des Fensters räumt auf, alle anderen
+  sind sofort wieder draußen. Bewusst zeitgesteuert statt zufällig — eine
+  Wahrscheinlichkeit von 1:100 bedeutet bei einer Redaktion mit wenigen
+  Zugriffen am Tag, dass tagelang nichts passiert und niemand nachvollziehen
+  kann, ob die Bereinigung arbeitet. Je Lauf höchstens 500 Löschungen, damit ein
+  Request nicht an einem großen Verzeichnis hängt; der Rest folgt beim nächsten
+  Mal.
 
 Dateien **ohne** den Verfallszeitpunkt — Altbestände aus der Zeit vor dieser
 Änderung — verschwinden über eine bewusst großzügige Rückfall-Frist von 30 Tagen
