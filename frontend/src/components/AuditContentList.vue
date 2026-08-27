@@ -10,20 +10,23 @@ import { useAssistantStore } from '../stores/assistant'
 import { useAuthStore } from '../stores/auth'
 import { useConfirm } from '../util/confirm'
 import { errorText } from '../i18n/apiMessage'
-import { useTransientError } from '../util/transientError'
 
 const { t, locale } = useI18n()
 const store = useAuditContentStore()
 const assistant = useAssistantStore()
 const auth = useAuthStore()
 const confirm = useConfirm()
-const error = useTransientError()
+// Fehler bleibt stehen, bis die nächste Aktion ihn ersetzt: Eine Meldung, die
+// sich nach acht Sekunden selbst ausblendet, hinterlässt ein Ergebnis, dem man
+// nicht ansieht, ob es der letzte Lauf ist oder ein alter Stand.
+const error = ref(null)
 
 // Automatische Terminierung ein-/ausschalten. Der Schalter schreibt nur dieses
 // eine Feld; Fenster und Tagesmenge bleiben, wie sie in den Projekteinstellungen
 // stehen.
 const autoBusy = ref(false)
 async function toggleAuto(value) {
+  error.value = null
   autoBusy.value = true
   try {
     await auth.setImproveAuto(!!value)

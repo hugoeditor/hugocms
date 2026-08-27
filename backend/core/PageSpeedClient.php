@@ -62,6 +62,12 @@ final class PageSpeedClient
         'dom-size' => 'dom-size-insight',
     ];
 
+    /** Felder, die als Beschriftung eines Detailpostens taugen (in dieser Reihenfolge). */
+    private const LABEL_KEYS = ['description', 'label', 'text', 'name', 'statement', 'reason', 'source'];
+
+    /** Felder, die als Beschriftung nichts hergeben (reine Typkennungen). */
+    private const LABEL_SKIP_KEYS = ['type', 'urlProvider', 'entity', 'protocol'];
+
     /** Obergrenze der übernommenen Optimierungs-Chancen (Gruppe B). */
     private const MAX_OPPORTUNITIES = 12;
 
@@ -80,6 +86,17 @@ final class PageSpeedClient
 
     /** Obergrenze der Hinweise je Kategorie. */
     private const MAX_FINDINGS_PER_CATEGORY = 15;
+
+    /**
+     * Obergrenze der Fundstellen je Hinweis. Ohne sie ist ein Hinweis wie
+     * „Elemente ohne passenden barrierefreien Namen" nicht verwertbar — man
+     * müsste das ganze Projekt durchsuchen. Zehn Stellen zeigen das Muster;
+     * die Gesamtzahl steht daneben.
+     */
+    private const MAX_FINDING_ITEMS = 10;
+
+    /** Länge, auf die HTML-Ausschnitt und Erklärung gekürzt werden. */
+    private const MAX_SNIPPET = 300;
 
     public function __construct(
         private readonly ?string $apiKey = null,
@@ -183,7 +200,8 @@ final class PageSpeedClient
      * derselben Antwort — kein zusätzlicher Abruf:
      *   scores        Kategorie-Scores 0–100.
      *   metrics       Kern- und Diagnose-Kennwerte (Labormessung) als Zahl +
-     *                 lesbare Darstellung.
+     *                 lesbare Darstellung, dazu Lighthouses Titel und
+     *                 Erklärung des Kennwerts.
      *   opportunities Optimierungs-Chancen mit geschätzter Zeitersparnis (B).
      *   fieldData     CrUX-Felddaten (echte Nutzererfahrung) je Metrik mit
      *                 Verteilung gut/verbesserungswürdig/schlecht — für die
@@ -218,6 +236,16 @@ final class PageSpeedClient
                 $metrics[$id] = [
                     'value' => (float) $audit['numericValue'],
                     'display' => (string) ($audit['displayValue'] ?? ''),
+                    // Einheit des Zahlenwerts (millisecond, byte, element …).
+                    // Nur nötig, wenn Lighthouse keine fertige Darstellung
+                    // mitliefert — etwa bei „dom-size".
+                    'unit' => (string) ($audit['numericUnit'] ?? ''),
+                    // Lighthouses eigener Titel und die Erklärung, was der Wert
+                    // bedeutet. Die Oberfläche zeigt ihre eigenen kurzen
+                    // Beschriftungen; der Titel dient als Rückfall für
+                    // Kennwerte ohne Übersetzung, die Beschreibung erklärt sie.
+                    'title' => (string) ($audit['title'] ?? ''),
+                    'description' => (string) ($audit['description'] ?? ''),
                 ];
             }
         }
@@ -298,6 +326,9 @@ final class PageSpeedClient
             $out[] = [
                 'id' => (string) $id,
                 'title' => (string) ($audit['title'] ?? $id),
+                // Ohne die Beschreibung bleibt offen, WAS zu ändern ist — der
+                // Titel nennt nur das Thema.
+                'description' => (string) ($audit['description'] ?? ''),
                 // Lighthouses eigene, lokalisierte Ersparnis-Angabe (z. B.
                 // „Geschätzte Einsparung von 127 KiB" oder „… von 0,3 s").
                 'display' => (string) ($audit['displayValue'] ?? ''),
@@ -347,10 +378,17 @@ final class PageSpeedClient
                 if (!is_numeric($audit['score'] ?? null) || (float) $audit['score'] >= 1.0) {
                     continue;
                 }
+                [$items, $itemsTotal] = self::findingItems(
+                    is_array($audit['details'] ?? null) ? $audit['details'] : [],
+                );
                 $list[] = [
                     'id' => $id,
                     'title' => (string) ($audit['title'] ?? $id),
                     'description' => (string) ($audit['description'] ?? ''),
+                    // Wo genau der Mangel steckt — ohne das bleibt der Hinweis
+                    // eine Behauptung über die ganze Seite.
+                    'items' => $items,
+                    'itemsTotal' => $itemsTotal,
                 ];
                 if (count($list) >= self::MAX_FINDINGS_PER_CATEGORY) {
                     break;
@@ -408,17 +446,77 @@ final class PageSpeedClient
                 continue;
             }
             $label = self::itemLabel($item);
-            if ($label === '') {
+            $url = self::sourceUrl($item);
+            if ($label === '' && $url === '') {
                 continue;
             }
             $rows[] = [
                 'label' => $label,
+                // Bei Posten, die ihre Adresse nur im Untereintrag
+                // `sourceLocation` tragen, wäre sonst nicht erkennbar, welche
+                // Ressource gemeint ist.
+                'url' => $url === $label ? '' : self::shorten($url),
                 'bytes' => self::intOrNull($item['wastedBytes'] ?? $item['totalBytes'] ?? null),
                 'ms' => self::intOrNull($item['wastedMs'] ?? null),
             ];
         }
 
         return [array_slice($rows, 0, self::MAX_OPPORTUNITY_ITEMS), count($rows)];
+    }
+
+    /**
+     * Fundstellen eines Hinweises aus dessen details.items: je Stelle das
+     * betroffene Element mit CSS-Selektor, HTML-Ausschnitt und Lighthouses
+     * Erklärung — bei Ressourcen-Prüfungen stattdessen die URL.
+     *
+     * Das ist die Antwort auf die Frage „wo?": Der Selektor führt im gebauten
+     * HTML zur Stelle, der Ausschnitt liefert einen Suchbegriff für die Quelle
+     * (Layout oder Content-Datei).
+     *
+     * @param array<string, mixed> $details
+     * @return array{0: list<array{label: string, selector: string, snippet: string, explanation: string}>, 1: int}
+     */
+    private static function findingItems(array $details): array
+    {
+        $items = is_array($details['items'] ?? null) ? $details['items'] : [];
+        $rows = [];
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $node = is_array($item['node'] ?? null) ? $item['node'] : [];
+            $row = [
+                'label' => self::itemLabel($item),
+                'selector' => self::shorten((string) ($node['selector'] ?? '')),
+                'snippet' => self::shorten((string) ($node['snippet'] ?? '')),
+                // explanation nennt die konkrete Regelverletzung ("Fix any of
+                // the following: …") — ohne sie bleibt oft unklar, WAS an der
+                // Stelle zu ändern ist.
+                'explanation' => self::shorten((string) ($node['explanation'] ?? '')),
+                'url' => self::shorten(self::sourceUrl($item)),
+            ];
+            // Steht die Adresse schon in der Beschriftung, nicht doppelt zeigen.
+            if ($row['url'] !== '' && $row['url'] === self::shorten($row['label'])) {
+                $row['url'] = '';
+            }
+            // Posten ohne jede Ortsangabe helfen niemandem.
+            if ($row['label'] === '' && $row['selector'] === '' && $row['snippet'] === '' && $row['url'] === '') {
+                continue;
+            }
+            $rows[] = $row;
+        }
+
+        return [array_slice($rows, 0, self::MAX_FINDING_ITEMS), count($rows)];
+    }
+
+    /** Kürzt lange Ausschnitte auf ein in der Oberfläche lesbares Maß. */
+    private static function shorten(string $text): string
+    {
+        $text = trim(preg_replace('/\s+/u', ' ', $text) ?? $text);
+
+        return mb_strlen($text) > self::MAX_SNIPPET
+            ? mb_substr($text, 0, self::MAX_SNIPPET) . '…'
+            : $text;
     }
 
     /**
@@ -440,13 +538,54 @@ final class PageSpeedClient
                 return $label;
             }
         }
-        foreach ($item as $value) {
+        // Beschreibende Felder zuerst. Der frühere Griff nach der ersten besten
+        // Zeichenkette lieferte bei Konsolenfehlern „network" (Feld `source`)
+        // statt der Fehlermeldung daneben.
+        foreach (self::LABEL_KEYS as $key) {
+            $value = $item[$key] ?? null;
+            if (is_string($value) && $value !== '') {
+                return $value;
+            }
+            // Manche Werte sind Objekte der Form {type: 'code', value: '…'}.
+            if (is_array($value) && is_string($value['value'] ?? null) && $value['value'] !== '') {
+                return $value['value'];
+            }
+        }
+        $url = self::sourceUrl($item);
+        if ($url !== '') {
+            return $url;
+        }
+        foreach ($item as $key => $value) {
+            if (in_array($key, self::LABEL_SKIP_KEYS, true)) {
+                continue;
+            }
             if (is_string($value) && $value !== '') {
                 return $value;
             }
         }
 
         return '';
+    }
+
+    /**
+     * Adresse aus einem `sourceLocation`-Untereintrag. Ohne sie bleibt bei
+     * Meldungen wie „net::ERR_TIMED_OUT" offen, welche Ressource betroffen ist.
+     * Die Zeilennummer wird nur angehängt, wenn sie etwas aussagt — Lighthouse
+     * zählt ab 0 und setzt bei Netzwerkfehlern schlicht 0.
+     */
+    private static function sourceUrl(array $item): string
+    {
+        $loc = $item['sourceLocation'] ?? null;
+        if (!is_array($loc)) {
+            return '';
+        }
+        $url = (string) ($loc['url'] ?? '');
+        if ($url === '') {
+            return '';
+        }
+        $line = (int) ($loc['line'] ?? 0);
+
+        return $line > 0 ? $url . ':' . ($line + 1) : $url;
     }
 
     /** Wandelt einen numerischen Wert in einen gerundeten Ganzzahlwert oder null. */

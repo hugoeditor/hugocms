@@ -11,7 +11,6 @@ import { useAuthStore } from '../stores/auth'
 import { useFilesStore } from '../stores/files'
 import { useHelpStore } from '../stores/help'
 import { errorText } from '../i18n/apiMessage'
-import { useTransientError } from '../util/transientError'
 import { useConfirm } from '../util/confirm'
 import AuditSeverityChip from './AuditSeverityChip.vue'
 import AuditIssueTable from './AuditIssueTable.vue'
@@ -31,7 +30,10 @@ const auth = useAuthStore()
 const files = useFilesStore()
 const help = useHelpStore()
 const confirm = useConfirm()
-const error = useTransientError()
+// Fehler bleibt stehen, bis die nächste Aktion ihn ersetzt: Eine Meldung, die
+// sich nach acht Sekunden selbst ausblendet, hinterlässt ein Ergebnis, dem man
+// nicht ansieht, ob es der letzte Lauf ist oder ein alter Stand.
+const error = ref(null)
 
 // Reiter: SEO-Bericht (Standard), LLM-Content-Qualität, PageSpeed, Live-Analyse.
 // Alle bleiben sichtbar, auch ohne Freischaltung — der Inhalt zeigt dann den
@@ -109,6 +111,7 @@ async function startRun() {
 }
 
 async function selectRun(id) {
+  error.value = null
   if (!id || id === audit.current?.id) return
   try {
     await audit.fetchRun(id)
@@ -118,6 +121,7 @@ async function selectRun(id) {
 }
 
 async function removeRun() {
+  error.value = null
   if (!audit.current) return
   const ok = await confirm({
     title: t('audit.deleteTitle'),
@@ -136,6 +140,7 @@ async function removeRun() {
 
 // Verlauf aufräumen: alle Läufe bis auf den zuletzt erzeugten löschen.
 async function removeOtherRuns() {
+  error.value = null
   const ok = await confirm({
     title: t('audit.pruneTitle'),
     message: t('audit.pruneConfirm'),
@@ -182,6 +187,7 @@ function diagnoseIssue(issue) {
 watch(() => audit.current?.id, () => { fixedKeys.value = [] })
 
 async function openSource(issue) {
+  error.value = null
   try {
     // Audit-Modus bewusst NICHT verlassen: Der Editor legt sich nur als
     // Überlagerung über die Audit-Ansicht. Beim Schließen erscheint der Bericht

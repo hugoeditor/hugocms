@@ -8,12 +8,14 @@ import { useI18n } from 'vue-i18n'
 import { useAuditStore } from '../stores/audit'
 import { useAuthStore } from '../stores/auth'
 import { errorText } from '../i18n/apiMessage'
-import { useTransientError } from '../util/transientError'
 
 const { t, locale } = useI18n()
 const audit = useAuditStore()
 const auth = useAuthStore()
-const error = useTransientError()
+// Fehler bleibt stehen, bis die nächste Aktion ihn ersetzt: Eine Meldung, die
+// sich nach acht Sekunden selbst ausblendet, hinterlässt ein Ergebnis, dem man
+// nicht ansieht, ob es der letzte Lauf ist oder ein alter Stand.
+const error = ref(null)
 
 // Beim Öffnen das zuletzt gespeicherte Ergebnis dieser Webseite laden (falls
 // eines vorliegt), damit Datum und Kennzahlen ohne neue Messung erscheinen.
@@ -65,7 +67,7 @@ const CRUX_ORDER = [
   'INTERACTION_TO_NEXT_PAINT',
   'CUMULATIVE_LAYOUT_SHIFT_SCORE',
   'FIRST_CONTENTFUL_PAINT_MS',
-  'EXPERIENCE_TIME_TO_FIRST_BYTE',
+  'EXPERIMENTAL_TIME_TO_FIRST_BYTE',
   'FIRST_INPUT_DELAY_MS',
 ]
 
@@ -109,6 +111,15 @@ function fieldValue(key, percentile) {
   return percentile >= 1000 ? (percentile / 1000).toFixed(1) + ' s' : Math.round(percentile) + ' ms'
 }
 
+// Beschriftung einer CrUX-Metrik. Fehlt der Schlüssel, gibt vue-i18n den PFAD
+// zurück ('pagespeed.cruxMetric.…') — der stünde dann in der Oberfläche. Führt
+// Google eine neue Metrik ein, erscheint stattdessen ihr roher Name.
+function metricLabel(key) {
+  const path = 'pagespeed.cruxMetric.' + key
+  const label = t(path)
+  return label === path ? key.replace(/_/g, ' ') : label
+}
+
 // CrUX-Metriken der gewählten Erfahrung in fester Reihenfolge, anzeigefertig.
 const fieldMetrics = computed(() => {
   const m = fieldExp.value?.metrics
@@ -116,7 +127,7 @@ const fieldMetrics = computed(() => {
   const keys = [...CRUX_ORDER.filter((k) => k in m), ...Object.keys(m).filter((k) => !CRUX_ORDER.includes(k))]
   return keys.map((key) => ({
     key,
-    label: t('pagespeed.cruxMetric.' + key),
+    label: metricLabel(key),
     value: fieldValue(key, m[key].percentile),
     cls: catClass(m[key].category),
     good: Math.round((m[key].good || 0) * 100),
@@ -125,9 +136,36 @@ const fieldMetrics = computed(() => {
   }))
 })
 
+// Eine Kennwert-Kachel: eigene kurze Beschriftung, ersatzweise Lighthouses
+// Titel; die Erklärung des Kennwerts erscheint als Hinweis beim Überfahren.
+function metricCell(id) {
+  const m = result.value?.metrics?.[id] || {}
+  const path = 'pagespeed.metric.' + id
+  const label = t(path)
+  return {
+    label: label === path ? (m.title || id) : label,
+    value: m.display || metricFallback(m),
+    tip: descParts(m.description).text,
+  }
+}
+
+// Manche Kennwerte kommen ohne fertige Darstellung („dom-size" liefert nur die
+// Anzahl). Dann wird der Zahlenwert anhand seiner Einheit selbst gesetzt.
+function metricFallback(m) {
+  if (m.value == null) return ''
+  if (m.unit === 'millisecond') return savingsText(m.value).slice(1)
+  if (m.unit === 'byte') return formatBytes(m.value)
+  return String(Math.round(m.value))
+}
+
 // --- Optimierungs-Chancen (Gruppe B) ----------------------------------------
 
-const opportunities = computed(() => result.value?.opportunities ?? [])
+// Die Lighthouse-Beschreibung wird gleich mit aufbereitet: Der Titel nennt nur
+// das Thema („Bilder in modernen Formaten bereitstellen"), erst die Beschreibung
+// sagt, was zu ändern ist.
+const opportunities = computed(() =>
+  (result.value?.opportunities ?? []).map((o) => ({ ...o, ...descParts(o.description) })),
+)
 
 // Verbesserungshinweise je Kategorie (Barrierefreiheit, Best Practices, SEO):
 // fehlgeschlagene Prüfungen mit Titel + Beschreibung, nur vorhandene Kategorien.
@@ -145,7 +183,18 @@ function descParts(desc) {
   if (!desc) return { text: '', url: '' }
   const m = desc.match(/\[([^\]]+)\]\(([^)]+)\)/)
   const url = m ? m[2] : ''
-  const text = desc.replace(/\[([^\]]+)\]\([^)]+\)/g, '').replace(/\s+/g, ' ').trim()
+  // Steht der Doku-Link am Schluss („… Weitere Informationen"), übernimmt ihn
+  // der eigene Knopf und er fällt aus dem Text. Steht er mitten im Satz, bleibt
+  // sein Text stehen — sonst fehlt dem Satz das Prädikat.
+  const text = desc
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (full, label, href, offset) =>
+      /^[.!?;:\s]*$/.test(desc.slice(offset + full.length)) ? '' : label,
+    )
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([.,;:!?])/g, '$1')
+    // Der entfallene Link hinterlässt sonst ein doppeltes Satzzeichen.
+    .replace(/([.!?;:])[.!?;:\s]*$/, '$1')
+    .trim()
   return { text, url }
 }
 // Ersparnis lesbar (Zeit; ab 1 s in Sekunden).
@@ -341,9 +390,14 @@ async function runBoth() {
         <div class="ps-metrics-title">{{ $t('pagespeed.metricsTitle') }}</div>
         <div class="ps-metrics-grid">
           <template v-for="id in CORE_METRICS" :key="id">
-            <div v-if="result.metrics[id]" class="ps-metric">
-              <span class="ps-metric-label">{{ $t('pagespeed.metric.' + id) }}</span>
-              <span class="ps-metric-value">{{ result.metrics[id].display }}</span>
+            <div
+              v-if="result.metrics[id]"
+              class="ps-metric"
+              :class="{ explained: metricCell(id).tip }"
+              :title="metricCell(id).tip"
+            >
+              <span class="ps-metric-label">{{ metricCell(id).label }}</span>
+              <span class="ps-metric-value">{{ metricCell(id).value }}</span>
             </div>
           </template>
         </div>
@@ -354,9 +408,14 @@ async function runBoth() {
         <div class="ps-metrics-title">{{ $t('pagespeed.moreMetricsTitle') }}</div>
         <div class="ps-metrics-grid">
           <template v-for="id in MORE_METRICS" :key="id">
-            <div v-if="result.metrics[id]" class="ps-metric">
-              <span class="ps-metric-label">{{ $t('pagespeed.metric.' + id) }}</span>
-              <span class="ps-metric-value">{{ result.metrics[id].display }}</span>
+            <div
+              v-if="result.metrics[id]"
+              class="ps-metric"
+              :class="{ explained: metricCell(id).tip }"
+              :title="metricCell(id).tip"
+            >
+              <span class="ps-metric-label">{{ metricCell(id).label }}</span>
+              <span class="ps-metric-value">{{ metricCell(id).value }}</span>
             </div>
           </template>
         </div>
@@ -369,12 +428,12 @@ async function runBoth() {
           <div v-for="o in opportunities" :key="o.id" class="ps-opp">
             <button
               class="ps-opp-head"
-              :class="{ clickable: o.items.length }"
-              :disabled="!o.items.length"
+              :class="{ clickable: o.items.length || o.text }"
+              :disabled="!o.items.length && !o.text"
               @click="toggleOpp(o.id)"
             >
               <v-icon
-                v-if="o.items.length"
+                v-if="o.items.length || o.text"
                 :icon="openOpp === o.id ? 'mdi-chevron-down' : 'mdi-chevron-right'"
                 size="18"
                 class="ps-opp-chev"
@@ -383,10 +442,19 @@ async function runBoth() {
               <span class="ps-opp-savings">{{ o.display || savingsText(o.savingsMs) }}</span>
             </button>
 
+            <!-- Was zu tun ist (aufgeklappt), darunter die Verursacher -->
+            <div v-if="openOpp === o.id && o.text" class="ps-opp-desc">
+              {{ o.text }}
+              <a v-if="o.url" :href="o.url" target="_blank" rel="noopener" class="ps-find-more">{{ $t('pagespeed.learnMore') }}</a>
+            </div>
+
             <!-- Detailtabelle: konkrete Verursacher (aufgeklappt) -->
             <div v-if="openOpp === o.id && o.items.length" class="ps-opp-items">
               <div v-for="(it, i) in o.items" :key="i" class="ps-opp-item">
-                <span class="ps-opp-item-label" :title="it.label">{{ it.label }}</span>
+                <span class="ps-opp-item-main">
+                  <span class="ps-opp-item-label" :title="it.label">{{ it.label }}</span>
+                  <span v-if="it.url" class="ps-opp-item-url" :title="it.url">{{ it.url }}</span>
+                </span>
                 <span class="ps-opp-item-val">{{ itemValue(it) }}</span>
               </div>
               <div v-if="o.moreItems" class="ps-opp-more">{{ $t('pagespeed.moreItems', [o.moreItems]) }}</div>
@@ -408,10 +476,32 @@ async function runBoth() {
             <div class="ps-find-list">
               <div v-for="f in g.items" :key="f.id" class="ps-find-item">
                 <div class="ps-find-item-title">{{ f.title }}</div>
-                <div v-if="f.text" class="ps-find-item-desc">
+                <div v-if="f.text || f.url" class="ps-find-item-desc">
                   {{ f.text }}
                   <a v-if="f.url" :href="f.url" target="_blank" rel="noopener" class="ps-find-more">{{ $t('pagespeed.learnMore') }}</a>
                 </div>
+
+                <!-- Fundstellen: ohne sie bliebe offen, WO der Mangel steckt.
+                     Der Ausschnitt taugt als Suchbegriff für die Quelldatei. -->
+                <details v-if="f.items?.length" class="ps-where">
+                  <summary class="ps-where-head">
+                    <v-icon icon="mdi-chevron-right" size="14" class="ps-where-chev" />
+                    {{ f.itemsTotal > f.items.length
+                        ? $t('pagespeed.whereSome', [f.items.length, f.itemsTotal])
+                        : $t('pagespeed.where', [f.items.length]) }}
+                  </summary>
+                  <ol class="ps-where-list">
+                    <li v-for="(it, i) in f.items" :key="i" class="ps-where-item">
+                      <code v-if="it.selector" class="ps-where-sel">{{ it.selector }}</code>
+                      <span v-else-if="it.label" class="ps-where-sel">{{ it.label }}</span>
+                      <!-- Die betroffene Ressource: bei Meldungen wie
+                           „net::ERR_TIMED_OUT" steht sie nur hier. -->
+                      <div v-if="it.url" class="ps-where-url">{{ it.url }}</div>
+                      <pre v-if="it.snippet" class="ps-where-snippet">{{ it.snippet }}</pre>
+                      <div v-if="it.explanation" class="ps-where-why">{{ it.explanation }}</div>
+                    </li>
+                  </ol>
+                </details>
               </div>
             </div>
           </details>
@@ -577,6 +667,9 @@ async function runBoth() {
   border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.6));
   font-size: 0.85rem;
 }
+.ps-metric.explained {
+  cursor: help;
+}
 .ps-metric-label {
   opacity: 0.8;
 }
@@ -686,6 +779,12 @@ async function runBoth() {
   color: #b25e00;
   white-space: nowrap;
 }
+.ps-opp-desc {
+  padding: 8px 12px 4px 34px;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: rgba(var(--v-theme-on-surface), 0.75);
+}
 .ps-opp-items {
   margin: 8px 0 4px 26px;
   display: flex;
@@ -699,6 +798,22 @@ async function runBoth() {
   font-size: 0.8rem;
   padding: 3px 0;
   border-bottom: 1px solid rgba(var(--v-border-color), calc(var(--v-border-opacity) * 0.5));
+}
+.ps-opp-item-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ps-opp-item-url {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: monospace;
+  font-size: 0.72rem;
+  opacity: 0.6;
+  direction: rtl;
+  text-align: left;
 }
 .ps-opp-item-label {
   min-width: 0;
@@ -768,5 +883,62 @@ async function runBoth() {
   margin-top: 28px;
   font-size: 0.75rem;
   opacity: 0.6;
+}
+/* Fundstellen eines Hinweises — bewusst schmal und monospace, damit Selektor
+   und HTML-Ausschnitt als Code lesbar bleiben. */
+.ps-where {
+  margin-top: 6px;
+}
+.ps-where-head {
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.78rem;
+  color: var(--mint-text-muted, #666);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.ps-where-head::-webkit-details-marker {
+  display: none;
+}
+.ps-where-chev {
+  transition: transform 0.15s;
+}
+.ps-where[open] .ps-where-chev {
+  transform: rotate(90deg);
+}
+.ps-where-list {
+  margin: 6px 0 0;
+  padding-left: 22px;
+}
+.ps-where-item {
+  margin-bottom: 8px;
+  font-size: 0.78rem;
+}
+.ps-where-url {
+  font-family: monospace;
+  font-size: 0.74rem;
+  opacity: 0.75;
+  word-break: break-all;
+  margin-top: 2px;
+}
+.ps-where-sel {
+  font-family: monospace;
+  color: var(--mint-text, #222);
+  word-break: break-all;
+}
+.ps-where-snippet {
+  margin: 2px 0;
+  padding: 4px 6px;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 4px;
+  font-size: 0.74rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 120px;
+  overflow: auto;
+}
+.ps-where-why {
+  color: var(--mint-text-muted, #666);
 }
 </style>

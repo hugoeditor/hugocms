@@ -497,6 +497,8 @@ export default {
     noFieldData: 'Keine Felddaten vorhanden — diese Seite hat zu wenig gemessenen Nutzerverkehr.',
     opportunitiesTitle: 'Optimierungs-Chancen',
     moreItems: 'und {0} weitere',
+    where: '{0} Fundstelle(n) anzeigen',
+    whereSome: '{0} von {1} Fundstellen anzeigen',
     findingsTitle: 'Verbesserungshinweise',
     learnMore: 'Mehr erfahren',
     good: 'Gut',
@@ -507,7 +509,7 @@ export default {
     category: {
       performance: 'Leistung',
       accessibility: 'Barrierefreiheit',
-      'best-practices': 'Empfehlungen',
+      'best-practices': 'Best Practices',
       seo: 'SEO',
     },
     metric: {
@@ -528,7 +530,7 @@ export default {
       INTERACTION_TO_NEXT_PAINT: 'Reaktion auf Eingaben (INP)',
       CUMULATIVE_LAYOUT_SHIFT_SCORE: 'Layoutverschiebung (CLS)',
       FIRST_CONTENTFUL_PAINT_MS: 'Erstes Inhaltselement (FCP)',
-      EXPERIENCE_TIME_TO_FIRST_BYTE: 'Server-Antwortzeit (TTFB)',
+      EXPERIMENTAL_TIME_TO_FIRST_BYTE: 'Server-Antwortzeit (TTFB)',
       FIRST_INPUT_DELAY_MS: 'Eingabeverzögerung (FID)',
     },
   },
@@ -773,6 +775,14 @@ export default {
       },
       oppsTitle: 'Optimierungs-Chancen',
       oppsMore: '… und {0} weitere',
+      where: '{0} Fundstelle(n) anzeigen',
+      whereSome: '{0} von {1} Fundstellen anzeigen',
+      impact: {
+        critical: 'kritisch',
+        serious: 'schwer',
+        moderate: 'mittel',
+        minor: 'gering',
+      },
       findTitle: 'Verbesserungshinweise',
       learnMore: 'Mehr erfahren',
       field: {

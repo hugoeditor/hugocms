@@ -10,12 +10,14 @@ import { useLiveAnalysisStore } from '../stores/liveAnalysis'
 import { useAuthStore } from '../stores/auth'
 import { api } from '../api/client'
 import { errorText } from '../i18n/apiMessage'
-import { useTransientError } from '../util/transientError'
 
 const { t, te, locale } = useI18n()
 const live = useLiveAnalysisStore()
 const auth = useAuthStore()
-const error = useTransientError()
+// Fehler bleibt stehen, bis die nächste Aktion ihn ersetzt: Eine Meldung, die
+// sich nach acht Sekunden selbst ausblendet, hinterlässt ein Ergebnis, dem man
+// nicht ansieht, ob es der letzte Lauf ist oder ein alter Stand.
+const error = ref(null)
 
 // Zu prüfende Adresse: gespeicherte Adresse dieser Webseite, sonst die aus der
 // Hugo-baseURL erkannte. Beim Start wird sie serverseitig gespeichert.
@@ -81,6 +83,7 @@ async function startAnalyse() {
 }
 
 async function cancelAnalyse() {
+  error.value = null
   try {
     await live.cancel()
   } catch (e) {
@@ -184,13 +187,30 @@ const typeCounts = computed(() => {
 // die weiteren Ladekennwerte. Alle sechs liefert der chrome-sidecar; einzelne
 // können null sein (Lighthouse konnte sie nicht messen).
 const BROWSER_METRICS = [
-  { key: 'lcp_ms', unit: ' ms' },
-  { key: 'cls', unit: '' },
-  { key: 'tbt_ms', unit: ' ms' },
-  { key: 'fcp_ms', unit: ' ms' },
-  { key: 'si_ms', unit: ' ms' },
-  { key: 'tti_ms', unit: ' ms' },
+  { key: 'lcp_ms', unit: ' ms', audit: 'largest-contentful-paint' },
+  { key: 'cls', unit: '', audit: 'cumulative-layout-shift' },
+  { key: 'tbt_ms', unit: ' ms', audit: 'total-blocking-time' },
+  { key: 'fcp_ms', unit: ' ms', audit: 'first-contentful-paint' },
+  { key: 'si_ms', unit: ' ms', audit: 'speed-index' },
+  { key: 'tti_ms', unit: ' ms', audit: 'interactive' },
 ]
+
+// Erklärung eines Kennwerts, wie Lighthouse sie liefert (Hinweis beim
+// Überfahren). Leer, solange der Dienst `metric_docs` nicht mitschickt.
+function metricTip(auditId) {
+  const doc = live.result?.browser?.metric_docs?.[auditId]
+  return doc ? descParts(doc.description).text : ''
+}
+
+// Anzeigewert eines Kern-Kennwerts: Lighthouses eigene, lokalisierte Darstellung
+// („0,9 s"), sonst die Rohzahl mit Einheit. So steht hier dasselbe wie im
+// PageSpeed-Bericht.
+function metricValue(m) {
+  const display = live.result?.browser?.metric_docs?.[m.audit]?.display
+  if (display) return display
+  const raw = live.result?.browser?.metrics?.[m.key]
+  return raw === null || raw === undefined ? '—' : raw + m.unit
+}
 
 // Diagnose-Kennwerte in Anzeigereihenfolge (Serverantwort, Seitengewicht,
 // DOM-Größe, JS-Ausführungs- und Hauptthread-Zeit). Der Sidecar liefert je
@@ -205,11 +225,29 @@ const browserDiagnostics = computed(() => {
   if (!diag) return []
   return BROWSER_DIAGNOSTICS
     .filter((key) => diag[key])
-    .map((key) => ({ key, display: diag[key].display || String(diag[key].value) }))
+    .map((key) => ({
+      key,
+      // Manche Kennwerte kommen ohne fertige Darstellung („dom-size" liefert nur
+      // die Anzahl). Dann wird der Zahlenwert anhand seiner Einheit gesetzt.
+      display: diag[key].display || diagFallback(diag[key]),
+      tip: descParts(diag[key].description || '').text || metricTip(key),
+    }))
 })
 
+function diagFallback(m) {
+  if (m.value === null || m.value === undefined) return ''
+  if (m.unit === 'byte') return fmtBytes(m.value)
+  if (m.unit === 'millisecond') return m.value >= 1000 ? (m.value / 1000).toFixed(1) + ' s' : m.value + ' ms'
+  return String(m.value)
+}
+
 // Optimierungs-Chancen (bereits nach Wirkung sortiert und gekappt vom Dienst).
-const browserOpportunities = computed(() => live.result?.browser?.opportunities ?? [])
+// Die Beschreibung wird gleich mit aufbereitet: Der Titel nennt nur das Thema,
+// erst sie sagt, was zu ändern ist. Der Dienst liefert sie derzeit nicht mit —
+// kommt sie, erscheint sie ohne weiteres Zutun.
+const browserOpportunities = computed(() =>
+  (live.result?.browser?.opportunities ?? []).map((o) => ({ ...o, ...descParts(o.description) })),
+)
 
 // Kompakte Byte-Angabe (KiB/MiB) für die Verursacher einer Chance.
 function fmtBytes(n) {
@@ -281,9 +319,19 @@ const FINDING_CATS = [
 const findingGroups = computed(() => {
   const cf = live.result?.browser?.category_findings
   if (!cf || typeof cf !== 'object') return []
+  // Den Schweregrad trägt nur die Liste `accessibility_failures` (serious,
+  // critical …). Er wird hier zum gleichnamigen Befund dazugeholt, statt die
+  // Angabe zu verwerfen.
+  const impacts = {}
+  for (const f of live.result?.browser?.accessibility_failures ?? []) {
+    if (f.id && f.impact) impacts[f.id] = f.impact
+  }
   return FINDING_CATS
     .filter((c) => Array.isArray(cf[c.key]) && cf[c.key].length)
-    .map((c) => ({ ...c, items: cf[c.key].map((f) => ({ ...f, ...descParts(f.description) })) }))
+    .map((c) => ({
+      ...c,
+      items: cf[c.key].map((f) => ({ ...f, impact: impacts[f.id] || '', ...descParts(f.description) })),
+    }))
 })
 
 // Lighthouse-Beschreibung: den Markdown-Doku-Link abtrennen. text = Beschreibung
@@ -292,7 +340,18 @@ function descParts(desc) {
   if (!desc) return { text: '', url: '' }
   const m = desc.match(/\[([^\]]+)\]\(([^)]+)\)/)
   const url = m ? m[2] : ''
-  const text = desc.replace(/\[([^\]]+)\]\([^)]+\)/g, '').replace(/\s+/g, ' ').trim()
+  // Steht der Doku-Link am Schluss („… Weitere Informationen"), übernimmt ihn
+  // der eigene Knopf und er fällt aus dem Text. Steht er mitten im Satz, bleibt
+  // sein Text stehen — sonst fehlt dem Satz das Prädikat.
+  const text = desc
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (full, label, href, offset) =>
+      /^[.!?;:\s]*$/.test(desc.slice(offset + full.length)) ? '' : label,
+    )
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([.,;:!?])/g, '$1')
+    // Der entfallene Link hinterlässt sonst ein doppeltes Satzzeichen.
+    .replace(/([.!?;:])[.!?;:\s]*$/, '$1')
+    .trim()
   return { text, url }
 }
 
@@ -671,12 +730,9 @@ function fmtDate(iso) {
 
           <!-- Kennwerte: Core Web Vitals zuerst, dann die weiteren Ladekennwerte -->
           <div v-if="live.result.browser.metrics" class="la-facts la-bmetrics">
-            <div v-for="m in BROWSER_METRICS" :key="m.key" class="la-fact">
+            <div v-for="m in BROWSER_METRICS" :key="m.key" class="la-fact" :class="{ explained: metricTip(m.audit) }" :title="metricTip(m.audit)">
               <span class="la-fact-k">{{ $t('liveAnalysis.browser.metric.' + m.key) }}</span>
-              <template v-if="live.result.browser.metrics[m.key] !== null && live.result.browser.metrics[m.key] !== undefined">
-                {{ live.result.browser.metrics[m.key] }}{{ m.unit }}
-              </template>
-              <template v-else>—</template>
+              {{ metricValue(m) }}
             </div>
           </div>
 
@@ -706,7 +762,7 @@ function fmtDate(iso) {
 
           <!-- Diagnose-Kennwerte (Serverantwort, Seitengewicht, DOM-Größe …) -->
           <div v-if="browserDiagnostics.length" class="la-facts la-bmetrics">
-            <div v-for="d in browserDiagnostics" :key="d.key" class="la-fact">
+            <div v-for="d in browserDiagnostics" :key="d.key" class="la-fact" :class="{ explained: d.tip }" :title="d.tip">
               <span class="la-fact-k">{{ $t('liveAnalysis.browser.diag.' + d.key) }}</span>
               {{ d.display }}
             </div>
@@ -720,9 +776,16 @@ function fmtDate(iso) {
                 <span class="la-opp-title">{{ o.title }}</span>
                 <span v-if="opportunitySavings(o)" class="la-opp-savings">{{ opportunitySavings(o) }}</span>
               </summary>
+              <div v-if="o.text" class="la-opp-desc">
+                {{ o.text }}
+                <a v-if="o.url" :href="o.url" target="_blank" rel="noopener" class="la-find-more">{{ $t('liveAnalysis.browser.learnMore') }}</a>
+              </div>
               <ul v-if="o.items?.length" class="la-opp-items">
                 <li v-for="(it, i) in o.items" :key="i" class="la-opp-item">
-                  <span class="la-opp-item-label">{{ it.label }}</span>
+                  <span class="la-opp-item-label">
+                    {{ it.label }}
+                    <span v-if="it.url" class="la-opp-item-url" :title="it.url">{{ it.url }}</span>
+                  </span>
                   <span v-if="it.bytes || it.ms" class="la-opp-item-cost">
                     <template v-if="it.bytes">{{ fmtBytes(it.bytes) }}</template>
                     <template v-if="it.ms">{{ it.bytes ? ' · ' : '' }}{{ it.ms }} ms</template>
@@ -749,11 +812,34 @@ function fmtDate(iso) {
                 <span class="la-find-count">{{ g.items.length }}</span>
               </summary>
               <div v-for="f in g.items" :key="f.id" class="la-find-item">
-                <div class="la-find-item-title">{{ f.title }}</div>
-                <div v-if="f.text" class="la-find-item-desc">
+                <div class="la-find-item-title">
+                  <span v-if="f.impact" class="la-find-impact" :class="'imp-' + f.impact">{{ $t('liveAnalysis.browser.impact.' + f.impact) }}</span>
+                  {{ f.title }}
+                </div>
+                <div v-if="f.text || f.url" class="la-find-item-desc">
                   {{ f.text }}
                   <a v-if="f.url" :href="f.url" target="_blank" rel="noopener" class="la-find-more">{{ $t('liveAnalysis.browser.learnMore') }}</a>
                 </div>
+
+                <!-- Fundstellen: ohne sie bliebe offen, WO der Mangel steckt.
+                     Der Ausschnitt taugt als Suchbegriff für die Quelldatei. -->
+                <details v-if="f.items?.length" class="la-where">
+                  <summary class="la-where-head">
+                    <v-icon icon="mdi-chevron-right" size="14" class="la-where-chev" />
+                    {{ f.items_total > f.items.length
+                        ? $t('liveAnalysis.browser.whereSome', [f.items.length, f.items_total])
+                        : $t('liveAnalysis.browser.where', [f.items.length]) }}
+                  </summary>
+                  <ol class="la-where-list">
+                    <li v-for="(it, i) in f.items" :key="i" class="la-where-item">
+                      <code v-if="it.selector" class="la-where-sel">{{ it.selector }}</code>
+                      <span v-else-if="it.label" class="la-where-sel">{{ it.label }}</span>
+                      <div v-if="it.url" class="la-where-url">{{ it.url }}</div>
+                      <pre v-if="it.snippet" class="la-where-snippet">{{ it.snippet }}</pre>
+                      <div v-if="it.explanation" class="la-where-why">{{ it.explanation }}</div>
+                    </li>
+                  </ol>
+                </details>
               </div>
             </details>
           </div>
@@ -1039,6 +1125,87 @@ function fmtDate(iso) {
 .la-opp-item-cost { flex: 0 0 auto; color: var(--mint-text-muted); white-space: nowrap; }
 .la-opp-more { padding: 2px 0; font-size: 0.74rem; color: var(--mint-text-muted); font-style: italic; }
 
+/* Beschreibung einer Chance (was zu ändern ist) */
+.la-opp-desc {
+  padding: 6px 0 4px;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  opacity: 0.8;
+}
+/* Schweregrad eines Barrierefreiheits-Befunds */
+.la-find-impact {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  vertical-align: 1px;
+  background: rgba(var(--v-theme-on-surface), 0.1);
+}
+.la-find-impact.imp-critical,
+.la-find-impact.imp-serious {
+  background: rgba(211, 47, 47, 0.15);
+  color: #c62828;
+}
+/* Kennwert mit hinterlegter Erklärung */
+.la-fact.explained {
+  cursor: help;
+}
+/* Adresse eines Verursachers (steht nur im sourceLocation-Untereintrag) */
+.la-opp-item-url {
+  display: block;
+  font-family: monospace;
+  font-size: 0.72rem;
+  opacity: 0.6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Fundstellen eines Befunds */
+.la-where {
+  margin: 4px 0 8px;
+  font-size: 0.78rem;
+}
+.la-where-head {
+  cursor: pointer;
+  list-style: none;
+  opacity: 0.8;
+}
+.la-where[open] .la-where-chev {
+  transform: rotate(90deg);
+}
+.la-where-list {
+  margin: 6px 0 0;
+  padding-left: 20px;
+}
+.la-where-item {
+  margin-bottom: 8px;
+}
+.la-where-sel {
+  font-family: monospace;
+  word-break: break-all;
+}
+.la-where-url {
+  font-family: monospace;
+  font-size: 0.74rem;
+  opacity: 0.75;
+  word-break: break-all;
+  margin-top: 2px;
+}
+.la-where-snippet {
+  margin: 2px 0 0;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  font-size: 0.72rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.la-where-why {
+  margin-top: 2px;
+  opacity: 0.75;
+}
 /* Lauf-Warnungen von Lighthouse */
 .la-warnings { margin-top: 12px; }
 .la-warning {
