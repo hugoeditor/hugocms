@@ -67,6 +67,14 @@ website — it reads the mount path, host, and license status from the mount
 files. It does not change the crontab, it only prints the lines; review, then
 apply them (`crontab -e`).
 
+The other way round, `bin/crontab-entries.sh --status` answers what is already
+in place: it reads the existing crontab and shows, per website, which of the
+three tasks is scheduled and at what interval — plus entries pointing nowhere
+(website removed), duplicated ones, and those starting a Pro task without a
+license. If the host manages cron through a web panel, hand over its export:
+`--status=cron.txt` or via standard input (`--status=-`). Nothing is changed
+here either.
+
 ## Pausing tasks
 
 Each of the three tasks can be paused per website without touching the host's

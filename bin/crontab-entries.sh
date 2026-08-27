@@ -17,6 +17,13 @@
 #     bin/crontab-entries.sh --php=/usr/bin/php8.2  provide the PHP path
 #     bin/crontab-entries.sh > cron.txt            save to review, then apply via 'crontab -e'
 #
+# With --status the script does the opposite: it reads an EXISTING crontab and
+# reports which site already has which HugoCMS task, which are missing, and
+# which entries point nowhere. Nothing is written in this mode either.
+#     bin/crontab-entries.sh --status              read 'crontab -l' of the current user
+#     bin/crontab-entries.sh --status=cron.txt     read a file instead (panel export)
+#     cat cron.txt | bin/crontab-entries.sh --status=-   read standard input
+#
 # Schedule (staggered per site so they don't all run at once):
 #   build            every 15 minutes (builds only when releases are due;
 #                    for Hugo's front-matter publishDate additionally --force)
@@ -40,17 +47,23 @@ CLI_DIR="$BACKEND_DIR/cli"
 source "$SCRIPT_DIR/lib/deploy.sh"
 
 usage() {
-    sed -n '2,24p' "$0" | sed 's/^#\( \|$\)//'
+    # All leading comment lines after the shebang — no fixed line range, so
+    # extending the header above cannot silently truncate the help.
+    awk 'NR > 1 { if ($0 !~ /^#/) exit; sub(/^#( |$)/, ""); print }' "$0"
 }
 
 # --- Parameters ------------------------------------------------------------
 LIMIT=3
 PHP_BIN=""
+STATUS=0
+STATUS_SRC=""     # empty = 'crontab -l', "-" = stdin, otherwise a file
 for arg in "$@"; do
     case "$arg" in
-        --limit=*) LIMIT="${arg#*=}" ;;
-        --php=*)   PHP_BIN="${arg#*=}" ;;
-        -h|--help) usage; exit 0 ;;
+        --limit=*)  LIMIT="${arg#*=}" ;;
+        --php=*)    PHP_BIN="${arg#*=}" ;;
+        --status)   STATUS=1 ;;
+        --status=*) STATUS=1; STATUS_SRC="${arg#*=}" ;;
+        -h|--help)  usage; exit 0 ;;
         *) echo "Unknown option: $arg" >&2; echo "  (bin/crontab-entries.sh --help)" >&2; exit 1 ;;
     esac
 done
@@ -82,6 +95,217 @@ emit() {
     local sched="$1" script="$2" rest="$3"
     printf '%-13s %s %s/%-20s %s\n' "$sched" "$PHP_BIN" "$CLI_DIR" "$script" "$rest"
 }
+
+# --- Status mode: interpret an EXISTING crontab -----------------------------
+# Reads a crontab (own one, a file, or stdin) and matches its HugoCMS lines
+# against the configured sites. Reports per site which task is set up and which
+# is missing, plus entries that point at a mount file which no longer exists.
+
+# Checks the source BEFORE reading it. Deliberately its own step: read_crontab
+# runs inside a process substitution further down, and an 'exit' there would
+# only end that subshell — the script would carry on with an empty crontab and
+# report every task as missing.
+check_status_source() {
+    [ "$STATUS_SRC" = "-" ] && return 0
+    if [ -n "$STATUS_SRC" ]; then
+        [ -r "$STATUS_SRC" ] && return 0
+        echo "❌ Cannot read '$STATUS_SRC'." >&2
+        exit 1
+    fi
+    command -v crontab >/dev/null 2>&1 && return 0
+    cat >&2 <<'EOT'
+❌ No 'crontab' command available on this host.
+   Many shared hosts manage cron through a web panel instead. Export the
+   entries there and hand them over:
+       bin/crontab-entries.sh --status=cron.txt
+       cat cron.txt | bin/crontab-entries.sh --status=-
+EOT
+    exit 1
+}
+
+# Prints the crontab to be examined (source already checked).
+read_crontab() {
+    if [ "$STATUS_SRC" = "-" ]; then
+        cat
+    elif [ -n "$STATUS_SRC" ]; then
+        cat "$STATUS_SRC"
+    else
+        # An empty crontab exits with 1 — that is not an error here.
+        crontab -l 2>/dev/null || true
+    fi
+}
+
+# Canonical path, also for files that no longer exist (realpath -m).
+canon() {
+    realpath -m -- "$1" 2>/dev/null || echo "$1"
+}
+
+# The schedule of a crontab line: the five time fields, or a single @-keyword.
+schedule_of() {
+    case "$1" in
+        @*) printf '%s' "${1%% *}" ;;
+        *)  printf '%s' "$(echo "$1" | awk '{print $1, $2, $3, $4, $5}')" ;;
+    esac
+}
+
+# Value of a --option=… in a line ("" if absent).
+option_of() {
+    printf '%s' "$1" | sed -n -E "s/.*--$2=([^[:space:]]+).*/\\1/p" | head -n1
+}
+
+run_status() {
+    check_status_source
+
+    declare -A FOUND=()      # "<mount>|<script>"  -> schedule
+    declare -A FOUND_HOST=() # "<mount>|<script>"  -> --host value
+    declare -A KNOWN=()      # canonical mount path -> host label
+    local orphans=() foreign=() duplicates=() disabled=0 total=0 assigned=0
+
+    shopt -s nullglob
+    local files=("$MOUNTS_DIR"/*.ini)
+    local default_mounts
+    default_mounts="$(canon "$BACKEND_DIR/mounts.ini")"
+    [ -f "$BACKEND_DIR/mounts.ini" ] && files+=("$BACKEND_DIR/mounts.ini")
+
+    local f host
+    for f in "${files[@]}"; do
+        host="$(read_mount_host "$f")"
+        KNOWN["$(canon "$f")"]="${host:-$(basename "$f")}"
+    done
+
+    local line trimmed script mounts_opt key
+    while IFS= read -r line; do
+        trimmed="${line#"${line%%[![:space:]]*}"}"
+        [ -z "$trimmed" ] && continue
+        case "$trimmed" in
+            \#*)
+                # Commented-out HugoCMS line — counted, not evaluated.
+                case "$trimmed" in
+                    *cron-build.php*|*cron-improve.php*|*cron-healthcheck.php*)
+                        disabled=$((disabled + 1)) ;;
+                esac
+                continue ;;
+        esac
+
+        case "$trimmed" in
+            *cron-build.php*)       script="cron-build.php" ;;
+            *cron-improve.php*)     script="cron-improve.php" ;;
+            *cron-healthcheck.php*) script="cron-healthcheck.php" ;;
+            *) continue ;;
+        esac
+        total=$((total + 1))
+
+        # Lines of a DIFFERENT installation: the script path does not start with
+        # our cli directory.
+        case "$trimmed" in
+            *"$CLI_DIR/$script"*) ;;
+            *) foreign+=("$trimmed"); continue ;;
+        esac
+
+        mounts_opt="$(option_of "$trimmed" mounts)"
+        # Without --mounts the scripts fall back to backend/mounts.ini.
+        [ -z "$mounts_opt" ] && mounts_opt="$BACKEND_DIR/mounts.ini"
+        mounts_opt="$(canon "$mounts_opt")"
+
+        if [ -z "${KNOWN[$mounts_opt]+x}" ]; then
+            orphans+=("$script → $mounts_opt")
+            continue
+        fi
+
+        key="$mounts_opt|$script"
+        if [ -n "${FOUND[$key]:-}" ]; then
+            # Zwei Einträge für dieselbe Aufgabe derselben Webseite: Der Lauf
+            # geschieht doppelt — fast immer ein Versehen.
+            duplicates+=("${KNOWN[$mounts_opt]} · $script")
+        fi
+        FOUND["$key"]="$(schedule_of "$trimmed")"
+        FOUND_HOST["$key"]="$(option_of "$trimmed" host)"
+        assigned=$((assigned + 1))
+    done < <(read_crontab)
+
+    # --- Report -------------------------------------------------------------
+    local src_label="crontab -l ($(id -un))"
+    [ "$STATUS_SRC" = "-" ] && src_label="standard input"
+    [ -n "$STATUS_SRC" ] && [ "$STATUS_SRC" != "-" ] && src_label="$STATUS_SRC"
+
+    echo "HugoCMS – cron status"
+    echo "Source: $src_label · Installation: $PKG_ROOT"
+    echo ""
+    printf '%-34s %-15s %-15s %-15s\n' "SITE" "BUILD" "IMPROVE" "HEALTH CHECK"
+    printf '%-34s %-15s %-15s %-15s\n' "----------------------------------" "---------------" "---------------" "---------------"
+
+    local notes=()
+    local mount label license cell
+    # Sorted by site so that two runs are comparable — the order of an
+    # associative array is arbitrary.
+    local sorted=()
+    while IFS= read -r mount; do
+        sorted+=("$mount")
+    done < <(for mount in "${!KNOWN[@]}"; do printf '%s\t%s\n' "${KNOWN[$mount]}" "$mount"; done | sort -f | cut -f2-)
+
+    for mount in "${sorted[@]}"; do
+        label="${KNOWN[$mount]}"
+        license="$(read_ini_value "$mount" license key)"
+        printf '%-34s' "$label"
+        for script in cron-build.php cron-improve.php cron-healthcheck.php; do
+            cell="${FOUND["$mount|$script"]:-}"
+            # ASCII only: printf pads by BYTES, so a multi-byte dash would
+            # shift the columns.
+            printf ' %-15s' "${cell:-missing}"
+        done
+        echo ""
+
+        # Findings worth acting on.
+        if [ -z "$license" ]; then
+            for script in cron-improve.php cron-healthcheck.php; do
+                [ -n "${FOUND["$mount|$script"]:-}" ] &&
+                    notes+=("$label: $script is scheduled, but the site has no license — every run aborts.")
+            done
+        fi
+        for script in cron-improve.php cron-healthcheck.php; do
+            if [ -n "${FOUND["$mount|$script"]:-}" ] && [ -z "${FOUND_HOST["$mount|$script"]:-}" ]; then
+                notes+=("$label: $script runs without --host — the license cannot be checked.")
+            fi
+        done
+    done
+
+    echo ""
+    printf '%d HugoCMS line(s) found: %d assigned, %d orphaned, %d from another installation.\n' \
+        "$total" "$assigned" "${#orphans[@]}" "${#foreign[@]}"
+    [ "$disabled" -gt 0 ] && echo "$disabled commented-out line(s) ignored."
+    if [ "${#duplicates[@]}" -gt 0 ]; then
+        echo ""
+        echo "⚠ Scheduled more than once (the task then runs twice):"
+        printf '   %s\n' "${duplicates[@]}"
+    fi
+
+    if [ "${#orphans[@]}" -gt 0 ]; then
+        echo ""
+        echo "⚠ Entries whose mount file is unknown (site removed?):"
+        printf '   %s\n' "${orphans[@]}"
+    fi
+    if [ "${#foreign[@]}" -gt 0 ]; then
+        echo ""
+        echo "ℹ ${#foreign[@]} HugoCMS line(s) belong to a DIFFERENT installation (other path) and were not evaluated."
+    fi
+    if [ "${#notes[@]}" -gt 0 ]; then
+        echo ""
+        echo "Findings:"
+        printf '   %s\n' "${notes[@]}"
+    fi
+
+    cat <<'EOT'
+
+Note: only the crontab shown above is examined. Entries of another user or in
+/etc/cron.d are invisible here — a task reported as missing may well be set up
+somewhere else.
+EOT
+}
+
+if [ "$STATUS" -eq 1 ]; then
+    run_status
+    exit 0
+fi
 
 shopt -s nullglob
 mounts=("$MOUNTS_DIR"/*.ini)

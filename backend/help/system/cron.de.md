@@ -71,6 +71,14 @@ Webseiten fertig aus — Mount-Pfad, Host und Lizenzstatus liest es aus den
 Mount-Dateien. Es ändert die Crontab nicht, sondern gibt nur die Zeilen aus;
 prüfen und dann übernehmen (`crontab -e`).
 
+Umgekehrt beantwortet `bin/crontab-entries.sh --status` die Frage, was bereits
+eingerichtet ist: Es liest die vorhandene Crontab und zeigt je Webseite, welche
+der drei Aufgaben eingetragen ist und in welchem Takt — dazu Einträge, die ins
+Leere zeigen (Webseite entfernt), doppelt vorhandene und solche, die eine
+Pro-Aufgabe ohne Lizenz starten. Verwaltet der Hoster die Crontab über ein
+Webpanel, lässt sich der Export übergeben: `--status=cron.txt` oder über die
+Standardeingabe (`--status=-`). Geändert wird auch dabei nichts.
+
 ## Aufgaben pausieren
 
 Jede der drei Aufgaben lässt sich pro Webseite pausieren, ohne die Crontab des
