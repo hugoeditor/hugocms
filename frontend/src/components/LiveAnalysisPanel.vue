@@ -118,6 +118,25 @@ function issueLocation(issue) {
   return issue.url || issue.host || ''
 }
 
+// Absolute Adresse zu einem Wert — oder '' , wenn der Wert keine Adresse ist
+// (Hostname, HTTP-Code, Byte-Zahl, CSS-Selektor). Relative Pfade werden gegen
+// die geprüfte Startadresse aufgelöst, damit auch Befunde, die nur den Pfad
+// nennen, anklickbar sind. Nur was hier eine Adresse zurückgibt, wird verlinkt.
+function linkFor(value) {
+  if (typeof value !== 'string') return ''
+  const s = value.trim()
+  if (!s || /\s/.test(s)) return ''
+  if (/^https?:\/\//i.test(s)) return s
+  if (!s.startsWith('/')) return ''
+  const base = live.result?.start_url
+  if (!base) return ''
+  try {
+    return new URL(s, base).href
+  } catch {
+    return ''
+  }
+}
+
 // Zusatzfelder eines Befunds (alles außer den überall vorhandenen Standard-
 // feldern) — z. B. `source` (Seite, auf der ein toter Link steht), `status`
 // (HTTP-Code), `variant`, `bytes`, `count`. Generisch wie der Bericht des
@@ -602,12 +621,17 @@ function fmtDate(iso) {
             <v-icon :icon="sevMeta(issue.severity).icon" size="16" :class="sevMeta(issue.severity).cls" class="la-issue-icon" />
             <div class="la-issue-body">
               <div class="la-issue-title">{{ issue.title || issue.type }}</div>
-              <div v-if="issueLocation(issue)" class="la-issue-loc">{{ issueLocation(issue) }}</div>
+              <div v-if="issueLocation(issue)" class="la-issue-loc">
+                <a v-if="linkFor(issueLocation(issue))" :href="linkFor(issueLocation(issue))" target="_blank" rel="noopener" class="la-ext">{{ issueLocation(issue) }}</a>
+                <template v-else>{{ issueLocation(issue) }}</template>
+              </div>
               <!-- Zusatzfelder: bei toten Links steht hier die Quellseite (source)
                    und der HTTP-Code (status) — das Wichtigste zum Beheben. -->
               <div v-if="issueDetails(issue).length" class="la-issue-details">
                 <span v-for="d in issueDetails(issue)" :key="d.key" class="la-issue-detail">
-                  <span class="la-detail-k">{{ d.label }}:</span> {{ d.value }}
+                  <span class="la-detail-k">{{ d.label }}:</span>
+                  <a v-if="linkFor(d.value)" :href="linkFor(d.value)" target="_blank" rel="noopener" class="la-ext">{{ d.value }}</a>
+                  <template v-else>{{ d.value }}</template>
                 </span>
               </div>
               <!-- Listenfelder (betroffene Seiten, Beispiel-URLs) untereinander;
@@ -615,7 +639,10 @@ function fmtDate(iso) {
               <div v-for="l in issueLists(issue)" :key="l.key" class="la-issue-list">
                 <span class="la-detail-k">{{ l.label }}:</span>
                 <ul class="la-issue-urls">
-                  <li v-for="(v, j) in l.values" :key="j">{{ v }}</li>
+                  <li v-for="(v, j) in l.values" :key="j">
+                    <a v-if="linkFor(v)" :href="linkFor(v)" target="_blank" rel="noopener" class="la-ext">{{ v }}</a>
+                    <template v-else>{{ v }}</template>
+                  </li>
                   <li v-if="l.more" class="la-muted">{{ $t('liveAnalysis.issueListMore', [l.more]) }}</li>
                 </ul>
               </div>
@@ -784,7 +811,10 @@ function fmtDate(iso) {
                 <li v-for="(it, i) in o.items" :key="i" class="la-opp-item">
                   <span class="la-opp-item-label">
                     {{ it.label }}
-                    <span v-if="it.url" class="la-opp-item-url" :title="it.url">{{ it.url }}</span>
+                    <span v-if="it.url" class="la-opp-item-url" :title="it.url">
+                      <a v-if="linkFor(it.url)" :href="linkFor(it.url)" target="_blank" rel="noopener" class="la-ext">{{ it.url }}</a>
+                      <template v-else>{{ it.url }}</template>
+                    </span>
                   </span>
                   <span v-if="it.bytes || it.ms" class="la-opp-item-cost">
                     <template v-if="it.bytes">{{ fmtBytes(it.bytes) }}</template>
@@ -834,7 +864,10 @@ function fmtDate(iso) {
                     <li v-for="(it, i) in f.items" :key="i" class="la-where-item">
                       <code v-if="it.selector" class="la-where-sel">{{ it.selector }}</code>
                       <span v-else-if="it.label" class="la-where-sel">{{ it.label }}</span>
-                      <div v-if="it.url" class="la-where-url">{{ it.url }}</div>
+                      <div v-if="it.url" class="la-where-url">
+                        <a v-if="linkFor(it.url)" :href="linkFor(it.url)" target="_blank" rel="noopener" class="la-ext">{{ it.url }}</a>
+                        <template v-else>{{ it.url }}</template>
+                      </div>
                       <pre v-if="it.snippet" class="la-where-snippet">{{ it.snippet }}</pre>
                       <div v-if="it.explanation" class="la-where-why">{{ it.explanation }}</div>
                     </li>
@@ -993,6 +1026,12 @@ function fmtDate(iso) {
 .la-issue-urls { list-style: none; margin: 1px 0 0; padding: 0 0 0 10px; }
 .la-issue-urls li { word-break: break-all; line-height: 1.45; }
 .la-detail-k { color: var(--mint-text-muted); }
+
+/* Anklickbare Adresse in einem Befund — öffnet die Seite in neuem Tab. */
+.la-ext { color: var(--mint-green); text-decoration: none; word-break: break-all; }
+.la-ext:hover { text-decoration: underline; }
+.la-opp-item-url .la-ext, .la-where-url .la-ext { color: inherit; text-decoration: underline; text-decoration-style: dotted; }
+.la-opp-item-url .la-ext:hover, .la-where-url .la-ext:hover { text-decoration-style: solid; }
 
 .la-typefilters { margin-top: -4px; }
 .la-typefilters .la-chip { font-family: inherit; }
