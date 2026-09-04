@@ -850,6 +850,7 @@ export default {
     placeholder: 'Frage stellen oder Aufgabe beschreiben … (Enter sendet, Umschalt+Enter = neue Zeile)',
     approve: 'Übernehmen',
     approveRest: 'Nicht mehr fragen',
+    useConfigured: 'Wie konfiguriert',
     approveRestHint: 'Diese Änderung übernehmen und den Rest dieses Auftrags ohne weitere Nachfragen ausführen. Geschrieben wird wie bisher; es entfällt nur die Pause vor jeder Änderung. Danach gilt wieder der eingestellte Schreibmodus.',
     autoConfirmActive: 'Dieser Auftrag läuft ohne Nachfrage.',
     autoConfirmStop: 'Wieder fragen',

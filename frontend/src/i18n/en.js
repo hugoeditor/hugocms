@@ -849,6 +849,7 @@ export default {
     placeholder: 'Ask a question or describe a task … (Enter sends, Shift+Enter = new line)',
     approve: 'Apply',
     approveRest: 'Stop asking',
+    useConfigured: 'As configured',
     approveRestHint: 'Apply this change and let the rest of this task run without further prompts. Writing works as before; only the pause before each change is skipped. Afterwards the configured write mode applies again.',
     autoConfirmActive: 'This task runs without prompting.',
     autoConfirmStop: 'Ask again',

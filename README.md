@@ -519,6 +519,13 @@ Bei aktiver Pro-Lizenz kommt das Nur-Lese-Werkzeug **`get_file_report`** hinzu:
 Es liefert zu einer Datei den Gesamt-Bericht (Qualitätsurteil + SEO-Funde) —
 Grundlage der KI-Verbesserung (siehe „SEO-Check & Content-Qualität").
 
+**Modell und Schreibmodus im Panel.** Zwei Chips im Kopf des Assistenten stellen
+beides für die laufende Sitzung um, ohne die `hugocms.ini` anzufassen. Sie zeigen
+den *wirksamen* Wert: solange im Panel nichts gewählt ist, den konfigurierten —
+eine Änderung in der Konfiguration schlägt also sofort durch. Erst eine Auswahl
+im Menü übersteuert ihn, und der Eintrag **„Wie konfiguriert"** nimmt sie wieder
+zurück. Ein Neuladen setzt ebenfalls zurück.
+
 **Schreibmodi** (`[ai] write_mode`):
 
 | Modus     | Verhalten                                                        |

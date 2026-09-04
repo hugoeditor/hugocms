@@ -22,10 +22,14 @@ export const useAssistantStore = defineStore('assistant', {
     // die Länge von `history` zum Zeitpunkt des Fehlers und bestimmt, an welcher
     // Stelle des Verlaufs die Meldung erscheint.
     notices: [],
-    // Sitzungsbezogene Auswahl aus dem Panel. null = noch nicht gesetzt; das
-    // Panel belegt beide beim Öffnen mit dem konfigurierten Standard (auth.ai).
-    // Werden bei jedem Zug mitgeschickt und übersteuern die INI nur zur Laufzeit
-    // (nach einem Neuladen gilt wieder der Standard). reset() lässt sie stehen.
+    // Sitzungsbezogene Auswahl aus dem Panel. `null` heißt: NICHT gewählt —
+    // dann geht nichts mit, und der Server nimmt den konfigurierten Wert. Beide
+    // dürfen deshalb nie mit dem Standard vorbelegt werden: Der eingefrorene
+    // Wert würde als Übersteuerung mitgeschickt, und eine spätere Änderung in
+    // der Konfiguration käme nie an. Das Panel zeigt den wirksamen Wert
+    // (Auswahl, sonst auth.ai) und stellt „Wie konfiguriert" zum Zurücksetzen
+    // bereit. Eine getroffene Auswahl gilt nur zur Laufzeit (ein Neuladen setzt
+    // sie zurück); reset() lässt sie stehen.
     model: null,
     writeMode: null,
     // „Nicht mehr fragen": Der Benutzer hat die Bestätigungen für den LAUFENDEN

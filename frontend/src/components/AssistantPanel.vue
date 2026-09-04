@@ -17,11 +17,14 @@ const auth = useAuthStore()
 const assistant = useAssistantStore()
 const files = useFilesStore()
 
-// Modell und Schreibmodus für diese Sitzung. Beim ersten Rendern mit dem
-// konfigurierten Standard (auth.ai) belegen; die Auswahl im Panel gilt danach
-// nur zur Laufzeit (siehe assistant-Store). Ein Neuladen setzt zurück.
-if (assistant.model === null) assistant.model = auth.ai?.model || AI_MODELS[0]
-if (assistant.writeMode === null) assistant.writeMode = auth.ai?.writeMode || 'confirm'
+// Modell und Schreibmodus dieser Sitzung. `null` im Store heißt: im Panel wurde
+// NICHTS gewählt — dann gilt der konfigurierte Standard (auth.ai), und zwar
+// jeweils der aktuelle. Den Store-Wert beim ersten Rendern vorzubelegen wäre
+// falsch: Das fröre den damaligen Standard ein, und eine spätere Änderung in
+// der Konfiguration käme nie beim Assistenten an, weil der Client den
+// Store-Wert bei jedem Zug als Übersteuerung mitschickt.
+const activeModel = computed(() => assistant.model ?? (auth.ai?.model || AI_MODELS[0]))
+const activeWriteMode = computed(() => assistant.writeMode ?? (auth.ai?.writeMode || 'confirm'))
 
 const writeModes = ['readonly', 'confirm', 'auto']
 
@@ -30,7 +33,7 @@ const writeModes = ['readonly', 'confirm', 'auto']
 // (damit es nicht aus der Auswahl fällt).
 const modelItems = computed(() => {
   const list = auth.ai?.models?.length ? [...auth.ai.models] : [...AI_MODELS]
-  for (const m of [auth.ai?.model, assistant.model]) {
+  for (const m of [auth.ai?.model, activeModel.value]) {
     if (m && !list.includes(m)) list.unshift(m)
   }
   return list
@@ -117,7 +120,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', updateViewportHeight)
 })
 
-const writeModeLabel = computed(() => t(`assistant.mode.${assistant.writeMode ?? 'confirm'}`))
+const writeModeLabel = computed(() => t(`assistant.mode.${activeWriteMode.value}`))
 
 // Nutzungslimit-Fehler des KI-Kontos: blendet zusätzlich den Console-Link ein.
 function isUsageLimitError(err) {
@@ -320,11 +323,23 @@ watch(
               :title="$t('assistant.model')"
             >
               <v-icon icon="mdi-brain" size="x-small" start />
-              {{ assistant.model }}
+              {{ activeModel }}
               <v-icon icon="mdi-menu-down" size="x-small" end />
             </v-chip>
           </template>
           <v-list density="compact" min-width="180">
+            <!-- Zurück zum konfigurierten Standard: ohne diesen Eintrag bliebe
+                 eine einmal getroffene Sitzungsauswahl bis zum Neuladen
+                 bestehen — auch wenn die Konfiguration inzwischen ein anderes
+                 Modell nennt. -->
+            <v-list-item
+              :active="assistant.model === null"
+              @click="assistant.model = null"
+            >
+              <v-list-item-title>{{ $t('assistant.useConfigured') }}</v-list-item-title>
+              <v-list-item-subtitle>{{ auth.ai?.model || AI_MODELS[0] }}</v-list-item-subtitle>
+            </v-list-item>
+            <v-divider />
             <v-list-item
               v-for="m in modelItems"
               :key="m"
@@ -352,6 +367,14 @@ watch(
             </v-chip>
           </template>
           <v-list density="compact" min-width="180">
+            <v-list-item
+              :active="assistant.writeMode === null"
+              @click="assistant.writeMode = null"
+            >
+              <v-list-item-title>{{ $t('assistant.useConfigured') }}</v-list-item-title>
+              <v-list-item-subtitle>{{ $t('assistant.mode.' + (auth.ai?.writeMode || 'confirm')) }}</v-list-item-subtitle>
+            </v-list-item>
+            <v-divider />
             <v-list-item
               v-for="m in writeModes"
               :key="m"
