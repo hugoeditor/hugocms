@@ -14,16 +14,21 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_DIR" || exit 1
 
+# Beim Selbstaufruf im neuen Terminal-Fenster entfallen alle Vorarbeiten
+# (Prüfungen, Git-Abgleich, Statistiken, npm) — sie liefen bereits im Elternlauf.
+IS_CHILD=0
+[ "$1" = "--run-servers" ] && IS_CHILD=1
+
 # === PHP prüfen (mindestens 8.1) ===
-if ! command -v php &> /dev/null; then
+if [ $IS_CHILD -eq 0 ] && ! command -v php &> /dev/null; then
     echo "ERROR: PHP nicht gefunden. Bitte installieren:"
     echo "  sudo apt install php-cli php-mbstring php-xml php-gd"
     exit 1
 fi
-PHP_VERSION=$(php -r 'echo PHP_VERSION;')
+PHP_VERSION=$(php -r 'echo PHP_VERSION;' 2>/dev/null || echo 0.0)
 PHP_MAJOR=$(echo "$PHP_VERSION" | cut -d. -f1)
 PHP_MINOR=$(echo "$PHP_VERSION" | cut -d. -f2)
-if [ "$PHP_MAJOR" -lt 8 ] || { [ "$PHP_MAJOR" -eq 8 ] && [ "$PHP_MINOR" -lt 1 ]; }; then
+if [ $IS_CHILD -eq 0 ] && { [ "$PHP_MAJOR" -lt 8 ] || { [ "$PHP_MAJOR" -eq 8 ] && [ "$PHP_MINOR" -lt 1 ]; }; }; then
     echo "ERROR: PHP 8.1 oder höher erforderlich, gefunden: $PHP_VERSION"
     exit 1
 fi
@@ -53,30 +58,52 @@ ensure_node() {
     echo "Using Node: $(node --version)"
 }
 
+# === Frontend-Abhängigkeiten (nur bei Änderung installieren) ===
+# npm install fragt sonst bei jedem Start die Registry ab und braucht Minuten,
+# obwohl alles aktuell ist. Der Fingerabdruck aus package.json + package-lock.json
+# im Stempel entscheidet, ob wirklich etwas zu tun ist.
+deps_fingerprint() {
+    cat frontend/package.json frontend/package-lock.json 2>/dev/null | sha256sum | cut -d' ' -f1
+}
+
+ensure_deps() {
+    local stamp="frontend/node_modules/.hugocms-deps-stamp"
+    if [ -d frontend/node_modules ] && [ -f "$stamp" ] \
+       && [ "$(cat "$stamp" 2>/dev/null)" = "$(deps_fingerprint)" ]; then
+        echo "Frontend dependencies up to date (skipping npm install)."
+        return 0
+    fi
+    echo "Installing frontend dependencies..."
+    (cd frontend && npm install --no-audit --no-fund --prefer-offline) || return 1
+    # Nach der Installation neu stempeln — npm schreibt das Lockfile mitunter um.
+    deps_fingerprint > "$stamp"
+}
+
 # === Optionaler Git-Abgleich (nur falls Repo) ===
-if [ -d .git ]; then
+if [ $IS_CHILD -eq 0 ] && [ -d .git ]; then
     echo "=== Updating from Git ==="
     git pull || echo "WARNUNG: git pull fehlgeschlagen, fahre fort."
     echo ""
 fi
 
 ensure_node
-echo "Using PHP: $(php -v | head -n 1)"
 
-# === Projekt-Statistiken ===
-echo ""
-echo "=== Projekt-Statistiken ==="
-FE_FILES=$(find frontend/src \( -name '*.vue' -o -name '*.js' \) 2>/dev/null | wc -l)
-FE_LINES=$(find frontend/src \( -name '*.vue' -o -name '*.js' \) 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}')
-BE_FILES=$(find backend -name '*.php' 2>/dev/null | wc -l)
-BE_LINES=$(find backend -name '*.php' 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}')
-echo "  Frontend (Vue/JS): $FE_FILES Dateien, $FE_LINES Zeilen"
-echo "  Backend (PHP):     $BE_FILES Dateien, $BE_LINES Zeilen"
-echo ""
+if [ $IS_CHILD -eq 0 ]; then
+    echo "Using PHP: $(php -v | head -n 1)"
 
-# === npm-Abhängigkeiten ===
-echo "Installing frontend dependencies..."
-(cd frontend && npm install)
+    # === Projekt-Statistiken ===
+    echo ""
+    echo "=== Projekt-Statistiken ==="
+    FE_FILES=$(find frontend/src \( -name '*.vue' -o -name '*.js' \) 2>/dev/null | wc -l)
+    FE_LINES=$(find frontend/src \( -name '*.vue' -o -name '*.js' \) 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}')
+    BE_FILES=$(find backend -name '*.php' 2>/dev/null | wc -l)
+    BE_LINES=$(find backend -name '*.php' 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}')
+    echo "  Frontend (Vue/JS): $FE_FILES Dateien, $FE_LINES Zeilen"
+    echo "  Backend (PHP):     $BE_FILES Dateien, $BE_LINES Zeilen"
+    echo ""
+
+    ensure_deps
+fi
 
 # === Server-Start-Funktion ===
 run_servers() {
