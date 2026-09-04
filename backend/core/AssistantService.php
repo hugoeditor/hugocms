@@ -58,6 +58,16 @@ final class AssistantService
      *        Modelle außerhalb der Positivliste (globale Einstellung [ai]
      *        force_thinking). Für ein Modell, das es doch nicht kann, lehnt die
      *        API dann mit einem Fehler ab.
+     * @param bool $autoConfirm Vorab erteilte Bestätigung („nicht mehr fragen"):
+     *        Im Modus `confirm` läuft der Loop durch, statt vor jeder
+     *        Schreibaktion anzuhalten. Bewusst KEIN Wechsel auf den Modus
+     *        `auto` — der zöge die Entwurfspflicht der gestaffelten
+     *        Veröffentlichung nach sich ({@see isDraftWrite}), und der Benutzer,
+     *        der eben noch „Ja" zu einer Live-Änderung sagen wollte, bekäme
+     *        plötzlich Entwürfe in der Warteschlange. Der Schalter trennt daher
+     *        nur die Bestätigungspause ab; wohin geschrieben wird, bleibt
+     *        unverändert. Ohne Wirkung in `readonly` (dort gibt es keine
+     *        Schreibwerkzeuge) und in `auto` (dort wird ohnehin nicht gefragt).
      */
     public function __construct(
         private readonly AnthropicClient $client,
@@ -69,6 +79,7 @@ final class AssistantService
         private readonly ?\Closure $onWrite = null,
         private readonly ?\Closure $draftSink = null,
         private readonly bool $forceAdaptiveThinking = false,
+        private readonly bool $autoConfirm = false,
     ) {
     }
 
@@ -133,7 +144,9 @@ final class AssistantService
             $input = is_array($toolUse['input'] ?? null) ? $toolUse['input'] : [];
 
             // Schreibaktion im confirm-Modus: anhalten und an den Client geben.
-            if ($this->writeMode === 'confirm' && in_array($name, self::WRITE_TOOLS, true)) {
+            // Es sei denn, der Benutzer hat für diesen Auftrag vorab bestätigt
+            // („nicht mehr fragen") — dann läuft der Loop durch.
+            if ($this->writeMode === 'confirm' && !$this->autoConfirm && in_array($name, self::WRITE_TOOLS, true)) {
                 return $this->result(
                     $messages,
                     $this->textFromContent($content),
@@ -685,9 +698,13 @@ final class AssistantService
         }
         $mounts = $mountLines === [] ? '(none)' : implode("\n", $mountLines);
 
-        $writeNote = match ($this->writeMode) {
-            'readonly' => 'You can only read files; no write tools are available.',
-            'confirm' => 'Write actions require the user to confirm before they run.',
+        // Der Hinweis muss die TATSÄCHLICHE Lage beschreiben: Mit vorab
+        // erteilter Bestätigung wird nicht mehr gefragt — glaubte das Modell
+        // weiter an eine Bestätigung je Schreibvorgang, zerlegte es seine Arbeit
+        // unnötig in kleinste Schritte.
+        $writeNote = match (true) {
+            $this->writeMode === 'readonly' => 'You can only read files; no write tools are available.',
+            $this->writeMode === 'confirm' && !$this->autoConfirm => 'Write actions require the user to confirm before they run.',
             default => 'Write actions are applied directly.',
         };
 

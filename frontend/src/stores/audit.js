@@ -12,7 +12,11 @@ export const useAuditStore = defineStore('audit', {
     current: null, // vollständiger Bericht des angezeigten Laufs
     running: false, // läuft gerade ein Audit?
     loading: false, // Bericht/Liste wird geladen
-    severityFilter: 'all', // 'all' | 'error' | 'warning' | 'hint'
+    // 'all' | 'error' | 'warning' | 'hint' | 'ignored'. „ignored" ist ein
+    // eigener Wert und kein zusätzlicher Schalter: Die ignorierten Funde sind
+    // ein Blick FÜR SICH — in jeder anderen Ansicht laufen sie am Ende der
+    // Liste mit (siehe filteredIssues).
+    severityFilter: 'all',
     categoryFilter: 'all', // 'all' | <Kategorie>
     // PageSpeed-Check (Pro, eigener Reiter). Misst die konfigurierte Live-Adresse
     // über Google PageSpeed Insights. Je Strategie wird das jüngste Ergebnis
@@ -23,6 +27,13 @@ export const useAuditStore = defineStore('audit', {
   }),
 
   getters: {
+    // Ignorierte Funde des angezeigten Berichts. Der Server markiert sie beim
+    // Ausliefern (`ignored: true`) und rechnet sie aus Zusammenfassung und
+    // Kategoriezählern heraus; hier zählt nur, wie viele es sind — für den
+    // Filter-Chip.
+    ignoredCount: (state) =>
+      state.current?.ignoredCount ?? (state.current?.issues ?? []).filter((i) => i.ignored).length,
+
     // Angezeigtes PageSpeed-Ergebnis: das der gerade gewählten Strategie (oder
     // null, wenn dafür noch keine Messung vorliegt).
     pageSpeed: (state) => state.pageSpeedResults[state.pageSpeedStrategy] ?? null,
@@ -37,17 +48,53 @@ export const useAuditStore = defineStore('audit', {
     filteredIssues(state) {
       const issues = state.current?.issues ?? []
       const rank = { error: 0, warning: 1, hint: 2 }
+      // Ignorierte Funde sortieren sich hinter alles andere. Sie verschwinden
+      // nicht aus der Liste — eine Entscheidung, die man nicht mehr sieht, lässt
+      // sich auch nicht mehr zurücknehmen.
+      const key = (i) => (i.ignored ? 100 : (rank[i.severity] ?? 99))
+      const onlyIgnored = state.severityFilter === 'ignored'
       return issues
         .filter(
           (i) =>
-            (state.severityFilter === 'all' || i.severity === state.severityFilter) &&
+            (onlyIgnored
+              ? i.ignored
+              : state.severityFilter === 'all' || i.severity === state.severityFilter) &&
             (state.categoryFilter === 'all' || i.category === state.categoryFilter),
         )
-        .sort((a, b) => (rank[a.severity] ?? 99) - (rank[b.severity] ?? 99))
+        .sort((a, b) => key(a) - key(b))
     },
   },
 
   actions: {
+    // Funde dauerhaft ignorieren oder wieder aufnehmen. Die Vormerkung gilt je
+    // Webseite und überlebt neue Läufe; der Server liefert den neu gerechneten
+    // Bericht gleich zurück (Zusammenfassung und Kategoriezähler ohne die
+    // ignorierten Funde), sodass kein zweiter Abruf nötig ist.
+    async setIgnored(keys, ignored) {
+      if (!keys.length) return
+      const res = await api.post('auditignore', {
+        keys,
+        ignored,
+        runId: this.current?.id ?? undefined,
+      })
+      if (res.report) this.current = markRaw(res.report)
+      // Wurde der letzte ignorierte Fund wieder aufgenommen, führt der Filter
+      // „Ignoriert" auf eine leere Liste — und sein Chip ist mit dem letzten
+      // Eintrag verschwunden. Also zurück auf die vollständige Ansicht.
+      if (this.severityFilter === 'ignored' && this.ignoredCount === 0) {
+        this.severityFilter = 'all'
+      }
+      // Dasselbe für die Kategorie: Sie fällt aus dem Bericht, sobald ihr
+      // letzter nicht ignorierter Fund weg ist — ein Filter auf eine Kategorie
+      // ohne Chip wäre eine Sackgasse.
+      if (this.categoryFilter !== 'all' && !this.categories.includes(this.categoryFilter)) {
+        this.categoryFilter = 'all'
+      }
+      // Der Verlauf nennt je Lauf die Fundzahlen — die haben sich mitgeändert.
+      await this.fetchRuns()
+      return res
+    },
+
     // Neuen Lauf starten; der vollständige Bericht kommt direkt zurück.
     async runAudit() {
       this.running = true

@@ -38,6 +38,26 @@ ensure_node() {
     echo "Using Node: $(node --version)"
 }
 
+# === Frontend-Abhängigkeiten (nur bei Änderung installieren) ===
+# npm install fragt sonst bei jedem Build die Registry ab und braucht Minuten,
+# obwohl alles aktuell ist. Der Fingerabdruck aus package.json + package-lock.json
+# im Stempel entscheidet, ob wirklich etwas zu tun ist.
+deps_fingerprint() {
+    cat frontend/package.json frontend/package-lock.json 2>/dev/null | sha256sum | cut -d' ' -f1
+}
+
+ensure_deps() {
+    local stamp="frontend/node_modules/.hugocms-deps-stamp"
+    if [ -d frontend/node_modules ] && [ -f "$stamp" ] \
+       && [ "$(cat "$stamp" 2>/dev/null)" = "$(deps_fingerprint)" ]; then
+        echo "Dependencies unverändert — npm install übersprungen."
+        return 0
+    fi
+    (cd frontend && npm install --no-audit --no-fund --prefer-offline) || return 1
+    # Nach der Installation neu stempeln — npm schreibt das Lockfile mitunter um.
+    deps_fingerprint > "$stamp"
+}
+
 # === Optionaler Git-Abgleich (nur falls Repo) ===
 if [ -d .git ]; then
     echo "0. Aktuelles Repository aktualisieren..."
@@ -55,8 +75,8 @@ FE_LINES=$(find frontend/src \( -name '*.vue' -o -name '*.js' \) 2>/dev/null | x
 echo "  Frontend (Vue/JS): $FE_FILES Dateien, $FE_LINES Zeilen"
 echo ""
 
-echo "1. Dependencies installieren..."
-(cd frontend && npm install) || { echo "❌ npm install fehlgeschlagen!"; exit 1; }
+echo "1. Dependencies prüfen..."
+ensure_deps || { echo "❌ npm install fehlgeschlagen!"; exit 1; }
 
 echo ""
 echo "2. Frontend bauen..."

@@ -11,6 +11,7 @@ import { useAuthStore } from '../stores/auth'
 import { useFilesStore } from '../stores/files'
 import { useHelpStore } from '../stores/help'
 import { errorText } from '../i18n/apiMessage'
+import { groupFixableBySource, issueKey } from '../util/auditIssue'
 import { useConfirm } from '../util/confirm'
 import AuditSeverityChip from './AuditSeverityChip.vue'
 import AuditIssueTable from './AuditIssueTable.vue'
@@ -182,9 +183,101 @@ function diagnoseIssue(issue) {
   assistant.fixIssue(audit.current.id, issue.ruleId, issue.url ?? null, locale.value, 'diagnose')
 }
 
+// --- Auswahl und Sammelaktionen ----------------------------------------
+// Die Auswahl lebt hier und nicht in der Tabelle: Die Sammelaktionen brauchen
+// die vollständigen Funde (Quelldatei, fixable), die Tabelle nur die Schlüssel.
+const selectedKeys = ref([])
+
+// Schlüssel → Fund, über ALLE Funde des Berichts. Bewusst nicht nur über die
+// gefilterten: Eine Auswahl, die durch einen Filterwechsel aus der Anzeige
+// fällt, bleibt bestehen (die Leiste nennt ihre Zahl) und darf beim Ausführen
+// nicht stillschweigend zusammenschrumpfen.
+const issuesByKey = computed(() => {
+  const map = new Map()
+  for (const issue of audit.current?.issues ?? []) map.set(issueKey(issue), issue)
+  return map
+})
+
+const selectedIssues = computed(() =>
+  selectedKeys.value.map((k) => issuesByKey.value.get(k)).filter(Boolean),
+)
+
+// Für die KI-Bündelung: je Content-Datei ein Auftrag. Was nicht über die
+// Content-Datei behebbar ist (Theme, Konfiguration, Struktur), fällt dabei
+// heraus — die Leiste weist die Differenz aus, statt sie zu verschweigen.
+const fixGroups = computed(() => groupFixableBySource(selectedIssues.value))
+const fixableCount = computed(() =>
+  fixGroups.value.reduce((n, g) => n + g.issues.length, 0),
+)
+// Wie viele der gewählten Funde bereits ignoriert sind — entscheidet, welche
+// der beiden Ignorier-Schaltflächen sinnvoll ist.
+const selectedIgnoredCount = computed(() => selectedIssues.value.filter((i) => i.ignored).length)
+
+function clearSelection() {
+  selectedKeys.value = []
+}
+
+// Auswahl dauerhaft ignorieren bzw. wieder aufnehmen. Die Vormerkung gilt je
+// Webseite: Sie überlebt neue Läufe und wirkt auch auf die gespeicherten.
+async function ignoreSelected(ignored) {
+  error.value = null
+  const keys = selectedKeys.value
+  if (!keys.length) return
+  try {
+    await audit.setIgnored(keys, ignored)
+    clearSelection()
+  } catch (e) {
+    error.value = errorText(t, e)
+  }
+}
+
+// Einen einzelnen Fund ignorieren/aufnehmen (Zeilenknopf, ohne Auswahl).
+async function toggleIgnore(issue) {
+  error.value = null
+  try {
+    await audit.setIgnored([issueKey(issue)], !issue.ignored)
+  } catch (e) {
+    error.value = errorText(t, e)
+  }
+}
+
+// Sammelauftrag an den KI-Assistenten: EIN Auftrag je Content-Datei, alle ihre
+// Funde zusammen — das Modell liest die Datei einmal und sieht die Mängel im
+// Zusammenhang. Über mehrere Dateien hinweg arbeitet der Assistent die Gruppen
+// nacheinander ab (siehe assistant.fixIssueGroups).
+async function fixSelected() {
+  error.value = null
+  if (!audit.current?.id || !fixGroups.value.length) return
+  const groups = fixGroups.value
+  const ok = await confirm({
+    title: t('audit.bulkFixTitle'),
+    message: t('audit.bulkFixConfirm', [fixableCount.value, groups.length]),
+    confirmText: t('audit.bulkFixAction'),
+  })
+  if (!ok) return
+  clearSelection()
+  await assistant.fixIssueGroups(audit.current.id, groups, locale.value)
+}
+
+// Abgesetzte Aufträge als erledigt kennzeichnen — dieselbe Markierung wie beim
+// Einzelknopf. Sie wächst mit jedem abgeschickten Auftrag, nicht erst am Ende:
+// Bricht die Reihe ab, bleibt sichtbar, was schon durchlief.
+watch(
+  () => assistant.batch?.submittedKeys.length ?? 0,
+  () => {
+    const keys = assistant.batch?.submittedKeys ?? []
+    const next = new Set(fixedKeys.value)
+    for (const k of keys) next.add(k)
+    fixedKeys.value = [...next]
+  },
+)
+
 // Neuer Bericht (anderer Lauf oder frischer Durchlauf): die Erledigt-Merker
-// gehören zum alten Lauf und werden verworfen.
-watch(() => audit.current?.id, () => { fixedKeys.value = [] })
+// gehören zum alten Lauf und werden verworfen — die Auswahl ebenso.
+watch(() => audit.current?.id, () => {
+  fixedKeys.value = []
+  clearSelection()
+})
 
 async function openSource(issue) {
   error.value = null
@@ -354,6 +447,19 @@ function runLabel(run) {
           >
             <AuditSeverityChip :severity="sev" :count="audit.current.summary[sev] ?? 0" />
           </button>
+          <!-- Ignorierte: eigener Blick. In allen anderen Ansichten laufen sie
+               am Ende der Liste mit; hier stehen sie für sich. Der Chip
+               erscheint erst, wenn es etwas zu zeigen gibt. -->
+          <button
+            v-if="audit.ignoredCount"
+            class="audit-chip audit-chip-ignored"
+            :class="{ active: audit.severityFilter === 'ignored' }"
+            :title="$t('audit.ignoredFilterHint')"
+            @click="audit.setSeverityFilter(audit.severityFilter === 'ignored' ? 'all' : 'ignored')"
+          >
+            <v-icon icon="mdi-bell-off-outline" size="13" class="mr-1" />
+            {{ $t('audit.ignoredFilter') }} <span class="audit-catcount">{{ audit.ignoredCount }}</span>
+          </button>
         </div>
       </div>
 
@@ -369,6 +475,58 @@ function runLabel(run) {
           {{ $t('audit.category.' + cat) }} <span class="audit-catcount">{{ categoryCount(cat) }}</span>
         </button>
       </div>
+    </div>
+
+    <!-- Sammelaktionen: erscheinen erst mit einer Auswahl und legen sich als
+         eigene Leiste zwischen Berichtskopf und Liste. -->
+    <div v-if="tab === 'report' && selectedKeys.length" class="audit-bulkbar nemo-noselect">
+      <span class="audit-bulkcount">{{ $t('audit.selectedCount', [selectedKeys.length]) }}</span>
+
+      <button
+        v-if="selectedIgnoredCount < selectedKeys.length"
+        class="audit-btn"
+        @click="ignoreSelected(true)"
+      >
+        <v-icon icon="mdi-bell-off-outline" size="16" class="mr-1" />{{ $t('audit.ignoreSelected') }}
+      </button>
+      <button v-if="selectedIgnoredCount > 0" class="audit-btn" @click="ignoreSelected(false)">
+        <v-icon icon="mdi-bell-outline" size="16" class="mr-1" />{{ $t('audit.unignoreSelected') }}
+      </button>
+
+      <button
+        class="audit-btn primary"
+        :disabled="!fixGroups.length || assistant.busy"
+        :title="$t('audit.bulkFixHint')"
+        @click="fixSelected"
+      >
+        <v-icon icon="mdi-auto-fix" size="16" class="mr-1" />{{ $t('audit.fixSelected') }}
+      </button>
+      <!-- Ehrlich statt stillschweigend: Was im Theme oder in der Konfiguration
+           wurzelt, kann der Sammelauftrag nicht anfassen. -->
+      <span class="audit-bulknote">
+        {{ fixableCount === selectedKeys.length
+          ? $t('audit.bulkFixAll', [fixGroups.length])
+          : $t('audit.bulkFixSome', [fixableCount, selectedKeys.length, fixGroups.length]) }}
+      </span>
+
+      <button class="audit-btn" @click="clearSelection">
+        <v-icon icon="mdi-close" size="16" class="mr-1" />{{ $t('audit.clearSelection') }}
+      </button>
+    </div>
+
+    <!-- Laufender Sammelauftrag: zeigt, bei welcher Datei die Reihe steht, und
+         lässt sie anhalten. Ohne das wirkte das Zurücksetzen des Gesprächs
+         zwischen zwei Dateien wie ein Fehler. -->
+    <div v-if="tab === 'report' && assistant.batchActive" class="audit-batchbar nemo-noselect">
+      <v-progress-circular indeterminate size="14" width="2" class="mr-1" />
+      <span>{{ $t('audit.batchProgress', [
+        assistant.batch.index + 1,
+        assistant.batch.groups.length,
+        assistant.batch.groups[assistant.batch.index]?.sourceFile ?? '',
+      ]) }}</span>
+      <button class="audit-btn" @click="assistant.stopBatch()">
+        <v-icon icon="mdi-stop" size="16" class="mr-1" />{{ $t('audit.batchStop') }}
+      </button>
     </div>
 
     <div class="nemo-content nemo-scroll">
@@ -412,11 +570,14 @@ function runLabel(run) {
         :search="searchQuery"
         :fixed-keys="fixedKeys"
         :busy="assistant.busy"
+        :selected="selectedKeys"
         @open-source="openSource"
         @open-help="openHelp"
         @fix-issue="fixIssue"
         @diagnose-issue="diagnoseIssue"
+        @toggle-ignore="toggleIgnore"
         @update:row-count="rowCount = $event"
+        @update:selected="selectedKeys = $event"
       />
     </div>
 
@@ -454,6 +615,25 @@ function runLabel(run) {
   inset: 0;
   z-index: 9;
 }
+
+/* Leiste der Sammelaktionen (nur mit Auswahl sichtbar). */
+.audit-bulkbar,
+.audit-batchbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--mint-panel);
+  border-bottom: 1px solid var(--mint-border);
+  font-size: 0.84rem;
+  color: var(--mint-text);
+}
+.audit-bulkcount { font-weight: 600; }
+.audit-bulknote { color: var(--mint-text-muted); font-size: 0.8rem; }
+.audit-batchbar { color: var(--mint-text-muted); }
+/* Filter-Chip der ignorierten Funde: gedämpft, er zeigt nichts Dringliches. */
+.audit-chip-ignored { color: var(--mint-text-muted); }
 
 .audit-head {
   display: flex;

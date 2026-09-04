@@ -507,6 +507,7 @@ final class Connector
                 'assistantping' => $this->cmdAssistantPing(),
                 'assistantimprove' => $this->cmdAssistantImprove($request),
                 'assistantfix' => $this->cmdAssistantFix($request),
+                'assistantfixmany' => $this->cmdAssistantFixMany($request),
                 'speech' => $this->cmdSpeech($request),
                 'serviceverify' => $this->cmdServiceVerify($request),
                 'pagespeed' => $this->cmdPageSpeed($request),
@@ -552,6 +553,7 @@ final class Connector
                 'auditget' => $this->cmdAuditGet($request),
                 'auditdelete' => $this->cmdAuditDelete($request),
                 'auditdeleteothers' => $this->cmdAuditDeleteOthers(),
+                'auditignore' => $this->cmdAuditIgnore($request),
                 'auditcontent' => $this->cmdAuditContent($request),
                 'auditcontentlist' => $this->cmdAuditContentList(),
                 'auditcontentget' => $this->cmdAuditContentGet($request),
@@ -1935,6 +1937,11 @@ final class Connector
         $writeModeReq = strtolower(trim((string) ($request['writeMode'] ?? '')));
         $writeModeOverride = in_array($writeModeReq, self::AI_WRITE_MODES, true) ? $writeModeReq : null;
         $modelOverride = trim((string) ($request['model'] ?? '')) ?: null;
+        // „Nicht mehr fragen": Der Benutzer hat die Bestätigungen für den Rest
+        // dieses Auftrags vorab erteilt. Gilt nur für diesen Zug — der Client
+        // schickt den Schalter mit, solange der Auftrag läuft, und lässt ihn
+        // danach weg (zustandsloses Backend).
+        $autoConfirm = !empty($request['autoConfirm']);
 
         // Termin für einen Entwurf („Termin festlegen" statt bloßem „Später
         // veröffentlichen"). Wie bei der Freigabe in der Warteschlange zählt nur
@@ -1950,7 +1957,7 @@ final class Connector
         // ab). Großzügig bemessen; die harte Grenze setzt ohnehin der Webserver.
         @set_time_limit(600);
 
-        return $this->assistantService($writeModeOverride, $modelOverride, 'ai', null, $draftPublishAt)->run(
+        return $this->assistantService($writeModeOverride, $modelOverride, 'ai', null, $draftPublishAt, $autoConfirm)->run(
             $messages,
             $confirm === null ? null : (string) $confirm,
             $locale,
@@ -1985,7 +1992,7 @@ final class Connector
      * Werkzeug get_file_report wird nur eingehängt, wenn Pro-Lizenz und
      * Hugo-Projekt vorliegen (sonst gibt es keinen Audit-/Content-Bericht).
      */
-    private function assistantService(?string $writeModeOverride = null, ?string $modelOverride = null, string $draftOrigin = 'ai', ?bool $forceThinkingOverride = null, ?string $draftPublishAt = null): AssistantService
+    private function assistantService(?string $writeModeOverride = null, ?string $modelOverride = null, string $draftOrigin = 'ai', ?bool $forceThinkingOverride = null, ?string $draftPublishAt = null, bool $autoConfirm = false): AssistantService
     {
         // Interaktiver Assistent nutzt `model`; der Cron-Verbesserer reicht sein
         // eigenes Modell (`model_cron`) als Override durch.
@@ -2029,6 +2036,10 @@ final class Connector
             $onWrite,
             $draftSink,
             $forceThinking,
+            // Vorab erteilte Bestätigung („nicht mehr fragen"): setzt nur die
+            // Bestätigungspause aus, nicht den Schreibmodus — der bestimmt
+            // weiterhin, ob live geschrieben oder ein Entwurf abgelegt wird.
+            $autoConfirm,
         );
     }
 
@@ -3461,6 +3472,157 @@ final class Connector
     }
 
     /**
+     * assistantfixmany — behebt MEHRERE Funde EINER Content-Datei in einem
+     * einzigen Auftrag.
+     *
+     * Der Zuschnitt „eine Datei je Auftrag" ist kein Zufall: Das Modell liest
+     * die Datei dann einmal statt für jeden Fund erneut, sieht alle Mängel
+     * zusammen (ein Titel, der die Description ergänzt, statt zweier isolierter
+     * Umformulierungen) und braucht einen Bruchteil der Läufe. Über mehrere
+     * Dateien hinweg arbeitet der Client die Gruppen nacheinander ab — ein
+     * Request je Datei, passend zum zustandslosen Backend.
+     *
+     * @param array<string, mixed> $request
+     * @return array<string, mixed>
+     */
+    private function cmdAssistantFixMany(array $request): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+        $this->requirePro();
+        if ($this->hugo === null) {
+            throw new ApiException('ECONFIG', 409, 'AUDIT-NO-PROJECT');
+        }
+        if ($this->ai['apiKey'] === null) {
+            throw new ApiException('ECONFIG', 409, 'AI-NOT-CONFIGURED');
+        }
+        $runId = $this->requireParam($request, 'runId');
+        $wanted = $request['issues'] ?? null;
+        if (!is_array($wanted) || $wanted === []) {
+            throw ApiException::badRequest('PARAM-MISSING', ['issues']);
+        }
+        if (count($wanted) > self::FIX_MANY_MAX) {
+            throw new ApiException('ECONFIG', 409, 'AUDIT-FIX-TOO-MANY', [self::FIX_MANY_MAX]);
+        }
+        $locale = (string) ($request['locale'] ?? 'de');
+
+        $report = $this->auditStore()->get($runId);
+        $issues = [];
+        $sourceFile = null;
+        foreach ($wanted as $ref) {
+            if (!is_array($ref)) {
+                throw ApiException::badRequest('PARAM-MISSING', ['issues']);
+            }
+            $ruleId = (string) ($ref['ruleId'] ?? '');
+            $url = isset($ref['url']) ? (string) $ref['url'] : null;
+            if ($ruleId === '') {
+                throw ApiException::badRequest('PARAM-MISSING', ['ruleId']);
+            }
+            if (!RuleCatalog::fixable($ruleId)) {
+                throw new ApiException('ECONFIG', 409, 'AUDIT-RULE-NOT-FIXABLE', [$ruleId]);
+            }
+            $issue = self::findIssue($report, $ruleId, $url);
+            if ($issue === null) {
+                throw ApiException::notFound('AUDIT-ISSUE-NOT-FOUND', [$ruleId]);
+            }
+            $rel = (string) ($issue['sourceFile'] ?? '');
+            if ($rel === '') {
+                throw ApiException::notFound('AUDIT-ISSUE-NO-SOURCE', [$ruleId]);
+            }
+            // Ein Auftrag, eine Datei: Der Client gruppiert vorher danach. Käme
+            // hier ein Gemisch an, würde das Modell in einem Auftrag durch
+            // mehrere Dateien schreiben — genau das, was der enge Zuschnitt
+            // verhindern soll.
+            $sourceFile ??= $rel;
+            if ($rel !== $sourceFile) {
+                throw ApiException::badRequest('AUDIT-ISSUES-MIXED-SOURCE', [$rel, $sourceFile]);
+            }
+            $issues[] = $issue;
+        }
+
+        $fileId = $this->resolveFileId((string) $this->hugo['source'] . '/' . (string) $sourceFile);
+        if ($fileId === null) {
+            throw ApiException::notFound('AUDIT-ISSUE-NO-SOURCE', [(string) $sourceFile]);
+        }
+        $r = $this->resolver->resolve($fileId, true);
+        $path = $r['mount']->name() . '/' . $r['rel'];
+
+        // Mehr Funde in einem Lauf heißt mehr Werkzeugaufrufe. Großzügiger als
+        // der Einzelauftrag bemessen, aber weiterhin ein Request → eine Antwort.
+        @set_time_limit(300);
+
+        // Hat der Benutzer die Bestätigungen für diese Reihe vorab erteilt,
+        // gilt das auch für die folgenden Dateien — sonst fragte der Sammellauf
+        // bei jeder neuen Datei erneut.
+        return $this->assistantService(null, null, 'ai', null, null, !empty($request['autoConfirm']))->run(
+            [['role' => 'user', 'content' => $this->fixManyInstruction($path, $issues, $report, $locale)]],
+            null,
+            $locale,
+            $path,
+        );
+    }
+
+    /**
+     * Startanweisung für den gebündelten Auftrag. Wie {@see fixInstruction},
+     * aber mit einer nummerierten Liste der Funde und dem Regelwissen EINMAL je
+     * vorkommender Regel statt je Fund — sonst stünde dieselbe Erklärung bei
+     * fünf Funden fünfmal in der Anweisung.
+     *
+     * @param list<array<string, mixed>> $issues
+     * @param array<string, mixed>       $report
+     */
+    private function fixManyInstruction(string $path, array $issues, array $report, string $locale): string
+    {
+        $en = str_starts_with(strtolower($locale), 'en');
+        $count = count($issues);
+
+        $lines = [];
+        $lines[] = $en
+            ? "Fix the following {$count} reported SEO issues in the content file `{$path}` — change nothing else."
+            : "Behebe in der Content-Datei `{$path}` die folgenden {$count} gemeldeten SEO-Funde — ändere sonst nichts.";
+        $lines[] = '';
+
+        $n = 0;
+        $seenRules = [];
+        foreach ($issues as $issue) {
+            $ruleId = (string) ($issue['ruleId'] ?? '');
+            $url = (string) ($issue['url'] ?? '');
+            $lines[] = ++$n . '. ' . ($en ? 'Rule: ' : 'Regel: ') . $ruleId
+                . ($url !== '' ? ($en ? ' — affected page: ' : ' — betroffene Seite: ') . $url : '');
+            $seenRules[$ruleId] = true;
+
+            // Duplikat-Funde: die übrigen betroffenen Seiten. Ohne sie schreibt
+            // das Modell erneut einen austauschbaren Text.
+            $others = self::duplicateSiblings($report, $issue);
+            if ($others !== []) {
+                $lines[] = '   ' . ($en
+                    ? 'The SAME text is used on these other pages — your new text must clearly distinguish this page from them:'
+                    : 'Derselbe Text steht auf diesen weiteren Seiten — dein neuer Text muss diese Seite deutlich von ihnen unterscheiden:');
+                foreach ($others as $o) {
+                    $lines[] = '   - ' . $o;
+                }
+            }
+        }
+
+        foreach (array_keys($seenRules) as $ruleId) {
+            $help = $this->ruleHelp($ruleId, $locale);
+            if ($help === null) {
+                continue;
+            }
+            $lines[] = '';
+            $lines[] = ($en ? '--- What the rule means: ' : '--- Was die Regel bedeutet: ') . $ruleId . ' ---';
+            $lines[] = $help;
+        }
+
+        $lines[] = '';
+        $lines[] = $en
+            ? "Steps: (1) read `{$path}` ONCE; (2) fix ALL listed issues together — prefer replace_in_file per affected section, use write_file only if the change really spans the whole file. Keep the existing front-matter format valid, preserve the author's meaning, and leave everything untouched that none of the listed rules concerns. If an issue's cause is not in this file but in the theme, do NOT write for that one — name it at the end and explain what has to change in which layout."
+            : "Vorgehen: (1) lies `{$path}` EINMAL; (2) behebe ALLE aufgeführten Funde gemeinsam — bevorzugt mit replace_in_file je betroffenem Abschnitt, write_file nur, wenn die Änderung wirklich die ganze Datei betrifft. Halte das vorhandene Front-Matter-Format gültig, bewahre die Aussage des Autors und lass alles unangetastet, was keine der aufgeführten Regeln betrifft. Liegt die Ursache eines Funds nicht in dieser Datei, sondern im Theme, schreibe dafür NICHT — nenne ihn am Ende und erkläre, was in welchem Layout zu ändern ist.";
+
+        return implode("\n", $lines);
+    }
+
+    /**
      * Sucht einen Fund im Bericht: erst Regel-ID UND URL, sonst — falls keine
      * URL übergeben wurde — den ersten Fund dieser Regel.
      *
@@ -3631,6 +3793,14 @@ final class Connector
 
     /** Höchstzahl der genannten Schwester-Seiten einer Duplikat-Gruppe. */
     private const int FIX_SIBLINGS_MAX = 12;
+
+    /**
+     * Höchstzahl der Funde in EINEM gebündelten Auftrag ({@see cmdAssistantFixMany}).
+     * Die Grenze schützt zwei Enden: die Anweisung bliebe sonst irgendwann
+     * länger als der Text, den sie ändern soll, und der Lauf müsste in einem
+     * Request mehr Werkzeugaufrufe unterbringen, als das Zeitlimit hergibt.
+     */
+    private const int FIX_MANY_MAX = 25;
 
     /**
      * Erklärtext einer Regel aus der Hilfe-Datenbank (Titel + Rumpf, gekürzt)
@@ -5338,6 +5508,56 @@ final class Connector
         return $this->audit()->deleteAllButLatest();
     }
 
+    /**
+     * auditignore — merkt Funde dauerhaft als ignoriert vor (oder nimmt die
+     * Ignorierung zurück). Die Vormerkung gilt JE WEBSEITE, nicht je Lauf: Sie
+     * überlebt neue Durchläufe und wirkt rückwirkend auch auf gespeicherte
+     * Berichte ({@see AuditService::ignore}).
+     *
+     * Wird eine Lauf-ID mitgeschickt, kommt der neu gerechnete Bericht gleich
+     * zurück — er ist nach der Änderung ohnehin fällig, und ein zweiter Abruf
+     * kostete dasselbe noch einmal.
+     *
+     * @param array<string, mixed> $request
+     * @return array<string, mixed>
+     */
+    private function cmdAuditIgnore(array $request): array
+    {
+        $service = $this->audit();
+        $this->requireMethod('POST');
+
+        $keys = $request['keys'] ?? null;
+        if (!is_array($keys) || $keys === []) {
+            throw ApiException::badRequest('PARAM-MISSING', ['keys']);
+        }
+        $list = [];
+        foreach ($keys as $key) {
+            if (is_string($key)) {
+                $list[] = $key;
+            }
+        }
+        if ($list === []) {
+            throw ApiException::badRequest('PARAM-MISSING', ['keys']);
+        }
+        // Fehlendes `ignored` bedeutet setzen — das ist der häufige Fall.
+        $ignored = !isset($request['ignored']) || (bool) $request['ignored'];
+
+        $result = $service->ignore($list, $ignored);
+        $this->logger->info(sprintf(
+            'SEO-Audit: %d Fund(e) %s (insgesamt %d ignoriert).',
+            $result['changed'],
+            $ignored ? 'ignoriert' : 'wieder aufgenommen',
+            $result['ignoredTotal'],
+        ));
+
+        $runId = isset($request['runId']) ? (string) $request['runId'] : '';
+        if ($runId !== '') {
+            $result['report'] = $this->enrichReport($service->get($runId));
+        }
+
+        return $result;
+    }
+
     // --- LLM-Content-Qualität (Pro-Funktion, braucht KI-Schlüssel) ----------
 
     /**
@@ -5561,6 +5781,12 @@ final class Connector
             $fileId = $this->withContentFileId($entry)['fileId'] ?? null;
             foreach ($report['issues'] ?? [] as $issue) {
                 if (!is_array($issue) || ($issue['sourceFile'] ?? null) !== $rel) {
+                    continue;
+                }
+                // Bewusst ignorierte Funde erreichen auch die Content-Prüfung
+                // nicht — sonst arbeitet der Verbesserungslauf gegen eine
+                // Entscheidung, die der Benutzer schon getroffen hat.
+                if (!empty($issue['ignored'])) {
                     continue;
                 }
                 if ($fileId !== null) {

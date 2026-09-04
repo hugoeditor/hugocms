@@ -15,6 +15,11 @@ use HugoCMS\FileManager\Exception\ApiException;
  *
  * Die Freischaltung (Auth + Pro-Lizenz + Hugo-Projekt) prüft der Connector,
  * bevor er diesen Dienst überhaupt erzeugt.
+ *
+ * Ignorierte Funde ({@see IgnoreStore}) werden erst BEIM AUSLIEFERN angewandt:
+ * Der abgelegte Bericht bleibt der unverfälschte Schnappschuss seines Laufs,
+ * die Ignorierung wirkt dadurch aber rückwirkend auf alle gespeicherten Läufe
+ * und nicht nur auf den nächsten.
  */
 final class AuditService
 {
@@ -30,6 +35,9 @@ final class AuditService
      * @param list<string> $excludeFiles Einzelne public-relative Dateien aus der
      *        [seo_report]-Sektion, die vom Audit übersprungen werden.
      */
+    /** Speicher der ignorierten Funde — liegt neben den Läufen dieser Webseite. */
+    private readonly IgnoreStore $ignored;
+
     public function __construct(
         private readonly string $publicDir,
         private readonly string $sourceDir,
@@ -37,6 +45,21 @@ final class AuditService
         private readonly array $excludePrefixes = [],
         private readonly array $excludeFiles = [],
     ) {
+        $this->ignored = new IgnoreStore($storageDir);
+    }
+
+    /**
+     * Setzt oder löst die Ignorierung mehrerer Funde. Liefert die Zahl der
+     * geänderten Einträge und den neuen Gesamtstand.
+     *
+     * @param list<string> $keys Fund-Kennungen ({@see IgnoreStore::keyFor})
+     * @return array{changed: int, ignoredTotal: int}
+     */
+    public function ignore(array $keys, bool $ignored): array
+    {
+        $changed = $this->ignored->set($keys, $ignored);
+
+        return ['changed' => $changed, 'ignoredTotal' => $this->ignored->count()];
     }
 
     /**
@@ -63,7 +86,7 @@ final class AuditService
         $this->persist($report);
         $this->applyRetention();
 
-        return $report;
+        return $this->applyIgnored($report);
     }
 
     /**
@@ -79,6 +102,9 @@ final class AuditService
             if ($report === null) {
                 continue;
             }
+            // Auch der Verlaufseintrag zählt ohne die ignorierten Funde — sonst
+            // widerspräche die Auswahlliste dem geöffneten Bericht.
+            $report = $this->applyIgnored($report);
             $runs[] = [
                 'id' => $report['id'] ?? basename($path, '.json'),
                 'startedAt' => $report['startedAt'] ?? null,
@@ -87,6 +113,7 @@ final class AuditService
                 'rulesApplied' => $report['rulesApplied'] ?? 0,
                 'truncated' => $report['truncated'] ?? false,
                 'summary' => $report['summary'] ?? ['error' => 0, 'warning' => 0, 'hint' => 0],
+                'ignoredCount' => $report['ignoredCount'] ?? 0,
             ];
         }
         usort($runs, static fn (array $a, array $b): int => strcmp((string) $b['id'], (string) $a['id']));
@@ -103,7 +130,12 @@ final class AuditService
     public function latest(): ?array
     {
         $files = $this->files(); // neueste zuerst
-        return $files === [] ? null : $this->readReport($files[0]);
+        if ($files === []) {
+            return null;
+        }
+        $report = $this->readReport($files[0]);
+
+        return $report === null ? null : $this->applyIgnored($report);
     }
 
     /**
@@ -118,7 +150,7 @@ final class AuditService
             throw ApiException::notFound('AUDIT-RUN-NOT-FOUND', [$id]);
         }
 
-        return $report;
+        return $this->applyIgnored($report);
     }
 
     /**
@@ -159,6 +191,67 @@ final class AuditService
     }
 
     // --- Intern ------------------------------------------------------------
+
+    /**
+     * Wendet die Ignorierliste auf einen gelesenen Bericht an: Jeder ignorierte
+     * Fund wird mit `ignored: true` markiert und aus Zusammenfassung und
+     * Kategoriezählern herausgerechnet; `ignoredCount` nennt ihre Zahl.
+     *
+     * Die Funde selbst BLEIBEN im Bericht — der Client zeigt sie am Ende der
+     * Liste und über einen eigenen Filter, damit eine Ignorierung sichtbar und
+     * rücknehmbar bleibt. Wer sie nicht sehen will (E-Mail-Bericht, Verknüpfung
+     * mit der Content-Prüfung), filtert auf das Kennzeichen.
+     *
+     * @param array<string, mixed> $report
+     * @return array<string, mixed>
+     */
+    private function applyIgnored(array $report): array
+    {
+        if (!is_array($report['issues'] ?? null) || $report['issues'] === []) {
+            $report['ignoredCount'] = 0;
+
+            return $report;
+        }
+        // Ohne einen einzigen ignorierten Fund bleiben die im Lauf berechneten
+        // Zähler unangetastet (der Normalfall, kein Nachrechnen nötig).
+        if ($this->ignored->count() === 0) {
+            $report['ignoredCount'] = 0;
+
+            return $report;
+        }
+
+        $summary = ['error' => 0, 'warning' => 0, 'hint' => 0];
+        $byCategory = [];
+        $ignoredCount = 0;
+        foreach ($report['issues'] as &$issue) {
+            if (!is_array($issue)) {
+                continue;
+            }
+            if ($this->ignored->has(IgnoreStore::keyFor($issue))) {
+                $issue['ignored'] = true;
+                ++$ignoredCount;
+                continue;
+            }
+            $sev = (string) ($issue['severity'] ?? 'hint');
+            $cat = (string) ($issue['category'] ?? '');
+            $summary[$sev] = ($summary[$sev] ?? 0) + 1;
+            if ($cat === '') {
+                continue;
+            }
+            $byCategory[$cat] ??= ['error' => 0, 'warning' => 0, 'hint' => 0, 'total' => 0];
+            $byCategory[$cat][$sev] = ($byCategory[$cat][$sev] ?? 0) + 1;
+            ++$byCategory[$cat]['total'];
+        }
+        unset($issue);
+
+        $report['summary'] = $summary;
+        // Kategorien ohne verbleibenden Fund fallen weg — ihr Filter-Chip wäre
+        // sonst eine Schaltfläche, die auf eine leere Liste führt.
+        $report['byCategory'] = $byCategory === [] ? new \stdClass() : $byCategory;
+        $report['ignoredCount'] = $ignoredCount;
+
+        return $report;
+    }
 
     /**
      * Ermittelt den Hugo-contentDir-Namen (relativ zur Projektwurzel) aus der
@@ -260,6 +353,11 @@ final class AuditService
     /**
      * Gespeicherte Berichtsdateien, neueste zuerst (nach Dateiname/ID sortiert).
      *
+     * Es zählt NUR, was eine gültige Lauf-ID trägt: Im selben Verzeichnis liegt
+     * auch die Ignorierliste ({@see IgnoreStore}). Ohne diese Prüfung erschiene
+     * sie als Lauf im Verlauf — und die Retention würde sie nach zehn Läufen
+     * löschen.
+     *
      * @return list<string>
      */
     private function files(): array
@@ -267,7 +365,10 @@ final class AuditService
         if (!is_dir($this->storageDir)) {
             return [];
         }
-        $files = glob($this->storageDir . '/*.json') ?: [];
+        $files = array_values(array_filter(
+            glob($this->storageDir . '/*.json') ?: [],
+            static fn (string $path): bool => preg_match(self::ID_PATTERN, basename($path, '.json')) === 1,
+        ));
         rsort($files);
 
         return array_values($files);

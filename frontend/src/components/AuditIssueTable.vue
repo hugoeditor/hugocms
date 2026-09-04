@@ -5,6 +5,7 @@
 // Tab; hat ein Fund eine fileId, öffnet der Knopf rechts die Quelldatei im Editor.
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { issueKey } from '../util/auditIssue'
 
 const props = defineProps({
   issues: { type: Array, required: true },
@@ -18,8 +19,20 @@ const props = defineProps({
   fixedKeys: { type: Array, default: () => [] },
   // Läuft gerade ein Auftrag? Dann keinen zweiten anstoßen.
   busy: { type: Boolean, default: false },
+  // Ausgewählte Funde (Schlüssel aus issueKey). Die Auswahl selbst hält die
+  // AuditView — sie baut daraus die Sammelaktionen; hier werden nur die
+  // Kästchen daraus abgeleitet und Änderungen nach oben gemeldet.
+  selected: { type: Array, default: () => [] },
 })
-const emit = defineEmits(['open-source', 'open-help', 'fix-issue', 'diagnose-issue', 'update:row-count'])
+const emit = defineEmits([
+  'open-source',
+  'open-help',
+  'fix-issue',
+  'diagnose-issue',
+  'toggle-ignore',
+  'update:row-count',
+  'update:selected',
+])
 
 const { t } = useI18n()
 
@@ -27,15 +40,48 @@ function ruleMessage(issue) {
   return t('audit.rules.' + issue.ruleId.replaceAll('.', '_'), issue.params || [])
 }
 
-// Kennung eines Funds innerhalb eines Berichts — dieselbe Zusammensetzung, mit
-// der der Server den Fund wiederfindet (Regel + betroffene Seite).
-function issueKey(issue) {
-  return issue.ruleId + '|' + (issue.url || issue.sourceFile || '')
-}
-
 const fixedSet = computed(() => new Set(props.fixedKeys))
 function isFixed(issue) {
   return fixedSet.value.has(issueKey(issue))
+}
+
+// --- Auswahl -----------------------------------------------------------
+// Die Auswahl arbeitet auf Fund-Schlüsseln, nicht auf Zeilen: Eine
+// zusammengefasste Duplikat-Gruppe ist EINE Zeile, aber viele Funde — und
+// ignoriert oder bearbeitet wird immer der einzelne Fund.
+const selectedSet = computed(() => new Set(props.selected))
+
+function isSelected(issue) {
+  return selectedSet.value.has(issueKey(issue))
+}
+
+// Setzt die Auswahl für eine Menge Funde und meldet die neue Liste nach oben.
+function setSelected(issues, on) {
+  const next = new Set(props.selected)
+  for (const issue of issues) {
+    if (on) {
+      next.add(issueKey(issue))
+    } else {
+      next.delete(issueKey(issue))
+    }
+  }
+  emit('update:selected', [...next])
+}
+
+function toggleIssue(issue) {
+  setSelected([issue], !isSelected(issue))
+}
+
+// Kopfzeile einer Duplikat-Gruppe: wählt alle ihre Funde gemeinsam. Sind nur
+// einige gewählt, ergänzt der Klick die fehlenden (statt alles abzuwählen) —
+// das ist die Erwartung an ein Kästchen im Zwischenzustand.
+function groupState(row) {
+  const chosen = row.issues.filter(isSelected).length
+  return chosen === 0 ? 'none' : chosen === row.issues.length ? 'all' : 'some'
+}
+
+function toggleGroup(row) {
+  setSelected(row.issues, groupState(row) !== 'all')
 }
 
 // Die veröffentlichte Webseite liegt auf derselben Domain wie das CMS (wie der
@@ -55,6 +101,16 @@ const filtered = computed(() => {
     [i.url, i.sourceFile].some((v) => String(v ?? '').toLowerCase().includes(q)),
   )
 })
+
+// Kopf-Kästchen: greift auf ALLE Funde der aktuellen Ansicht — nach Filter und
+// Suche, nicht nur auf die gerenderten 300 Zeilen. Wer „alles auswählen"
+// drückt, meint, was die Liste gerade zeigt.
+const allSelected = computed(() => filtered.value.length > 0 && filtered.value.every(isSelected))
+const someSelected = computed(() => !allSelected.value && filtered.value.some(isSelected))
+
+function toggleAll() {
+  setSelected(filtered.value, !allSelected.value)
+}
 
 // Zeilen bilden: Funde, die derselbe Text auf vielen Seiten erzeugt (doppelte
 // Meta-Description, doppelter Titel), kommen vom Server mit einer gemeinsamen
@@ -132,6 +188,16 @@ function showMore() {
     <table v-else class="nemo-list audit-list">
     <thead>
       <tr>
+        <th class="col-pick">
+          <input
+            type="checkbox"
+            class="audit-check"
+            :checked="allSelected"
+            :indeterminate.prop="someSelected"
+            :title="$t('audit.selectAll')"
+            @change="toggleAll"
+          />
+        </th>
         <th class="col-sev">{{ $t('audit.colSeverity') }}</th>
         <th class="col-msg">{{ $t('audit.colIssue') }}</th>
         <th class="col-url">{{ $t('audit.colUrl') }}</th>
@@ -141,8 +207,27 @@ function showMore() {
     <tbody>
       <template v-for="(row, idx) in visibleRows" :key="row.group ? row.key : 'i' + idx">
         <!-- Gewöhnlicher Einzelfund -->
-        <tr v-if="!row.group" class="nemo-row">
-          <td class="col-sev"><span class="sev-chip" :class="'sev-chip--' + row.issue.severity">{{ $t('audit.severity.' + row.issue.severity) }}</span></td>
+        <tr v-if="!row.group" class="nemo-row" :class="{ 'audit-ignored': row.issue.ignored }">
+          <td class="col-pick">
+            <input
+              type="checkbox"
+              class="audit-check"
+              :checked="isSelected(row.issue)"
+              @change="toggleIssue(row.issue)"
+            />
+          </td>
+          <td class="col-sev">
+            <span class="sev-chip" :class="'sev-chip--' + row.issue.severity">{{ $t('audit.severity.' + row.issue.severity) }}</span>
+            <!-- Ignoriert: zählt in keiner Zusammenfassung mehr mit; das Zeichen
+                 sagt, warum die Zeile blass am Ende der Liste steht. -->
+            <v-icon
+              v-if="row.issue.ignored"
+              icon="mdi-bell-off-outline"
+              size="13"
+              class="audit-ignored-mark"
+              :title="$t('audit.ignoredMark')"
+            />
+          </td>
           <td class="col-msg">
             <button
               class="audit-msg-help"
@@ -208,14 +293,44 @@ function showMore() {
             >
               <v-icon icon="mdi-file-edit-outline" size="18" />
             </button>
+            <!-- Dauerhaft ignorieren bzw. wieder aufnehmen. Gilt je Webseite,
+                 nicht je Lauf — auch der nächste Bericht zählt den Fund dann
+                 nicht mehr mit. -->
+            <button
+              class="audit-jump audit-ignore"
+              :title="row.issue.ignored ? $t('audit.unignore') : $t('audit.ignore')"
+              @click="emit('toggle-ignore', row.issue)"
+            >
+              <v-icon :icon="row.issue.ignored ? 'mdi-bell-outline' : 'mdi-bell-off-outline'" size="18" />
+            </button>
           </td>
         </tr>
 
         <!-- Zusammengefasste Duplikate: eine Kopfzeile, die betroffenen Seiten
              erscheinen aufgeklappt darunter. -->
         <template v-else>
-          <tr class="nemo-row audit-grouprow" @click="toggle(row.key)">
-            <td class="col-sev"><span class="sev-chip" :class="'sev-chip--' + row.lead.severity">{{ $t('audit.severity.' + row.lead.severity) }}</span></td>
+          <tr class="nemo-row audit-grouprow" :class="{ 'audit-ignored': row.lead.ignored }" @click="toggle(row.key)">
+            <td class="col-pick">
+              <!-- Wählt alle Funde der Gruppe; teilweise gewählt = Zwischenzustand. -->
+              <input
+                type="checkbox"
+                class="audit-check"
+                :checked="groupState(row) === 'all'"
+                :indeterminate.prop="groupState(row) === 'some'"
+                @click.stop
+                @change="toggleGroup(row)"
+              />
+            </td>
+            <td class="col-sev">
+              <span class="sev-chip" :class="'sev-chip--' + row.lead.severity">{{ $t('audit.severity.' + row.lead.severity) }}</span>
+              <v-icon
+                v-if="row.lead.ignored"
+                icon="mdi-bell-off-outline"
+                size="13"
+                class="audit-ignored-mark"
+                :title="$t('audit.ignoredMark')"
+              />
+            </td>
             <td class="col-msg">
               <button
                 class="audit-msg-help"
@@ -245,7 +360,16 @@ function showMore() {
             v-for="(issue, i) in (expanded.has(row.key) ? row.issues : [])"
             :key="row.key + '#' + i"
             class="nemo-row audit-childrow"
+            :class="{ 'audit-ignored': issue.ignored }"
           >
+            <td class="col-pick">
+              <input
+                type="checkbox"
+                class="audit-check"
+                :checked="isSelected(issue)"
+                @change="toggleIssue(issue)"
+              />
+            </td>
             <td class="col-sev"></td>
             <td class="col-msg">
               <span
@@ -298,6 +422,13 @@ function showMore() {
               >
                 <v-icon icon="mdi-file-edit-outline" size="18" />
               </button>
+              <button
+                class="audit-jump audit-ignore"
+                :title="issue.ignored ? $t('audit.unignore') : $t('audit.ignore')"
+                @click="emit('toggle-ignore', issue)"
+              >
+                <v-icon :icon="issue.ignored ? 'mdi-bell-outline' : 'mdi-bell-off-outline'" size="18" />
+              </button>
             </td>
           </tr>
         </template>
@@ -329,6 +460,9 @@ function showMore() {
   padding: 6px 10px;
   white-space: nowrap;
 }
+/* Auswahlspalte: schmal, damit sie der Meldung keinen Platz nimmt. */
+.col-pick { width: 34px; text-align: center; }
+.audit-check { cursor: pointer; accent-color: var(--mint-green); }
 .col-sev { width: 120px; }
 /* Leichter Schweregrad-Chip (statt v-chip) — spart je Zeile eine Vuetify-
    Komponente, was bei hunderten Zeilen spürbar rendert. */
@@ -345,8 +479,8 @@ function showMore() {
 .sev-chip--warning { background: #d98613; }
 .sev-chip--hint { background: #4a7bab; }
 .col-url { width: 28%; }
-/* Zwei Knöpfe nebeneinander: KI-Auftrag und Sprung zur Quelle. */
-.col-act { width: 80px; text-align: center; white-space: nowrap; }
+/* Drei Knöpfe nebeneinander: KI-Auftrag, Sprung zur Quelle, Ignorieren. */
+.col-act { width: 116px; text-align: center; white-space: nowrap; }
 
 .nemo-row td {
   padding: 6px 10px;
@@ -366,6 +500,13 @@ function showMore() {
   font-style: italic;
 }
 .audit-groupcount { font-size: 0.8rem; color: var(--mint-text-muted); }
+/* Ignorierter Fund: steht am Ende der Liste und zählt nirgends mehr mit. Blass
+   statt versteckt — eine Entscheidung, die man nicht mehr sieht, lässt sich
+   auch nicht mehr zurücknehmen. */
+.audit-ignored td { opacity: 0.55; }
+.audit-ignored:hover td { opacity: 0.8; }
+.audit-ignored .sev-chip { background: #9a9a97; }
+.audit-ignored-mark { color: var(--mint-text-muted); margin-left: 4px; vertical-align: text-bottom; }
 /* Betroffene Seite innerhalb einer aufgeklappten Gruppe: eingerückt und
    zurückgenommen, damit die Zugehörigkeit sichtbar bleibt. */
 .audit-childrow td { background: var(--mint-panel); }
@@ -434,6 +575,8 @@ function showMore() {
 /* Diagnose: erklärt nur, ändert nichts — deshalb zurückhaltender als der
    Behebungs-Knopf, mit dem er nie zusammen auftritt. */
 .audit-diagnose { color: #4a7bab; margin-right: 4px; }
+/* Ignorieren: zurückhaltend — die Entscheidung ist jederzeit umkehrbar. */
+.audit-ignore { color: var(--mint-text-muted); margin-left: 4px; }
 
 .nemo-empty {
   display: flex;

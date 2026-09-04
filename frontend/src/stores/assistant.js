@@ -28,9 +28,27 @@ export const useAssistantStore = defineStore('assistant', {
     // (nach einem Neuladen gilt wieder der Standard). reset() lässt sie stehen.
     model: null,
     writeMode: null,
+    // „Nicht mehr fragen": Der Benutzer hat die Bestätigungen für den LAUFENDEN
+    // Auftrag vorab erteilt. Der Schalter geht bei jedem Zug mit und wird
+    // zurückgenommen, sobald der Auftrag zu Ende ist — danach gilt wieder der
+    // eingestellte Schreibmodus. Bewusst kein Wechsel auf „automatisch": Der
+    // würde jede Änderung als Entwurf in die Freigabe-Warteschlange legen
+    // statt in die Datei (Entwurfspflicht der gestaffelten Veröffentlichung).
+    autoConfirm: false,
+    // Sammelauftrag aus dem SEO-Bericht: eine Gruppe je Content-Datei, jede mit
+    // ihren Funden. Die Gruppen laufen NACHEINANDER — ein Request je Datei,
+    // passend zum zustandslosen Backend. Wartet ein Auftrag auf den Benutzer
+    // (Bestätigung im confirm-Modus oder Schrittgrenze), hält die Reihe an und
+    // läuft nach seiner Entscheidung von selbst weiter.
+    // { runId, locale, groups, index, submittedKeys, stopped, finished }
+    batch: null,
   }),
 
   getters: {
+    // Läuft gerade ein Sammelauftrag (mehr als eine Datei, noch nicht am Ende)?
+    // Treibt die Fortschrittszeile im Panel.
+    batchActive: (s) => !!s.batch && !s.batch.finished && !s.batch.stopped,
+
     // Aus dem rohen Verlauf eine anzeigbare Liste ableiten. Thinking- und
     // tool_result-Blöcke werden ausgeblendet; tool_use als kompakte Notiz.
     // Fehlermeldungen (notices) werden an ihrer Position eingemischt, damit sie
@@ -98,24 +116,31 @@ export const useAssistantStore = defineStore('assistant', {
     async send(text, locale, ctx = {}) {
       this.history.push({ role: 'user', content: text })
       this.busy = true
+      let ok = false
       try {
         const data = await api.post('assistant', {
           messages: this.history,
           locale,
           model: this.model ?? undefined, // leer/undefined = konfiguriertes Modell
           writeMode: this.writeMode ?? undefined,
+          autoConfirm: this.autoConfirm || undefined,
           openFilePath: ctx.openFilePath ?? null,
           openDirPath: ctx.openDirPath ?? null,
         })
         this.apply(data)
-        return true
+        ok = true
       } catch (e) {
         this.history.pop() // Rollback der unbeantworteten Nachricht
         this.noteError(e)
-        return false
       } finally {
         this.busy = false
       }
+      // Führt der Benutzer einen an der Schrittgrenze angehaltenen Auftrag zu
+      // Ende, läuft ein wartender Sammellauf danach weiter.
+      if (ok) await this.continueBatch()
+      this.releaseAutoConfirm()
+
+      return ok
     },
 
     // Bereitschaftsprüfung: fragt das Backend, ob die Claude-API erreichbar und
@@ -144,6 +169,8 @@ export const useAssistantStore = defineStore('assistant', {
     // pausiert im confirm-Modus vor dem Schreiben). Öffnet das Panel und
     // übernimmt den Verlauf; der Benutzer bestätigt bzw. plaudert weiter.
     async improve(fileId, locale) {
+      this.batch = null // ein Verbesserungslauf löst eine noch offene Reihe ab
+      this.releaseAutoConfirm(true)
       this.reset()
       this.open = true
       this.busy = true
@@ -167,6 +194,8 @@ export const useAssistantStore = defineStore('assistant', {
     // was im Theme, in der Konfiguration oder an der Struktur zu ändern wäre
     // (der Server läuft dafür im Nur-Lese-Modus).
     async fixIssue(runId, ruleId, url, locale, mode = 'fix') {
+      this.batch = null // ein Einzelauftrag löst eine noch offene Reihe ab
+      this.releaseAutoConfirm(true)
       this.reset()
       this.open = true
       this.busy = true
@@ -182,12 +211,113 @@ export const useAssistantStore = defineStore('assistant', {
       }
     },
 
+    // „Nicht mehr fragen": bestätigt die ausstehende Änderung und lässt den
+    // Assistenten den REST DIESES AUFTRAGS ohne weitere Rückfragen abarbeiten.
+    // Geschrieben wird weiterhin wie bisher (live bzw. je nach Modus) — es
+    // entfällt nur die Pause vor jeder einzelnen Änderung.
+    async allowRest(locale, ctx = {}) {
+      if (!this.pending) return false
+      this.autoConfirm = true
+      return this.resolve('allow', locale, ctx)
+    },
+
+    // Nimmt die Vorab-Bestätigung zurück, sobald der Auftrag zu Ende ist: kein
+    // Zug läuft, nichts steht aus. Ein an der Schrittgrenze angehaltener Zug
+    // (`aborted`) und ein laufender Sammelauftrag zählen als „noch nicht
+    // fertig" — die Freigabe galt der ganzen Aufgabe, nicht dem einzelnen Zug.
+    releaseAutoConfirm(force = false) {
+      if (!this.autoConfirm) return
+      if (!force && (this.busy || this.pending || this.aborted || this.batchActive)) return
+      this.autoConfirm = false
+    },
+
+    // Startet einen Sammelauftrag über mehrere Funde. `groups` ist bereits nach
+    // Quelldatei gruppiert: [{ sourceFile, issues: [{ ruleId, url }] }]. Je
+    // Gruppe geht EIN Auftrag ans Backend — das Modell liest die Datei einmal
+    // und behebt alle ihre Funde zusammen, statt sie einzeln anzufassen.
+    async fixIssueGroups(runId, groups, locale) {
+      if (!groups.length) return false
+      this.releaseAutoConfirm(true) // neue Aufgabe, neue Entscheidung
+      this.batch = {
+        runId,
+        locale,
+        groups,
+        index: 0,
+        submittedKeys: [], // tatsächlich abgesetzte Funde (für den Erledigt-Haken)
+        stopped: false,
+        finished: false,
+      }
+      this.open = true
+      await this.runBatch()
+      return true
+    },
+
+    // Arbeitet die Gruppen ab, solange nichts auf den Benutzer wartet.
+    async runBatch() {
+      const b = this.batch
+      if (!b) return
+      while (!b.stopped && b.index < b.groups.length) {
+        const group = b.groups[b.index]
+        // Jede Datei bekommt ein eigenes Gespräch: Der Verlauf der vorigen
+        // gehört nicht in den nächsten Auftrag (und würde ihn nur verteuern).
+        this.reset()
+        this.busy = true
+        try {
+          const data = await api.post('assistantfixmany', {
+            runId: b.runId,
+            // Nur die Kennungen: Den Fund selbst schlägt der Server im
+            // gespeicherten Lauf nach (`key` dient allein dem Erledigt-Haken).
+            issues: group.issues.map((i) => ({ ruleId: i.ruleId, url: i.url })),
+            locale: b.locale,
+            autoConfirm: this.autoConfirm || undefined,
+          })
+          this.apply(data)
+          b.submittedKeys = [...b.submittedKeys, ...group.issues.map((i) => i.key)]
+        } catch (e) {
+          // Ein gescheiterter Auftrag hält die Reihe an, statt sie stumm
+          // weiterlaufen zu lassen — der Fehler steht im Verlauf, und der
+          // Benutzer entscheidet, ob er den Rest noch will.
+          this.noteError(e)
+          b.stopped = true
+          return
+        } finally {
+          this.busy = false
+        }
+        // Bestätigung ausstehend oder an der Schrittgrenze angehalten: Jetzt ist
+        // der Benutzer am Zug; weiter geht es über continueBatch().
+        if (this.pending || this.aborted) return
+        b.index += 1
+      }
+      b.finished = true
+      this.releaseAutoConfirm()
+    },
+
+    // Setzt die Reihe fort, nachdem der Benutzer den wartenden Auftrag beendet
+    // hat (Bestätigung entschieden bzw. Zug zu Ende geführt). Tut nichts,
+    // solange noch etwas aussteht.
+    async continueBatch() {
+      const b = this.batch
+      if (!b || b.stopped || b.finished) return
+      if (this.busy || this.pending || this.aborted) return
+      b.index += 1
+      await this.runBatch()
+    },
+
+    // Bricht die Reihe ab. Der bereits laufende Auftrag bleibt stehen — er ist
+    // abgeschickt; abgebrochen wird nur, was noch nicht begonnen hat.
+    stopBatch() {
+      if (this.batch) this.batch.stopped = true
+      // Die Reihe ist beendet — damit endet auch die Freigabe für sie.
+      this.releaseAutoConfirm(true)
+    },
+
     // Beantwortet eine ausstehende Schreibaktion (confirm-Modus): 'allow'
     // schreibt live, 'draft' legt einen Entwurf zur Freigabe ab, 'reject' lehnt
     // ab. Zu 'draft' kann ein Termin (ISO 8601) mitgegeben werden — dann ist der
     // Entwurf gleich terminiert und die Live-Datei bleibt bis dahin unverändert.
     async resolve(decision, locale, ctx = {}, publishDate = '') {
       this.busy = true
+      let ok = false
       try {
         const data = await api.post('assistant', {
           messages: this.history,
@@ -196,17 +326,23 @@ export const useAssistantStore = defineStore('assistant', {
           publishDate: publishDate || undefined,
           model: this.model ?? undefined, // leer/undefined = konfiguriertes Modell
           writeMode: this.writeMode ?? undefined,
+          autoConfirm: this.autoConfirm || undefined,
           openFilePath: ctx.openFilePath ?? null,
           openDirPath: ctx.openDirPath ?? null,
         })
         this.apply(data)
-        return true
+        ok = true
       } catch (e) {
         this.noteError(e)
-        return false
       } finally {
         this.busy = false
       }
+      // Gehört der beantwortete Auftrag zu einem Sammellauf und steht nichts
+      // mehr aus, geht es mit der nächsten Datei weiter.
+      if (ok) await this.continueBatch()
+      this.releaseAutoConfirm()
+
+      return ok
     },
 
     apply(data) {
@@ -234,6 +370,16 @@ export const useAssistantStore = defineStore('assistant', {
       form.append('audio', blob, 'aufnahme.webm')
       const data = await api.postForm(form)
       return typeof data.text === 'string' ? data.text : ''
+    },
+
+    // Verlauf leeren (Besen-Knopf im Panel). Beendet auch einen wartenden
+    // Sammelauftrag: Mit dem Verlauf verschwindet die ausstehende Bestätigung,
+    // an der die Reihe hängt — sie liefe sonst nie weiter und ließe sich nicht
+    // mehr abbrechen.
+    clearConversation() {
+      this.batch = null
+      this.releaseAutoConfirm(true)
+      this.reset()
     },
 
     reset() {

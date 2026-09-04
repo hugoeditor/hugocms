@@ -51,13 +51,24 @@ final class AuditMailReport
         $lines[] = sprintf('Bericht-ID:       %s', (string) ($report['id'] ?? '—'));
         $lines[] = '';
         $lines[] = sprintf('Zusammenfassung:  %d Fehler / %d Warnungen / %d Hinweise', $errors, $warnings, $hints);
+        $ignored = (int) ($report['ignoredCount'] ?? 0);
+        if ($ignored > 0) {
+            // Ausgewiesen, nicht verschwiegen: Wer die Mail liest, soll sehen,
+            // dass die Zahlen um bewusst ignorierte Funde bereinigt sind.
+            $lines[] = sprintf('Ignoriert:        %d (nicht mitgezählt)', $ignored);
+        }
         $lines[] = '';
 
         // Nur Fehler und Warnungen auflisten — Hinweise werden nur gezählt.
+        // Ignorierte Funde bleiben ganz außen vor: Der Benutzer hat sie bewusst
+        // abgehakt, eine Nachtmail, die sie weiter meldet, macht die Ignorierung
+        // wertlos. Die Zusammenfassung oben rechnet sie ebenfalls nicht mit
+        // ({@see AuditService::applyIgnored}).
         $issues = is_array($report['issues'] ?? null) ? $report['issues'] : [];
         $relevant = array_values(array_filter(
             $issues,
             static fn ($i): bool => is_array($i)
+                && empty($i['ignored'])
                 && in_array($i['severity'] ?? '', ['error', 'warning'], true),
         ));
 

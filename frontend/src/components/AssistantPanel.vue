@@ -194,6 +194,15 @@ async function submit() {
   await reloadIfOpenChanged()
 }
 
+// „Nicht mehr fragen": bestätigt die anstehende Änderung und lässt den Rest des
+// Auftrags ohne weitere Rückfragen durchlaufen. Danach gilt wieder der
+// eingestellte Schreibmodus.
+async function resolveRest() {
+  await assistant.allowRest(locale.value, context())
+  files.refresh?.()
+  await reloadIfOpenChanged()
+}
+
 async function resolve(decision, publishDate = '') {
   await assistant.resolve(decision, locale.value, context(), publishDate)
   if (decision === 'allow') {
@@ -292,7 +301,7 @@ watch(
         <v-spacer />
         <v-tooltip :text="$t('assistant.clear')" location="bottom">
           <template #activator="{ props }">
-            <v-btn v-bind="props" icon="mdi-broom" variant="text" size="small" :disabled="assistant.busy || !assistant.bubbles.length" @click="assistant.reset()" />
+            <v-btn v-bind="props" icon="mdi-broom" variant="text" size="small" :disabled="assistant.busy || !assistant.bubbles.length" @click="assistant.clearConversation()" />
           </template>
         </v-tooltip>
         <v-btn icon="mdi-close" variant="text" size="small" @click="assistant.open = false" />
@@ -465,6 +474,20 @@ watch(
               </v-btn>
             </div>
             <div class="d-flex flex-wrap ga-2 justify-end">
+              <!-- Bestätigen UND für den Rest dieses Auftrags nicht mehr fragen.
+                   Links abgesetzt, damit die gewohnte Entscheidung rechts
+                   unverändert an ihrem Platz bleibt. -->
+              <v-btn
+                variant="text"
+                size="small"
+                class="mr-auto"
+                prepend-icon="mdi-flash-outline"
+                :disabled="assistant.busy"
+                :title="$t('assistant.approveRestHint')"
+                @click="resolveRest"
+              >
+                {{ $t('assistant.approveRest') }}
+              </v-btn>
               <v-btn variant="text" size="small" :disabled="assistant.busy" @click="resolve('reject')">{{ $t('assistant.reject') }}</v-btn>
               <v-btn color="primary" variant="flat" size="small" :loading="assistant.busy" @click="resolve('allow')">{{ $t('assistant.approve') }}</v-btn>
             </div>
@@ -492,6 +515,23 @@ watch(
         <div v-if="assistant.busy" class="d-flex align-center text-caption text-medium-emphasis my-2">
           <v-progress-circular indeterminate size="16" width="2" class="mr-2" />{{ $t('assistant.thinking') }}
         </div>
+      </div>
+
+      <!-- Vorab erteilte Bestätigung: bleibt sichtbar, solange sie gilt — und
+           zwar außerhalb des scrollenden Verlaufs. Eine abgeschaltete
+           Rückfrage darf man nicht wegscrollen können. -->
+      <div v-if="assistant.autoConfirm" class="assistant-autoconfirm d-flex align-center px-3 py-1">
+        <v-icon icon="mdi-flash-outline" size="x-small" class="mr-2" />
+        <span class="text-caption">{{ $t('assistant.autoConfirmActive') }}</span>
+        <v-btn
+          variant="text"
+          size="x-small"
+          class="ml-auto"
+          :disabled="assistant.busy"
+          @click="assistant.releaseAutoConfirm(true)"
+        >
+          {{ $t('assistant.autoConfirmStop') }}
+        </v-btn>
       </div>
 
       <!-- Eingabe -->
@@ -602,6 +642,13 @@ watch(
 </template>
 
 <style scoped>
+/* Band der vorab erteilten Bestätigung: warnfarben, aber ruhig — es meldet
+   keinen Fehler, sondern einen Zustand, den man im Blick behalten soll. */
+.assistant-autoconfirm {
+  border-top: 1px solid rgb(var(--v-theme-warning));
+  background: rgba(var(--v-theme-warning), 0.08);
+  color: rgb(var(--v-theme-warning));
+}
 /* Spracheingabe ohne Freischaltung: sichtbar, aber zurückgenommen. */
 .assistant-locked { opacity: 0.5; }
 

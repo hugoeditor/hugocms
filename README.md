@@ -44,6 +44,7 @@ hugocms-2026/                     # Quell-Repo (Entwicklung)
 │   │   ├── Audit/                # Pro: SEO-Check & Content-Qualität
 │   │   │   ├── AuditService.php      # SEO-Check-Läufe (Bericht je Webseite)
 │   │   │   ├── AuditRunner.php       # gebautes public/ parsen & Regeln prüfen
+│   │   │   ├── IgnoreStore.php       # dauerhaft ignorierte Funde je Webseite
 │   │   │   ├── Checks.php / RuleCatalog.php / HtmlInspector.php / …
 │   │   │   └── ContentQualityService.php # LLM-Qualitätsprüfung je Inhaltsdatei
 │   │   ├── Review/               # gestaffelte Veröffentlichung (Freigabe)
@@ -537,6 +538,18 @@ dann bereits sein `publishAt`; die veröffentlichte Fassung bleibt bis dahin
 unverändert online, und der verzögerte Austausch tauscht die Datei beim ersten
 Bauen nach dem Zeitpunkt. Ein vergangener Zeitpunkt gilt als „ohne Termin".
 
+**„Nicht mehr fragen"** übernimmt die angezeigte Änderung und lässt den **Rest
+des laufenden Auftrags** ohne weitere Rückfragen durchlaufen; danach gilt wieder
+der eingestellte Schreibmodus. Ein Band über dem Eingabefeld zeigt an, solange
+die Freigabe gilt, und nimmt sie auf Klick sofort zurück. Technisch ist das
+bewusst **kein** Wechsel auf `auto`: Der Modus `auto` zieht die Entwurfspflicht
+der gestaffelten Veröffentlichung nach sich, jede Änderung ginge also in die
+Freigabe-Warteschlange statt in die Datei — das Gegenteil dessen, was jemand
+erwartet, der eben noch „Übernehmen" drücken wollte. Stattdessen schickt der
+Client den Schalter `autoConfirm` mit, der allein die Bestätigungspause
+aussetzt; wohin geschrieben wird, bleibt unverändert. Wie `writeMode` geht er
+bei jedem Zug mit und wird nicht serverseitig gemerkt.
+
 Beide Entwurfswege erscheinen nur beim Schreiben einer Datei und nur bei
 konfiguriertem Hugo-Projekt — ohne eines gibt es kein `draft`/`publishDate` und
 damit keine Warteschlange. Umbenennen, Verschieben und Löschen kennen keinen
@@ -899,6 +912,26 @@ Meta-Description auf vielen Seiten, zeigt der Bericht dafür EINE aufklappbare
 Zeile mit der Zahl der betroffenen Seiten. Gezählt werden die Funde weiterhin
 einzeln — jede Seite behält ihren eigenen Fund samt Sprung zur Quelldatei.
 
+**Auswahl und Sammelaktionen:** Jede Zeile trägt ein Kontrollkästchen, das
+Kopf-Kästchen wählt alles, was der aktuelle Filter zeigt (nicht nur die
+gerenderten Zeilen); bei einer zusammengefassten Duplikat-Gruppe wählt das
+Kästchen der Kopfzeile alle ihre Funde. Mit einer Auswahl erscheint eine Leiste
+mit zwei Aktionen: **ignorieren** und **mit KI bearbeiten**.
+
+**Ignorierte Funde:** Ignorieren gilt **je Webseite und dauerhaft**, nicht je
+Lauf — die Vormerkung liegt als `ignored.json` neben den Berichten
+(`backend/var/audit/<hash>/`, Klasse `Audit\IgnoreStore`) und überlebt neue
+Durchläufe. Angewandt wird sie erst beim Ausliefern, deshalb wirkt sie
+rückwirkend auch auf gespeicherte Läufe. Ein ignorierter Fund zählt **nirgends
+mehr mit**: nicht in der Zusammenfassung, nicht in den Kategoriezählern, nicht
+im nächtlichen E-Mail-Bericht (der die Zahl der Ignorierten aber ausweist) und
+auch nicht in der Verknüpfung mit der Content-Qualität. Er verschwindet aber
+nicht aus der Liste, sondern rutscht blass an ihr Ende — eine Entscheidung, die
+man nicht mehr sieht, ließe sich auch nicht mehr zurücknehmen. Ein eigener
+Filter-Chip zeigt ausschließlich die ignorierten Funde. Angesprochen wird ein
+Fund über `ruleId|url` (ersatzweise `ruleId|sourceFile`) — dieselbe Kennung, mit
+der der Server ihn im Bericht wiederfindet.
+
 **Micro-Aufträge an die KI:** Funde, die sich über die Content-Datei beheben
 lassen (`RuleCatalog::FIXABLE` — Titel, Meta-Description, Überschriften,
 Bild-`alt`, Open Graph, Front-Matter u. a.), tragen einen Zauberstab-Knopf. Er
@@ -911,6 +944,18 @@ Schreibmodus, Bestätigungspause und Entwurfs-Freigabe sind die des normalen
 Assistenten. Der Fund selbst bleibt im Bericht stehen — dieser ist der
 Schnappschuss eines Laufs; er verschwindet erst nach dem nächsten Bauen und
 Prüfen.
+
+**Sammelauftrag (`assistantfixmany`):** „Mit KI bearbeiten" über eine Auswahl
+bündelt die Funde **je Content-Datei zu einem Auftrag** — das Modell liest die
+Datei einmal statt für jeden Fund erneut und sieht die Mängel im Zusammenhang
+(ein Titel, der die Description ergänzt, statt zweier isolierter
+Umformulierungen). Über mehrere Dateien hinweg arbeitet der Client die Gruppen
+**nacheinander** ab, ein Request je Datei; das Backend bleibt damit zustandslos.
+Wartet ein Auftrag auf den Benutzer (Bestätigungspause im `confirm`-Modus oder
+Schrittgrenze), hält die Reihe an und läuft nach seiner Entscheidung von selbst
+weiter; eine Leiste nennt die laufende Datei und lässt die Reihe anhalten. Nicht
+über die Content-Datei behebbare und ignorierte Funde fallen aus der Bündelung
+heraus — die Leiste weist die Differenz aus, statt sie zu verschweigen.
 
 **Diagnose statt Behebung:** Die übrigen 30 Regeln wurzeln im Theme, in der
 Hugo-Konfiguration oder in der Seitenstruktur — sie tragen deshalb einen
@@ -1154,7 +1199,7 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `build`    | POST    | –                                    | Hugo aufrufen (Webseite erzeugen)      |
 | `previewbuild`| POST | `id` \| `draftKey`, `content`?       | Vorschau EINER Content-Seite bauen. Entweder `id` (Datei; `content` = ungespeicherter Editor-Stand) oder `draftKey` (Freigabe-Entwurf, liefert Pfad und Inhalt selbst — auch für Seiten, die es live noch nicht gibt). Antwort: Einmal-Token |
 | `preview`  | GET     | `token`                              | Gebaute Vorschau als HTML ausliefern (nur angemeldet, Token gilt einmal, `X-Robots-Tag: noindex`) |
-| `assistant`| POST    | `messages`, `locale`?, `confirm`?, `publishDate`?, `openFilePath`?, `openDirPath`? | KI-Assistent: einen Zug ausführen (Werkzeug-Schleife). `confirm`: `allow` \| `draft` (als Entwurf ablegen) \| `reject`; `publishDate` terminiert den Entwurf |
+| `assistant`| POST    | `messages`, `locale`?, `confirm`?, `publishDate`?, `autoConfirm`?, `openFilePath`?, `openDirPath`? | KI-Assistent: einen Zug ausführen (Werkzeug-Schleife). `confirm`: `allow` \| `draft` (als Entwurf ablegen) \| `reject`; `publishDate` terminiert den Entwurf; `autoConfirm` setzt die Bestätigungspause für diesen Zug aus („nicht mehr fragen") |
 | `config`   | GET     | –                                    | Aktuelle Konfigurationswerte inkl. AI-Status (ohne Geheimnisse) |
 | `reconfigure`| POST  | `authDriver`?, `sessionPath`, `logFile`, `logLevel`, `hugoBin`?, `aiApiKey`?, `aiModel`?, `aiWriteMode`? | hugocms.ini ändern (Anmeldeverfahren/Verzeichnisse/Log/Hugo/AI). Verlangt `config.manage` — ebenso `aimodels` und `activate`. `config` (lesen) und `projectconfig`/`projectreconfigure` nicht |
 | `account`  | POST    | `currentPassword`, `username`, `password`? | Anmeldedaten ändern (danach Neuanmeldung) |
@@ -1178,10 +1223,12 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `gitrestorefile` | POST | `sha`, `path`                    | **Pro:** EINE Datei aus einem alten Stand zurückholen (ohne eigenen Commit) |
 | `assistantimprove`| POST | `id` (Datei-ID), `locale`?         | **Pro:** KI-Verbesserung einer Datei starten (nutzt `get_file_report`) |
 | `assistantfix`| POST | `runId`, `ruleId`, `url`?, `mode`?, `locale`? | **Pro:** KI-Micro-Auftrag zu genau einem Fund des SEO-Berichts (`mode`: `fix` behebt, `diagnose` erklärt nur) |
+| `assistantfixmany`| POST | `runId`, `issues` (`[{ruleId, url}]`), `locale`?, `autoConfirm`? | **Pro:** gebündelter KI-Auftrag über mehrere Funde EINER Content-Datei (höchstens 25) |
 | `audit`    | POST    | –                                    | **Pro:** SEO-Check-Lauf ausführen (Bericht)            |
 | `auditlist`| GET     | –                                    | **Pro:** gespeicherte Läufe auflisten                  |
 | `auditget` | GET     | `id`                                 | **Pro:** vollständiger Bericht eines Laufs             |
 | `auditdelete`| POST  | `id`                                 | **Pro:** einen Lauf löschen                            |
+| `auditignore`| POST  | `keys` (`ruleId\|url`), `ignored`?, `runId`? | **Pro:** Funde dauerhaft ignorieren/wieder aufnehmen (je Webseite); liefert mit `runId` den neu gerechneten Bericht zurück |
 | `auditcontent`| POST | `id` (Datei-ID), `locale`?           | **Pro:** Content-Qualität einer Datei prüfen (LLM)     |
 | `auditcontentlist`| GET | –                                  | **Pro:** geprüfte Dateien auflisten (Score, Marker)    |
 | `auditcontentget` | GET | `key`                               | **Pro:** gespeichertes Prüfergebnis einer Datei        |
