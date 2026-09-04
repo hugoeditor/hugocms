@@ -8,7 +8,8 @@
 // eintragen (das Panel zeigt sie dann als weitere Option).
 export const AI_MODELS = [
   'claude-opus-5', // Standard des Assistenten
-  'claude-fable-5', // stärkstes Modell, doppelter Preis — für schwierige Fälle
+  'claude-fable-5-1', // stärkstes Modell, doppelter Preis — für schwierige Fälle
+  'claude-fable-5', // Vorgänger von Fable 5.1, weiterhin verfügbar
   'claude-opus-4-8', // Vorgängergeneration, weiterhin verfügbar
   'claude-opus-4-7', // ältere Generation, weiterhin verfügbar
   'claude-sonnet-5', // ausgewogen: nahe an Opus, günstiger
