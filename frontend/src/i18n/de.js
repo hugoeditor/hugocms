@@ -201,6 +201,8 @@ export default {
     commitMessagePendingHint: 'Für vorher schon offene Änderungen im Quellverzeichnis. Nur wenn welche vorliegen. Das Datum (Serverzeit) wird automatisch angehängt.',
     changelog: 'Änderungsprotokoll führen',
     changelogHint: 'Schreibt die Seite changelog.md im Inhaltsverzeichnis bei jedem Versionsstand fort — auch bei denen von Hand. Die Seite wird von Hugo gebaut und ist damit öffentlich sichtbar.',
+    changelogPath: 'Ablage des Protokolls',
+    changelogPathHint: 'Pfad im Inhaltsverzeichnis. Bei mehrsprachigen Webseiten mehrere durch Komma getrennt, damit jede Sprache ihre eigene Seite bekommt — z. B. „de/changelog.md, en/changelog.md“. Alle bekommen denselben Text. Leer = changelog.md.',
     timeInvalid: 'Bitte als Uhrzeit angeben, z. B. 07:00.',
   },
 
@@ -425,6 +427,7 @@ export default {
     changelogConfirm: 'Die Seite changelog.md wird vollständig aus der Versionsgeschichte neu erzeugt — berücksichtigt werden nur Stände mit Versionsnummer. Von Hand ergänzter Text darin geht verloren. Die Seite erscheint danach als offene Änderung und wird mit dem nächsten Versionsstand gesichert.',
     changelogAction: 'Neu aufbauen',
     changelogOk: 'Änderungsprotokoll neu erzeugt: {0} Abschnitte.',
+    changelogOkFiles: 'Änderungsprotokoll neu erzeugt: {0} Abschnitte in {1} Dateien.',
     tagHint: 'Wird automatisch fortgezählt. Leer lassen, um ohne Nummer zu sichern.',
     tagFail: 'Der Versionsstand wurde gesichert, aber die Nummer {0} ließ sich nicht vergeben.',
     commit: 'Versionsstand sichern',
@@ -1717,6 +1720,7 @@ export default {
     'LOG-DIR-MISSING': 'Log-Verzeichnis fehlt: {0} — Meldungen gehen ins Server-Log.',
     'MOUNT-CONFIG-MISSING': 'Keine eigene Mount-Konfiguration für „{0}“.',
     'HUGO-CONFIG-INCOMPLETE': 'Unvollständige [hugo]-Sektion in {0}: „source“ ist erforderlich. Veröffentlichen ist für diese Webseite deaktiviert.',
+    'GIT-CHANGELOG-PATH-INVALID': 'Unbrauchbarer Wert für „changelog_path“ in {0}. Das Änderungsprotokoll wird nach changelog.md geschrieben.',
     'HUGO-BIN-NOT-CONFIGURED': 'Hugo-Programm ist nicht konfiguriert ([hugo] bin in der hugocms.ini). Veröffentlichen ist deaktiviert.',
   },
 }

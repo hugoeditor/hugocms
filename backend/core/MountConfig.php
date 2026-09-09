@@ -76,6 +76,10 @@ use HugoCMS\FileManager\Exception\ApiException;
  *   auto_commit            (optional) true schaltet den Auto-Commit ein. Standard: aus.
  *   commit_message         (optional) Nachricht nach der Veröffentlichung (ohne Datum). Standard: siehe unten.
  *   commit_message_pending (optional) Nachricht für offene Änderungen vor dem Build (ohne Datum). Standard: siehe unten.
+ *   changelog_path         (optional) Zielpfad(e) der Protokollseite im
+ *                          Content-Mount, kommagetrennt. Mehrere für
+ *                          mehrsprachige Projekte (de/changelog.md,
+ *                          en/changelog.md). Standard: changelog.md
  *   changelog              (optional) false schaltet das Änderungsprotokoll ab
  *                          (die Seite changelog.md im Content-Mount, die bei
  *                          jedem Versionsstand fortgeschrieben wird).
@@ -109,6 +113,16 @@ final class MountConfig
 
     /** Obergrenze dieses Wortes — es steht in einer Überschrift. */
     private const int GIT_TAG_LABEL_MAX = 40;
+
+    /** Zielpfad des Änderungsprotokolls, wenn keiner konfiguriert ist. */
+    public const string GIT_CHANGELOG_PATH_DEFAULT = ChangelogService::DEFAULT_FILE;
+
+    /**
+     * Höchstzahl der Zielpfade. Jeder Pfad ist eine Datei, die bei JEDEM
+     * Versionsstand geschrieben wird — eine Obergrenze hält den Aufwand
+     * überschaubar und begrenzt den Schaden eines Vertippers.
+     */
+    private const int GIT_CHANGELOG_PATHS_MAX = 12;
 
     /** Obergrenze der Commit-Nachricht (vor dem Datum), damit sie handhabbar bleibt. */
     private const int GIT_MESSAGE_MAX = 200;
@@ -165,6 +179,8 @@ final class MountConfig
             // Vorgabe an: Der Schalter dient zum Abschalten des Protokolls,
             // nicht zum Einschalten — fehlt er, wird es geschrieben.
             'changelog' => true,
+            'changelogPaths' => [self::GIT_CHANGELOG_PATH_DEFAULT],
+            'tagLabel' => self::GIT_TAG_LABEL_DEFAULT,
         ];
         $warnings = [];
 
@@ -257,11 +273,19 @@ final class MountConfig
                 $label = array_key_exists('tag_label', $section)
                     ? trim((string) $section['tag_label'])
                     : self::GIT_TAG_LABEL_DEFAULT;
+                // Zielpfade des Protokolls, relativ zum Content-Mount. Mehrere
+                // für mehrsprachige Projekte, in denen jede Sprache ihre eigene
+                // Seite braucht (content/de/…, content/en/…).
+                $paths = self::changelogPaths($section['changelog_path'] ?? '');
+                if ($paths === [] && trim((string) ($section['changelog_path'] ?? '')) !== '') {
+                    $warnings[] = ['key' => 'GIT-CHANGELOG-PATH-INVALID', 'params' => [$configPath]];
+                }
                 $git = [
                     'autoCommit' => filter_var($section['auto_commit'] ?? false, FILTER_VALIDATE_BOOLEAN),
                     'commitMessage' => mb_substr($message, 0, self::GIT_MESSAGE_MAX),
                     'commitMessagePending' => mb_substr($pending, 0, self::GIT_MESSAGE_MAX),
                     'changelog' => filter_var($section['changelog'] ?? true, FILTER_VALIDATE_BOOLEAN),
+                    'changelogPaths' => $paths === [] ? [self::GIT_CHANGELOG_PATH_DEFAULT] : $paths,
                     'tagLabel' => mb_substr($label, 0, self::GIT_TAG_LABEL_MAX),
                 ];
                 continue;
@@ -405,6 +429,32 @@ final class MountConfig
     private static function resolve(string $path, string $baseDir): string
     {
         return self::isAbsolute($path) ? $path : $baseDir . '/' . $path;
+    }
+
+    /**
+     * Zerlegt `changelog_path` in bereinigte Zielpfade: relativ zur Wurzel des
+     * Content-Mounts, ohne führenden Schrägstrich, ohne `..` (das führte aus
+     * dem Mount heraus), ohne Doppelte und auf {@see GIT_CHANGELOG_PATHS_MAX}
+     * begrenzt. Leerer Wert oder nichts Brauchbares ergibt eine leere Liste —
+     * der Aufrufer setzt dann die Vorgabe.
+     *
+     * @return list<string>
+     */
+    private static function changelogPaths(mixed $value): array
+    {
+        $clean = [];
+        foreach (self::toList($value) as $entry) {
+            $rel = trim(str_replace('\\', '/', $entry), " \t/");
+            if ($rel === '' || str_contains($rel, '..')) {
+                continue;
+            }
+            $clean[$rel] = true;
+            if (count($clean) >= self::GIT_CHANGELOG_PATHS_MAX) {
+                break;
+            }
+        }
+
+        return array_keys($clean);
     }
 
     /** Zerlegt eine kommagetrennte Liste in getrimmte, nicht-leere Werte. */

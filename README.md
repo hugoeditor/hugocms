@@ -701,6 +701,31 @@ Cron. Bei der Wiederherstellung wird der Stand der Seite vorher festgehalten
 Inhalt zurück und das Protokoll verlöre genau die Einträge, die es festhalten
 soll.
 
+**Mehrsprachige Webseiten.** Wo das Hugo-Projekt seine Sprachen in eigene
+Verzeichnisse trennt (`content/de`, `content/en`), gehört eine Seite im
+Wurzelverzeichnis des Content-Mounts zu keiner Sprache — Hugo baut sie dann gar
+nicht; trennt es sie über den Dateinamen (`changelog.de.md`), gehört sie nur zur
+Standardsprache. Deshalb nimmt `[git] changelog_path` einen oder mehrere
+Zielpfade auf, kommagetrennt und relativ zum Content-Mount:
+
+```ini
+[git]
+changelog_path = "de/changelog.md, en/changelog.md"
+```
+
+Alle Ziele bekommen **denselben** Text — die Beschreibungen der Versionsstände
+werden nicht übersetzt, sie stammen aus der Eingabe beim Sichern. Neu angelegte
+Seiten tragen `translationKey: changelog` im Front Matter, sodass Hugo die
+Sprachfassungen als Übersetzungen voneinander führt und ein Theme aus jeder
+Sprache über `.Translations` die passende findet, statt auf eine feste Adresse
+zu verweisen. Eine **bestehende** Seite bekommt den Schlüssel nicht
+nachträglich: Von ihrem Kopf wird ausschließlich `lastmod` angefasst. Ein Ziel,
+dessen Verzeichnis es nicht gibt, wird protokolliert und übersprungen; die
+übrigen werden trotzdem geschrieben. `..` ist in den Pfaden nicht erlaubt, mehr
+als zwölf Ziele werden nicht angenommen. In der Oberfläche steht das Feld
+**Ablage des Protokolls** in den Projekteinstellungen; ohne den Schlüssel bleibt
+es bei `changelog.md`, eine Bestandsinstallation ändert sich also nicht.
+
 Da die Seite unter `content/` liegt, wird sie von Hugo gebaut und ist im Web
 öffentlich lesbar — mitsamt der Dateipfade. Wer das nicht möchte, ergänzt im
 Front Matter `draft: true` oder `headless: true`; die Fortschreibung lässt beides
@@ -1228,7 +1253,7 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `gitdiff`  | GET     | `sha`                                | **Pro:** Diff eines Versionsstands samt vollständiger Beschreibung (`message`) |
 | `gitcommit`| POST    | `message`, `tag`?                    | **Pro:** alle Änderungen als Versionsstand sichern; `tag` vergibt die Versionsnummer (leer = ohne) |
 | `gitpush`  | POST    | –                                    | **Pro:** Änderungen samt Versionsnummern zur konfigurierten Gegenstelle hochladen |
-| `gitchangelog`| POST | `tagLabel`?                        | **Pro:** changelog.md aus der Historie neu erzeugen (nur Stände mit Versionsnummer); schreibt nur die Datei |
+| `gitchangelog`| POST | `tagLabel`?                        | **Pro:** changelog.md aus der Historie neu erzeugen (nur Stände mit Versionsnummer); schreibt nur die Datei(en), Antwort `sections` und `files` |
 | `gitreset` | POST    | `ref`?                               | **Pro:** Arbeitsbaum zurücksetzen (Standard: `HEAD`) |
 | `gitrestorepreview` | GET | `sha`                            | **Pro:** Vorschau — welche Dateien eine Wiederherstellung ändern würde |
 | `gitrestore` | POST  | `sha`, `message`, `tag`?, `presaveMessage` | **Pro:** zu einem alten Stand zurückkehren; sichert ihn als neuen Versionsstand |

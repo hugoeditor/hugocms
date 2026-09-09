@@ -201,6 +201,8 @@ export default {
     commitMessagePendingHint: 'For changes already pending in the source directory. Only when any exist. The date (server time) is appended automatically.',
     changelog: 'Keep a change log',
     changelogHint: 'Extends the page changelog.md in the content directory with every version state — including those saved by hand. The page is built by Hugo and therefore publicly visible.',
+    changelogPath: 'Location of the log',
+    changelogPathHint: 'Path inside the content directory. For multilingual sites list several, separated by commas, so every language gets its own page — e.g. “de/changelog.md, en/changelog.md”. All of them receive the same text. Empty = changelog.md.',
     timeInvalid: 'Please enter a time, e.g. 07:00.',
   },
 
@@ -424,6 +426,7 @@ export default {
     changelogConfirm: 'The changelog.md page is regenerated entirely from the version history — only states with a version number are included. Any text added there by hand is lost. The page then shows up as a pending change and is saved with the next version state.',
     changelogAction: 'Rebuild',
     changelogOk: 'Changelog rebuilt: {0} sections.',
+    changelogOkFiles: 'Changelog rebuilt: {0} sections in {1} files.',
     tagHint: 'Counted up automatically. Leave empty to save without a number.',
     tagFail: 'The version state was saved, but the number {0} could not be assigned.',
     commit: 'Save version state',
@@ -1712,6 +1715,7 @@ export default {
     'LOG-DIR-MISSING': 'Log directory missing: {0} — messages go to the server log.',
     'MOUNT-CONFIG-MISSING': 'No dedicated mount configuration for “{0}”.',
     'HUGO-CONFIG-INCOMPLETE': 'Incomplete [hugo] section in {0}: “source” is required. Publishing is disabled for this site.',
+    'GIT-CHANGELOG-PATH-INVALID': 'Unusable value for “changelog_path” in {0}. The change log is written to changelog.md.',
     'HUGO-BIN-NOT-CONFIGURED': 'The Hugo binary is not configured ([hugo] bin in hugocms.ini). Publishing is disabled.',
   },
 }

@@ -185,17 +185,22 @@ final class Connector
      * changelog.md im Content-Mount, die bei JEDEM Versionsstand fortgeschrieben
      * wird, nicht nur bei denen des Cron.
      *
+     * `changelogPaths` sind ihre Zielpfade im Content-Mount. Mehrere für
+     * mehrsprachige Projekte: Dort liegt der Inhalt je Sprache in einem eigenen
+     * Verzeichnis, und eine Seite im Wurzelverzeichnis gehörte zu keiner davon.
+     *
      * `tagLabel` ist das Wort vor der Versionsnummer im Änderungsprotokoll
      * („Ausgabe 12“). Im Dialog schickt der Client es mit; beim Cron gibt es
      * keinen Client, deshalb steht es in der Mount-Konfiguration.
      *
-     * @var array{autoCommit: bool, commitMessage: string, commitMessagePending: string, changelog: bool, tagLabel: string}
+     * @var array{autoCommit: bool, commitMessage: string, commitMessagePending: string, changelog: bool, changelogPaths: list<string>, tagLabel: string}
      */
     private array $gitAuto = [
         'autoCommit' => false,
         'commitMessage' => MountConfig::GIT_COMMIT_MESSAGE_DEFAULT,
         'commitMessagePending' => MountConfig::GIT_COMMIT_MESSAGE_PENDING_DEFAULT,
         'changelog' => true,
+        'changelogPaths' => [MountConfig::GIT_CHANGELOG_PATH_DEFAULT],
         'tagLabel' => MountConfig::GIT_TAG_LABEL_DEFAULT,
     ];
 
@@ -4289,6 +4294,8 @@ final class Connector
             'commitMessagePending' => (string) $this->gitAuto['commitMessagePending'],
             // Änderungsprotokoll (unabhängig vom Auto-Commit des Cron).
             'changelog' => (bool) $this->gitAuto['changelog'],
+            // Zielpfade im Content-Mount, im Formular als kommagetrennte Liste.
+            'changelogPath' => implode(', ', $this->changelogPaths()),
             // Wort vor der Versionsnummer im Protokoll (Cron-Läufe).
             'tagLabel' => (string) $this->gitAuto['tagLabel'],
             // Ist die Quelle ein Git-Repository? Für den Hinweis im Formular.
@@ -4393,11 +4400,39 @@ final class Connector
             // Immer geschrieben, damit der Zustand in der Datei ablesbar bleibt
             // — die Vorgabe „an“ gilt nur, solange nichts dasteht.
             'changelog' => !empty($request['changelog']) ? 'true' : 'false',
+            // Zielpfade des Protokolls. Leer = Vorgabe, damit ein geleertes Feld
+            // nicht in einer Webseite ohne Protokollseite endet.
+            'changelog_path' => self::changelogPathValue($request['changelogPath'] ?? ''),
             // Wort vor der Versionsnummer im Protokoll. Ausdrücklich leer heißt
             // „nur die Nummer“ — deshalb wird der Wert übernommen, wie er kommt,
             // und nicht auf die Vorgabe zurückgesetzt.
             'tag_label' => trim((string) ($request['tagLabel'] ?? '')),
         ];
+    }
+
+    /**
+     * Bereinigt die Zielpfade des Änderungsprotokolls aus dem Formular zu einem
+     * INI-Wert: kommagetrennt, ohne führenden Schrägstrich, ohne `..` und ohne
+     * Doppelte. Bleibt nichts übrig, wird die Vorgabe geschrieben — ein leeres
+     * Feld heißt „wie bisher“, nicht „nirgendwohin“.
+     *
+     * Die endgültige Prüfung macht {@see MountConfig} beim Einlesen; hier geht
+     * es darum, dass in der Datei nichts Unbrauchbares landet.
+     */
+    private static function changelogPathValue(mixed $raw): string
+    {
+        $clean = [];
+        foreach (explode(',', (string) $raw) as $entry) {
+            $rel = trim(str_replace('\\', '/', $entry), " \t/");
+            if ($rel === '' || str_contains($rel, '..')) {
+                continue;
+            }
+            $clean[$rel] = true;
+        }
+
+        return $clean === []
+            ? MountConfig::GIT_CHANGELOG_PATH_DEFAULT
+            : implode(', ', array_keys($clean));
     }
 
     /**
@@ -5233,7 +5268,12 @@ final class Connector
         if (empty($this->gitAuto['changelog'])) {
             return null;
         }
-        $changelog = new ChangelogService($this->resolver, $this->files, $this->logger);
+        $changelog = new ChangelogService(
+            $this->resolver,
+            $this->files,
+            $this->logger,
+            $this->changelogPaths(),
+        );
         if ($pin) {
             $changelog->pin();
         }
@@ -5256,11 +5296,34 @@ final class Connector
         $this->requireMethod('POST');
         $states = $this->git()->taggedHistory();
 
-        $changelog = new ChangelogService($this->resolver, $this->files, $this->logger);
-        $sections = $changelog->rebuild($states, (string) ($request['tagLabel'] ?? ''));
-        $this->logger->info(sprintf('Änderungsprotokoll neu erzeugt: %d Abschnitte', $sections));
+        $changelog = new ChangelogService(
+            $this->resolver,
+            $this->files,
+            $this->logger,
+            $this->changelogPaths(),
+        );
+        $result = $changelog->rebuild($states, (string) ($request['tagLabel'] ?? ''));
+        $this->logger->info(sprintf(
+            'Änderungsprotokoll neu erzeugt: %d Abschnitte in %d Datei(en)',
+            $result['sections'],
+            $result['files'],
+        ));
 
-        return ['sections' => $sections];
+        return $result;
+    }
+
+    /**
+     * Zielpfade des Änderungsprotokolls aus der Mount-Konfiguration. Eine
+     * Bestandsinstallation ohne den Schlüssel bekommt die Vorgabe — dort ändert
+     * sich nichts.
+     *
+     * @return list<string>
+     */
+    private function changelogPaths(): array
+    {
+        $paths = $this->gitAuto['changelogPaths'] ?? [];
+
+        return $paths === [] ? [MountConfig::GIT_CHANGELOG_PATH_DEFAULT] : array_values($paths);
     }
 
     private function cmdGitStatus(): array

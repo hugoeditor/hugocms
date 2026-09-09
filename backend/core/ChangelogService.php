@@ -8,9 +8,17 @@ use HugoCMS\FileManager\Exception\ApiException;
 use Throwable;
 
 /**
- * Schreibt das Änderungsprotokoll der Webseite fort — eine einzelne Seite im
+ * Schreibt das Änderungsprotokoll der Webseite fort — eine Seite im
  * Content-Mount (`changelog.md`), die bei jedem Versionsstand einen Abschnitt
  * dazubekommt.
+ *
+ * Mehrsprachige Hugo-Projekte trennen ihre Sprachen entweder in Verzeichnisse
+ * (`content/de`, `content/en`) oder über den Dateinamen (`changelog.de.md`).
+ * Eine Seite im Wurzelverzeichnis des Content-Mounts wäre dort entweder gar
+ * nicht Teil einer Sprache — Hugo baut sie dann nicht — oder nur Teil der
+ * Standardsprache. Deshalb nimmt der Dienst eine LISTE von Zielen entgegen
+ * (`[git] changelog_path`), die er alle mit demselben Inhalt fortschreibt: In
+ * jeder Sprache steht dann eine Seite, die ein Theme verlinken kann.
  *
  * Die Datei liegt im Content-Verzeichnis des Hugo-Projekts und damit im selben
  * Git-Repository. Geschrieben wird deshalb IMMER vor `git add -A`, sodass der
@@ -32,44 +40,108 @@ final class ChangelogService
     /** Name des Content-Mounts. Konvention der von install.sh erzeugten Datei. */
     public const string MOUNT = 'content';
 
-    /** Dateiname im Wurzelverzeichnis des Content-Mounts. */
-    public const string FILE = 'changelog.md';
+    /** Zielpfad, solange keiner konfiguriert ist: Wurzel des Content-Mounts. */
+    public const string DEFAULT_FILE = 'changelog.md';
+
+    /**
+     * Schlüssel im Front Matter neu angelegter Seiten. Hugo führt Seiten mit
+     * gleichem `translationKey` als Übersetzungen voneinander — unabhängig von
+     * Dateiname und Ablageort. Erst dadurch findet ein Theme aus jeder Sprache
+     * die passende Fassung (`.Translations`), statt auf eine feste Adresse zu
+     * verweisen, die es in anderen Sprachen nicht gibt.
+     */
+    private const string TRANSLATION_KEY = 'changelog';
 
     /** Titel der Seite, wenn sie neu angelegt wird. */
     private const string DEFAULT_TITLE = 'Änderungen';
 
     /**
-     * Zuletzt bekannter Stand der Seite, unabhängig davon, was gerade auf der
+     * Zielpfade im Content-Mount, relativ zu dessen Wurzel. Alle bekommen
+     * denselben Inhalt.
+     *
+     * @var list<string>
+     */
+    private readonly array $targets;
+
+    /**
+     * Zuletzt bekannter Stand JE ZIEL, unabhängig davon, was gerade auf der
      * Platte liegt. Nötig für die Wiederherstellung: `read-tree` setzt auch
-     * diese Seite auf den alten Inhalt zurück, wodurch die zwischenzeitlichen
+     * diese Seiten auf den alten Inhalt zurück, wodurch die zwischenzeitlichen
      * Einträge verschwänden. Ein Protokoll, das Einträge verliert, ist keines —
      * und es widerspräche der Zusage der Wiederherstellung, dass die späteren
      * Stände erhalten bleiben. Über {@see pin()} wird der Stand vorher
      * festgehalten und dient danach als Grundlage.
+     *
+     * Je Ziel ein eigener Eintrag: Die Sprachfassungen können auseinander
+     * liegen (eine erst später angelegt, eine von Hand ergänzt), und ein
+     * gemeinsamer Stand würde sie beim Schreiben gegenseitig überschreiben.
+     *
+     * @var array<string, string>
      */
-    private ?string $carry = null;
+    private array $carry = [];
 
+    /**
+     * @param list<string> $targets Zielpfade relativ zur Wurzel des
+     *                              Content-Mounts. Leer = {@see DEFAULT_FILE}.
+     */
     public function __construct(
         private readonly MountResolver $mounts,
         private readonly FileService $files,
         private readonly Logger $logger,
+        array $targets = [],
     ) {
+        $this->targets = self::normalizeTargets($targets);
     }
 
     /**
-     * Hält den derzeitigen Inhalt der Seite fest. Vor einer Wiederherstellung
+     * Bereinigt die konfigurierten Zielpfade: getrimmt, ohne führenden Schrägstrich,
+     * ohne Doppelte, ohne `..` (das führte aus dem Mount heraus — der
+     * MountResolver wiese es ohnehin ab, aber ein stiller Fehlschlag bei jedem
+     * Versionsstand hilft niemandem). Bleibt nichts übrig, gilt die Vorgabe.
+     *
+     * @param list<string> $targets
+     * @return list<string>
+     */
+    private static function normalizeTargets(array $targets): array
+    {
+        $clean = [];
+        foreach ($targets as $target) {
+            $rel = trim(str_replace('\\', '/', (string) $target), " \t/");
+            if ($rel === '' || str_contains($rel, '..')) {
+                continue;
+            }
+            $clean[$rel] = true;
+        }
+
+        return $clean === [] ? [self::DEFAULT_FILE] : array_keys($clean);
+    }
+
+    /**
+     * Zielpfade, die dieser Dienst fortschreibt — für Protokollausgaben.
+     *
+     * @return list<string>
+     */
+    public function targets(): array
+    {
+        return $this->targets;
+    }
+
+    /**
+     * Hält den derzeitigen Inhalt jeder Seite fest. Vor einer Wiederherstellung
      * aufzurufen, damit die Einträge sie überdauern.
      */
     public function pin(): void
     {
-        try {
-            $target = $this->mounts->resolve($this->mounts->encodeId(self::MOUNT, self::FILE), false);
-            if (is_file($target['abs'])) {
-                $this->carry = (string) $this->files->readText($target['mount'], $target['abs'])['content'];
+        $this->carry = [];
+        foreach ($this->targets as $rel) {
+            try {
+                $target = $this->mounts->resolve($this->mounts->encodeId(self::MOUNT, $rel), false);
+                if (is_file($target['abs'])) {
+                    $this->carry[$rel] = (string) $this->files->readText($target['mount'], $target['abs'])['content'];
+                }
+            } catch (Throwable) {
+                // Keine Seite, kein Mount — dann gibt es auch nichts zu bewahren.
             }
-        } catch (Throwable) {
-            // Keine Seite, kein Mount — dann gibt es auch nichts zu bewahren.
-            $this->carry = null;
         }
     }
 
@@ -85,7 +157,7 @@ final class ChangelogService
      *                          („Ausgabe“ / „Edition“). Sichtbarer Text und
      *                          damit sprachabhängig — er kommt deshalb vom
      *                          Client, wie die Beschreibung selbst.
-     * @return bool true, wenn die Seite geschrieben wurde.
+     * @return bool true, wenn mindestens eine Seite geschrieben wurde.
      */
     public function append(string $message, ?string $tag = null, string $tagLabel = ''): bool
     {
@@ -94,32 +166,41 @@ final class ChangelogService
             return false;
         }
 
-        try {
-            $id = $this->mounts->encodeId(self::MOUNT, self::FILE);
-            // mustExist=false: Beim ersten Mal gibt es die Seite noch nicht;
-            // geprüft wird dann das Elternverzeichnis (das Mount-Wurzelverzeichnis).
-            $target = $this->mounts->resolve($id, false);
+        $written = 0;
+        foreach ($this->targets as $rel) {
+            try {
+                $id = $this->mounts->encodeId(self::MOUNT, $rel);
+                // mustExist=false: Beim ersten Mal gibt es die Seite noch nicht;
+                // geprüft wird dann das Elternverzeichnis (bei einem Sprachpfad
+                // also content/<sprache>).
+                $target = $this->mounts->resolve($id, false);
 
-            // Der festgehaltene Stand hat Vorrang vor dem, was gerade auf der
-            // Platte liegt — siehe $carry.
-            $existing = $this->carry ?? (is_file($target['abs'])
-                ? (string) $this->files->readText($target['mount'], $target['abs'])['content']
-                : '');
+                // Der festgehaltene Stand hat Vorrang vor dem, was gerade auf der
+                // Platte liegt — siehe $carry.
+                $existing = $this->carry[$rel] ?? (is_file($target['abs'])
+                    ? (string) $this->files->readText($target['mount'], $target['abs'])['content']
+                    : '');
 
-            $merged = $this->merge($existing, $message, $tag, $tagLabel);
-            $this->files->writeText($target['mount'], $target['rel'], $target['abs'], $merged);
-            // Für einen zweiten Eintrag im selben Vorgang (Vorab-Sicherung und
-            // Wiederherstellung) ist ab jetzt dieser Stand die Grundlage.
-            $this->carry = $merged;
-
-            return true;
-        } catch (ApiException | Throwable $e) {
-            // Etwa MOUNT-UNKNOWN (kein Content-Mount konfiguriert) oder ein
-            // schreibgeschützter Mount. Der Versionsstand bleibt davon unberührt.
-            $this->logger->warning('Änderungsprotokoll nicht geschrieben: ' . $e->getMessage());
-
-            return false;
+                $merged = $this->merge($existing, $message, $tag, $tagLabel);
+                $this->files->writeText($target['mount'], $target['rel'], $target['abs'], $merged);
+                // Für einen zweiten Eintrag im selben Vorgang (Vorab-Sicherung und
+                // Wiederherstellung) ist ab jetzt dieser Stand die Grundlage.
+                $this->carry[$rel] = $merged;
+                ++$written;
+            } catch (ApiException | Throwable $e) {
+                // Etwa MOUNT-UNKNOWN (kein Content-Mount konfiguriert), ein
+                // schreibgeschützter Mount oder ein Sprachverzeichnis, das es
+                // (noch) nicht gibt. Die übrigen Ziele werden trotzdem bedient,
+                // und der Versionsstand bleibt davon unberührt.
+                $this->logger->warning(sprintf(
+                    'Änderungsprotokoll %s nicht geschrieben: %s',
+                    $rel,
+                    $e->getMessage(),
+                ));
+            }
         }
+
+        return $written > 0;
     }
 
     /**
@@ -132,9 +213,10 @@ final class ChangelogService
      * Standes, nicht die aktuelle Zeit — die Seite gibt die Historie wieder.
      *
      * @param list<array{tag: string, date: string, message: string}> $states
-     * @return int Anzahl geschriebener Abschnitte
+     * @return array{sections: int, files: int} Abschnitte je Seite und Anzahl
+     *                                          geschriebener Seiten
      */
-    public function rebuild(array $states, string $tagLabel = ''): int
+    public function rebuild(array $states, string $tagLabel = ''): array
     {
         $sections = [];
         foreach ($states as $state) {
@@ -152,17 +234,34 @@ final class ChangelogService
 
         $page = $this->header() . "\n" . implode("\n", $sections);
 
-        try {
-            $target = $this->mounts->resolve($this->mounts->encodeId(self::MOUNT, self::FILE), false);
-            $this->files->writeText($target['mount'], $target['rel'], $target['abs'], $page);
-            $this->carry = $page;
-        } catch (ApiException | Throwable $e) {
-            $this->logger->warning('Änderungsprotokoll nicht erneuert: ' . $e->getMessage());
-
-            throw $e;
+        $written = 0;
+        $lastError = null;
+        foreach ($this->targets as $rel) {
+            try {
+                $target = $this->mounts->resolve($this->mounts->encodeId(self::MOUNT, $rel), false);
+                $this->files->writeText($target['mount'], $target['rel'], $target['abs'], $page);
+                $this->carry[$rel] = $page;
+                ++$written;
+            } catch (ApiException | Throwable $e) {
+                $this->logger->warning(sprintf(
+                    'Änderungsprotokoll %s nicht erneuert: %s',
+                    $rel,
+                    $e->getMessage(),
+                ));
+                $lastError = $e;
+            }
         }
 
-        return count($sections);
+        // Nur wenn KEIN einziges Ziel beschrieben werden konnte, ist der Aufruf
+        // gescheitert — sonst bekäme der Benutzer eine Fehlermeldung, obwohl
+        // die Seite in den übrigen Sprachen neu steht. Die Zahl der
+        // geschriebenen Seiten geht mit an den Client, damit ein
+        // Teil-Fehlschlag dort sichtbar wird.
+        if ($written === 0 && $lastError !== null) {
+            throw $lastError;
+        }
+
+        return ['sections' => count($sections), 'files' => $written];
     }
 
     /**
@@ -226,14 +325,24 @@ final class ChangelogService
         return $ts === false ? date('d.m.Y H:i') : date('d.m.Y H:i', $ts);
     }
 
-    /** Front Matter einer neu angelegten Seite. */
+    /**
+     * Front Matter einer neu angelegten Seite. Der `translationKey` verbindet
+     * die Sprachfassungen miteinander (siehe {@see TRANSLATION_KEY}) — er steht
+     * auch bei nur einem Ziel darin, damit eine später hinzukommende Sprache
+     * ohne Nacharbeit an der bestehenden Seite dazupasst.
+     *
+     * Eine BESTEHENDE Seite bekommt ihn nicht nachträglich: Von ihrem Kopf wird
+     * ausschließlich `lastmod` angefasst ({@see touchLastmod()}), alles andere
+     * gehört dem Benutzer.
+     */
     private function header(): string
     {
         $now = date('c');
 
         return sprintf(
-            "---\ntitle: \"%s\"\ndate: %s\nlastmod: %s\n---\n",
+            "---\ntitle: \"%s\"\ntranslationKey: %s\ndate: %s\nlastmod: %s\n---\n",
             self::DEFAULT_TITLE,
+            self::TRANSLATION_KEY,
             $now,
             $now,
         );

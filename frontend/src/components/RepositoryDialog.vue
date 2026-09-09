@@ -280,7 +280,11 @@ async function doRebuildChangelog() {
   action.value = null
   try {
     const res = await repo.rebuildChangelog(t('repo.tagLabel'))
-    action.value = { type: 'success', key: 'repo.changelogOk', params: [res.sections] }
+    // Bei mehreren Zielpfaden (mehrsprachige Projekte) auch sagen, in wie viele
+    // Dateien geschrieben wurde — sonst bliebe ein Teil-Fehlschlag unsichtbar.
+    action.value = res.files > 1
+      ? { type: 'success', key: 'repo.changelogOkFiles', params: [res.sections, res.files] }
+      : { type: 'success', key: 'repo.changelogOk', params: [res.sections] }
     await repo.refresh()
     applySuggestions()
   } catch (e) {

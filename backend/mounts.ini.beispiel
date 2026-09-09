@@ -160,8 +160,24 @@ label = Medien
 ; wer das nicht möchte, setzt in ihrem Front Matter draft: true oder
 ; headless: true — die Fortschreibung lässt beides unangetastet.
 ;   changelog              false schaltet das Änderungsprotokoll ab. Standard: AN.
+;   changelog_path         Zielpfad der Seite im Content-Mount. Standard:
+;                          changelog.md (dessen Wurzelverzeichnis).
+;
+; changelog_path ist für MEHRSPRACHIGE Webseiten gedacht. Trennt das Hugo-Projekt
+; seine Sprachen in Verzeichnisse (content/de, content/en), gehört eine Seite im
+; Wurzelverzeichnis zu keiner Sprache — Hugo baut sie dann gar nicht; trennt es
+; sie über den Dateinamen (changelog.de.md), gehört sie nur zur Standardsprache.
+; Mehrere Pfade werden durch Komma getrennt; jeder bekommt DENSELBEN Text (die
+; Beschreibungen der Versionsstände werden nicht übersetzt). Pfade sind relativ
+; zum Content-Mount; „..“ ist nicht erlaubt, und mehr als 12 Ziele werden nicht
+; angenommen. Neu angelegte Seiten bekommen „translationKey: changelog“ in ihr
+; Front Matter, sodass Hugo die Sprachfassungen als Übersetzungen führt und ein
+; Theme aus jeder Sprache die passende findet. Ein Ziel, dessen Verzeichnis es
+; nicht gibt, wird protokolliert und übersprungen — die übrigen werden trotzdem
+; geschrieben.
 ;[git]
 ;auto_commit = true
 ;commit_message = "Automatische Veröffentlichung terminierter Freigaben"
 ;commit_message_pending = "Offene Änderungen vor dem Build gesichert"
 ;changelog = false
+;changelog_path = "de/changelog.md, en/changelog.md"

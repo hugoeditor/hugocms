@@ -51,6 +51,10 @@ const commitMessagePending = ref('')
 // wird bei JEDEM Versionsstand fortgeschrieben, nicht nur bei denen des Cron.
 // Vorgabe an — der Schalter dient zum Abschalten.
 const changelog = ref(true)
+// Zielpfade der Protokollseite im Inhaltsverzeichnis, kommagetrennt. Mehrere
+// für mehrsprachige Projekte: Dort liegt der Inhalt je Sprache in einem eigenen
+// Verzeichnis, und eine Seite im Wurzelverzeichnis gehörte zu keiner davon.
+const changelogPath = ref('')
 // Wort vor der Versionsnummer in der Überschrift des Protokolls („Ausgabe 12“).
 // Beim Sichern von Hand schickt der Client es aus der Oberflächensprache mit;
 // für die Cron-Läufe steht hier der Wert, weil dort keine Sprache bekannt ist.
@@ -113,6 +117,7 @@ watch(model, async (open) => {
     commitMessage.value = cfg.commitMessage ?? ''
     commitMessagePending.value = cfg.commitMessagePending ?? ''
     changelog.value = !!cfg.changelog
+    changelogPath.value = cfg.changelogPath ?? ''
     tagLabel.value = cfg.tagLabel ?? ''
     gitRepo.value = !!cfg.gitRepo
   } catch (e) {
@@ -150,6 +155,7 @@ async function submit() {
       commitMessage: commitMessage.value,
       commitMessagePending: commitMessagePending.value,
       changelog: changelog.value,
+      changelogPath: changelogPath.value,
       tagLabel: tagLabel.value,
     })
     // Der Schalter in der Liste „zu verbessern“ liest denselben Zustand aus
@@ -407,6 +413,17 @@ async function submit() {
           </div>
 
           <v-text-field
+            v-model="changelogPath"
+            :label="$t('projectConfig.changelogPath')"
+            :hint="$t('projectConfig.changelogPathHint')"
+            :disabled="!gitCommitAvailable || !changelog"
+            variant="outlined"
+            density="comfortable"
+            persistent-hint
+            class="mb-2 mt-5"
+          />
+
+          <v-text-field
             v-model="tagLabel"
             :label="$t('projectConfig.tagLabel')"
             :hint="$t('projectConfig.tagLabelHint')"
@@ -414,7 +431,7 @@ async function submit() {
             variant="outlined"
             density="comfortable"
             persistent-hint
-            class="mb-2"
+            class="mb-2 mt-5"
           />
 
           <v-alert v-if="error" type="error" density="compact" class="mt-2">{{ error }}</v-alert>
