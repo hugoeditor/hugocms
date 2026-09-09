@@ -5,9 +5,12 @@
 TERMINAL_WIDTH=250
 TERMINAL_HEIGHT=40
 
+# Ports dieser Umgebung. Sie müssen sich von einer eventuell parallel
+# laufenden zweiten Entwicklungsumgebung unterscheiden (dort: Vite 5173,
+# PHP 8000, SSE 3001).
 PHP_HOST="127.0.0.1"
 PHP_PORT="8765"
-VITE_PORT="5173"
+VITE_PORT="5174"
 
 # Projektverzeichnis = eine Ebene über /scripts
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -105,15 +108,31 @@ if [ $IS_CHILD -eq 0 ]; then
     ensure_deps
 fi
 
+# === Nur die Server DIESES Projekts beenden ===
+# Ein pauschales `pkill -f vite` würde den Dev-Server einer parallel laufenden
+# zweiten Entwicklungsumgebung mit abschießen. Deshalb wird gezielt nach dem
+# eigenen Projektpfad und dem eigenen Port gesucht.
+stop_own_servers() {
+    # `php.*-S`, nicht `php -S`: Der Server wird mit -d-Optionen vor dem -S
+    # gestartet, ein Muster mit direkt anschließendem -S trifft ihn nicht.
+    pkill -f "php.*-S $PHP_HOST:$PHP_PORT" 2>/dev/null
+    pkill -f "$PROJECT_DIR/frontend/node_modules.*vite" 2>/dev/null
+    # Reste eines hart abgebrochenen Laufs, die den Port noch halten
+    if command -v fuser >/dev/null 2>&1; then
+        fuser -k "$VITE_PORT/tcp" 2>/dev/null
+        fuser -k "$PHP_PORT/tcp" 2>/dev/null
+    fi
+    return 0
+}
+
 # === Server-Start-Funktion ===
 run_servers() {
     echo "=== HugoCMS Development Environment ==="
     echo ""
 
-    # Stoppe eventuell laufende Server
+    # Stoppe eventuell laufende Server dieses Projekts
     echo "Stopping old servers..."
-    pkill -f "php -S $PHP_HOST:$PHP_PORT" 2>/dev/null
-    pkill -f "vite" 2>/dev/null
+    stop_own_servers
     sleep 1
 
     # Anwendungslog vorbereiten und mitlesen
@@ -135,7 +154,7 @@ run_servers() {
 
     # Starte Vite-Dev-Server
     echo "Starting Vite Dev Server on http://localhost:$VITE_PORT ..."
-    (cd frontend && npm run dev) 2>&1 | while read -r line; do
+    (cd frontend && HUGOCMS_VITE_PORT="$VITE_PORT" npm run dev) 2>&1 | while read -r line; do
         echo "[VITE] $line"
     done &
     NPM_PID=$!
@@ -147,8 +166,7 @@ run_servers() {
         echo ""
         echo "=== Stopping Servers ==="
         kill $PHP_PID $NPM_PID $TAIL_PID 2>/dev/null
-        pkill -f "php -S $PHP_HOST:$PHP_PORT" 2>/dev/null
-        pkill -f "vite" 2>/dev/null
+        stop_own_servers
         exit 0
     }
     trap cleanup SIGINT SIGTERM

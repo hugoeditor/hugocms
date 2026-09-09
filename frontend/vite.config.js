@@ -4,7 +4,7 @@ import vuetify from 'vite-plugin-vuetify'
 import vueDevTools from 'vite-plugin-vue-devtools'
 import { resolveBuildNumber } from './build-version.js'
 
-// Im Entwicklungsbetrieb läuft Vite auf 5173 und der PHP-Server auf 8765.
+// Im Entwicklungsbetrieb läuft Vite auf 5174 und der PHP-Server auf 8765.
 // Der Proxy leitet alle /cms-api-Aufrufe an den PHP-Connector weiter und reicht
 // dabei das Session-Cookie durch — damit ist im Dev-Betrieb kein CORS nötig.
 export default defineConfig(({ command }) => {
@@ -18,7 +18,7 @@ export default defineConfig(({ command }) => {
   return {
     // Der Client wird unter dem Pfad /edit/ ausgeliefert. Dadurch referenziert
     // das gebaute index.html seine Assets als /edit/assets/…
-    // Gilt für Build und Dev-Server (Dev: http://localhost:5173/edit/).
+    // Gilt für Build und Dev-Server (Dev: http://localhost:5174/edit/).
     base: '/edit/',
     define: {
       // Zur Bauzeit ersetzt; im Client als globale Konstante __APP_BUILD__
@@ -55,7 +55,13 @@ export default defineConfig(({ command }) => {
       include: ['filerobot-image-editor'],
     },
     server: {
-      port: 5173,
+      // 5174 statt Vites Standard 5173, damit HugoCMS neben einer zweiten
+      // Vite-Umgebung auf demselben Rechner laufen kann. HUGOCMS_VITE_PORT
+      // überschreibt den Wert; scripts/dev.sh setzt ihn aus VITE_PORT.
+      // strictPort verhindert stilles Ausweichen auf einen freien Port —
+      // sonst nennt dev.sh eine Adresse, unter der nichts erreichbar ist.
+      port: Number(process.env.HUGOCMS_VITE_PORT) || 5174,
+      strictPort: true,
       proxy: {
         '/cms-api': {
           target: 'http://127.0.0.1:8765',

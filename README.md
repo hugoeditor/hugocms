@@ -230,9 +230,14 @@ scripts/dev.sh
 `scripts/dev.sh` prüft PHP/Node, startet den PHP-Connector
 (`php -S 127.0.0.1:8765 index.php`) und den Vite-Dev-Server und blendet
 Log-Zeilen mit dem Präfix `[LOG]` im Terminal ein. Danach
-<http://localhost:5173> öffnen. Der Vite-Proxy leitet den API-Endpunkt
+<http://localhost:5174> öffnen. Der Vite-Proxy leitet den API-Endpunkt
 `/cms-api/` an das Backend weiter und reicht das Session-Cookie durch – kein
 CORS nötig.
+
+Der Vite-Dev-Server läuft bewusst auf 5174 statt auf Vites Standard 5173,
+damit HugoCMS neben einer zweiten Entwicklungsumgebung auf demselben Rechner
+laufen kann. Die Ports stehen am Kopf von `scripts/dev.sh`; das Skript beendet
+beim Start ausschließlich seine eigenen Prozesse.
 
 Ohne `dev.sh` lassen sich beide Prozesse auch von Hand starten (`php -S
 127.0.0.1:8765 index.php` und `cd frontend && npm install && npm run dev`).
