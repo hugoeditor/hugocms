@@ -114,6 +114,14 @@ const GROUP_META = {
 // Reihenfolge in Liste und Zusammenfassung: Dringendes zuerst.
 const GROUP_ORDER = ['conflict', 'deleted', 'new', 'modified', 'renamed']
 
+// Reihenfolge in der vorgeschlagenen Beschreibung — und damit im
+// Änderungsprotokoll, das sie wörtlich übernimmt: Neues zuerst. Die Liste im
+// Dialog warnt vor dem Sichern und stellt Gelöschtes deshalb nach vorn; die
+// Beschreibung dagegen berichtet, was dazugekommen ist, und Gelöschtes
+// interessiert ihren Leser zuletzt.
+const MESSAGE_ORDER = ['new', 'modified', 'renamed', 'deleted', 'conflict']
+const byMessageOrder = (a, b) => MESSAGE_ORDER.indexOf(a.group) - MESSAGE_ORDER.indexOf(b.group)
+
 // Änderungen nach Art gruppiert, damit Gleichartiges beieinandersteht.
 const changes = computed(() =>
   (repo.status?.entries ?? [])
@@ -140,7 +148,8 @@ const MESSAGE_BUDGET = 900
 
 /**
  * Baut die vorgeschlagene Beschreibung: erste Zeile die Zusammenfassung, danach
- * eine Zeile je geänderter Datei.
+ * eine Zeile je geänderter Datei — beides in {@link MESSAGE_ORDER}, neue Dateien
+ * zuerst.
  *
  * Die erste Zeile trägt bewusst die Zusammenfassung und keinen Dateipfad — git
  * behandelt sie als Betreff, und genau sie zeigt die Spalte „Beschreibung“ im
@@ -149,10 +158,13 @@ const MESSAGE_BUDGET = 900
  * überschritten. Was nicht mehr hineinpasst, weist die letzte Zeile als Anzahl aus.
  */
 function buildMessage() {
-  const list = changes.value
+  const list = [...changes.value].sort((a, b) => byMessageOrder(a, b) || a.path.localeCompare(b.path))
   if (list.length === 0) return ''
 
-  const subject = summary.value.map((s) => t(GROUP_META[s.group].count, [s.count])).join(', ')
+  const subject = [...summary.value]
+    .sort(byMessageOrder)
+    .map((s) => t(GROUP_META[s.group].count, [s.count]))
+    .join(', ')
   // Abschlusszeile für den nicht gelisteten Rest. Eigener Schlüssel für die
   // Einzahl, weil das Projekt keine i18n-Pluralformen verwendet.
   const moreLine = (n) => (n === 1 ? t('repo.messageMoreOne') : t('repo.messageMore', [n]))
