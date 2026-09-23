@@ -285,14 +285,16 @@ async function leaveEditorThen(action) {
   if (files.dirty && !(await confirmDiscard())) return
   // Offene Überlagerungen schließen, sonst blieben sie über der neu gewählten
   // Ansicht (Dateimanager, Papierkorb, SEO-Audit) liegen: die Hilfe, der
-  // Qualitätsbericht (ContentQualityView), die Freigabe-Warteschlange und der
-  // Systemstatus — sie alle haben einen höheren z-index als die Dateiliste und
-  // würden sie sonst verdecken.
+  // Qualitätsbericht (ContentQualityView), die Freigabe-Warteschlange, die
+  // Hyperlink-Suche, der Systemstatus und die Benutzerverwaltung — sie alle
+  // haben einen höheren z-index als die Dateiliste und würden sie sonst
+  // verdecken.
   help.close()
   auditContent.closeDialog()
   review.closeQueue()
   linkScan.close()
   status.close()
+  users.close()
   // Auch den SEO-Check verlassen: Er ist keine Überlagerung, sondern ein
   // Modus der Hauptansicht — bliebe er gesetzt, zeigte die Werkzeugschiene ihn
   // weiter als aktiv, und sein nächster Klick würde ihn abschalten statt ihn zu
@@ -352,14 +354,7 @@ function openUsersView() {
     users.close()
     return
   }
-  leaveEditorThen(() => {
-    // Die übrigen Overlays teilen sich dieselbe Ebene; eines davon offen zu
-    // lassen hieße, die Verwaltung darunter zu verstecken.
-    status.close()
-    review.closeQueue()
-    files.leaveAudit()
-    users.openView()
-  })
+  leaveEditorThen(() => users.openView())
 }
 
 // Systemstatus öffnen/schließen — Umschalter wie die übrigen Overlays.

@@ -66,4 +66,3 @@ scripts/keygen/
 /.*
 !/.gitignore
 !/.gitmodules
-!/.claude/

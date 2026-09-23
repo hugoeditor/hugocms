@@ -72,6 +72,7 @@ final class PreviewService
 
         $config = $this->hugoConfig();
         $contentDir = trim((string) ($config['contentDir'] ?? 'content'), '/');
+        $mount = $this->contentMountFor($config, $contentDir, $relInContent);
 
         $token = bin2hex(random_bytes(16));
         $work = $this->storageDir . '/' . $token . '.work';
@@ -84,10 +85,10 @@ final class PreviewService
         $this->makeDir($out);
 
         try {
-            // Overlay: nur diese eine Datei, im selben Zuschnitt wie unter
-            // content/ — alles andere (Bilder eines Page Bundles, Nachbar-
-            // seiten) kommt weiterhin aus dem echten Projekt.
-            $overlayFile = $work . '/content/' . $relInContent;
+            // Overlay: nur diese eine Datei, im selben Zuschnitt wie in ihrem
+            // Mount — alles andere (Bilder eines Page Bundles, Nachbarseiten)
+            // kommt weiterhin aus dem echten Projekt.
+            $overlayFile = $work . '/content/' . $mount['rel'];
             $this->makeDir(dirname($overlayFile));
             if (@file_put_contents($overlayFile, $content) === false) {
                 throw new ApiException('EIO', 500, 'PREVIEW-STORAGE-FAILED');
@@ -97,7 +98,7 @@ final class PreviewService
             // Overlay, damit auch eine Seite gefunden wird, die es im Projekt
             // noch gar nicht gibt.
             $configFile = $work . '/preview.json';
-            $base = $this->previewConfig($config, $work . '/content');
+            $base = $this->previewConfig($config, $work . '/content', $mount);
             $this->writeJson($configFile, $base);
 
             // Hugo benennt die Datei je nach Herkunft unterschiedlich: aus dem
@@ -105,12 +106,12 @@ final class PreviewService
             // außerhalb absolut. Da das Overlay gewinnt, gilt in aller Regel
             // die zweite Form — geprüft werden beide.
             $urlPath = $this->urlPathFor($configFile, [
-                $work . '/content/' . $relInContent,
+                $work . '/content/' . $mount['rel'],
                 $contentDir . '/' . $relInContent,
             ]);
 
             // Zweiter Durchgang mit Segment: jetzt steht fest, was zu rendern ist.
-            $base['segments'] = ['preview' => ['includes' => [['path' => $this->segmentPattern($urlPath)]]]];
+            $base['segments'] = ['preview' => ['includes' => $this->segmentIncludes($mount['logical'], $config)]];
             $this->writeJson($configFile, $base);
 
             $this->runHugo($configFile, $out);
@@ -224,12 +225,21 @@ final class PreviewService
      * Sobald Mounts gesetzt werden, gelten NUR noch die aufgeführten — die
      * bestehenden werden deshalb übernommen, nicht neu erfunden.
      *
-     * @param array<string, mixed> $config
+     * Das Overlay übernimmt Ziel und Sprache des Mounts, in dem die Datei
+     * liegt — sonst entstünde z. B. aus content/de/blog/x.md eine zusätzliche
+     * Seite "/de/blog/x" in der Standardsprache, statt die echte zu überlagern.
+     *
+     * @param array<string, mixed>                                     $config
+     * @param array{target: string, lang: ?string, rel: string, logical: string} $contentMount
      * @return array<string, mixed>
      */
-    private function previewConfig(array $config, string $overlayDir): array
+    private function previewConfig(array $config, string $overlayDir, array $contentMount): array
     {
-        $mounts = [['source' => $overlayDir, 'target' => 'content']];
+        $overlay = ['source' => $overlayDir, 'target' => $contentMount['target']];
+        if ($contentMount['lang'] !== null) {
+            $overlay['lang'] = $contentMount['lang'];
+        }
+        $mounts = [$overlay];
         $existing = $config['module']['mounts'] ?? null;
         foreach (is_array($existing) ? $existing : [] as $mount) {
             if (!is_array($mount)) {
@@ -248,13 +258,105 @@ final class PreviewService
         return ['module' => ['mounts' => $mounts]];
     }
 
-    /** Segment-Muster für genau diese Adresse (Seite plus ihre Unterseiten). */
-    private function segmentPattern(string $urlPath): string
+    /**
+     * Der content-Mount, in dem die Datei liegt. Bei mehrsprachigen Webseiten
+     * hängt Hugo je Sprache einen eigenen Ordner ein (content/de → content,
+     * lang "de"); die Datei gehört dann zu diesem Mount und nicht an die
+     * Wurzel. Es gewinnt der Mount mit dem längsten passenden Quellpfad.
+     *
+     * @param array<string, mixed> $config
+     * @return array{target: string, lang: ?string, rel: string, logical: string}
+     *         rel: Pfad innerhalb des Mounts; logical: Pfad unterhalb des
+     *         virtuellen content-Ordners (Grundlage für den Segment-Filter)
+     */
+    private function contentMountFor(array $config, string $contentDir, string $relInContent): array
     {
-        $trimmed = rtrim($urlPath, '/');
+        $best = ['target' => 'content', 'lang' => null, 'prefix' => null];
+        $sourceRoot = realpath($this->source) ?: $this->source;
+        $existing = $config['module']['mounts'] ?? null;
+        foreach (is_array($existing) ? $existing : [] as $mount) {
+            if (!is_array($mount)) {
+                continue;
+            }
+            $target = trim((string) ($mount['target'] ?? ''), '/');
+            if ($target !== 'content' && !str_starts_with($target, 'content/')) {
+                continue;
+            }
+            $source = trim((string) ($mount['source'] ?? ''), '/');
+            if (str_starts_with((string) ($mount['source'] ?? ''), '/')) {
+                // Absolute Quelle: nur innerhalb des Projekts vergleichbar.
+                if (!str_starts_with('/' . $source . '/', $sourceRoot . '/')) {
+                    continue;
+                }
+                $source = trim(substr('/' . $source, strlen($sourceRoot)), '/');
+            }
+            if ($source === $contentDir) {
+                $prefix = '';
+            } elseif (str_starts_with($source, $contentDir . '/')) {
+                $prefix = substr($source, strlen($contentDir) + 1) . '/';
+            } else {
+                continue;
+            }
+            if (!str_starts_with($relInContent, $prefix)
+                || ($best['prefix'] !== null && strlen($prefix) <= strlen($best['prefix']))) {
+                continue;
+            }
+            $lang = trim((string) ($mount['lang'] ?? ''));
+            $best = ['target' => $target, 'lang' => $lang === '' ? null : $lang, 'prefix' => $prefix];
+        }
+
+        $rel = substr($relInContent, strlen($best['prefix'] ?? ''));
+        $below = trim(substr($best['target'], strlen('content')), '/');
+
+        return [
+            'target' => $best['target'],
+            'lang' => $best['lang'],
+            'rel' => $rel,
+            'logical' => $below === '' ? $rel : $below . '/' . $rel,
+        ];
+    }
+
+    /**
+     * Segment-Filter für genau diese Seite (plus ihre Unterseiten).
+     *
+     * Hugo vergleicht das Muster mit dem LOGISCHEN Pfad der Seite, nicht mit
+     * ihrer Adresse: "blog/Ölwechsel 1,6l.md" heißt dort "/blog/ölwechsel-1,6l",
+     * auch wenn slug, url oder permalinks eine ganz andere Adresse ergeben.
+     * Der Pfad wird deshalb aus dem Dateinamen gebildet — nach Hugos Regeln:
+     * Endung und Sprachkennung weg, index/_index steht für den Ordner, klein
+     * geschrieben, Leerzeichen als Bindestrich.
+     *
+     * @param array<string, mixed> $config
+     * @return list<array{path: string}>
+     */
+    private function segmentIncludes(string $relInContent, array $config): array
+    {
+        $parts = explode('/', trim(str_replace('\\', '/', $relInContent), '/'));
+        $name = (string) array_pop($parts);
+
+        $stem = pathinfo($name, PATHINFO_FILENAME);
+        // Sprachkennung im Dateinamen ("beitrag.en.md") gehört nicht zum Pfad.
+        $languages = is_array($config['languages'] ?? null) ? array_keys($config['languages']) : [];
+        $dot = strrpos($stem, '.');
+        if ($dot !== false && in_array(strtolower(substr($stem, $dot + 1)), array_map('strtolower', $languages), true)) {
+            $stem = substr($stem, 0, $dot);
+        }
+        if ($stem !== 'index' && $stem !== '_index') {
+            $parts[] = $stem;
+        }
+
+        $path = '/' . str_replace(' ', '-', mb_strtolower(implode('/', $parts), 'UTF-8'));
 
         // Startseite: kein "/**", das würde die ganze Webseite einschließen.
-        return $trimmed === '' ? '/' : '{' . $trimmed . ',' . $trimmed . '/**}';
+        if ($path === '/') {
+            return [['path' => '/']];
+        }
+
+        // Zwei Einträge statt "{a,a/**}": Ein Komma im Dateinamen würde die
+        // Aufzählung sprengen. Glob-Zeichen im Namen gelten wörtlich.
+        $glob = addcslashes($path, '\\*?[]{}');
+
+        return [['path' => $glob], ['path' => $glob . '/**']];
     }
 
     /** @param array<string, mixed> $data */
@@ -333,7 +435,8 @@ final class PreviewService
      */
     private function readRendered(string $out, string $urlPath): string
     {
-        $trimmed = trim($urlPath, '/');
+        // Die Adresse ist kodiert ("/t%C3%BCv-hu/"), das Verzeichnis nicht.
+        $trimmed = trim(rawurldecode($urlPath), '/');
         $candidates = [
             $out . '/' . ($trimmed === '' ? '' : $trimmed . '/') . 'index.html',
             $out . '/' . $trimmed . '.html',
