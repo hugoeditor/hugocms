@@ -117,6 +117,19 @@ bin = ../bin/hugo/hugo
 ; „Konfiguration ändern" schaltbar.
 ;clean = true
 
+;[editor]
+; Texteditor. Optional.
+;   extra_editable  Weitere Dateiendungen, die der Texteditor öffnen und
+;                   speichern darf — kommagetrennt, ohne Punkt. Sie ERGÄNZEN
+;                   die eingebauten (html, htm, md, markdown, txt, css, js,
+;                   json, xml, yaml, yml, svg, toml). Die accept-Liste des
+;                   jeweiligen Mounts gilt beim Speichern weiterhin.
+;                   VORSICHT bei Skripten (sh, php, py …): Führt der Server
+;                   oder ein Cron-Job sie aus, kann jeder mit Schreibrecht auf
+;                   den Mount — auch der KI-Assistent — Befehle auf dem Server
+;                   ausführen lassen.
+;extra_editable = sh
+
 ;[ai]
 ; KI-Assistent (Claude). Optional — ohne API-Schlüssel ist der Assistent aus.
 ; Lässt sich auch über das Einrichtungs-/Konfigurationsformular setzen.

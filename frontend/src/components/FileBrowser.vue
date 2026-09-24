@@ -124,6 +124,13 @@ function onRowClick(entry, event) {
 }
 
 function onOpen(entry) {
+  // Weder Verzeichnis noch Bild noch Editortyp: activate() täte nichts — ohne
+  // Hinweis sähe das nach einem toten Doppelklick aus. Herunterladen bleibt
+  // über das Kontextmenü möglich.
+  if (entry.type !== 'dir' && !entry.image && !entry.editable) {
+    error.value = errorText(t, { key: 'FILETYPE-NOT-EDITABLE' })
+    return
+  }
   run(() => files.activate(entry))
 }
 

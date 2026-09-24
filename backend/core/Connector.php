@@ -256,6 +256,7 @@ final class Connector
         // Fehler-Handler noch nicht stehen.
         $authConfig = null;
         $authOptions = [];
+        $extraEditable = []; // zusätzliche Editor-Endungen aus [editor]
         $sessionPath = null;
         $this->configPath = isset($options['config']) ? (string) $options['config'] : null;
         if (isset($options['config'])) {
@@ -285,6 +286,7 @@ final class Connector
             $this->user = $cfg['user'];
             $this->mail = $cfg['mail'];
             $this->seoReport = $cfg['seoReport'];
+            $extraEditable = $cfg['editor']['extraEditable'];
             $authConfig = $cfg['auth'];
             // Globale [user]-Einstellungen an den Auth-Treiber durchreichen
             // (z. B. Sitzungsdauer für SingleUser).
@@ -341,7 +343,7 @@ final class Connector
         $this->resolver = new MountResolver();
         $this->files = new FileService(
             $this->resolver,
-            $options['editable'] ?? ['html', 'htm', 'md', 'markdown', 'txt', 'css', 'js', 'json', 'xml', 'yaml', 'yml', 'svg', 'toml'],
+            $options['editable'] ?? array_values(array_unique([...FileService::DEFAULT_EDITABLE, ...$extraEditable])),
             $options['maxEditableBytes'] ?? 5_242_880,
             $options['maxUploadBytes'] ?? 52_428_800,
         );

@@ -15,6 +15,7 @@ import { json } from '@codemirror/lang-json'
 import { yaml } from '@codemirror/lang-yaml'
 import { xml } from '@codemirror/lang-xml'
 import { toml } from '@codemirror/legacy-modes/mode/toml'
+import { shell } from '@codemirror/legacy-modes/mode/shell'
 import { linter, lintGutter } from '@codemirror/lint'
 import { jsonParseLinter } from '@codemirror/lang-json'
 import { parseDocument } from 'yaml'
@@ -187,6 +188,10 @@ function fileLanguage(name) {
       return { label: 'YAML', extensions: [yaml(), yamlLinter(), lintGutter()] }
     case 'toml':
       return { label: 'TOML', extensions: [StreamLanguage.define(toml)] }
+    // Nur erreichbar, wenn [editor] extra_editable die Endung freischaltet.
+    case 'sh':
+    case 'bash':
+      return { label: 'Shell', extensions: [StreamLanguage.define(shell)] }
     default:
       return { label: null, extensions: [] }
   }

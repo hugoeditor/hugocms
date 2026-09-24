@@ -33,6 +33,9 @@ use HugoCMS\FileManager\Exception\ApiException;
  *   [hugo]
  *   bin = ../bin/hugo/hugo   ; zentraler Pfad zum Hugo-Programm (optional)
  *
+ *   [editor]
+ *   extra_editable = sh, conf ; weitere Endungen für den Texteditor (optional)
+ *
  * Die Sektion [hugo] enthält hier NUR das Programm (bin) — es gibt installa-
  * tionsweit nur eine Hugo-Binärdatei. Die je Webseite unterschiedlichen Pfade
  * (source/destination) stehen in der jeweiligen Mount-Konfiguration.
@@ -62,7 +65,8 @@ final class Config
      *   session: array{path: string},
      *   log: array{file: string, level: string, maxBytes: int, keep: int},
      *   hugoBin: ?string,
-     *   hugoClean: bool
+     *   hugoClean: bool,
+     *   editor: array{extraEditable: list<string>}
      * }
      */
     public static function load(string $configPath): array
@@ -133,7 +137,46 @@ final class Config
             'services' => self::servicesSection($raw['services'] ?? null),
             'mail' => self::mailSection($raw['mail'] ?? null),
             'seoReport' => self::seoReportSection($raw['seo_report'] ?? null),
+            'editor' => self::editorSection($raw['editor'] ?? null),
         ];
+    }
+
+    /**
+     * Texteditor ([editor]-Sektion, optional). extra_editable ERGÄNZT die fest
+     * eingebauten Editor-Endungen ({@see FileService::DEFAULT_EDITABLE}) um
+     * weitere, kommagetrennt und ohne Punkt (z. B. "sh, conf"). Ergänzen statt
+     * Ersetzen: Ein Tippfehler in der Liste soll nicht Markdown & Co. aussperren.
+     * Die accept-Liste des Mounts gilt beim Speichern weiterhin zusätzlich.
+     *
+     * @return array{extraEditable: list<string>}
+     */
+    private static function editorSection(mixed $section): array
+    {
+        $section = is_array($section) ? $section : [];
+
+        return [
+            'extraEditable' => self::normalizeExtensions((string) ($section['extra_editable'] ?? '')),
+        ];
+    }
+
+    /**
+     * Normalisiert eine kommagetrennte Endungsliste: Kleinschreibung, führende
+     * Punkte entfernt, nur Buchstaben und Ziffern, entdoppelt. Ungültige
+     * Einträge (leer, mit Sonderzeichen) werden verworfen.
+     *
+     * @return list<string>
+     */
+    private static function normalizeExtensions(string $raw): array
+    {
+        $out = [];
+        foreach (preg_split('/[,\s]+/', $raw) ?: [] as $entry) {
+            $ext = strtolower(ltrim(trim((string) $entry), '.'));
+            if ($ext !== '' && preg_match('/^[a-z0-9]+$/', $ext) === 1) {
+                $out[$ext] = true;
+            }
+        }
+
+        return array_keys($out);
     }
 
     /**

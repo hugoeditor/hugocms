@@ -29,12 +29,18 @@ final class FileService
     /** So viel vom Dateianfang genügt, um das Front Matter zu lesen. */
     private const FRONT_MATTER_BYTES = 8192;
 
+    /**
+     * Endungen, die der Texteditor von Haus aus öffnet. Weitere schaltet
+     * [editor] extra_editable in der hugocms.ini frei ({@see Config::load}).
+     */
+    public const DEFAULT_EDITABLE = ['html', 'htm', 'md', 'markdown', 'txt', 'css', 'js', 'json', 'xml', 'yaml', 'yml', 'svg', 'toml'];
+
     /** @var list<string> Endungen, die der Texteditor öffnen darf. */
     private array $editable;
 
     public function __construct(
         private readonly MountResolver $resolver,
-        array $editable = ['html', 'htm', 'md', 'markdown', 'txt', 'css', 'js', 'json', 'xml', 'yaml', 'yml', 'svg', 'toml'],
+        array $editable = self::DEFAULT_EDITABLE,
         private readonly int $maxEditableBytes = 5_242_880, // 5 MiB
         private readonly int $maxUploadBytes = 52_428_800, // 50 MiB
     ) {
