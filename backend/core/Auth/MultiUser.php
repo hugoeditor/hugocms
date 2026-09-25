@@ -27,7 +27,7 @@ use HugoCMS\FileManager\Exception\ApiException;
  * niemanden endgültig aus — der Administrator kommt herein und kann die Lizenz
  * eintragen —, aber die eigentliche Mehrbenutzer-Nutzung ruht.
  */
-final class MultiUser implements AuthInterface, UserAdminInterface, SiteAwareInterface
+final class MultiUser implements AuthInterface, UserAdminInterface, SiteAwareInterface, FileTypeAwareInterface
 {
     use SessionHandling;
 
@@ -197,6 +197,20 @@ final class MultiUser implements AuthInterface, UserAdminInterface, SiteAwareInt
         return true;
     }
 
+    /**
+     * Dateityp-Einschränkung des angemeldeten Kontos. Administratoren sind
+     * ausgenommen — wie bei der Webseiten-Zuordnung.
+     */
+    public function allowedFileTypes(): ?array
+    {
+        $user = $this->currentAccount();
+        if ($user === null || $user['role'] === self::ROLE_ADMIN || $user['fileTypes'] === []) {
+            return null;
+        }
+
+        return $user['fileTypes'];
+    }
+
     public function supportsPreferences(): bool
     {
         return $this->currentAccount() !== null;
@@ -228,12 +242,13 @@ final class MultiUser implements AuthInterface, UserAdminInterface, SiteAwareInt
             'name' => $u['name'],
             'role' => $u['role'],
             'sites' => $u['sites'],
+            'fileTypes' => $u['fileTypes'],
             'disabled' => $u['disabled'],
             'self' => UserStore::key($u['name']) === $self,
         ], $this->store->all());
     }
 
-    public function createUser(string $username, string $password, string $role, array $sites): void
+    public function createUser(string $username, string $password, string $role, array $sites, array $fileTypes = []): void
     {
         $this->requireAdmin();
         $username = UserStore::normalizeName($username);
@@ -246,6 +261,7 @@ final class MultiUser implements AuthInterface, UserAdminInterface, SiteAwareInt
             $role,
             UserStore::normalizeSites($sites),
             false,
+            $fileTypes,
         );
     }
 
@@ -268,7 +284,7 @@ final class MultiUser implements AuthInterface, UserAdminInterface, SiteAwareInt
         ]);
     }
 
-    public function updateUser(string $username, ?string $role = null, ?array $sites = null, ?bool $disabled = null): void
+    public function updateUser(string $username, ?string $role = null, ?array $sites = null, ?bool $disabled = null, ?array $fileTypes = null): void
     {
         $this->requireAdmin();
         $user = $this->store->load($username);
@@ -298,6 +314,10 @@ final class MultiUser implements AuthInterface, UserAdminInterface, SiteAwareInt
         }
         if ($disabled !== null) {
             $changes['disabled'] = $disabled ? 'true' : 'false';
+        }
+        if ($fileTypes !== null) {
+            // Leere Zeichenkette statt Entfernen: updateAccount führt nur zusammen.
+            $changes['file_types'] = implode(', ', UserStore::normalizeFileTypes($fileTypes));
         }
         if ($changes === []) {
             return;

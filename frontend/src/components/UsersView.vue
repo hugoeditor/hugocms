@@ -30,7 +30,7 @@ const busy = ref(false)
 // Formular für „anlegen“ und „bearbeiten“. editing = null → neues Konto.
 const formOpen = ref(false)
 const editing = ref(null)
-const form = ref({ username: '', password: '', role: 'editor', allSites: true, sites: [] })
+const form = ref({ username: '', password: '', role: 'editor', allSites: true, sites: [], fileTypes: [] })
 const formError = ref(null)
 
 // Getrenntes Formular fürs Zurücksetzen eines fremden Passworts.
@@ -53,7 +53,7 @@ function siteLabel(user) {
 
 function openCreate() {
   editing.value = null
-  form.value = { username: '', password: '', role: 'editor', allSites: true, sites: [] }
+  form.value = { username: '', password: '', role: 'editor', allSites: true, sites: [], fileTypes: [] }
   formError.value = null
   formOpen.value = true
 }
@@ -66,6 +66,7 @@ function openEdit(user) {
     role: user.role,
     allSites: user.sites.includes(ALL_SITES) || user.sites.length === 0,
     sites: user.sites.filter((s) => s !== ALL_SITES),
+    fileTypes: [...(user.fileTypes ?? [])],
   }
   formError.value = null
   formOpen.value = true
@@ -73,6 +74,18 @@ function openEdit(user) {
 
 function formSites() {
   return form.value.allSites ? [ALL_SITES] : form.value.sites
+}
+
+// Dateityp-Einschränkung lesbar machen. Administratoren sind ausgenommen.
+function fileTypeLabel(user) {
+  if (user.role === 'admin' || !user.fileTypes?.length) return t('users.allFileTypes')
+  return user.fileTypes.join(', ')
+}
+
+// Freie Eingaben der Combobox angleichen (klein, ohne Punkt); die endgültige
+// Prüfung macht der Server.
+function formFileTypes() {
+  return [...new Set(form.value.fileTypes.map((e) => String(e).trim().replace(/^\./, '').toLowerCase()).filter(Boolean))]
 }
 
 async function submitForm() {
@@ -88,6 +101,7 @@ async function submitForm() {
         username: editing.value.name,
         role: form.value.role,
         sites: formSites(),
+        fileTypes: formFileTypes(),
       })
       emit('notice', t('users.updated', [editing.value.name]))
     } else {
@@ -96,6 +110,7 @@ async function submitForm() {
         password: form.value.password,
         role: form.value.role,
         sites: formSites(),
+        fileTypes: formFileTypes(),
       })
       emit('notice', t('users.created', [form.value.username]))
     }
@@ -225,6 +240,7 @@ async function removeUser(user) {
                 <th>{{ $t('users.name') }}</th>
                 <th>{{ $t('users.role') }}</th>
                 <th>{{ $t('users.sites') }}</th>
+                <th>{{ $t('users.fileTypes') }}</th>
                 <th>{{ $t('users.status') }}</th>
                 <th class="text-right" />
               </tr>
@@ -239,6 +255,7 @@ async function removeUser(user) {
                 </td>
                 <td>{{ user.role === 'admin' ? $t('users.roleAdmin') : $t('users.roleEditor') }}</td>
                 <td class="text-caption">{{ siteLabel(user) }}</td>
+                <td class="text-caption">{{ fileTypeLabel(user) }}</td>
                 <td>
                   <v-chip :color="user.disabled ? 'warning' : 'success'" size="x-small" variant="tonal">
                     {{ user.disabled ? $t('users.disabled') : $t('users.active') }}
@@ -368,6 +385,23 @@ async function removeUser(user) {
                 prepend-inner-icon="mdi-web"
                 variant="outlined"
                 density="comfortable"
+              />
+              <!-- Schränkt nur ein: Freie Eingabe erlaubt, die Vorschläge
+                   kommen vom Server (Editor- und Bildendungen). -->
+              <v-combobox
+                v-model="form.fileTypes"
+                :items="store.fileTypes"
+                :label="$t('users.fileTypes')"
+                :placeholder="$t('users.allFileTypes')"
+                :hint="$t('users.fileTypesHint')"
+                persistent-hint
+                multiple
+                chips
+                closable-chips
+                prepend-inner-icon="mdi-file-lock-outline"
+                variant="outlined"
+                density="comfortable"
+                class="mt-3"
               />
             </template>
           </v-form>

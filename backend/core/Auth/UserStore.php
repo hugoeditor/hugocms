@@ -33,6 +33,8 @@ use HugoCMS\FileManager\Exception\ApiException;
  *   role = "editor"          ; admin | editor
  *   disabled = "false"
  *   sites = "kunde-a.example.com/cms-api"   ; Kommaliste oder "*"
+ *   file_types = "md, png"   ; erlaubte Endungen (optional; leer = keine
+ *                            ; Einschränkung, für admin ohne Belang)
  *
  *   [user]
  *   session_lifetime = "8"   ; dieselben Schlüssel wie die [user]-Sektion der
@@ -93,7 +95,7 @@ final class UserStore
     /**
      * Lädt ein Konto. null, wenn es keines gibt.
      *
-     * @return ?array{name: string, hash: string, role: string, sites: list<string>, disabled: bool, prefs: array<string, string>}
+     * @return ?array{name: string, hash: string, role: string, sites: list<string>, fileTypes: list<string>, disabled: bool, prefs: array<string, string>}
      */
     public function load(string $username): ?array
     {
@@ -114,6 +116,7 @@ final class UserStore
             'hash' => $hash,
             'role' => self::normalizeRole($account['role'] ?? ''),
             'sites' => self::parseSites($account['sites'] ?? ''),
+            'fileTypes' => Config::normalizeExtensions((string) ($account['file_types'] ?? '')),
             'disabled' => filter_var($account['disabled'] ?? false, FILTER_VALIDATE_BOOLEAN),
             'prefs' => array_map('strval', $raw['user'] ?? []),
         ];
@@ -123,7 +126,7 @@ final class UserStore
      * Alle Konten, nach Namen sortiert. Liest jede Datei im Verzeichnis — nur
      * für die Verwaltungsansicht gedacht, nicht für den Anmeldeweg.
      *
-     * @return list<array{name: string, hash: string, role: string, sites: list<string>, disabled: bool, prefs: array<string, string>}>
+     * @return list<array{name: string, hash: string, role: string, sites: list<string>, fileTypes: list<string>, disabled: bool, prefs: array<string, string>}>
      */
     public function all(): array
     {
@@ -140,6 +143,7 @@ final class UserStore
                 'hash' => isset($account['password_hash']) ? (string) $account['password_hash'] : '',
                 'role' => self::normalizeRole($account['role'] ?? ''),
                 'sites' => self::parseSites($account['sites'] ?? ''),
+                'fileTypes' => Config::normalizeExtensions((string) ($account['file_types'] ?? '')),
                 'disabled' => filter_var($account['disabled'] ?? false, FILTER_VALIDATE_BOOLEAN),
                 'prefs' => array_map('strval', $raw['user'] ?? []),
             ];
@@ -167,23 +171,28 @@ final class UserStore
      * Die [user]-Sektion bleibt erhalten (updateSections fasst sie nicht an).
      *
      * @param list<string> $sites
+     * @param list<string> $fileTypes erlaubte Endungen; leer = keine Einschränkung
      */
-    public function write(string $username, string $passwordHash, string $role, array $sites, bool $disabled): void
+    public function write(string $username, string $passwordHash, string $role, array $sites, bool $disabled, array $fileTypes = []): void
     {
         $username = self::normalizeName($username);
         $this->ensureDirectory();
 
+        $account = [
+            'username' => $username,
+            'password_hash' => $passwordHash,
+            'role' => self::normalizeRole($role),
+            'sites' => implode(', ', self::normalizeSites($sites)),
+            'disabled' => $disabled ? 'true' : 'false',
+        ];
+        $fileTypes = self::normalizeFileTypes($fileTypes);
+        if ($fileTypes !== []) {
+            $account['file_types'] = implode(', ', $fileTypes);
+        }
+
         Config::updateSections(
             $this->path($username),
-            [
-                'account' => [
-                    'username' => $username,
-                    'password_hash' => $passwordHash,
-                    'role' => self::normalizeRole($role),
-                    'sites' => implode(', ', self::normalizeSites($sites)),
-                    'disabled' => $disabled ? 'true' : 'false',
-                ],
-            ],
+            ['account' => $account],
             $this->header($username),
         );
     }
@@ -337,6 +346,28 @@ final class UserStore
         }
 
         return array_values(array_unique($clean));
+    }
+
+    /**
+     * Dateityp-Liste eines Kontos bereinigen (klein, ohne Punkt, entdoppelt).
+     * Anders als bei den Webseiten wird ein ungültiger Eintrag abgewiesen statt
+     * verworfen: Die Liste schränkt ein, ein stillschweigend fehlender Eintrag
+     * sperrte den Benutzer unbemerkt aus.
+     *
+     * @param list<string> $fileTypes
+     *
+     * @return list<string>
+     */
+    public static function normalizeFileTypes(array $fileTypes): array
+    {
+        foreach ($fileTypes as $type) {
+            $type = trim((string) $type);
+            if ($type !== '' && preg_match('/^\.?[A-Za-z0-9]+$/', $type) !== 1) {
+                throw ApiException::badRequest('USER-FILETYPE-INVALID', [$type]);
+            }
+        }
+
+        return Config::normalizeExtensions(implode(',', array_map('strval', $fileTypes)));
     }
 
     private function header(string $username): string

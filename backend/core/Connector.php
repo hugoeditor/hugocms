@@ -10,6 +10,7 @@ use HugoCMS\FileManager\Audit\ContentQualityService;
 use HugoCMS\FileManager\Audit\RuleCatalog;
 use HugoCMS\FileManager\Audit\SourceGuesser;
 use HugoCMS\FileManager\Auth\AuthInterface;
+use HugoCMS\FileManager\Auth\FileTypeAwareInterface;
 use HugoCMS\FileManager\Auth\SessionCleaner;
 use HugoCMS\FileManager\Auth\SiteAwareInterface;
 use HugoCMS\FileManager\Auth\UserAdminInterface;
@@ -156,6 +157,9 @@ final class Connector
      * @var array{excludePrefixes: list<string>, excludeFiles: list<string>}
      */
     private array $seoReport = ['excludePrefixes' => [], 'excludeFiles' => []];
+
+    /** @var list<string> Endungen, die der Texteditor öffnet (Standard + [editor] extra_editable). */
+    private array $editableTypes = [];
 
     /**
      * Automatikmodus des Cron-Verbesserers aus der [improve]-Sektion der
@@ -354,11 +358,17 @@ final class Connector
         }
 
         $this->resolver = new MountResolver();
+        $this->editableTypes = $options['editable'] ?? array_values(array_unique([...FileService::DEFAULT_EDITABLE, ...$extraEditable]));
         $this->files = new FileService(
             $this->resolver,
-            $options['editable'] ?? array_values(array_unique([...FileService::DEFAULT_EDITABLE, ...$extraEditable])),
+            $this->editableTypes,
             $options['maxEditableBytes'] ?? 5_242_880,
             $options['maxUploadBytes'] ?? 52_428_800,
+            // Dateityp-Einschränkung des angemeldeten Kontos — die Entscheidung
+            // fällt im Treiber; ohne Anmeldung (Cron) gibt es keine.
+            fn (): ?array => $this->auth instanceof FileTypeAwareInterface
+                ? $this->auth->allowedFileTypes()
+                : null,
         );
         $this->cors = $options['cors'] ?? null;
 
@@ -4220,6 +4230,9 @@ final class Connector
     /** Mindestlänge für ein neu gesetztes Passwort (wie im Erst-Setup). */
     private const MIN_PASSWORD_LENGTH = 8;
 
+    /** Bildendungen, die Hochladen und Bild-Editor verarbeiten (Vorschläge der Benutzerverwaltung). */
+    private const IMAGE_TYPES = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
+
     /**
      * Grenzen für eine über den Konto-Dialog gesetzte Sitzungsdauer (Stunden):
      * eine Viertelstunde bis 30 Tage. Beim LESEN gelten sie nicht — ein von Hand
@@ -5048,6 +5061,9 @@ final class Connector
             'users' => $admin->listUsers(),
             'sites' => $this->knownSites(),
             'roles' => [UserAdminInterface::ROLE_ADMIN, UserAdminInterface::ROLE_EDITOR],
+            // Vorschläge für die Dateityp-Einschränkung: alles, was der Editor
+            // öffnet, dazu die Bildformate (Hochladen, Bild-Editor).
+            'fileTypes' => array_values(array_unique([...$this->editableTypes, ...self::IMAGE_TYPES])),
         ];
     }
 
@@ -5066,6 +5082,7 @@ final class Connector
             $password,
             (string) ($request['role'] ?? UserAdminInterface::ROLE_EDITOR),
             $this->requestSites($request),
+            $this->requestFileTypes($request) ?? [],
         );
         $this->logger->info('Benutzerkonto angelegt: ' . $username);
 
@@ -5087,6 +5104,7 @@ final class Connector
             array_key_exists('role', $request) ? (string) $request['role'] : null,
             array_key_exists('sites', $request) ? $this->requestSites($request) : null,
             $disabled,
+            $this->requestFileTypes($request),
         );
         $this->logger->info('Benutzerkonto geändert: ' . $username);
 
@@ -5120,6 +5138,25 @@ final class Connector
         $this->logger->info('Benutzerkonto gelöscht: ' . $username);
 
         return ['ok' => true, 'users' => $admin->listUsers()];
+    }
+
+    /**
+     * Dateityp-Einschränkung aus der Anfrage: eine Liste von Endungen (leer =
+     * keine Einschränkung), oder null, wenn die Anfrage sie nicht nennt.
+     *
+     * @return ?list<string>
+     */
+    private function requestFileTypes(array $request): ?array
+    {
+        if (!array_key_exists('fileTypes', $request)) {
+            return null;
+        }
+        $types = $request['fileTypes'];
+        if (!is_array($types)) {
+            throw ApiException::badRequest('PARAM-INVALID', ['fileTypes']);
+        }
+
+        return array_values(array_map('strval', $types));
     }
 
     /**

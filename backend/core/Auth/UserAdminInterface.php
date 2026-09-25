@@ -28,16 +28,18 @@ interface UserAdminInterface
     /**
      * Alle Konten — ohne Passwort-Hashes.
      *
-     * @return list<array{name: string, role: string, sites: list<string>, disabled: bool, self: bool}>
+     * @return list<array{name: string, role: string, sites: list<string>, fileTypes: list<string>, disabled: bool, self: bool}>
      */
     public function listUsers(): array;
 
     /**
      * Legt ein Konto an. Der Name muss frei sein.
      *
-     * @param list<string> $sites Webseiten-Kennungen oder [ALL_SITES]
+     * @param list<string> $sites     Webseiten-Kennungen oder [ALL_SITES]
+     * @param list<string> $fileTypes erlaubte Endungen; leer = keine Einschränkung
+     *                                ({@see FileTypeAwareInterface})
      */
-    public function createUser(string $username, string $password, string $role, array $sites): void;
+    public function createUser(string $username, string $password, string $role, array $sites, array $fileTypes = []): void;
 
     /**
      * Löscht ein Konto. Das eigene Konto und das letzte verbleibende
@@ -52,10 +54,12 @@ interface UserAdminInterface
     public function resetPassword(string $username, string $newPassword): void;
 
     /**
-     * Ändert Rolle, Webseiten-Zuordnung oder Sperre eines Kontos. null lässt
-     * den jeweiligen Wert unverändert.
+     * Ändert Rolle, Webseiten-Zuordnung, Dateitypen oder Sperre eines Kontos.
+     * null lässt den jeweiligen Wert unverändert; eine leere Dateityp-Liste
+     * hebt die Einschränkung auf.
      *
      * @param ?list<string> $sites
+     * @param ?list<string> $fileTypes
      */
-    public function updateUser(string $username, ?string $role = null, ?array $sites = null, ?bool $disabled = null): void;
+    public function updateUser(string $username, ?string $role = null, ?array $sites = null, ?bool $disabled = null, ?array $fileTypes = null): void;
 }

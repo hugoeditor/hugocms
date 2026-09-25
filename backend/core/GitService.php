@@ -516,6 +516,11 @@ final class GitService
      * Das Protokoll liegt selbst im Repository und würde sonst mit auf den alten
      * Inhalt zurückgesetzt, samt des gerade geschriebenen Eintrags.
      *
+     * Bekannte Lücke: Geschrieben wird über git, nicht über FileService — die
+     * accept-Liste der Mounts und die Dateityp-Einschränkung je Konto
+     * (Auth\FileTypeAwareInterface) greifen hier nicht. Bewusst vorerst offen;
+     * gilt ebenso für restoreFile().
+     *
      * @param ?callable(string, ?string): void $beforeAdd
      * @return array{success: bool, sha: ?string, output: string, tag: ?string, tagged: bool, tagOutput: string, presaved: bool, presavedSha: ?string}
      */

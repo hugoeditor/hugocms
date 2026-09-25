@@ -162,11 +162,13 @@ final class Config
     /**
      * Normalisiert eine kommagetrennte Endungsliste: Kleinschreibung, führende
      * Punkte entfernt, nur Buchstaben und Ziffern, entdoppelt. Ungültige
-     * Einträge (leer, mit Sonderzeichen) werden verworfen.
+     * Einträge (leer, mit Sonderzeichen) werden verworfen. Gemeinsam genutzt von
+     * [editor] extra_editable und der Dateityp-Liste je Benutzerkonto
+     * ({@see Auth\UserStore}).
      *
      * @return list<string>
      */
-    private static function normalizeExtensions(string $raw): array
+    public static function normalizeExtensions(string $raw): array
     {
         $out = [];
         foreach (preg_split('/[,\s]+/', $raw) ?: [] as $entry) {

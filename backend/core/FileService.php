@@ -38,11 +38,19 @@ final class FileService
     /** @var list<string> Endungen, die der Texteditor öffnen darf. */
     private array $editable;
 
+    /**
+     * @param ?\Closure(): ?list<string> $allowedTypes Dateityp-Einschränkung des
+     *        angemeldeten Benutzers ({@see Auth\FileTypeAwareInterface}); liefert
+     *        null für „keine Einschränkung“. Als Rückruf, weil erst der Request
+     *        klärt, wer angemeldet ist. Fehlt er (Shop-Anbindung, eigene
+     *        Instanzen), gibt es keine Einschränkung je Benutzer.
+     */
     public function __construct(
         private readonly MountResolver $resolver,
         array $editable = self::DEFAULT_EDITABLE,
         private readonly int $maxEditableBytes = 5_242_880, // 5 MiB
         private readonly int $maxUploadBytes = 52_428_800, // 50 MiB
+        private readonly ?\Closure $allowedTypes = null,
     ) {
         $this->editable = array_map('strtolower', $editable);
     }
@@ -93,6 +101,7 @@ final class FileService
         if (!$this->isEditable($name)) {
             throw ApiException::denied('FILETYPE-NOT-EDITABLE');
         }
+        $this->assertUserAllows($name);
         $size = filesize($abs);
         if ($size !== false && $size > $this->maxEditableBytes) {
             throw ApiException::denied('FILE-TOO-LARGE');
@@ -122,6 +131,7 @@ final class FileService
         if (!$this->isEditable($name)) {
             throw ApiException::denied('FILETYPE-NOT-SAVABLE');
         }
+        $this->assertUserAllows($name);
         if (!$mount->accepts($name)) {
             throw ApiException::denied('FILETYPE-NOT-ALLOWED-MOUNT');
         }
@@ -180,6 +190,7 @@ final class FileService
         if (!$mount->accepts($name)) {
             throw ApiException::denied('FILETYPE-NOT-ALLOWED-MOUNT');
         }
+        $this->assertUserAllows($name);
         $abs = $parentAbs . '/' . $name;
         if (file_exists($abs)) {
             throw ApiException::badRequest('ALREADY-EXISTS', [$name]);
@@ -207,6 +218,12 @@ final class FileService
         }
         if (is_file($abs) && !$mount->accepts($newName)) {
             throw ApiException::denied('FILETYPE-NOT-ALLOWED-MOUNT');
+        }
+        // Alter UND neuer Name: Sonst ließe sich eine gesperrte Datei über
+        // „.txt“ umbenennen, bearbeiten und zurückbenennen.
+        if (is_file($abs)) {
+            $this->assertUserAllows(basename($abs));
+            $this->assertUserAllows($newName);
         }
         if (!@rename($abs, $newAbs)) {
             throw new ApiException('EIO', 500, 'RENAME-FAILED');
@@ -476,6 +493,7 @@ final class FileService
         if (!$mount->accepts($name)) {
             throw ApiException::denied('FILETYPE-NOT-ALLOWED-MOUNT');
         }
+        $this->assertUserAllows($name);
         if ((int) ($file['size'] ?? 0) > $this->maxUploadBytes) {
             throw ApiException::badRequest('UPLOAD-TOO-LARGE', [$name, self::humanBytes($this->maxUploadBytes)]);
         }
@@ -543,12 +561,14 @@ final class FileService
             if (!$mount->accepts($name)) {
                 throw ApiException::denied('FILETYPE-NOT-ALLOWED-MOUNT');
             }
+            $this->assertUserAllows($name);
             $destAbs = $this->uniqueTarget($parentAbs, $name, numbered: true);
             $destRel = self::childRel(self::parentRel($rel), basename($destAbs));
         } elseif ($mode === 'overwrite') {
             if (!$mount->accepts(basename($abs))) {
                 throw ApiException::denied('FILETYPE-NOT-ALLOWED-MOUNT');
             }
+            $this->assertUserAllows(basename($abs));
             $destAbs = $abs;
             $destRel = $rel;
         } else {
@@ -805,7 +825,9 @@ final class FileService
             'mtime' => (int) (filemtime($abs) ?: 0),
             'ctime' => (int) (filectime($abs) ?: 0),
             'mime' => $mime,
-            'editable' => !$isDir && $this->isEditable($name),
+            // Auch die Einschränkung je Benutzer: Die Dateiliste bietet dann
+            // gar nicht erst den Editor an, sondern meldet den Dateityp.
+            'editable' => !$isDir && $this->isEditable($name) && $this->userAllows($name),
             'image' => !$isDir && str_starts_with($mime, 'image/'),
         ];
     }
@@ -815,6 +837,28 @@ final class FileService
         $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
 
         return $ext !== '' && in_array($ext, $this->editable, true);
+    }
+
+    /**
+     * Darf der angemeldete Benutzer Dateien dieser Endung bearbeiten? Ohne
+     * Einschränkung (kein Rückruf, oder er liefert null) immer.
+     */
+    private function userAllows(string $filename): bool
+    {
+        $allowed = $this->allowedTypes !== null ? ($this->allowedTypes)() : null;
+        if ($allowed === null) {
+            return true;
+        }
+        $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+
+        return $ext !== '' && in_array($ext, $allowed, true);
+    }
+
+    private function assertUserAllows(string $filename): void
+    {
+        if (!$this->userAllows($filename)) {
+            throw ApiException::denied('FILETYPE-NOT-ALLOWED-USER');
+        }
     }
 
     private function detectMime(string $abs): string

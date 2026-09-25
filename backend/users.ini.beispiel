@@ -53,6 +53,16 @@ role = "editor"
 ; Für die Rolle admin ohne Belang: Administratoren erreichen ohnehin alles.
 sites = "kunde-a.example.com, kunde-b.example.com"
 
+; Dateitypen, die dieses Konto bearbeiten darf: Kommaliste der Endungen (ohne
+; Punkt). Gilt für Öffnen im Editor, Speichern, Neuanlegen, Umbenennen und
+; Hochladen. Die Liste SCHRÄNKT NUR EIN — sie gibt nie mehr frei als die
+; Editor-Endungen ([editor] extra_editable in der hugocms.ini) und die
+; accept-Liste des Mounts.
+;   leer oder fehlend = keine Einschränkung
+; Für die Rolle admin ohne Belang. Bekannte Lücke: Die Wiederherstellung eines
+; Versionsstands (Git) umgeht die Liste.
+;file_types = "md, png, jpg"
+
 ; Gesperrt? true = die Anmeldung wird abgewiesen, das Konto bleibt aber
 ; bestehen (samt Zuordnung und Einstellungen).
 disabled = "false"

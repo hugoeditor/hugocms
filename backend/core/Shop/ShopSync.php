@@ -34,7 +34,10 @@ use HugoCMS\FileManager\MountResolver;
  *     Dateien. Vorgabe ist der Aufbau, den OpensourceERP erzeugt.
  *   - Endungen ({@see ACCEPT}): nur Text — kein PHP. Der Texteditor von
  *     HugoCMS schreibt ebenfalls kein PHP; die Anbindung soll nicht mehr
- *     dürfen als ein Redakteur.
+ *     dürfen als ein Redakteur ohne Dateityp-Einschränkung. Eine
+ *     Einschränkung je Konto (file_types) gilt hier nicht: Die Anbindung
+ *     meldet sich mit Schlüssel an, nicht als Benutzer, und nutzt eine eigene
+ *     FileService-Instanz.
  *
  * Gelöscht wird nur, was OpensourceERP bei der VORIGEN Übernahme selbst
  * geliefert hat (last-manifest.json). Von Hand angelegte Dateien in einem

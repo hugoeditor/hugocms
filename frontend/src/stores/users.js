@@ -13,8 +13,9 @@ import { api } from '../api/client'
 export const useUsersStore = defineStore('users', {
   state: () => ({
     open: false, // Overlay sichtbar
-    users: [], // [{ name, role, sites, disabled, self }]
+    users: [], // [{ name, role, sites, fileTypes, disabled, self }]
     sites: [], // bekannte Webseiten dieser Installation (Hosts)
+    fileTypes: [], // Vorschläge für die Dateityp-Einschränkung (Editor- und Bildendungen)
     loading: false,
     error: null, // roher Fehler (die Ansicht übersetzt ihn)
   }),
@@ -37,6 +38,7 @@ export const useUsersStore = defineStore('users', {
         const data = await api.get('users')
         this.users = data.users ?? []
         this.sites = data.sites ?? []
+        this.fileTypes = data.fileTypes ?? []
       } catch (e) {
         this.error = e
       } finally {

@@ -775,6 +775,13 @@ dasselbe Formular gesichert wie jede andere Bearbeitung. Das deckt den
 häufigeren und harmloseren Wunsch ab: eine Datei auf den alten Inhalt bringen,
 ohne die ganze Seite anzufassen.
 
+**Bekannte Lücke: Dateityp-Grenzen.** Beide Wege (ganzer Stand und einzelne
+Datei) schreiben über `git` direkt ins Dateisystem, nicht über `FileService`.
+Die `accept`-Liste der Mounts und die Dateityp-Einschränkung je Konto
+(`file_types`, siehe *Mehrbenutzer*) greifen hier deshalb nicht: Ein
+eingeschränktes Konto kann über die Wiederherstellung auch Dateien anderer
+Endungen zurücksetzen. Bewusst vorerst offen gelassen.
+
 Der Freigabe-Entwurfsspeicher liegt außerhalb des Repositorys
 (`backend/var/review/<hash>`) und bleibt von einer Wiederherstellung unberührt.
 Ein bereits terminierter Entwurf kann danach allerdings inhaltlich veraltet
@@ -813,6 +820,7 @@ username      = "redakteur"
 password_hash = "$2y$10$…"
 role          = "editor"                   ; admin | editor
 sites         = "kunde-a.example.com"      ; Kommaliste der HOSTS oder "*"
+file_types    = "md, png"                  ; optional, siehe unten
 disabled      = "false"
 
 [user]
@@ -825,6 +833,22 @@ content_width = "1440"
 Passwörter neu; `editor` arbeitet an den unter `sites` zugewiesenen Webseiten.
 Kein feingranulares Rechtesystem: Was auf einem Mount erlaubt ist, entscheidet
 unverändert dessen `permissions`/`readonly`.
+
+**Dateitypen je Konto** (`file_types`, optional). Beschränkt ein Redakteurskonto
+auf bestimmte Endungen — geprüft in `FileService` beim Öffnen im Editor,
+Speichern, Neuanlegen, Umbenennen (alter UND neuer Name) und Hochladen, damit
+auch für den KI-Assistenten. Die Liste **schränkt nur ein**: Wirksam ist, was
+zugleich in den Editor-Endungen (Standard + `[editor] extra_editable`), in der
+`accept`-Liste des Mounts und in `file_types` steht. Leer = keine Einschränkung;
+für Administratoren ohne Belang. Sie steht in `[account]`, nicht in `[user]`:
+Nur ein Administrator setzt sie, nicht das Konto selbst. Ohne angemeldeten
+Benutzer (Cron-Läufe, Shop-Anbindung) gibt es keine Einschränkung; die
+Shop-Anbindung arbeitet ohnehin mit einer eigenen `FileService`-Instanz und
+ihrer festen Endungsliste.
+
+**Bekannte Lücke:** Die Wiederherstellung eines Versionsstands (Git) schreibt
+über `git` direkt ins Dateisystem und umgeht damit `file_types` — ebenso wie die
+`accept`-Liste der Mounts.
 
 **Zuordnung über den Host**, nicht über den vollen SiteKey — dieselbe Bezugsgröße
 wie die Lizenz. Ein Umzug des Endpunkts von `/cms-api` nach `/hugocms-api`
@@ -844,6 +868,7 @@ steht in eigenen Verträgen, die der Connector per `instanceof` prüft:
 | Schnittstelle | Umsetzung | Wirkung |
 |---|---|---|
 | `UserAdminInterface` | nur `MultiUser` | Kontenverwaltung; ohne sie gibt es die Befehle `users…` nicht |
+| `FileTypeAwareInterface` | nur `MultiUser` | `allowedFileTypes()` — Dateityp-Einschränkung des angemeldeten Kontos (`null` = keine); der Connector reicht sie als Rückruf an `FileService` |
 | `SiteAwareInterface` | nur `MultiUser` | `bindSite(host, isPro)` — der Connector reicht den Webseiten-Kontext nach, da die Mount-Konfiguration erst nach dem Konstruktor feststeht (Lizenzstatus als Rückruf, damit die Prüfung nur bei Bedarf läuft) |
 
 **Umstieg vom Einzelbenutzer.** Im Dialog „Konfiguration ändern" umschaltbar
