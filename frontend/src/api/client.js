@@ -15,6 +15,13 @@ function normalizeBase(value) {
 
 const BASE = normalizeBase(import.meta.env.VITE_API_BASE)
 
+// Vollständige Adresse dieses Endpunkts. Die Shop-Anbindung zeigt sie an: In
+// OpensourceERP wird genau diese Adresse eingetragen, weil HugoCMS die Webseite
+// an Host und Endpunkt erkennt.
+export function endpointUrl() {
+  return new URL(BASE, window.location.href).href
+}
+
 // CSRF-Token: kommt aus whoami (auth-Store ruft setCsrfToken) und wird bei
 // jedem Schreibbefehl als Header mitgesendet.
 let csrfToken = null

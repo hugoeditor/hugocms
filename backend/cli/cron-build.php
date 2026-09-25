@@ -118,9 +118,10 @@ if (empty($result['success'])) {
 
 if (!$quiet) {
     fwrite(STDOUT, sprintf(
-        "Hugo-Lauf erfolgreich (%.2fs, %d fällige Freigabe(n)).\n",
+        "Hugo-Lauf erfolgreich (%.2fs, %d fällige Freigabe(n)%s).\n",
         (float) $result['seconds'],
         (int) ($result['applied'] ?? 0),
+        !empty($result['shopDelivery']) ? ', Lieferung der Shop-Anbindung' : '',
     ));
 }
 

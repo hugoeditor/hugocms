@@ -248,6 +248,67 @@ final class FileService
     }
 
     /**
+     * Legt ein Bild an oder ersetzt es — im Unterschied zu writeImage(), das nur
+     * vorhandene Bilder bearbeitet.
+     *
+     * Für Bilder, die HugoCMS selbst erzeugt (die Vorschaubilder der
+     * Shop-Anbindung). Dieselben Prüfungen: Endung laut Mount, Größe, Art aus
+     * den Rohdaten statt aus der Endung. Atomar über temporäre Datei.
+     *
+     * @return array Metadaten der gespeicherten Datei
+     */
+    public function putImage(Mount $mount, string $rel, string $abs, string $binary): array
+    {
+        $name = basename($abs);
+        self::assertValidName($name);
+        if (!$mount->accepts($name)) {
+            throw ApiException::denied('FILETYPE-NOT-ALLOWED-MOUNT');
+        }
+        if (strlen($binary) > $this->maxUploadBytes) {
+            throw ApiException::denied('CONTENT-TOO-LARGE');
+        }
+        if (!in_array($this->detectMimeString($binary), self::IMAGE_MIME, true)) {
+            throw ApiException::denied('FILETYPE-NOT-IMAGE');
+        }
+
+        $tmp = @tempnam(dirname($abs), '.hugofm');
+        if ($tmp === false) {
+            throw new ApiException('EIO', 500, 'TEMPFILE-FAILED');
+        }
+        if (@file_put_contents($tmp, $binary) === false || !@rename($tmp, $abs)) {
+            @unlink($tmp);
+            throw new ApiException('EIO', 500, 'FILE-SAVE-FAILED');
+        }
+        @chmod($abs, 0644);
+        clearstatcache(true, $abs);
+
+        return $this->entryInfo($mount, $rel, $abs);
+    }
+
+    /**
+     * Löscht eine Datei endgültig, ohne Papierkorb.
+     *
+     * Für Bereiche, deren Stand eine Quelle außerhalb von HugoCMS hält (die
+     * Shop-Anbindung): Was dort gelöscht wird, liefert die Quelle beim nächsten
+     * Mal wieder, falls es noch gilt. Ein Papierkorb füllte sich sonst mit
+     * jeder entfernten Produktseite. Nur Dateien, deren Endung der Mount
+     * annimmt; der Pfad muss über den Resolver aufgelöst sein.
+     */
+    public function remove(Mount $mount, string $abs): void
+    {
+        if (!is_file($abs)) {
+            return;
+        }
+        if (!$mount->accepts(basename($abs))) {
+            throw ApiException::denied('FILETYPE-NOT-ALLOWED-MOUNT');
+        }
+        if (!@unlink($abs)) {
+            throw new ApiException('EIO', 500, 'DELETE-FAILED');
+        }
+        clearstatcache(true, $abs);
+    }
+
+    /**
      * Listet den Papierkorb eines Mounts (neueste zuerst sortiert der Aufrufer).
      *
      * @return list<array>

@@ -3,9 +3,12 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 import { errorText } from '../i18n/apiMessage'
+import { endpointUrl } from '../api/client'
+import { useConfirm } from '../util/confirm'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const auth = useAuthStore()
+const confirm = useConfirm()
 
 // Sichtbarkeit als v-model (Vue 3.4+). Der Knopf in der Werkzeugschiene öffnet.
 const model = defineModel({ type: Boolean, default: false })
@@ -92,6 +95,82 @@ const perDayTooHigh = computed(
   () => windowMinutes.value !== null && Number(improvePerDay.value) > windowMinutes.value,
 )
 
+// Shop-Anbindung (OpensourceERP): Stand des Schlüssels dieser Webseite. Der
+// Schlüssel selbst kommt nur einmal, direkt nach dem Erzeugen — dann steht er in
+// newShopKey, bis der Dialog schließt.
+const shopKey = ref({ set: false, hint: null, created: null })
+const newShopKey = ref('')
+const shopBusy = ref(false)
+const shopError = ref(null)
+const shopCopied = ref(false)
+const shopEndpoint = endpointUrl()
+
+// Wie in der Freigabe-Warteschlange: toLocaleString in der Oberflächensprache
+const shopKeyCreatedText = computed(() => {
+  const created = shopKey.value.created
+  if (!created) return ''
+  const date = new Date(created)
+  return Number.isNaN(date.getTime()) ? created : date.toLocaleString(locale.value)
+})
+
+async function createShopKey() {
+  // Ein vorhandener Schlüssel gilt nach dem Ersetzen sofort nicht mehr —
+  // OpensourceERP braucht dann den neuen.
+  if (shopKey.value.set) {
+    const ok = await confirm({
+      title: t('projectConfig.shopKeyReplaceTitle'),
+      message: t('projectConfig.shopKeyReplaceConfirm'),
+      confirmText: t('projectConfig.shopKeyReplace'),
+      color: 'warning',
+    })
+    if (!ok) return
+  }
+  shopBusy.value = true
+  shopError.value = null
+  shopCopied.value = false
+  try {
+    const res = await auth.shopKeyCreate()
+    newShopKey.value = res.key
+    shopKey.value = { set: true, hint: res.hint, created: res.created }
+  } catch (e) {
+    shopError.value = errorText(t, e)
+  } finally {
+    shopBusy.value = false
+  }
+}
+
+async function deleteShopKey() {
+  const ok = await confirm({
+    title: t('projectConfig.shopKeyDeleteTitle'),
+    message: t('projectConfig.shopKeyDeleteConfirm'),
+    confirmText: t('projectConfig.shopKeyDelete'),
+    color: 'error',
+  })
+  if (!ok) return
+  shopBusy.value = true
+  shopError.value = null
+  try {
+    await auth.shopKeyDelete()
+    newShopKey.value = ''
+    shopKey.value = { set: false, hint: null, created: null }
+  } catch (e) {
+    shopError.value = errorText(t, e)
+  } finally {
+    shopBusy.value = false
+  }
+}
+
+async function copyShopKey() {
+  try {
+    await navigator.clipboard.writeText(newShopKey.value)
+    shopCopied.value = true
+  } catch {
+    // Ohne Zugriff auf die Zwischenablage (unsichere Verbindung) bleibt das
+    // Feld zum Markieren und Kopieren von Hand.
+    shopCopied.value = false
+  }
+}
+
 const loading = ref(false) // Laden der aktuellen Werte beim Öffnen
 const saving = ref(false)
 const error = ref(null)
@@ -120,6 +199,10 @@ watch(model, async (open) => {
     changelogPath.value = cfg.changelogPath ?? ''
     tagLabel.value = cfg.tagLabel ?? ''
     gitRepo.value = !!cfg.gitRepo
+    shopKey.value = cfg.shopKey ?? { set: false, hint: null, created: null }
+    newShopKey.value = ''
+    shopError.value = null
+    shopCopied.value = false
   } catch (e) {
     error.value = errorText(t, e)
   } finally {
@@ -434,6 +517,92 @@ async function submit() {
             class="mb-2 mt-5"
           />
 
+          <!-- Shop-Anbindung: Schlüssel, mit dem OpensourceERP den Bau dieser
+               Webseite anstößt. Wirkt sofort, nicht erst mit „Speichern“ —
+               wie bei jedem Zugangsschlüssel. -->
+          <template v-if="auth.manageConfig">
+            <v-divider class="my-4" />
+            <div class="text-subtitle-2 mb-1">{{ $t('projectConfig.shopSection') }}</div>
+            <div class="text-caption text-medium-emphasis mb-2">{{ $t('projectConfig.shopHint') }}</div>
+
+            <v-text-field
+              :model-value="shopEndpoint"
+              :label="$t('projectConfig.shopEndpoint')"
+              :hint="$t('projectConfig.shopEndpointHint')"
+              prepend-inner-icon="mdi-link-variant"
+              variant="outlined"
+              density="comfortable"
+              readonly
+              persistent-hint
+              class="mb-3"
+            />
+
+            <div class="text-caption text-medium-emphasis mb-3">
+              {{ $t('projectConfig.shopAreas') }}
+              <code v-for="bereich in shopKey.areas ?? []" :key="bereich" class="ml-1">{{ bereich }}</code>
+            </div>
+
+            <div class="text-body-2 mb-2">
+              <template v-if="shopKey.set">
+                {{ $t('projectConfig.shopKeySet', [shopKey.hint ?? '', shopKeyCreatedText]) }}
+              </template>
+              <template v-else>{{ $t('projectConfig.shopKeyNone') }}</template>
+            </div>
+
+            <v-alert
+              v-if="newShopKey"
+              type="warning"
+              variant="tonal"
+              density="compact"
+              class="mb-2"
+            >
+              <div class="mb-2">{{ $t('projectConfig.shopKeyShownOnce') }}</div>
+              <v-text-field
+                :model-value="newShopKey"
+                variant="outlined"
+                density="compact"
+                readonly
+                hide-details
+                class="shop-key"
+                @focus="$event.target.select()"
+              >
+                <template #append-inner>
+                  <v-btn
+                    :icon="shopCopied ? 'mdi-check' : 'mdi-content-copy'"
+                    variant="text"
+                    size="small"
+                    :aria-label="$t('projectConfig.shopKeyCopy')"
+                    @click="copyShopKey"
+                  />
+                </template>
+              </v-text-field>
+            </v-alert>
+
+            <div class="d-flex flex-wrap" style="gap: 8px">
+              <v-btn
+                variant="tonal"
+                color="primary"
+                prepend-icon="mdi-key-plus"
+                :loading="shopBusy"
+                :disabled="loading || saving"
+                @click="createShopKey"
+              >
+                {{ shopKey.set ? $t('projectConfig.shopKeyReplace') : $t('projectConfig.shopKeyCreate') }}
+              </v-btn>
+              <v-btn
+                v-if="shopKey.set"
+                variant="text"
+                color="error"
+                prepend-icon="mdi-key-remove"
+                :disabled="shopBusy || loading || saving"
+                @click="deleteShopKey"
+              >
+                {{ $t('projectConfig.shopKeyDelete') }}
+              </v-btn>
+            </div>
+            <v-alert v-if="shopError" type="error" density="compact" class="mt-2">{{ shopError }}</v-alert>
+          </template>
+
           <v-alert v-if="error" type="error" density="compact" class="mt-2">{{ error }}</v-alert>
           <div class="text-caption text-medium-emphasis mt-3">{{ $t('projectConfig.note') }}</div>
         </v-form>
@@ -450,3 +619,10 @@ async function submit() {
     </v-card>
   </v-dialog>
 </template>
+
+<style scoped>
+.shop-key :deep(input) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+}
+</style>

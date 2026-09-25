@@ -176,6 +176,18 @@ export const useAuthStore = defineStore('auth', {
       await api.post('projectreconfigure', payload)
     },
 
+    // Shop-Anbindung (OpensourceERP): erzeugt einen neuen Schlüssel für diese
+    // Webseite und ersetzt einen vorhandenen. Die Antwort trägt den Schlüssel —
+    // das einzige Mal, gespeichert wird nur sein Hash.
+    async shopKeyCreate() {
+      return api.post('shopkeycreate')
+    },
+
+    // Entfernt den Schlüssel der Shop-Anbindung; OpensourceERP ist danach ausgesperrt.
+    async shopKeyDelete() {
+      return api.post('shopkeydelete')
+    },
+
     // Prüft den seo-success-Schlüssel (eingegeben oder hinterlegt) gegen den
     // Dienst, ohne etwas zu speichern. Bedient den Konfigurationsdialog und die
     // Kontingentanzeige der Live-Analyse. Wirft bei ungültigem Schlüssel oder

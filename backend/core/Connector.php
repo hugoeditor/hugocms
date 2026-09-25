@@ -18,6 +18,9 @@ use HugoCMS\FileManager\Cron\Heartbeat;
 use HugoCMS\FileManager\Exception\ApiException;
 use HugoCMS\FileManager\Review\FrontMatter;
 use HugoCMS\FileManager\Review\ReviewStore;
+use HugoCMS\FileManager\Shop\ShopKey;
+use HugoCMS\FileManager\Shop\ShopSync;
+use HugoCMS\FileManager\Shop\ShopThumbnails;
 use Throwable;
 
 /**
@@ -173,6 +176,16 @@ final class Connector
      * @var array{pauseBuild: bool, pauseImprove: bool, pauseHealthcheck: bool}
      */
     private array $cronPause = ['pauseBuild' => false, 'pauseImprove' => false, 'pauseHealthcheck' => false];
+
+    /**
+     * Zugang der Shop-Anbindung (OpensourceERP) aus der [shop]-Sektion der
+     * Mount-Konfiguration: nur Hash, Kennung und Erzeugungszeit, nie der
+     * Schlüssel selbst ({@see ShopKey}).
+     *
+     * @var array{keyHash: ?string, keyHint: ?string, keyCreated: ?string, areas: list<string>, images: string, thumbnails: string}
+     */
+    private array $shop = ['keyHash' => null, 'keyHint' => null, 'keyCreated' => null, 'areas' => ShopSync::DEFAULT_AREAS,
+                           'images' => ShopThumbnails::DEFAULT_IMAGES, 'thumbnails' => ShopThumbnails::DEFAULT_THUMBNAILS];
 
     /**
      * Automatischer Commit rund um die zeitgesteuerte Veröffentlichung, aus der
@@ -429,6 +442,8 @@ final class Connector
         $this->cronPause = $config['cron'];
         // Automatischer Commit nach der Veröffentlichung.
         $this->gitAuto = $config['git'];
+        // Zugang der Shop-Anbindung.
+        $this->shop = $config['shop'];
         foreach ($config['warnings'] as $warning) {
             $this->addSetupWarning($warning['key'], $warning['params']);
         }
@@ -574,6 +589,17 @@ final class Connector
                 'reviewget' => $this->cmdReviewGet($request),
                 'reviewapprove' => $this->cmdReviewApprove($request),
                 'reviewdiscard' => $this->cmdReviewDiscard($request),
+                // Shop-Anbindung: shopbuild und shopbuildstatus ruft
+                // OpensourceERP mit Schlüssel auf, die beiden anderen ein
+                // angemeldeter Administrator in den Projekteinstellungen.
+                'shopbuild' => $this->cmdShopBuild(),
+                'shopbuildstatus' => $this->cmdShopBuildStatus(),
+                'shopmanifest' => $this->cmdShopManifest($request),
+                'shopupload' => $this->cmdShopUpload($request),
+                'shopcommit' => $this->cmdShopCommit($request),
+                'shopthumbnails' => $this->cmdShopThumbnails($request),
+                'shopkeycreate' => $this->cmdShopKeyCreate(),
+                'shopkeydelete' => $this->cmdShopKeyDelete(),
                 default => throw ApiException::badRequest('UNKNOWN-COMMAND', [$cmd]),
             };
 
@@ -1383,7 +1409,7 @@ final class Connector
             throw ApiException::denied('OPERATION-NOT-ALLOWED', ['build']);
         }
 
-        return $this->runHugoBuild();
+        return $this->runHugoBuild(true, 'manual');
     }
 
     /**
@@ -1573,15 +1599,21 @@ final class Connector
                     $this->logger->warning('Fällige Austausche nicht angewendet: ' . $e->getMessage());
                 }
 
-                if (!$force && $applied === []) {
+                // Eine übernommene Lieferung der Shop-Anbindung zählt wie eine
+                // fällige Freigabe: sie will gebaut werden.
+                $shopPending = $this->hugo !== null && ShopSync::buildPending($this->shopVarDir());
+
+                if (!$force && $applied === [] && !$shopPending) {
                     $this->logger->info('Cron-Build übersprungen — keine fälligen Freigaben.');
 
                     return ['skipped' => true, 'applied' => 0, 'committedPending' => $committedPending];
                 }
 
                 // Freigaben sind bereits angewendet — nicht erneut anwenden.
-                $result = $this->runHugoBuild(false);
+                $result = $this->runHugoBuild(false, 'cron');
                 $result['applied'] = count($applied);
+                // Anlass des Laufs für die Ausgabe des Cron-Skripts
+                $result['shopDelivery'] = $shopPending;
                 $result['committedPending'] = $committedPending;
 
                 // Optionaler Commit nach der Veröffentlichung: nur wenn wirklich
@@ -1840,9 +1872,15 @@ final class Connector
      * Aufrufer, die das bereits selbst erledigt haben ({@see buildSite()}, das
      * daraus erst entscheidet, ob überhaupt gebaut wird).
      *
+     * Läufe derselben Webseite laufen nacheinander, nie gleichzeitig: Knopf,
+     * Cron und Shop-Anbindung teilen sich eine Sperre ({@see BuildLock}). Wer
+     * später kommt, wartet und baut dann den neuesten Stand.
+     *
+     * $trigger (manual, cron, shop) steht im gespeicherten Stand des Laufs.
+     *
      * @return array{success: bool, exitCode: int, output: string, seconds: float}
      */
-    private function runHugoBuild(bool $applyDrafts = true): array
+    private function runHugoBuild(bool $applyDrafts = true, string $trigger = 'manual'): array
     {
         if ($this->hugo === null) {
             throw new ApiException('ECONFIG', 500, 'HUGO-NOT-CONFIGURED');
@@ -1886,26 +1924,287 @@ final class Connector
             . (!empty($this->hugo['minify']) ? ' --minify' : '')
             . ' 2>&1';
 
-        $start = hrtime(true);
-        $lines = [];
-        $exitCode = 1;
-        exec($cmd, $lines, $exitCode);
-        $seconds = round((hrtime(true) - $start) / 1e9, 2);
+        $lock = $this->buildLock();
+        $lock->acquire();
+        try {
+            $lock->recordStart($trigger);
+            // Dieser Lauf baut, was bis jetzt übernommen wurde. Kommt während
+            // des Laufs eine neue Lieferung, setzt sie die Markierung erneut.
+            $shopVarDir = $this->shopVarDir();
+            $shopPending = ShopSync::buildPending($shopVarDir);
+            ShopSync::clearBuildPending($shopVarDir);
 
-        // Ausgabe begrenzen (Logs können lang werden): die letzten 200 Zeilen.
-        $output = implode("\n", array_slice($lines, -200));
-        if ($exitCode === 0) {
-            $this->logger->info("Hugo-Lauf erfolgreich ({$seconds}s): {$source} -> {$dest}");
-        } else {
-            $this->logger->warning("Hugo-Lauf fehlgeschlagen (Code {$exitCode}): {$output}");
+            $start = hrtime(true);
+            $lines = [];
+            $exitCode = 1;
+            exec($cmd, $lines, $exitCode);
+            $seconds = round((hrtime(true) - $start) / 1e9, 2);
+
+            // Ausgabe begrenzen (Logs können lang werden): die letzten 200 Zeilen.
+            $output = implode("\n", array_slice($lines, -200));
+            if ($exitCode === 0) {
+                $this->logger->info("Hugo-Lauf erfolgreich ({$seconds}s, {$trigger}): {$source} -> {$dest}");
+            } else {
+                $this->logger->warning("Hugo-Lauf fehlgeschlagen (Code {$exitCode}, {$trigger}): {$output}");
+            }
+
+            $result = [
+                'success' => $exitCode === 0,
+                'exitCode' => $exitCode,
+                'output' => $output,
+                'seconds' => $seconds,
+            ];
+            $lock->recordFinish($result);
+            // Gescheitert: die Lieferung bleibt vorgemerkt, damit der nächste
+            // Lauf sie baut, sobald der Fehler behoben ist
+            if ($shopPending && $exitCode !== 0) {
+                ShopSync::markBuildPending($shopVarDir);
+            }
+
+            return $result;
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /**
+     * Sperre und gespeicherter Stand der Hugo-Läufe dieser Webseite, unter
+     * var/build/<sha1(Quelle)> — dieselbe Ablage je Webseite wie Vorschau und
+     * Cron.
+     */
+    private function buildLock(): BuildLock
+    {
+        return new BuildLock(__DIR__ . '/../var/build/' . sha1((string) ($this->hugo['source'] ?? '')));
+    }
+
+    // --- Shop-Anbindung (OpensourceERP) --------------------------------------
+
+    /**
+     * Verlangt den Schlüssel der Shop-Anbindung für DIESE Webseite.
+     *
+     * Die Webseite steht schon fest, bevor diese Prüfung läuft — HugoCMS hat
+     * sie aus Host und Endpunkt bestimmt und ihre Mount-Datei geladen. Ein
+     * Schlüssel gilt deshalb nur für die Webseite, zu der er gehört.
+     *
+     * Keine Sitzung, kein CSRF-Token: Es ruft kein Browser, sondern ein Server.
+     * Unverschlüsselt nimmt der Zugang nichts an, außer über die
+     * Loopback-Adresse ({@see ShopKey::transportSecure()}).
+     */
+    private function requireShopKey(): void
+    {
+        if (!ShopKey::transportSecure($_SERVER)) {
+            throw new ApiException('EINSECURE', 403, 'SHOP-HTTPS-REQUIRED');
+        }
+        if ($this->shop['keyHash'] === null) {
+            throw ApiException::unauthorized('SHOP-KEY-NOT-SET');
+        }
+        if (!ShopKey::verify($this->shop['keyHash'], ShopKey::fromRequest($_SERVER))) {
+            // Nur protokollieren, woher — der vorgelegte Wert gehört nicht ins Log
+            $this->logger->warning('Shop-Anbindung: ungültiger Schlüssel von ' . ($_SERVER['REMOTE_ADDR'] ?? '?'));
+            throw ApiException::unauthorized('SHOP-KEY-INVALID');
+        }
+    }
+
+    /**
+     * Baut die Webseite auf Anstoß von OpensourceERP.
+     *
+     * Läuft wie der Knopf „Veröffentlichen“ in dieser Anfrage und antwortet
+     * mit dem Ergebnis — ein Stateless-Backend ohne Hintergrundprozesse.
+     * OpensourceERP ruft den Befehl aus seinem eigenen Hintergrundlauf auf und
+     * wartet dort; der Browser wartet nirgends.
+     *
+     * Der Pausenschalter für den Cron-Bau gilt auch hier: Wer das Bauen
+     * aussetzt, will auch keine Läufe von außen.
+     */
+    private function cmdShopBuild(): array
+    {
+        $this->requireShopKey();
+        $this->requireMethod('POST', false);
+        if (!empty($this->cronPause['pauseBuild'])) {
+            return ['paused' => true];
         }
 
+        // Ein Vollbau großer Shops dauert; dieselbe Grenze wie bei den
+        // übrigen langen Web-Aufträgen.
+        @set_time_limit(600);
+
+        return ['paused' => false] + $this->runHugoBuild(true, 'shop');
+    }
+
+    /**
+     * Baustand dieser Webseite für OpensourceERP: läuft gerade ein Hugo-Lauf,
+     * wie ging der letzte aus. Dient zugleich als Verbindungstest.
+     */
+    private function cmdShopBuildStatus(): array
+    {
+        $this->requireShopKey();
+        $buildable = $this->hugo !== null && $this->hugoBin !== null;
+
         return [
-            'success' => $exitCode === 0,
-            'exitCode' => $exitCode,
-            'output' => $output,
-            'seconds' => $seconds,
+            'buildable' => $buildable,
+            'paused' => !empty($this->cronPause['pauseBuild']),
+            'running' => $buildable && $this->buildLock()->isRunning(),
+            'buildPending' => $this->hugo !== null && ShopSync::buildPending($this->shopVarDir()),
+            'last' => $buildable ? $this->buildLock()->last() : null,
+            // Was die Anbindung beschreiben darf — OpensourceERP prüft damit
+            // vorab, statt erst am Abgleich zu scheitern
+            'areas' => $this->shop['areas'],
+            'accept' => ShopSync::ACCEPT,
+            'images' => $this->shop['images'],
+            'thumbnails' => $this->shop['thumbnails'],
         ];
+    }
+
+    /**
+     * Erzeugt einen neuen Schlüssel für die Shop-Anbindung dieser Webseite.
+     *
+     * Die Antwort trägt den Schlüssel — das einzige Mal überhaupt: gespeichert
+     * wird nur sein Hash. Ein vorhandener Schlüssel wird dabei ersetzt und gilt
+     * sofort nicht mehr.
+     */
+    private function cmdShopKeyCreate(): array
+    {
+        $this->requireShopKeyAdmin();
+
+        $key = ShopKey::generate();
+        $created = gmdate('c');
+        // updateSections ersetzt die Sektion als Ganzes — von Hand gepflegte
+        // Einträge wie areas deshalb übernehmen
+        Config::updateSections($this->mountsPath, ['shop' => [
+            'key_hash' => ShopKey::hash($key),
+            'key_hint' => ShopKey::hint($key),
+            'key_created' => $created,
+        ] + $this->shopSectionRest()]);
+        $this->shop = MountConfig::load((string) $this->mountsPath)['shop'];
+        $this->logger->info('Shop-Anbindung: neuer Schlüssel erzeugt (…' . ShopKey::hint($key) . ')');
+
+        return ['key' => $key, 'hint' => ShopKey::hint($key), 'created' => $created];
+    }
+
+    /** Entfernt den Schlüssel der Shop-Anbindung; OpensourceERP ist danach ausgesperrt. */
+    private function cmdShopKeyDelete(): array
+    {
+        $this->requireShopKeyAdmin();
+
+        $rest = $this->shopSectionRest();
+        Config::updateSections($this->mountsPath, ['shop' => $rest === [] ? null : $rest]);
+        $this->shop = MountConfig::load((string) $this->mountsPath)['shop'];
+        $this->logger->info('Shop-Anbindung: Schlüssel entfernt');
+
+        return ['removed' => true];
+    }
+
+    /**
+     * Schlüssel verwalten dürfen nur Administratoren ({@see requireConfigAdmin})
+     * — anders als die übrigen Projekteinstellungen, die auch Redakteure
+     * ändern: Ein Schlüssel ist ein Zugang, keine redaktionelle Einstellung.
+     */
+    private function requireShopKeyAdmin(): void
+    {
+        $this->requireConfigAdmin();
+        $this->requireMethod('POST');
+        if ($this->mountsPath === null) {
+            throw new ApiException('ECONFIG', 409, 'PROJECT-CONFIG-UNAVAILABLE');
+        }
+    }
+
+    /**
+     * Einträge der [shop]-Sektion außer dem Schlüssel — was ein Administrator
+     * von Hand eingetragen hat (areas) und beim Schlüsselwechsel bleiben soll.
+     *
+     * @return array<string, mixed>
+     */
+    private function shopSectionRest(): array
+    {
+        $section = Config::raw((string) $this->mountsPath)['shop'] ?? [];
+        if (!is_array($section)) {
+            return [];
+        }
+        unset($section['key_hash'], $section['key_hint'], $section['key_created']);
+
+        return $section;
+    }
+
+    /** Laufzeitdaten der Shop-Anbindung dieser Webseite, unter var/shop/<sha1(Quelle)>. */
+    private function shopVarDir(): string
+    {
+        return __DIR__ . '/../var/shop/' . sha1((string) ($this->hugo['source'] ?? ''));
+    }
+
+    private function shopSync(): ShopSync
+    {
+        if ($this->hugo === null) {
+            throw new ApiException('ECONFIG', 500, 'HUGO-NOT-CONFIGURED');
+        }
+
+        return new ShopSync((string) $this->hugo['source'], $this->shopVarDir(), $this->shop['areas']);
+    }
+
+    /**
+     * Abgleich einer Lieferung aus OpensourceERP: nimmt das Verzeichnis der
+     * Dateien (Pfad und Prüfsumme) und nennt, was fehlt oder abweicht.
+     */
+    private function cmdShopManifest(array $request): array
+    {
+        $this->requireShopKey();
+        $this->requireMethod('POST', false);
+
+        return $this->shopSync()->manifest($request['files'] ?? null);
+    }
+
+    /** Übertragung einer Portion Dateien in die Bereitstellung — noch nicht in die Webseite. */
+    private function cmdShopUpload(array $request): array
+    {
+        $this->requireShopKey();
+        $this->requireMethod('POST', false);
+
+        return $this->shopSync()->upload((string) ($request['syncId'] ?? ''), $request['files'] ?? null);
+    }
+
+    /**
+     * Vorschaubilder für die genannten Produktbilder erzeugen — in Abschnitten
+     * von höchstens 20 Sekunden; die Antwort nennt mit `next`, wo der nächste
+     * Aufruf weitermacht. Entsteht ein neues Vorschaubild, wird gebaut: es liegt
+     * unter static/ und kommt erst mit dem Bau nach public/.
+     */
+    private function cmdShopThumbnails(array $request): array
+    {
+        $this->requireShopKey();
+        $this->requireMethod('POST', false);
+        if ($this->hugo === null) {
+            throw new ApiException('ECONFIG', 500, 'HUGO-NOT-CONFIGURED');
+        }
+        @set_time_limit(120);
+
+        $result = (new ShopThumbnails((string) $this->hugo['source'], $this->shop['images'], $this->shop['thumbnails']))
+            ->run($request['names'] ?? null, (int) ($request['size'] ?? 0), (int) ($request['offset'] ?? 0));
+        if ($result['created'] > 0) {
+            ShopSync::markBuildPending($this->shopVarDir());
+        }
+
+        return $result + ['buildPending' => ShopSync::buildPending($this->shopVarDir())];
+    }
+
+    /**
+     * Übernahme: schreibt die Lieferung in die Webseite, löscht nicht mehr
+     * Geliefertes und setzt die Bau-Markierung. Gebaut wird danach — vom Cron
+     * oder auf Anstoß mit shopbuild.
+     */
+    private function cmdShopCommit(array $request): array
+    {
+        $this->requireShopKey();
+        $this->requireMethod('POST', false);
+        @set_time_limit(300);
+
+        $result = $this->shopSync()->commit((string) ($request['syncId'] ?? ''));
+        $this->logger->info(sprintf(
+            'Shop-Anbindung: Lieferung übernommen (%d geschrieben, %d gelöscht, %d unverändert)',
+            $result['written'],
+            $result['deleted'],
+            $result['unchanged'],
+        ));
+
+        return $result;
     }
 
     /**
@@ -4302,6 +4601,16 @@ final class Connector
             'tagLabel' => (string) $this->gitAuto['tagLabel'],
             // Ist die Quelle ein Git-Repository? Für den Hinweis im Formular.
             'gitRepo' => $this->sourceIsGitRepo(),
+            // Shop-Anbindung: ob ein Schlüssel hinterlegt ist. Der Schlüssel
+            // selbst ist nirgends gespeichert und kommt nie zurück.
+            'shopKey' => [
+                'set' => $this->shop['keyHash'] !== null,
+                'hint' => $this->shop['keyHint'],
+                'created' => $this->shop['keyCreated'],
+                // Was OpensourceERP beschreiben darf — nur zur Anzeige, gepflegt
+                // in der Mount-Datei ([shop] areas)
+                'areas' => $this->shop['areas'],
+            ],
         ];
     }
 

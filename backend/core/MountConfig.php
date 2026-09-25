@@ -89,6 +89,23 @@ use HugoCMS\FileManager\Exception\ApiException;
  *                          Sprachabhängiger Text und deshalb konfigurierbar —
  *                          im Dialog kommt er vom Client, beim Cron von hier.
  *                          Leer = nur die Nummer. Standard: siehe unten.
+ *
+ * Reservierte Sektion [shop] (kein Mount): Zugang der Shop-Anbindung
+ * (OpensourceERP). Ist ein Schlüssel hinterlegt, darf OpensourceERP die
+ * shop*-Befehle dieser Webseite ohne Sitzung aufrufen ({@see Shop\ShopKey}).
+ * Geschrieben wird die Sektion ausschließlich über die Projekteinstellungen
+ * (Befehle shopkeycreate/shopkeydelete), nie von Hand.
+ *   key_hash    Hash des Schlüssels (sha256:…). Der Schlüssel selbst steht nirgends.
+ *   key_hint    letzte vier Zeichen des Schlüssels, zum Wiedererkennen.
+ *   key_created Zeitpunkt der Erzeugung (ISO 8601).
+ *   areas       (optional, von Hand) Bereiche, die die Anbindung beschreiben
+ *               darf, kommagetrennt und relativ zur Hugo-Quelle: Verzeichnisse
+ *               mit / am Ende, sonst einzelne Dateien. Standard: der Aufbau,
+ *               den OpensourceERP erzeugt ({@see Shop\ShopSync::DEFAULT_AREAS}).
+ *   images      (optional, von Hand) Verzeichnis der Produktbilder, relativ zur
+ *               Hugo-Quelle. Standard: static/images/products.
+ *   thumbnails  (optional, von Hand) Verzeichnis, in das HugoCMS die
+ *               Vorschaubilder schreibt. Standard: static/images/thumbnails.
  */
 final class MountConfig
 {
@@ -101,6 +118,7 @@ final class MountConfig
     private const IMPROVE_SECTION = 'improve';
     private const CRON_SECTION = 'cron';
     private const GIT_SECTION = 'git';
+    private const SHOP_SECTION = 'shop';
 
     /** Vorgeschlagene Commit-Nachricht, wenn keine konfiguriert ist. */
     public const string GIT_COMMIT_MESSAGE_DEFAULT = 'Automatische Veröffentlichung terminierter Freigaben';
@@ -149,9 +167,48 @@ final class MountConfig
      *   improve: array{auto: bool, windowStart: string, windowEnd: string, perDay: int, skipWeekends: bool},
      *   cron: array{pauseBuild: bool, pauseImprove: bool, pauseHealthcheck: bool},
      *   git: array{autoCommit: bool, commitMessage: string, commitMessagePending: string},
+     *   shop: array{keyHash: ?string, keyHint: ?string, keyCreated: ?string, areas: list<string>, images: string, thumbnails: string},
      *   warnings: list<array{key: string, params: list<mixed>}>
      * }
      */
+    /**
+     * Zerlegt [shop] areas. Ungültige Einträge (absolut, mit .. oder
+     * versteckten Bestandteilen) fallen weg.
+     *
+     * @return list<string>
+     */
+    private static function shopAreas(string $value): array
+    {
+        $areas = [];
+        foreach (explode(',', $value) as $area) {
+            $area = trim(str_replace('\\', '/', $area));
+            $directory = str_ends_with($area, '/');
+            $segments = array_values(array_filter(explode('/', $area), static fn ($s) => $s !== ''));
+            $valid = $segments !== [] && !str_starts_with($area, '/');
+            foreach ($segments as $segment) {
+                if ($segment === '..' || str_starts_with($segment, '.')) {
+                    $valid = false;
+                }
+            }
+            if ($valid) {
+                $areas[] = implode('/', $segments) . ($directory ? '/' : '');
+            }
+        }
+
+        return array_values(array_unique($areas));
+    }
+
+    /**
+     * Ein Verzeichnis der Shop-Anbindung, relativ zur Hugo-Quelle. Leer oder
+     * ungültig (absolut, mit .. oder Verstecktem) ergibt die Vorgabe.
+     */
+    private static function shopDirectory(mixed $value, string $default): string
+    {
+        $areas = self::shopAreas(trim((string) $value) . '/');
+
+        return count($areas) === 1 ? rtrim($areas[0], '/') : $default;
+    }
+
     public static function load(string $configPath): array
     {
         if (!is_file($configPath) || !is_readable($configPath)) {
@@ -182,6 +239,8 @@ final class MountConfig
             'changelogPaths' => [self::GIT_CHANGELOG_PATH_DEFAULT],
             'tagLabel' => self::GIT_TAG_LABEL_DEFAULT,
         ];
+        $shop = ['keyHash' => null, 'keyHint' => null, 'keyCreated' => null, 'areas' => Shop\ShopSync::DEFAULT_AREAS,
+                 'images' => Shop\ShopThumbnails::DEFAULT_IMAGES, 'thumbnails' => Shop\ShopThumbnails::DEFAULT_THUMBNAILS];
         $warnings = [];
 
         foreach ($raw as $name => $section) {
@@ -257,6 +316,32 @@ final class MountConfig
                 continue;
             }
 
+            // Zugang der Shop-Anbindung (optional, pro Webseite). Nur der Hash;
+            // ein leerer Wert zählt als „kein Schlüssel“.
+            if (strtolower((string) $name) === self::SHOP_SECTION) {
+                $hash = trim((string) ($section['key_hash'] ?? ''));
+                $hint = trim((string) ($section['key_hint'] ?? ''));
+                $created = trim((string) ($section['key_created'] ?? ''));
+                $areas = Shop\ShopSync::DEFAULT_AREAS;
+                if (trim((string) ($section['areas'] ?? '')) !== '') {
+                    $areas = self::shopAreas((string) $section['areas']);
+                    if ($areas === []) {
+                        // Nur Ungültiges eingetragen: lieber gar nichts
+                        // beschreibbar als stillschweigend die Vorgabe
+                        $warnings[] = ['key' => 'SHOP-AREAS-INVALID', 'params' => [$configPath]];
+                    }
+                }
+                $shop = [
+                    'keyHash' => $hash === '' ? null : $hash,
+                    'keyHint' => $hash === '' || $hint === '' ? null : $hint,
+                    'keyCreated' => $hash === '' || $created === '' ? null : $created,
+                    'areas' => $areas,
+                    'images' => self::shopDirectory($section['images'] ?? '', Shop\ShopThumbnails::DEFAULT_IMAGES),
+                    'thumbnails' => self::shopDirectory($section['thumbnails'] ?? '', Shop\ShopThumbnails::DEFAULT_THUMBNAILS),
+                ];
+                continue;
+            }
+
             // Automatischer Commit nach der Veröffentlichung (optional, pro Webseite)
             // sowie der Vorab-Commit offener Änderungen — beide am selben Schalter.
             if (strtolower((string) $name) === self::GIT_SECTION) {
@@ -328,6 +413,7 @@ final class MountConfig
             'improve' => $improve,
             'cron' => $cron,
             'git' => $git,
+            'shop' => $shop,
             'warnings' => $warnings,
         ];
     }

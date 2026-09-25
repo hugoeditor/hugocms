@@ -181,3 +181,29 @@ label = Medien
 ;commit_message_pending = "Offene Änderungen vor dem Build gesichert"
 ;changelog = false
 ;changelog_path = "de/changelog.md, en/changelog.md"
+
+; Reservierte Sektion [shop] (KEIN Mount): Zugang der Shop-Anbindung
+; (OpensourceERP). Ist ein Schlüssel hinterlegt, darf OpensourceERP die
+; shop*-Befehle dieser Webseite ohne Sitzung aufrufen (Übertragung, Vorschau-
+; bilder, Bau, Baustand).
+; NICHT von Hand anlegen: Der Schlüssel wird in den Projekteinstellungen unter
+; „Shop-Anbindung" erzeugt und dort einmal angezeigt; hier steht nur sein Hash.
+;   key_hash     Hash des Schlüssels (sha256:…)
+;   key_hint     letzte vier Zeichen, zum Wiedererkennen
+;   key_created  Zeitpunkt der Erzeugung
+;   areas        (optional, DARF von Hand gepflegt werden) Bereiche, die die
+;                Anbindung beschreiben darf, kommagetrennt und relativ zur
+;                Hugo-Quelle: Verzeichnisse mit / am Ende, sonst einzelne
+;                Dateien. Standard: der Aufbau, den OpensourceERP erzeugt.
+;                Die Schlüsselverwaltung lässt diesen Eintrag unangetastet.
+;   images       (optional, von Hand) Verzeichnis der Produktbilder, relativ
+;                zur Hugo-Quelle. Standard: static/images/products
+;   thumbnails   (optional, von Hand) Verzeichnis, in das shopthumbnails die
+;                Vorschaubilder schreibt. Standard: static/images/thumbnails
+;[shop]
+;key_hash = "sha256:…"
+;key_hint = "…"
+;key_created = "2026-01-01T00:00:00+00:00"
+;areas = "content/de/produkt/, data/category_groups.json, oserp-shop/"
+;images = "static/images/products"
+;thumbnails = "static/images/thumbnails"

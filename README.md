@@ -875,6 +875,7 @@ verläuft entlang SCHREIBEN, nicht LESEN:
 | `reconfigure`, `aimodels`, `activate` | nein | verändern die Installation bzw. die Lizenz (`requireConfigAdmin()`) |
 | `projectconfig`, `projectreconfigure` | ja | Einstellungen EINER Webseite (SEO-Ausschlüsse, Verbesserer, Cron-Pausen, automatischer Versionsstand, Analyse-Adressen) — redaktionelle Arbeit |
 | `users…` | nein | Kontenverwaltung (`users.manage`) |
+| `shopkeycreate`, `shopkeydelete` | nein | Schlüssel der Shop-Anbindung — ein Zugang, keine redaktionelle Einstellung (`requireConfigAdmin()`) |
 
 Entsprechend melden `reconfigurable` und `projectConfigurable` nur, ob es
 überhaupt eine Datei zum Anzeigen gibt; die Befugnis zum Speichern steht getrennt
@@ -1278,6 +1279,14 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `reviewget` | GET    | `key`                                | Entwurf samt aktuellem Live-Stand (für den Diff)       |
 | `reviewapprove`| POST | `key`, `publishDate`?, `force`?     | Freigeben: ohne Termin sofort live; mit künftigem `publishDate` terminiert (verzögerter Austausch) |
 | `reviewdiscard`| POST | `key`                               | Entwurf verwerfen (Live-Datei bleibt)                  |
+| `shopkeycreate`| POST | –                                   | Schlüssel der Shop-Anbindung erzeugen oder ersetzen; die Antwort trägt ihn — das einzige Mal (`config.manage`) |
+| `shopkeydelete`| POST | –                                   | Schlüssel der Shop-Anbindung entfernen (`config.manage`) |
+| `shopbuild`    | POST | –                                   | **Mit Schlüssel statt Sitzung:** Webseite bauen, auf Anstoß von OpensourceERP (siehe „Shop-Anbindung") |
+| `shopbuildstatus`| GET | –                                  | **Mit Schlüssel statt Sitzung:** Baustand — läuft ein Hugo-Lauf, wie ging der letzte aus, wartet eine Lieferung; dazu Bereiche und Endungen |
+| `shopmanifest` | POST | `files` (Liste aus `path`, `sha256`) | **Mit Schlüssel:** Abgleich einer Lieferung — nennt, was fehlt oder abweicht, und vergibt eine `syncId` |
+| `shopupload`   | POST | `syncId`, `files` (Liste aus `path`, `content` Base64) | **Mit Schlüssel:** eine Portion in die Bereitstellung, noch nicht in die Webseite |
+| `shopcommit`   | POST | `syncId`                            | **Mit Schlüssel:** Übernahme — schreiben, nicht mehr Geliefertes löschen, Bau vormerken |
+| `shopthumbnails` | POST | `names` (Dateinamen), `size`?, `offset`? | **Mit Schlüssel:** Vorschaubilder der Produktbilder erzeugen, abschnittsweise (`next`, `done`) |
 
 Alle POST-Befehle verlangen das **CSRF-Token** aus `whoami` (Feld `csrf`) im
 Header `X-CSRF-Token`; sonst antwortet das Backend mit `ECSRF` (403).
@@ -1299,6 +1308,98 @@ aufgebaut (`{ "key": …, "params": […] }`).
 
 `whoami` liefert zusätzlich ein `warnings`-Feld mit Einrichtungs-Hinweisen
 (siehe unten).
+
+## Shop-Anbindung (OpensourceERP)
+
+OpensourceERP erzeugt die Produktseiten eines Webshops und stößt danach den Bau
+der Webseite an. Der Plan dazu steht im OpensourceERP-Repository unter
+`dev/shop-hugocms-trennung.md`. Umgesetzt sind Zugang, Bau und die
+Übertragung der Inhaltsdateien; die Vorschaubilder erzeugt HugoCMS noch nicht.
+
+**Einrichten.** In den Projekteinstellungen unter „Shop-Anbindung" einen
+Schlüssel erzeugen (nur Administratoren). Er wird genau einmal angezeigt; in
+OpensourceERP werden er und die dort angezeigte Adresse eingetragen. HugoCMS
+erkennt die Webseite an Host und Endpunkt — ein Schlüssel gilt deshalb nur für
+die Webseite, zu der er gehört. Abgelegt wird er als Hash in der
+`[shop]`-Sektion ihrer Mount-Datei.
+
+**Anmeldung.** Bewusst kein Treiber der `AuthInterface`: Die beschreibt die
+Anmeldung von Benutzern (Passwort, Sitzung, Konten); ein Schlüssel für
+Maschinenaufrufe steht daneben und gilt nur für die `shop*`-Befehle
+(`Shop\ShopKey`).
+
+**Bauen.** `shopbuild` baut wie der Knopf „Veröffentlichen" in der Anfrage
+selbst und antwortet mit dem Ergebnis — ohne Hintergrundprozess, wie das übrige
+Backend. OpensourceERP ruft den Befehl aus seinem eigenen Hintergrundlauf auf.
+Der Pausenschalter `pause_build` der Webseite gilt auch hier.
+
+**Übertragung** (`Shop\ShopSync`). In drei Schritten, damit nie eine halbe
+Lieferung gebaut wird:
+
+1. `shopmanifest` — das Verzeichnis aller Dateien mit Prüfsumme. Die Antwort
+   nennt, was fehlt oder abweicht.
+2. `shopupload` — nur diese Dateien, in Portionen, zunächst in die
+   Bereitstellung unter `var/shop/<sha1(Quelle)>/sync/<syncId>/`.
+3. `shopcommit` — alles in die Webseite schreiben, nicht mehr Geliefertes
+   löschen, die Bau-Markierung setzen.
+
+Geschrieben wird über `FileService` und einen eigenen `MountResolver` mit einem
+Mount auf die Hugo-Quelle. Er ist bewusst nicht im Resolver der Redakteure —
+sonst wäre die ganze Webseite schreibbar. Zwei Listen begrenzen ihn:
+
+- **Bereiche** (`[shop] areas`, von Hand in der Mount-Datei): Verzeichnisse mit
+  `/` am Ende, sonst einzelne Dateien. Vorgabe: `content/de/produkt/`,
+  `data/category_groups.json`, `oserp-shop/` — der Aufbau, den OpensourceERP
+  erzeugt. Die Projekteinstellungen zeigen, was gilt.
+- **Endungen:** `md`, `json`, `html`, `js`, `css`. **Kein PHP** — der
+  Texteditor schreibt ebenfalls keines, und die Anbindung soll nicht mehr
+  dürfen als ein Redakteur. Die beiden PHP-Einstiegspunkte aus dem
+  Webseiten-Paket von OpensourceERP (Weiterleiter `shop-api/index.php`,
+  404-Seite `not_found.php`) legt man deshalb einmal von Hand nach
+  `oserp-shop/static/`; ihre Konfiguration kommt als `oserp-shop/config.json`
+  über die Übertragung.
+
+Gelöscht wird nur, was OpensourceERP bei der **vorigen** Übernahme selbst
+geliefert hat (`last-manifest.json`) — von Hand angelegte Dateien in einem
+Bereich, etwa `content/de/produkt/_index.md`, bleiben unberührt.
+
+**Vorschaubilder** (`Shop\ShopThumbnails`). Die Produktbilder liegen auf dem
+Webserver, nicht in OpensourceERP. OpensourceERP nennt mit `shopthumbnails` nur
+die Dateinamen (das erste Bild jedes Artikels) und die größte Seite der
+Vorschau (`size`, Vorgabe 200, erlaubt 16–2000); verkleinert wird hier. Quelle
+und Ziel stehen in der Mount-Datei (`[shop] images`, Vorgabe
+`static/images/products`; `[shop] thumbnails`, Vorgabe
+`static/images/thumbnails`), nicht in der Anfrage.
+
+- Eingepasst mit gleichem Seitenverhältnis, nie vergrößert; Transparenz und
+  Format der Quelle bleiben. Braucht die PHP-Erweiterung GD.
+- Ein Vorschaubild gilt als aktuell, wenn es nicht älter ist als seine Quelle
+  und die erwartete Größe hat — eine geänderte Größe wirkt so beim nächsten
+  Lauf.
+- Nur reine Dateinamen mit Bildendung (`jpg`, `jpeg`, `png`, `gif`, `webp`);
+  alles andere steht in `failed`, fehlende Quellen in `missing`.
+- Jeder Aufruf arbeitet höchstens 20 Sekunden und nennt in `next`, wo es
+  weitergeht; `done` meldet das Ende. Der Aufrufer ruft mit `offset` erneut
+  auf — kein Hintergrundprozess, kein Zustand auf dem Server.
+- Ist ein Vorschaubild entstanden, wird der Bau vorgemerkt wie nach einer
+  Übernahme.
+
+**Bau nach einer Lieferung.** Die Übernahme setzt eine Markierung
+(`var/shop/…/build-pending`); `cron-build.php` baut dann auch ohne fällige
+Freigaben, OpensourceERP stößt den Bau zusätzlich gleich mit `shopbuild` an.
+Jeder Bau nimmt die Markierung zu Beginn zurück; scheitert er, setzt er sie
+wieder, damit der nächste Lauf es erneut versucht.
+
+**`[hugo] clean` einschalten.** Ohne `--cleanDestinationDir` lässt Hugo die
+Ausgabe entfernter Seiten im Zielverzeichnis liegen — ein Produkt, das
+OpensourceERP aus dem Shop genommen hat, bliebe erreichbar.
+
+**Bausperre.** Knopf, Cron und Shop-Anbindung bauen nie gleichzeitig: Alle
+Hugo-Läufe einer Webseite teilen sich eine Sperre (`BuildLock`, unter
+`var/build/<sha1(Quelle)>/`). Wer später kommt, wartet und baut dann den
+neuesten Stand. Daneben steht dort der letzte Lauf (`last.json`: Auslöser,
+Zeiten, Ergebnis, letzte Zeilen der Hugo-Ausgabe) — den liefert
+`shopbuildstatus`.
 
 ## Logging, Hinweise und Fehlersuche
 
@@ -1394,6 +1495,13 @@ verlässliche Weg bleibt der im Web-Request.
   Pfad-Ausbruch erzeugen.
 - **Schreiboperationen nur per POST**, Session-Cookie mit `HttpOnly` und
   `SameSite=Lax`.
+- **Shop-Anbindung:** die shop*-Befehle außer der Schlüsselverwaltung laufen ohne Sitzung,
+  mit einem Schlüssel je Webseite (`Authorization: Bearer …`, ersatzweise
+  `X-HugoCMS-Key`). Gespeichert ist nur sein SHA-256-Hash; verglichen wird in
+  konstanter Zeit. Unverschlüsselt nimmt der Zugang nichts an, außer über die
+  Loopback-Adresse. Der Schlüssel öffnet nur diese Befehle — keine
+  Datei-Befehle, keine Konfiguration. Geschrieben wird nur in die Bereiche
+  (`[shop] areas`) und ins Verzeichnis der Vorschaubilder, und kein PHP.
 - **CSRF-Token:** Alle Schreibbefehle verlangen das sitzungsgebundene Token
   aus `whoami` im Header `X-CSRF-Token` (zweite Schicht neben `SameSite=Lax`).
   Das einmalige Einrichtungs-Setup (vor Existenz der `hugocms.ini`) läuft ohne
