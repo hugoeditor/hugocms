@@ -423,7 +423,19 @@ final class Connector
     {
         $config = MountConfig::load($configPath);
         foreach ($config['mounts'] as $spec) {
-            $this->mount($spec['name'], $spec['path'], $spec['options']);
+            try {
+                $this->mount($spec['name'], $spec['path'], $spec['options']);
+            } catch (ApiException $e) {
+                if ($e->messageKey() !== 'MOUNT-PATH-PROTECTED') {
+                    throw $e;
+                }
+                // Ein Mount, der das backend/ erreicht, wird übersprungen statt
+                // die ganze Installation lahmzulegen — der Administrator muss
+                // die Mount-Datei von Hand korrigieren können und sieht den
+                // Hinweis nach der Anmeldung.
+                $this->logger->warning('Mount "' . $spec['name'] . '" übersprungen: enthält das backend/ oder liegt darin.');
+                $this->addSetupWarning('MOUNT-PROTECTED-SKIPPED', [$spec['name']]);
+            }
         }
         // Pro-Lizenz dieser Webseite und das Ziel künftiger Aktivierungen.
         $this->mountsPath = $configPath;
@@ -4316,6 +4328,12 @@ final class Connector
             'seoExcludeFiles' => implode("\n", Config::normalizeExcludeFiles(
                 (string) ($raw['seo_report']['exclude_files'] ?? ''),
             )),
+            // Texteditor: zusätzlich freigegebene Endungen (kommagetrennt) und
+            // die eingebauten, damit der Dialog sie im Hinweis nennen kann.
+            'editorExtraEditable' => implode(', ', Config::normalizeExtensions(
+                (string) ($raw['editor']['extra_editable'] ?? ''),
+            )),
+            'editorDefaultEditable' => FileService::DEFAULT_EDITABLE,
         ];
     }
 
@@ -4485,6 +4503,14 @@ final class Connector
             // Ohne zusätzliche Präfixe/Dateien keine [seo_report]-Sektion.
             'seo_report' => $seoSection,
         ];
+        // [editor] nur anfassen, wenn das Formular das Feld mitschickt — ein
+        // älterer Client soll eine von Hand gepflegte Freigabe nicht löschen.
+        // Ungültige Einträge verwirft die Normalisierung; ohne Eintrag entfällt
+        // die Sektion.
+        if (array_key_exists('editorExtraEditable', $request)) {
+            $extra = Config::normalizeExtensions((string) $request['editorExtraEditable']);
+            $sections['editor'] = $extra === [] ? null : ['extra_editable' => implode(', ', $extra)];
+        }
         // [auth] NUR bei einem Treiberwechsel mitgeben. Den Schlüssel immer zu
         // setzen wäre gefährlich: updateSections deutet null als „Sektion
         // entfernen" — die Anmeldedaten wären damit weg.

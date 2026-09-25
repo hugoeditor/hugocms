@@ -981,6 +981,13 @@ export default {
     toHint: 'Adresse für die Gesundheitscheck-Berichte.',
   },
 
+  editorConfig: {
+    section: 'Texteditor',
+    extraEditable: 'Zusätzliche Dateitypen',
+    extraEditablePlaceholder: 'z. B. sh, conf',
+    extraEditableHint: 'Weitere Endungen, die der Texteditor öffnen und speichern darf — kommagetrennt, ohne Punkt. Sie ergänzen die eingebauten ({0}). Die accept-Liste eines Mounts und die Dateitypen eines Benutzerkontos gelten weiterhin.',
+    scriptWarning: 'Vorsicht bei Skripten (sh, php, py …): Führt der Server oder ein Cron-Job sie aus, kann jeder mit Schreibrecht auf den Mount — auch der KI-Assistent — Befehle auf dem Server ausführen lassen.',
+  },
   seoConfig: {
     section: 'SEO-Bericht',
     excludePrefixes: 'Ausgeschlossene Verzeichnisse',
@@ -1716,6 +1723,7 @@ export default {
     'PATH-INVALID-CHAR': 'Ungültiges Zeichen im Pfad.',
     'PARENT-PATH-NOT-ALLOWED': 'Übergeordnete Pfade sind nicht erlaubt.',
     'MOUNT-PATH-MISSING': 'Mount-Pfad existiert nicht oder ist kein Verzeichnis: {0}',
+    'MOUNT-PATH-PROTECTED': 'Der Mount „{0}“ enthält das Backend-Verzeichnis von HugoCMS oder liegt darin und ist deshalb nicht zulässig.',
 
     'MOUNTS-NOT-READABLE': 'Mount-Konfiguration nicht lesbar: {0}',
     'MOUNTS-INVALID-INI': 'Mount-Konfiguration ist kein gültiges INI: {0}',
@@ -1764,6 +1772,7 @@ export default {
     'SESSION-DIR-MISSING': 'Sitzungsverzeichnis fehlt: {0} — Anmeldungen sind möglicherweise nicht von Dauer.',
     'LOG-DIR-MISSING': 'Log-Verzeichnis fehlt: {0} — Meldungen gehen ins Server-Log.',
     'MOUNT-CONFIG-MISSING': 'Keine eigene Mount-Konfiguration für „{0}“.',
+    'MOUNT-PROTECTED-SKIPPED': 'Der Mount „{0}“ wurde ausgelassen: Er enthält das Backend-Verzeichnis von HugoCMS (Konfiguration, Benutzerkonten) oder liegt darin. Bitte den Pfad in der Mount-Konfiguration anpassen.',
     'HUGO-CONFIG-INCOMPLETE': 'Unvollständige [hugo]-Sektion in {0}: „source“ ist erforderlich. Veröffentlichen ist für diese Webseite deaktiviert.',
     'GIT-CHANGELOG-PATH-INVALID': 'Unbrauchbarer Wert für „changelog_path“ in {0}. Das Änderungsprotokoll wird nach changelog.md geschrieben.',
     'HUGO-BIN-NOT-CONFIGURED': 'Hugo-Programm ist nicht konfiguriert ([hugo] bin in der hugocms.ini). Veröffentlichen ist deaktiviert.',

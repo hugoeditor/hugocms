@@ -980,6 +980,13 @@ export default {
     toHint: 'Address for the health-check reports.',
   },
 
+  editorConfig: {
+    section: 'Text editor',
+    extraEditable: 'Additional file types',
+    extraEditablePlaceholder: 'e.g. sh, conf',
+    extraEditableHint: 'Further extensions the text editor may open and save — comma-separated, without a dot. They extend the built-in ones ({0}). A mount’s accept list and the file types of a user account still apply.',
+    scriptWarning: 'Caution with scripts (sh, php, py …): if the server or a cron job runs them, anyone with write access to the mount — including the AI assistant — can have commands executed on the server.',
+  },
   seoConfig: {
     section: 'SEO report',
     excludePrefixes: 'Excluded directories',
@@ -1711,6 +1718,7 @@ export default {
     'PATH-INVALID-CHAR': 'Invalid character in path.',
     'PARENT-PATH-NOT-ALLOWED': 'Parent paths are not allowed.',
     'MOUNT-PATH-MISSING': 'Mount path does not exist or is not a directory: {0}',
+    'MOUNT-PATH-PROTECTED': 'The mount “{0}” contains the HugoCMS backend directory or lies inside it and is therefore not allowed.',
 
     'MOUNTS-NOT-READABLE': 'Mount configuration not readable: {0}',
     'MOUNTS-INVALID-INI': 'Mount configuration is not valid INI: {0}',
@@ -1759,6 +1767,7 @@ export default {
     'SESSION-DIR-MISSING': 'Session directory missing: {0} — sign-ins may not persist.',
     'LOG-DIR-MISSING': 'Log directory missing: {0} — messages go to the server log.',
     'MOUNT-CONFIG-MISSING': 'No dedicated mount configuration for “{0}”.',
+    'MOUNT-PROTECTED-SKIPPED': 'The mount “{0}” was skipped: it contains the HugoCMS backend directory (configuration, user accounts) or lies inside it. Please adjust the path in the mount configuration.',
     'HUGO-CONFIG-INCOMPLETE': 'Incomplete [hugo] section in {0}: “source” is required. Publishing is disabled for this site.',
     'GIT-CHANGELOG-PATH-INVALID': 'Unusable value for “changelog_path” in {0}. The change log is written to changelog.md.',
     'HUGO-BIN-NOT-CONFIGURED': 'The Hugo binary is not configured ([hugo] bin in hugocms.ini). Publishing is disabled.',

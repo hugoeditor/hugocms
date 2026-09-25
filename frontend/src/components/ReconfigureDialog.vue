@@ -26,6 +26,10 @@ const logLevels = ref(['debug', 'info', 'warning', 'error'])
 const hugoBin = ref('')
 // --cleanDestinationDir: leert vor dem Build das Zielverzeichnis (siehe Hinweis).
 const hugoClean = ref(false)
+// Texteditor: zusätzlich freigegebene Endungen ([editor] extra_editable) als
+// Kommaliste; die eingebauten nennt der Hinweis.
+const editorExtraEditable = ref('')
+const editorDefaultEditable = ref([])
 
 // KI-Assistent. Der Schlüssel wird nie geladen (Geheimnis); leeres Feld lässt
 // ihn unverändert. aiConfigured zeigt nur an, ob bereits einer gesetzt ist.
@@ -180,6 +184,8 @@ watch(model, async (open) => {
     logLevels.value = cfg.logLevels ?? ['debug', 'info', 'warning', 'error']
     hugoBin.value = cfg.hugoBin ?? ''
     hugoClean.value = !!cfg.hugoClean
+    editorExtraEditable.value = cfg.editorExtraEditable ?? ''
+    editorDefaultEditable.value = cfg.editorDefaultEditable ?? []
     aiApiKey.value = ''
     aiModel.value = cfg.aiModel || 'claude-opus-5'
     aiModelCron.value = cfg.aiModelCron || ''
@@ -232,6 +238,7 @@ async function submit() {
       logLevel: logLevel.value,
       hugoBin: hugoBin.value,
       hugoClean: hugoClean.value,
+      editorExtraEditable: editorExtraEditable.value,
       aiApiKey: aiApiKey.value, // leer = unverändert
       aiModel: aiModel.value,
       aiModelCron: aiModelCron.value, // leer = wie Assistenten-Modell
@@ -383,6 +390,26 @@ async function submit() {
             hide-details
             class="mb-4"
           />
+
+          <v-divider class="my-3" />
+          <div class="text-subtitle-2 mb-2">{{ $t('editorConfig.section') }}</div>
+          <div class="text-caption text-medium-emphasis mb-2">
+            {{ $t('editorConfig.extraEditableHint', [editorDefaultEditable.join(', ')]) }}
+          </div>
+          <v-text-field
+            v-model="editorExtraEditable"
+            :label="$t('editorConfig.extraEditable')"
+            :placeholder="$t('editorConfig.extraEditablePlaceholder')"
+            prepend-inner-icon="mdi-file-code-outline"
+            variant="outlined"
+            density="comfortable"
+            class="mb-2"
+          />
+          <!-- Skripte, die der Server ausführt, sind ein Einfallstor: Wer sie
+               bearbeiten darf, kann Befehle auf dem Server ausführen lassen. -->
+          <v-alert type="warning" variant="tonal" density="compact" class="mb-4">
+            {{ $t('editorConfig.scriptWarning') }}
+          </v-alert>
 
           <v-divider class="my-3" />
           <!-- Überschrift mit Aktualisieren-Knopf: holt die Modell-Liste von der

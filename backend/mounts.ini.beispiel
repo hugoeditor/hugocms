@@ -21,6 +21,9 @@
 ;     (kurz, ohne Leer- und Sonderzeichen).
 ;   • path        (Pflicht)  Verzeichnis des Mounts. Relative Pfade gelten
 ;                            relativ zu DIESER Datei. Absolute Pfade empfohlen.
+;                            Darf das backend/ von HugoCMS weder enthalten
+;                            noch darin liegen — ein solcher Mount wird
+;                            übersprungen (Hinweis nach der Anmeldung).
 ;   • label       (optional) Anzeigename im Client. Standard: Sektionsname.
 ;   • permissions (optional) Kommaliste. Werte: read, write, upload, delete,
 ;                            mkdir, rename, copy, move. Fehlt sie: alle Rechte.

@@ -1505,6 +1505,13 @@ verlässliche Weg bleibt der im Web-Request.
 
 - **Einsperrung pro Mount:** Pfade werden mit `realpath()` aufgelöst und müssen
   innerhalb ihres Mounts liegen; `..` ist verboten.
+- **backend/ ist für Mounts tabu:** Kein Mount darf das eigene `backend/`
+  enthalten (auch nicht das Release-Verzeichnis darüber oder `/`) oder darin
+  liegen (`MountResolver::add`, `MOUNT-PATH-PROTECTED`). Sonst könnte ein
+  Redakteur mit Lösch- und Hochladerecht `hugocms.ini`, Kontodateien oder
+  Mount-Konfigurationen austauschen. Ein solcher Mount aus der Mount-Datei wird
+  übersprungen, protokolliert und nach der Anmeldung als Hinweis
+  `MOUNT-PROTECTED-SKIPPED` gemeldet — die übrigen Mounts bleiben nutzbar.
 - **Anmeldepflicht:** Alle Datei-Befehle erfordern eine gültige Sitzung.
 - **Rechte je Mount:** `permissions` und `readonly` begrenzen Operationen pro
   Mount. Sie gelten unabhängig vom Anmeldeverfahren: Beim Mehrbenutzer regelt
