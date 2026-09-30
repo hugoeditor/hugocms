@@ -30,7 +30,7 @@ const busy = ref(false)
 // Formular für „anlegen“ und „bearbeiten“. editing = null → neues Konto.
 const formOpen = ref(false)
 const editing = ref(null)
-const form = ref({ username: '', password: '', role: 'editor', allSites: true, sites: [], fileTypes: [] })
+const form = ref({ username: '', password: '', role: 'editor', allSites: true, sites: [], fileTypes: [], hiddenAllowed: false })
 const formError = ref(null)
 
 // Getrenntes Formular fürs Zurücksetzen eines fremden Passworts.
@@ -53,7 +53,7 @@ function siteLabel(user) {
 
 function openCreate() {
   editing.value = null
-  form.value = { username: '', password: '', role: 'editor', allSites: true, sites: [], fileTypes: [] }
+  form.value = { username: '', password: '', role: 'editor', allSites: true, sites: [], fileTypes: [], hiddenAllowed: false }
   formError.value = null
   formOpen.value = true
 }
@@ -67,6 +67,7 @@ function openEdit(user) {
     allSites: user.sites.includes(ALL_SITES) || user.sites.length === 0,
     sites: user.sites.filter((s) => s !== ALL_SITES),
     fileTypes: [...(user.fileTypes ?? [])],
+    hiddenAllowed: !!user.hiddenAllowed,
   }
   formError.value = null
   formOpen.value = true
@@ -102,6 +103,7 @@ async function submitForm() {
         role: form.value.role,
         sites: formSites(),
         fileTypes: formFileTypes(),
+        hiddenAllowed: form.value.hiddenAllowed,
       })
       emit('notice', t('users.updated', [editing.value.name]))
     } else {
@@ -111,6 +113,7 @@ async function submitForm() {
         role: form.value.role,
         sites: formSites(),
         fileTypes: formFileTypes(),
+        hiddenAllowed: form.value.hiddenAllowed,
       })
       emit('notice', t('users.created', [form.value.username]))
     }
@@ -255,7 +258,13 @@ async function removeUser(user) {
                 </td>
                 <td>{{ user.role === 'admin' ? $t('users.roleAdmin') : $t('users.roleEditor') }}</td>
                 <td class="text-caption">{{ siteLabel(user) }}</td>
-                <td class="text-caption">{{ fileTypeLabel(user) }}</td>
+                <td class="text-caption">
+                  {{ fileTypeLabel(user) }}
+                  <!-- Administratoren sehen versteckte Dateien ohnehin. -->
+                  <v-chip v-if="user.role !== 'admin' && user.hiddenAllowed" size="x-small" variant="tonal" class="ml-1">
+                    {{ $t('users.hiddenChip') }}
+                  </v-chip>
+                </td>
                 <td>
                   <v-chip :color="user.disabled ? 'warning' : 'success'" size="x-small" variant="tonal">
                     {{ user.disabled ? $t('users.disabled') : $t('users.active') }}
@@ -402,6 +411,15 @@ async function removeUser(user) {
                 variant="outlined"
                 density="comfortable"
                 class="mt-3"
+              />
+              <v-switch
+                v-model="form.hiddenAllowed"
+                :label="$t('users.hiddenAllowed')"
+                :hint="$t('users.hiddenAllowedHint')"
+                persistent-hint
+                color="primary"
+                density="compact"
+                class="mt-2"
               />
             </template>
           </v-form>

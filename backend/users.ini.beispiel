@@ -63,6 +63,12 @@ sites = "kunde-a.example.com, kunde-b.example.com"
 ; Versionsstands (Git) umgeht die Liste.
 ;file_types = "md, png, jpg"
 
+; Darf dieses Konto versteckte Dateien (Punkt-Dateien) im Dateimanager
+; einblenden? Ohne Freigabe ist der Schalter („Versteckte Dateien anzeigen“)
+; sichtbar, aber deaktiviert. Setzt die Benutzerverwaltung. Standard false; für
+; die Rolle admin ohne Belang — Administratoren dürfen das immer.
+;allow_hidden = "true"
+
 ; Gesperrt? true = die Anmeldung wird abgewiesen, das Konto bleibt aber
 ; bestehen (samt Zuordnung und Einstellungen).
 disabled = "false"
@@ -79,3 +85,4 @@ disabled = "false"
 ;content_width = "1200"
 ;toolbar_collapsed = "false"
 ;update_lastmod = "false"
+;show_hidden = "false"

@@ -21,7 +21,9 @@ export const useAuthStore = defineStore('auth', {
     // null = beim Speichern nachfragen, true/false = ohne Nachfrage anwenden.
     // contentWidth und toolbarCollapsed hält die Oberfläche selbst nach (siehe
     // saveUserPrefs) — sie sind der Zustand nach dem nächsten Neuladen.
-    ui: { contentWidth: 1200, toolbarCollapsed: false, sessionLifetimeHours: 8, updateLastmod: null },
+    // showHidden = versteckte Dateien werden gezeigt (wirksamer Zustand);
+    // hiddenAllowed = das Konto darf das schalten (sonst Schalter deaktiviert).
+    ui: { contentWidth: 1200, toolbarCollapsed: false, sessionLifetimeHours: 8, updateLastmod: null, showHidden: false, hiddenAllowed: false },
     // Pro-Lizenz (aus whoami). configured = ein Schlüssel ist hinterlegt (ggf.
     // ungültig/falsche Domain). git = Git-Funktion nutzbar (Pro + Hugo-Projekt).
     // Die Lizenz gilt pro Webseite; licensable = aktivierbar (Mount-Datei vorhanden).
@@ -102,7 +104,7 @@ export const useAuthStore = defineStore('auth', {
       this.reconfigurable = data.reconfigurable ?? false
       this.projectConfigurable = data.projectConfigurable ?? false
       this.ai = data.ai ?? { enabled: false, model: '', writeMode: 'confirm' }
-      this.ui = data.ui ?? { contentWidth: 1200, toolbarCollapsed: false, sessionLifetimeHours: 8, updateLastmod: null }
+      this.ui = data.ui ?? { contentWidth: 1200, toolbarCollapsed: false, sessionLifetimeHours: 8, updateLastmod: null, showHidden: false, hiddenAllowed: false }
       this.license = data.license ?? { edition: 'community', licensee: null, domain: '', configured: false }
       this.licensable = data.licensable ?? false
       this.git = data.git ?? false
@@ -205,6 +207,12 @@ export const useAuthStore = defineStore('auth', {
     async saveUserPrefs(patch) {
       const data = await api.post('setuserprefs', patch)
       this.ui = { ...this.ui, ...(data.ui ?? patch) }
+    },
+
+    // Versteckte Dateien zeigen/verbergen ([user] show_hidden). Die Dateiliste
+    // lädt der Aufrufer danach neu — der Server filtert beim Auflisten.
+    async setShowHidden(value) {
+      await this.saveUserPrefs({ showHidden: !!value })
     },
 
     // Merkt die Benutzerwahl zum lastmod-Verhalten in [user] update_lastmod.

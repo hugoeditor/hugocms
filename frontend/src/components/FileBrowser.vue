@@ -219,6 +219,21 @@ function buildItems(entry) {
     if (files.can('write')) items.push({ icon: 'mdi-file-plus-outline', label: t('ctx.newFile'), action: () => openNew('file') })
     if (files.can('upload')) items.push({ icon: 'mdi-upload-outline', label: t('ctx.upload'), action: () => pickUpload() })
   }
+  // Versteckte Dateien: Umschalter mit Häkchen, immer am Ende. Ohne Freigabe
+  // (Redakteur, die ein Administrator nicht freigeschaltet hat) sichtbar, aber
+  // deaktiviert — so ist klar, dass es die Möglichkeit gibt.
+  if (items.length) items.push({ divider: true })
+  items.push({
+    checkbox: true,
+    checked: !!auth.ui?.showHidden,
+    disabled: !auth.ui?.hiddenAllowed,
+    title: auth.ui?.hiddenAllowed ? '' : t('ctx.showHiddenLocked'),
+    label: t('ctx.showHidden'),
+    action: () => run(async () => {
+      await auth.setShowHidden(!auth.ui?.showHidden)
+      await files.refresh()
+    }),
+  })
   return items
 }
 
@@ -238,6 +253,7 @@ function closeMenu() {
 }
 
 function runItem(item) {
+  if (item.disabled) return
   closeMenu()
   item.action()
 }
@@ -573,8 +589,18 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
       <ul class="nemo-menu" :style="{ left: menu.x + 'px', top: menu.y + 'px' }">
         <template v-for="(item, i) in menu.items" :key="i">
           <li v-if="item.divider" class="nemo-menu-divider" />
-          <li v-else class="nemo-menu-item" @click="runItem(item)">
-            <v-icon :icon="item.icon" size="18" class="nemo-menu-icon" />
+          <li
+            v-else
+            class="nemo-menu-item"
+            :class="{ 'nemo-menu-item--disabled': item.disabled }"
+            :title="item.title || undefined"
+            @click="runItem(item)"
+          >
+            <v-icon
+              :icon="item.checkbox ? (item.checked ? 'mdi-checkbox-marked-outline' : 'mdi-checkbox-blank-outline') : item.icon"
+              size="18"
+              class="nemo-menu-icon"
+            />
             <span>{{ item.label }}</span>
           </li>
         </template>
@@ -865,6 +891,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 .nemo-menu-item:hover { background: var(--mint-green); color: #fff; }
 .nemo-menu-item:hover .nemo-menu-icon { color: #fff; }
 .nemo-menu-icon { color: var(--mint-text-muted); }
+.nemo-menu-item--disabled { opacity: 0.45; cursor: default; }
+.nemo-menu-item--disabled:hover { background: transparent; color: var(--mint-text); }
+.nemo-menu-item--disabled:hover .nemo-menu-icon { color: var(--mint-text-muted); }
 .nemo-menu-divider {
   height: 1px;
   margin: 4px 6px;

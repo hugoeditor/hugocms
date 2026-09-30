@@ -135,6 +135,7 @@ final class Connector
         'contentWidth' => 1200,
         'toolbarCollapsed' => false,
         'updateLastmod' => null,
+        'showHidden' => false,
     ];
 
     /** Zwischenspeicher der wirksamen Einstellungen (einmal je Request). */
@@ -945,8 +946,18 @@ final class Connector
 
         return [
             'cwd' => $cwd,
-            'entries' => $this->files->listDir($target['mount'], $target['rel'], $target['abs']),
+            'entries' => $this->files->listDir($target['mount'], $target['rel'], $target['abs'], $this->showHidden()),
         ];
+    }
+
+    /**
+     * Versteckte Dateien zeigen? Nur wenn das Konto es wünscht (show_hidden)
+     * UND darf (AuthInterface::HIDDEN_FILES). Nimmt ein Administrator die
+     * Freigabe zurück, gilt ein gespeichertes show_hidden = true nicht mehr.
+     */
+    private function showHidden(): bool
+    {
+        return $this->userPrefs()['showHidden'] && $this->auth->can(AuthInterface::HIDDEN_FILES);
     }
 
     private function cmdRead(array $request): array
@@ -4866,7 +4877,7 @@ final class Connector
      * Einzelbenutzer in der hugocms.ini, beim Mehrbenutzer in der Datei des
      * jeweiligen Kontos. Einmal je Request ermittelt.
      *
-     * @return array{sessionLifetime: int, contentWidth: int, toolbarCollapsed: bool, updateLastmod: ?bool}
+     * @return array{sessionLifetime: int, contentWidth: int, toolbarCollapsed: bool, updateLastmod: ?bool, showHidden: bool}
      */
     private function userPrefs(): array
     {
@@ -4891,6 +4902,8 @@ final class Connector
      *   sessionLifetime  Sitzungsdauer in STUNDEN (session_lifetime)
      *   updateLastmod    lastmod beim Speichern setzen (update_lastmod);
      *                    null entfernt den Schlüssel = im Editor nachfragen
+     *   showHidden       versteckte Dateien zeigen (show_hidden); true nur mit
+     *                    dem Recht AuthInterface::HIDDEN_FILES
      *
      * Jedes Feld ist einzeln optional; nur mitgegebene Felder werden
      * geschrieben, die übrigen [user]-Werte bleiben unberührt. Die ersten
@@ -4950,6 +4963,18 @@ final class Connector
             $changes['update_lastmod'] = $lastmod === null ? null : ($lastmod ? 'true' : 'false');
         }
 
+        if (array_key_exists('showHidden', $request)) {
+            $showHidden = $request['showHidden'];
+            if (!is_bool($showHidden)) {
+                throw ApiException::badRequest('PARAM-INVALID', ['showHidden']);
+            }
+            // Einschalten nur mit Freigabe; ausschalten darf jedes Konto.
+            if ($showHidden && !$this->auth->can(AuthInterface::HIDDEN_FILES)) {
+                throw ApiException::denied('HIDDEN-FILES-NOT-ALLOWED');
+            }
+            $changes['show_hidden'] = $showHidden ? 'true' : 'false';
+        }
+
         if ($changes === []) {
             throw ApiException::badRequest('PARAM-MISSING', ['contentWidth']);
         }
@@ -4983,6 +5008,11 @@ final class Connector
             // Dreiwertig: null = beim Speichern nach lastmod-Aktualisierung
             // fragen; true/false = ohne Nachfrage anwenden.
             'updateLastmod' => $prefs['updateLastmod'],
+            // Versteckte Dateien: wirksamer Zustand und ob das Konto ihn
+            // überhaupt schalten darf (sonst zeigt die Oberfläche den Schalter
+            // deaktiviert).
+            'showHidden' => $this->showHidden(),
+            'hiddenAllowed' => $this->auth->isAuthenticated() && $this->auth->can(AuthInterface::HIDDEN_FILES),
         ];
     }
 
@@ -5109,6 +5139,7 @@ final class Connector
             (string) ($request['role'] ?? UserAdminInterface::ROLE_EDITOR),
             $this->requestSites($request),
             $this->requestFileTypes($request) ?? [],
+            $this->requestBool($request, 'hiddenAllowed') ?? false,
         );
         $this->logger->info('Benutzerkonto angelegt: ' . $username);
 
@@ -5131,6 +5162,7 @@ final class Connector
             array_key_exists('sites', $request) ? $this->requestSites($request) : null,
             $disabled,
             $this->requestFileTypes($request),
+            $this->requestBool($request, 'hiddenAllowed'),
         );
         $this->logger->info('Benutzerkonto geändert: ' . $username);
 
@@ -5164,6 +5196,19 @@ final class Connector
         $this->logger->info('Benutzerkonto gelöscht: ' . $username);
 
         return ['ok' => true, 'users' => $admin->listUsers()];
+    }
+
+    /** Optionaler Wahrheitswert aus der Anfrage; null, wenn nicht genannt. */
+    private function requestBool(array $request, string $key): ?bool
+    {
+        if (!array_key_exists($key, $request)) {
+            return null;
+        }
+        if (!is_bool($request[$key])) {
+            throw ApiException::badRequest('PARAM-INVALID', [$key]);
+        }
+
+        return $request[$key];
     }
 
     /**

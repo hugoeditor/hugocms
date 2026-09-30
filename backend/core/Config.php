@@ -22,6 +22,8 @@ use HugoCMS\FileManager\Exception\ApiException;
  *   toolbar_collapsed = false ; Werkzeugleiste eingeklappt starten (optional)
  *   update_lastmod = false ; lastmod beim Speichern setzen (optional; fehlt =
  *                          ; im Editor nachfragen)
+ *   show_hidden = false    ; versteckte Dateien zeigen (optional; wirkt nur
+ *                          ; mit dem Recht files.hidden)
  *
  *   [session]
  *   path = var/sessions
@@ -61,7 +63,7 @@ final class Config
     /**
      * @return array{
      *   auth: array<string, mixed>,
-     *   user: array{sessionLifetime: int, contentWidth: int, toolbarCollapsed: bool, updateLastmod: ?bool},
+     *   user: array{sessionLifetime: int, contentWidth: int, toolbarCollapsed: bool, updateLastmod: ?bool, showHidden: bool},
      *   session: array{path: string},
      *   log: array{file: string, level: string, maxBytes: int, keep: int},
      *   hugoBin: ?string,
@@ -330,9 +332,9 @@ final class Config
      * angelegtes Konto (und jedes beim Umstieg übernommene) die installations-
      * weiten Vorgaben.
      *
-     * @param ?array{sessionLifetime: int, contentWidth: int, toolbarCollapsed: bool, updateLastmod: ?bool} $defaults
+     * @param ?array{sessionLifetime: int, contentWidth: int, toolbarCollapsed: bool, updateLastmod: ?bool, showHidden: bool} $defaults
      *
-     * @return array{sessionLifetime: int, contentWidth: int, toolbarCollapsed: bool, updateLastmod: ?bool}  sessionLifetime in Sekunden
+     * @return array{sessionLifetime: int, contentWidth: int, toolbarCollapsed: bool, updateLastmod: ?bool, showHidden: bool}  sessionLifetime in Sekunden
      */
     public static function userSection(mixed $section, ?array $defaults = null): array
     {
@@ -358,11 +360,18 @@ final class Config
             ? filter_var($section['update_lastmod'], FILTER_VALIDATE_BOOLEAN)
             : ($defaults['updateLastmod'] ?? null);
 
+        // Versteckte Dateien im Dateimanager zeigen — nur der Wunsch; ob das
+        // Konto es darf, entscheidet der Auth-Treiber (AuthInterface::HIDDEN_FILES).
+        $showHidden = isset($section['show_hidden'])
+            ? filter_var($section['show_hidden'], FILTER_VALIDATE_BOOLEAN)
+            : ($defaults['showHidden'] ?? false);
+
         return [
             'sessionLifetime' => $seconds,
             'contentWidth' => $width,
             'toolbarCollapsed' => $toolbarCollapsed,
             'updateLastmod' => $updateLastmod,
+            'showHidden' => $showHidden,
         ];
     }
 

@@ -15,8 +15,10 @@ use HugoCMS\FileManager\Review\FrontMatter;
  * Stufe 2: makeDir, makeFile, rename, trash (Papierkorb), copy, move.
  * Stufe 3: storeUpload; Auslieferung (download/raw/thumb) macht der Connector.
  *
- * Versteckte Einträge (Punkt-Dateien, inkl. dem Papierkorb .trash) werden in
- * Listen ausgeblendet — wie der Standard von Nemo.
+ * Versteckte Einträge (Punkt-Dateien) werden in Listen ausgeblendet — wie der
+ * Standard von Nemo. Der Aufrufer kann sie einblenden (listDir $showHidden);
+ * der Papierkorb .trash und Zwischendateien (.hugofm…) bleiben auch dann
+ * verborgen, sie sind reine Verwaltungsdaten.
  */
 final class FileService
 {
@@ -60,7 +62,7 @@ final class FileService
      *
      * @return array<int, array>
      */
-    public function listDir(Mount $mount, string $rel, string $abs): array
+    public function listDir(Mount $mount, string $rel, string $abs, bool $showHidden = false): array
     {
         if (!is_dir($abs)) {
             throw ApiException::badRequest('NOT-A-DIRECTORY');
@@ -69,7 +71,8 @@ final class FileService
         $entries = [];
         foreach (scandir($abs) ?: [] as $name) {
             // Punkt-Einträge ausblenden (.,.., Punkt-Dateien und der .trash).
-            if ($name[0] === '.') {
+            // Mit $showHidden nur noch . und .. sowie die Verwaltungsdaten.
+            if ($name[0] === '.' && (!$showHidden || self::isInternalName($name))) {
                 continue;
             }
             $childRel = $rel === '' ? $name : $rel . '/' . $name;
@@ -837,6 +840,12 @@ final class FileService
         $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
 
         return $ext !== '' && in_array($ext, $this->editable, true);
+    }
+
+    /** Nie anzuzeigen: ., .., der Papierkorb und Zwischendateien beim Speichern. */
+    private static function isInternalName(string $name): bool
+    {
+        return $name === '.' || $name === '..' || $name === '.trash' || str_starts_with($name, '.hugofm');
     }
 
     /**

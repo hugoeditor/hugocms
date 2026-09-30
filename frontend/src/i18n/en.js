@@ -99,6 +99,8 @@ export default {
   },
 
   ctx: {
+    showHidden: 'Show hidden files',
+    showHiddenLocked: 'Not enabled — an administrator can allow this in user management.',
     open: 'Open',
     edit: 'Edit',
     cut: 'Cut',
@@ -1000,6 +1002,9 @@ export default {
   },
 
   account: {
+    showHidden: 'Show hidden files',
+    showHiddenHint: 'Shows files and folders in the file manager whose name starts with a dot. The trash stays hidden.',
+    showHiddenLocked: 'Not enabled — an administrator can allow this in user management.',
     open: 'Account and settings',
     title: 'Account and settings',
     intro: 'Credentials and personal settings. Changing the credentials requires the current password.',
@@ -1474,6 +1479,9 @@ export default {
     sitesHint: 'Without a selection this account reaches no site at all. Administrators reach every site anyway.',
     fileTypes: 'File types',
     allFileTypes: 'All file types',
+    hiddenAllowed: 'Allow hidden files',
+    hiddenAllowedHint: 'The account may show hidden files (dot files) in the file manager. Administrators always may.',
+    hiddenChip: 'hidden files',
     fileTypesHint: 'Extensions this account may open, save, create, rename and upload. Empty = no restriction. The list never allows more than the mount does.',
     proHint: 'Without a valid Pro licence only administrators can sign in — the other accounts stay in place but locked out.',
   },
@@ -1590,6 +1598,7 @@ export default {
     'FILETYPE-NOT-SAVABLE': 'This file type cannot be saved in the editor.',
     'FILETYPE-NOT-ALLOWED-MOUNT': 'This file type is not allowed on this mount.',
     'FILETYPE-NOT-ALLOWED-USER': 'This file type is not enabled for your account.',
+    'HIDDEN-FILES-NOT-ALLOWED': 'Hidden files are not enabled for your account.',
     'CONTENT-TOO-LARGE': 'Content is too large.',
     'TEMPFILE-FAILED': 'Temporary file could not be created.',
     'FILE-SAVE-FAILED': 'File could not be saved.',

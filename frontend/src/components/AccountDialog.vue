@@ -2,10 +2,12 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
+import { useFilesStore } from '../stores/files'
 import { errorText } from '../i18n/apiMessage'
 
 const { t } = useI18n()
 const auth = useAuthStore()
+const files = useFilesStore()
 
 const MIN_PASSWORD_LENGTH = 8
 // Grenzen der Sitzungsdauer in Stunden — dieselben prüft der Server nach.
@@ -28,6 +30,8 @@ const newPasswordConfirm = ref('')
 // ausgewählt" deutet und dann leer bliebe.
 const sessionLifetime = ref('8')
 const lastmodChoice = ref('ask')
+// Versteckte Dateien im Dateimanager — schaltbar nur mit Freigabe.
+const showHidden = ref(false)
 
 const LASTMOD_TO_VALUE = { ask: null, always: true, never: false }
 
@@ -61,6 +65,7 @@ watch(model, (open) => {
   newPasswordConfirm.value = ''
   sessionLifetime.value = String(auth.ui?.sessionLifetimeHours ?? 8)
   lastmodChoice.value = lastmodToChoice(auth.ui?.updateLastmod ?? null)
+  showHidden.value = !!auth.ui?.showHidden
   error.value = null
 })
 
@@ -72,6 +77,7 @@ function changedPrefs() {
   if (hours !== (auth.ui?.sessionLifetimeHours ?? 8)) patch.sessionLifetime = hours
   const lastmod = LASTMOD_TO_VALUE[lastmodChoice.value]
   if (lastmod !== (auth.ui?.updateLastmod ?? null)) patch.updateLastmod = lastmod
+  if (showHidden.value !== !!auth.ui?.showHidden) patch.showHidden = showHidden.value
   return patch
 }
 
@@ -94,6 +100,8 @@ async function submit() {
     const prefs = changedPrefs()
     const prefsChanged = Object.keys(prefs).length > 0
     if (prefsChanged) await auth.saveUserPrefs(prefs)
+    // Die Dateiliste filtert der Server — nach dem Umschalten neu laden.
+    if ('showHidden' in prefs) await files.refresh()
 
     if (credentialsChanged.value) {
       await auth.changeAccount({
@@ -189,6 +197,16 @@ async function submit() {
             prepend-inner-icon="mdi-calendar-clock"
             variant="outlined"
             density="comfortable"
+          />
+          <v-switch
+            v-model="showHidden"
+            :label="$t('account.showHidden')"
+            :hint="auth.ui?.hiddenAllowed ? $t('account.showHiddenHint') : $t('account.showHiddenLocked')"
+            :disabled="!auth.ui?.hiddenAllowed"
+            persistent-hint
+            color="primary"
+            density="comfortable"
+            class="mt-2"
           />
 
           <v-alert v-if="error" type="error" density="compact" class="mt-3">{{ error }}</v-alert>

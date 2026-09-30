@@ -16,6 +16,13 @@ namespace HugoCMS\FileManager\Auth;
 interface AuthInterface
 {
     /**
+     * Recht, versteckte Dateien (Punkt-Dateien) im Dateimanager anzuzeigen.
+     * Der Einzelbenutzer hat es immer; beim Mehrbenutzer haben es
+     * Administratoren und Konten, denen ein Administrator es freigibt.
+     */
+    public const HIDDEN_FILES = 'files.hidden';
+
+    /**
      * Prüft Anmeldedaten und merkt den Benutzer in der Sitzung.
      */
     public function attemptLogin(string $username, string $password): bool;

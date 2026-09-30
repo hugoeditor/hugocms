@@ -35,6 +35,8 @@ use HugoCMS\FileManager\Exception\ApiException;
  *   sites = "kunde-a.example.com/cms-api"   ; Kommaliste oder "*"
  *   file_types = "md, png"   ; erlaubte Endungen (optional; leer = keine
  *                            ; Einschränkung, für admin ohne Belang)
+ *   allow_hidden = "true"    ; darf versteckte Dateien anzeigen (optional;
+ *                            ; Standard false, für admin ohne Belang)
  *
  *   [user]
  *   session_lifetime = "8"   ; dieselben Schlüssel wie die [user]-Sektion der
@@ -95,7 +97,7 @@ final class UserStore
     /**
      * Lädt ein Konto. null, wenn es keines gibt.
      *
-     * @return ?array{name: string, hash: string, role: string, sites: list<string>, fileTypes: list<string>, disabled: bool, prefs: array<string, string>}
+     * @return ?array{name: string, hash: string, role: string, sites: list<string>, fileTypes: list<string>, hiddenAllowed: bool, disabled: bool, prefs: array<string, string>}
      */
     public function load(string $username): ?array
     {
@@ -117,6 +119,7 @@ final class UserStore
             'role' => self::normalizeRole($account['role'] ?? ''),
             'sites' => self::parseSites($account['sites'] ?? ''),
             'fileTypes' => Config::normalizeExtensions((string) ($account['file_types'] ?? '')),
+            'hiddenAllowed' => filter_var($account['allow_hidden'] ?? false, FILTER_VALIDATE_BOOLEAN),
             'disabled' => filter_var($account['disabled'] ?? false, FILTER_VALIDATE_BOOLEAN),
             'prefs' => array_map('strval', $raw['user'] ?? []),
         ];
@@ -126,7 +129,7 @@ final class UserStore
      * Alle Konten, nach Namen sortiert. Liest jede Datei im Verzeichnis — nur
      * für die Verwaltungsansicht gedacht, nicht für den Anmeldeweg.
      *
-     * @return list<array{name: string, hash: string, role: string, sites: list<string>, fileTypes: list<string>, disabled: bool, prefs: array<string, string>}>
+     * @return list<array{name: string, hash: string, role: string, sites: list<string>, fileTypes: list<string>, hiddenAllowed: bool, disabled: bool, prefs: array<string, string>}>
      */
     public function all(): array
     {
@@ -144,6 +147,7 @@ final class UserStore
                 'role' => self::normalizeRole($account['role'] ?? ''),
                 'sites' => self::parseSites($account['sites'] ?? ''),
                 'fileTypes' => Config::normalizeExtensions((string) ($account['file_types'] ?? '')),
+                'hiddenAllowed' => filter_var($account['allow_hidden'] ?? false, FILTER_VALIDATE_BOOLEAN),
                 'disabled' => filter_var($account['disabled'] ?? false, FILTER_VALIDATE_BOOLEAN),
                 'prefs' => array_map('strval', $raw['user'] ?? []),
             ];
@@ -171,9 +175,10 @@ final class UserStore
      * Die [user]-Sektion bleibt erhalten (updateSections fasst sie nicht an).
      *
      * @param list<string> $sites
-     * @param list<string> $fileTypes erlaubte Endungen; leer = keine Einschränkung
+     * @param list<string> $fileTypes    erlaubte Endungen; leer = keine Einschränkung
+     * @param bool         $allowHidden versteckte Dateien anzeigen dürfen
      */
-    public function write(string $username, string $passwordHash, string $role, array $sites, bool $disabled, array $fileTypes = []): void
+    public function write(string $username, string $passwordHash, string $role, array $sites, bool $disabled, array $fileTypes = [], bool $allowHidden = false): void
     {
         $username = self::normalizeName($username);
         $this->ensureDirectory();
@@ -188,6 +193,9 @@ final class UserStore
         $fileTypes = self::normalizeFileTypes($fileTypes);
         if ($fileTypes !== []) {
             $account['file_types'] = implode(', ', $fileTypes);
+        }
+        if ($allowHidden) {
+            $account['allow_hidden'] = 'true';
         }
 
         Config::updateSections(

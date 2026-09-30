@@ -28,7 +28,7 @@ interface UserAdminInterface
     /**
      * Alle Konten — ohne Passwort-Hashes.
      *
-     * @return list<array{name: string, role: string, sites: list<string>, fileTypes: list<string>, disabled: bool, self: bool}>
+     * @return list<array{name: string, role: string, sites: list<string>, fileTypes: list<string>, hiddenAllowed: bool, disabled: bool, self: bool}>
      */
     public function listUsers(): array;
 
@@ -38,8 +38,10 @@ interface UserAdminInterface
      * @param list<string> $sites     Webseiten-Kennungen oder [ALL_SITES]
      * @param list<string> $fileTypes erlaubte Endungen; leer = keine Einschränkung
      *                                ({@see FileTypeAwareInterface})
+     * @param bool         $allowHidden   versteckte Dateien anzeigen dürfen
+     *                                ({@see AuthInterface::HIDDEN_FILES})
      */
-    public function createUser(string $username, string $password, string $role, array $sites, array $fileTypes = []): void;
+    public function createUser(string $username, string $password, string $role, array $sites, array $fileTypes = [], bool $allowHidden = false): void;
 
     /**
      * Löscht ein Konto. Das eigene Konto und das letzte verbleibende
@@ -54,12 +56,12 @@ interface UserAdminInterface
     public function resetPassword(string $username, string $newPassword): void;
 
     /**
-     * Ändert Rolle, Webseiten-Zuordnung, Dateitypen oder Sperre eines Kontos.
-     * null lässt den jeweiligen Wert unverändert; eine leere Dateityp-Liste
-     * hebt die Einschränkung auf.
+     * Ändert Rolle, Webseiten-Zuordnung, Dateitypen, Freigabe versteckter
+     * Dateien oder Sperre eines Kontos. null lässt den jeweiligen Wert
+     * unverändert; eine leere Dateityp-Liste hebt die Einschränkung auf.
      *
      * @param ?list<string> $sites
      * @param ?list<string> $fileTypes
      */
-    public function updateUser(string $username, ?string $role = null, ?array $sites = null, ?bool $disabled = null, ?array $fileTypes = null): void;
+    public function updateUser(string $username, ?string $role = null, ?array $sites = null, ?bool $disabled = null, ?array $fileTypes = null, ?bool $allowHidden = null): void;
 }

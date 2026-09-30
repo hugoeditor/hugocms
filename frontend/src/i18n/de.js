@@ -99,6 +99,8 @@ export default {
   },
 
   ctx: {
+    showHidden: 'Versteckte Dateien anzeigen',
+    showHiddenLocked: 'Nicht freigegeben — ein Administrator kann das in der Benutzerverwaltung erlauben.',
     open: 'Öffnen',
     edit: 'Bearbeiten',
     cut: 'Ausschneiden',
@@ -1001,6 +1003,9 @@ export default {
   },
 
   account: {
+    showHidden: 'Versteckte Dateien anzeigen',
+    showHiddenHint: 'Blendet im Dateimanager Dateien und Ordner ein, deren Name mit einem Punkt beginnt. Der Papierkorb bleibt verborgen.',
+    showHiddenLocked: 'Nicht freigegeben — ein Administrator kann das in der Benutzerverwaltung erlauben.',
     open: 'Konto und Einstellungen',
     title: 'Konto und Einstellungen',
     intro: 'Anmeldedaten und persönliche Einstellungen. Für eine Änderung der Anmeldedaten ist das aktuelle Passwort nötig.',
@@ -1477,6 +1482,9 @@ export default {
     sitesHint: 'Ohne Auswahl kommt dieses Konto auf keine Webseite. Administratoren erreichen ohnehin alle.',
     fileTypes: 'Dateitypen',
     allFileTypes: 'Alle Dateitypen',
+    hiddenAllowed: 'Versteckte Dateien erlauben',
+    hiddenAllowedHint: 'Das Konto darf im Dateimanager versteckte Dateien (Punkt-Dateien) einblenden. Administratoren dürfen das immer.',
+    hiddenChip: 'versteckte Dateien',
     fileTypesHint: 'Endungen, die dieses Konto öffnen, speichern, anlegen, umbenennen und hochladen darf. Leer = keine Einschränkung. Mehr als der Mount erlaubt, gibt die Liste nicht frei.',
     proHint: 'Ohne gültige Pro-Lizenz melden sich nur Administratoren an — die übrigen Konten bleiben angelegt, aber gesperrt.',
   },
@@ -1595,6 +1603,7 @@ export default {
     'FILETYPE-NOT-SAVABLE': 'Dieser Dateityp kann nicht im Editor gespeichert werden.',
     'FILETYPE-NOT-ALLOWED-MOUNT': 'Dieser Dateityp ist auf diesem Mount nicht erlaubt.',
     'FILETYPE-NOT-ALLOWED-USER': 'Dieser Dateityp ist für Ihr Konto nicht freigegeben.',
+    'HIDDEN-FILES-NOT-ALLOWED': 'Versteckte Dateien sind für Ihr Konto nicht freigegeben.',
     'CONTENT-TOO-LARGE': 'Inhalt ist zu groß.',
     'TEMPFILE-FAILED': 'Temporäre Datei konnte nicht angelegt werden.',
     'FILE-SAVE-FAILED': 'Datei konnte nicht gespeichert werden.',

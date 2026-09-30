@@ -851,6 +851,19 @@ Benutzer (Cron-Läufe, Shop-Anbindung) gibt es keine Einschränkung; die
 Shop-Anbindung arbeitet ohnehin mit einer eigenen `FileService`-Instanz und
 ihrer festen Endungsliste.
 
+**Versteckte Dateien** (Name beginnt mit einem Punkt). Der Dateimanager blendet
+sie standardmäßig aus. Einblenden lässt sich das über das Kontextmenü („Versteckte
+Dateien anzeigen“, mit Häkchen) und im Dialog „Konto und Einstellungen“; beide
+merken die Wahl als `[user] show_hidden`. Dürfen muss das Konto es: Das Recht
+`AuthInterface::HIDDEN_FILES` (`files.hidden`) hat der Einzelbenutzer immer, beim
+Mehrbenutzer jeder Administrator und Redakteure mit `allow_hidden = "true"` in
+`[account]` (Schalter in der Benutzerverwaltung). Ohne Recht sind beide Schalter
+sichtbar, aber deaktiviert, und der Server lehnt das Einschalten ab
+(`HIDDEN-FILES-NOT-ALLOWED`); ein zuvor gespeichertes `show_hidden = true`
+wirkt dann nicht. Der Papierkorb `.trash` und Zwischendateien (`.hugofm…`)
+bleiben immer verborgen. Der KI-Assistent listet weiterhin ohne versteckte
+Dateien.
+
 **Bekannte Lücke:** Die Wiederherstellung eines Versionsstands (Git) schreibt
 über `git` direkt ins Dateisystem und umgeht damit `file_types` — ebenso wie die
 `accept`-Liste der Mounts.

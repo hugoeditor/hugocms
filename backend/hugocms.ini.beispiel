@@ -77,6 +77,13 @@ password_hash = "HIER-PASSWORT-HASH-EINTRAGEN"
 ; Einstellungen" setzen — dort stellt „Jedes Mal nachfragen“ den Schlüssel
 ; wieder ab.
 ;update_lastmod = false
+; show_hidden: versteckte Dateien (Name beginnt mit einem Punkt) im
+; Dateimanager anzeigen. Optional; Standard false. Schaltbar über das
+; Kontextmenü des Dateimanagers und im Dialog „Konto und Einstellungen“ — beide
+; schreiben hierher (beim Mehrbenutzer in die Kontodatei). Der Papierkorb
+; (.trash) bleibt immer verborgen. Wirkt beim Mehrbenutzer nur für
+; Administratoren und für Konten mit allow_hidden = true.
+;show_hidden = false
 
 [session]
 ; Verzeichnis für die PHP-Sitzungsdateien (muss für den Webserver-Benutzer
