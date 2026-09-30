@@ -181,6 +181,39 @@ label = Vorlagen
 permissions = read, write
 ```
 
+### Orte verwalten (Dialog)
+
+Administratoren bearbeiten die Mounts der aufgerufenen Webseite im Dialog
+**„Orte verwalten“** (Werkzeugleiste): Orte hinzufügen, umbenennen, entfernen.
+Geschrieben wird in deren Mount-Datei (`mounts/<hash>.ini`, sonst der Rückfall
+`mounts.ini` — dann mit Hinweis, dass die Änderung für alle Webseiten ohne
+eigene Datei gilt) über `Config::updateSections`; die übrigen Sektionen bleiben
+wörtlich erhalten, die Schreibweise des Sektionsnamens ebenso.
+
+- **Umbenennen** ändert nur `label`. Die Sektions-ID steckt in den Datei-IDs
+  des Clients und bleibt fest.
+- **Hinzufügen**: Name und Verzeichnis. Die Sektions-ID leitet sich aus dem
+  Verzeichnisnamen ab (`[a-z0-9_-]`, bei Kollision mit Nummer; reservierte
+  Namen wie `hugo` sind ausgeschlossen). Geschrieben werden nur `path`
+  (absolut) und `label` — `permissions`, `accept` und `readonly` bei Bedarf
+  von Hand ergänzen. Abgewiesen werden ein Verzeichnis, das bereits ein Ort
+  ist, sowie das `backend/` (`MOUNT-PATH-PROTECTED`).
+- **Entfernen** löscht nur den Eintrag, nicht die Dateien. Der letzte Ort
+  bleibt (`MOUNT-LAST`).
+- Kommentare INNERHALB einer geänderten Sektion gehen beim Schreiben verloren
+  (die Sektion wird neu serialisiert); andere Sektionen und der Dateikopf
+  bleiben unberührt.
+
+**Verzeichnis-Picker.** Ein Browser kann kein Serververzeichnis auswählen,
+deshalb listet der Server auf (`browsedirs`, nach dem Vorbild von
+OpensourceERP) und der Dialog navigiert darin. Sichtbar ist nur, was unterhalb
+eines Einstiegspunkts liegt: `[system] browse_roots` in der `hugocms.ini`
+(kommagetrennt; steht der Schlüssel, gilt allein diese Liste), sonst
+abgeleitet — Release-Verzeichnis und sein Elternverzeichnis, Hugo-Projekt,
+Elternverzeichnisse der vorhandenen Orte, `/srv`, `/var/www`, `/mnt`,
+`/media`. Dieselbe Grenze prüft `mountadd` für einen eingetippten Pfad.
+Versteckte Verzeichnisse blendet der Picker aus.
+
 ### Programmatische Alternative: `backend/custom/custom.php`
 
 Für dynamische Mounts oder eigene `AuthInterface`-Implementierungen. Die Datei
@@ -918,6 +951,7 @@ verläuft entlang SCHREIBEN, nicht LESEN:
 | `reconfigure`, `aimodels`, `activate` | nein | verändern die Installation bzw. die Lizenz (`requireConfigAdmin()`) |
 | `projectconfig`, `projectreconfigure` | ja | Einstellungen EINER Webseite (SEO-Ausschlüsse, Verbesserer, Cron-Pausen, automatischer Versionsstand, Analyse-Adressen) — redaktionelle Arbeit |
 | `users…` | nein | Kontenverwaltung (`users.manage`) |
+| `mountadmin`, `mountadd`, `mountrename`, `mountdelete`, `browsedirs` | nein | Orte der Webseite verwalten; die Antwort nennt Serverpfade (`requireConfigAdmin()`) |
 | `shopkeycreate`, `shopkeydelete` | nein | Schlüssel der Shop-Anbindung — ein Zugang, keine redaktionelle Einstellung (`requireConfigAdmin()`) |
 
 Entsprechend melden `reconfigurable` und `projectConfigurable` nur, ob es
@@ -1285,6 +1319,11 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `reconfigure`| POST  | `authDriver`?, `sessionPath`, `logFile`, `logLevel`, `hugoBin`?, `aiApiKey`?, `aiModel`?, `aiWriteMode`? | hugocms.ini ändern (Anmeldeverfahren/Verzeichnisse/Log/Hugo/AI). Verlangt `config.manage` — ebenso `aimodels` und `activate`. `config` (lesen) und `projectconfig`/`projectreconfigure` nicht |
 | `account`  | POST    | `currentPassword`, `username`, `password`? | Anmeldedaten ändern (danach Neuanmeldung) |
 | `setuserprefs`| POST | `contentWidth`?, `toolbarCollapsed`?, `sessionLifetime`? (Stunden), `updateLastmod`? (`null` = nachfragen) | Eigene `[user]`-Einstellungen schreiben; nur die genannten Felder |
+| `mountadmin` | GET   | –                                    | Orte der Webseite mit Serverpfad (nur Administratoren) |
+| `mountadd` | POST    | `label`, `path`                      | Ort anlegen (nur Administratoren)       |
+| `mountrename`| POST  | `name`, `label`                      | Anzeigenamen eines Orts ändern (nur Administratoren) |
+| `mountdelete`| POST  | `name`                               | Ort entfernen, Dateien bleiben (nur Administratoren) |
+| `browsedirs` | GET   | `path`?                              | Unterverzeichnisse für den Verzeichnis-Picker (nur Administratoren) |
 | `users`    | GET     | –                                    | **Pro/multiuser:** Konten, bekannte Webseiten, Rollen |
 | `usercreate`| POST   | `username`, `password`, `role`, `sites` | **Pro/multiuser:** Konto anlegen        |
 | `userupdate`| POST   | `username`, `role`?, `sites`?, `disabled`? | **Pro/multiuser:** Rolle, Zuordnung oder Sperre ändern |

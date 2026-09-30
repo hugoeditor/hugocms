@@ -137,6 +137,19 @@ bin = ../bin/hugo/hugo
 ;                   ausführen lassen.
 ;extra_editable = sh
 
+;[system]
+; Verzeichnisauswahl („Orte verwalten“, nur Administratoren). Optional.
+;   browse_roots  Einstiegspunkte des Verzeichnis-Pickers: absolute Pfade,
+;                 kommagetrennt. Steht der Schlüssel hier, gilt ALLEIN diese
+;                 Liste — so lässt sich die Sicht auf einem gemeinsam
+;                 genutzten Server beschneiden. Außerhalb davon lässt sich
+;                 kein Ort anlegen, auch nicht per eingetipptem Pfad. Fehlt er,
+;                 gelten: das Release-Verzeichnis und sein Elternverzeichnis,
+;                 das Hugo-Projekt der Webseite, die Elternverzeichnisse der
+;                 vorhandenen Orte sowie /srv, /var/www, /mnt und /media.
+;                 Lässt sich auch im Dialog „Konfiguration ändern“ setzen.
+;browse_roots = /srv/www, /home/web
+
 ;[ai]
 ; KI-Assistent (Claude). Optional — ohne API-Schlüssel ist der Assistent aus.
 ; Lässt sich auch über das Einrichtungs-/Konfigurationsformular setzen.

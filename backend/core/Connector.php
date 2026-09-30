@@ -159,6 +159,9 @@ final class Connector
      */
     private array $seoReport = ['excludePrefixes' => [], 'excludeFiles' => []];
 
+    /** [system]-Sektion der hugocms.ini (Einstiegspunkte der Verzeichnisauswahl). */
+    private array $system = ['browseRoots' => []];
+
     /** @var list<string> Endungen, die der Texteditor öffnet (Standard + [editor] extra_editable). */
     private array $editableTypes = [];
 
@@ -305,6 +308,7 @@ final class Connector
             $this->mail = $cfg['mail'];
             $this->seoReport = $cfg['seoReport'];
             $extraEditable = $cfg['editor']['extraEditable'];
+            $this->system = $cfg['system'];
             $authConfig = $cfg['auth'];
             // Globale [user]-Einstellungen an den Auth-Treiber durchreichen
             // (z. B. Sitzungsdauer für SingleUser).
@@ -565,6 +569,11 @@ final class Connector
                 'liveanalyzeexport' => $this->cmdLiveAnalyzeExport($request),
                 'config' => $this->cmdConfig(),
                 'reconfigure' => $this->cmdReconfigure($request),
+                'mountadmin' => $this->cmdMountAdmin(),
+                'mountadd' => $this->cmdMountAdd($request),
+                'mountrename' => $this->cmdMountRename($request),
+                'mountdelete' => $this->cmdMountDelete($request),
+                'browsedirs' => $this->cmdBrowseDirs($request),
                 'aimodels' => $this->cmdAiModels(),
                 'projectconfig' => $this->cmdProjectConfig(),
                 'projectreconfigure' => $this->cmdProjectReconfigure($request),
@@ -4345,6 +4354,11 @@ final class Connector
                 (string) ($raw['editor']['extra_editable'] ?? ''),
             )),
             'editorDefaultEditable' => FileService::DEFAULT_EDITABLE,
+            // Verzeichnisauswahl: freigegebene Einstiegspunkte (eine je Zeile);
+            // leer = abgeleitet.
+            'systemBrowseRoots' => implode("\n", Config::normalizeBrowseRoots(
+                (string) ($raw['system']['browse_roots'] ?? ''),
+            )),
         ];
     }
 
@@ -4518,6 +4532,11 @@ final class Connector
         // älterer Client soll eine von Hand gepflegte Freigabe nicht löschen.
         // Ungültige Einträge verwirft die Normalisierung; ohne Eintrag entfällt
         // die Sektion.
+        // [system] wie [editor]: nur anfassen, wenn das Formular das Feld schickt.
+        if (array_key_exists('systemBrowseRoots', $request)) {
+            $roots = Config::normalizeBrowseRoots((string) $request['systemBrowseRoots']);
+            $sections['system'] = $roots === [] ? null : ['browse_roots' => implode(', ', $roots)];
+        }
         if (array_key_exists('editorExtraEditable', $request)) {
             $extra = Config::normalizeExtensions((string) $request['editorExtraEditable']);
             $sections['editor'] = $extra === [] ? null : ['extra_editable' => implode(', ', $extra)];
@@ -5014,6 +5033,180 @@ final class Connector
             'showHidden' => $this->showHidden(),
             'hiddenAllowed' => $this->auth->isAuthenticated() && $this->auth->can(AuthInterface::HIDDEN_FILES),
         ];
+    }
+
+    // ---- Orte verwalten (Mounts dieser Webseite, nur Administratoren) --------
+    //
+    // Geschrieben wird in die Mount-Datei dieser Webseite (mounts/<hash>.ini
+    // bzw. der Rückfall mounts.ini) über Config::updateSections — die übrigen
+    // Sektionen bleiben wörtlich erhalten. Umbenennen ändert nur `label`: Die
+    // Sektions-ID steckt in den Datei-IDs des Clients und bleibt deshalb fest.
+
+    /** Maximale Länge eines Ortsnamens (label). */
+    private const MOUNT_LABEL_MAX = 80;
+
+    /** Mount-Datei zum Schreiben, nur für Administratoren. */
+    private function requireMountAdmin(): string
+    {
+        $this->requireConfigAdmin();
+        if ($this->mountsPath === null) {
+            throw new ApiException('ECONFIG', 409, 'MOUNTS-NOT-EDITABLE');
+        }
+
+        return $this->mountsPath;
+    }
+
+    /**
+     * mountadmin — die Orte dieser Webseite mit Serverpfad (nur für
+     * Administratoren; der Pfad verlässt das Backend sonst nie).
+     */
+    private function cmdMountAdmin(): array
+    {
+        $path = $this->requireMountAdmin();
+
+        return $this->mountAdminState($path);
+    }
+
+    private function mountAdminState(string $path): array
+    {
+        $mounts = [];
+        foreach (MountConfig::load($path)['mounts'] as $spec) {
+            $real = realpath($spec['path']);
+            $mounts[] = [
+                'name' => $spec['name'],
+                'label' => $spec['options']['label'] ?? $spec['name'],
+                'path' => $real !== false ? $real : $spec['path'],
+                'missing' => $real === false || !is_dir($real),
+                'readonly' => !empty($spec['options']['readonly']),
+                'accept' => $spec['options']['accept'] ?? [],
+                'permissions' => $spec['options']['permissions'] ?? null,
+            ];
+        }
+
+        return [
+            'mounts' => $mounts,
+            // Rückfall-Datei: gilt für ALLE Webseiten ohne eigene Datei — der
+            // Dialog weist darauf hin.
+            'shared' => basename($path) === 'mounts.ini',
+        ];
+    }
+
+    /** mountadd — neuen Ort anlegen: Name (label) und Verzeichnis. */
+    private function cmdMountAdd(array $request): array
+    {
+        $file = $this->requireMountAdmin();
+        $this->requireMethod('POST');
+
+        $label = $this->cleanMountLabel($request['label'] ?? '');
+        if (trim((string) ($request['path'] ?? '')) === '') {
+            throw ApiException::badRequest('PARAM-MISSING', ['path']);
+        }
+        // Nur Verzeichnisse unterhalb der Einstiegspunkte — wie im Dialog.
+        $dir = $this->directoryBrowser()->resolve((string) $request['path']);
+        if ($this->resolver->isProtected($dir)) {
+            throw ApiException::denied('MOUNT-PATH-PROTECTED', [$label]);
+        }
+
+        $existing = MountConfig::load($file)['mounts'];
+        foreach ($existing as $spec) {
+            if (realpath($spec['path']) === $dir) {
+                throw ApiException::badRequest('MOUNT-PATH-DUPLICATE', [$spec['options']['label'] ?? $spec['name']]);
+            }
+        }
+        $raw = Config::raw($file);
+        $name = MountConfig::newMountName($dir, array_map('strval', array_keys($raw)));
+
+        Config::updateSections($file, [$name => ['path' => $dir, 'label' => $label]]);
+        $this->logger->info('Ort angelegt: ' . $name . ' → ' . $dir);
+
+        return $this->mountAdminState($file);
+    }
+
+    /** mountrename — sichtbaren Namen (label) eines Orts ändern. */
+    private function cmdMountRename(array $request): array
+    {
+        $file = $this->requireMountAdmin();
+        $this->requireMethod('POST');
+
+        [$name, $section] = $this->mountSection($file, (string) ($request['name'] ?? ''));
+        $section['label'] = $this->cleanMountLabel($request['label'] ?? '');
+        Config::updateSections($file, [strtolower($name) => $section]);
+        $this->logger->info('Ort umbenannt: ' . $name . ' → ' . $section['label']);
+
+        return $this->mountAdminState($file);
+    }
+
+    /**
+     * mountdelete — Ort entfernen. Nur der Eintrag verschwindet; die Dateien
+     * im Verzeichnis bleiben unberührt. Der letzte Ort bleibt: Ohne Mount
+     * lehnt das Backend die Webseite ab (MOUNTS-NO-SECTION).
+     */
+    private function cmdMountDelete(array $request): array
+    {
+        $file = $this->requireMountAdmin();
+        $this->requireMethod('POST');
+
+        [$name] = $this->mountSection($file, (string) ($request['name'] ?? ''));
+        if (count(MountConfig::load($file)['mounts']) <= 1) {
+            throw new ApiException('ECONFLICT', 409, 'MOUNT-LAST');
+        }
+        Config::updateSections($file, [strtolower($name) => null]);
+        $this->logger->info('Ort entfernt: ' . $name);
+
+        return $this->mountAdminState($file);
+    }
+
+    /** browsedirs — Verzeichnisauswahl für neue Orte (nur Administratoren). */
+    private function cmdBrowseDirs(array $request): array
+    {
+        $this->requireMountAdmin();
+
+        return $this->directoryBrowser()->list((string) ($request['path'] ?? ''));
+    }
+
+    private function directoryBrowser(): DirectoryBrowser
+    {
+        // Ableitung ohne browse_roots: Hugo-Projekt und vorhandene Orte.
+        $hints = [];
+        if ($this->hugo !== null && isset($this->hugo['source'])) {
+            $hints[] = (string) $this->hugo['source'];
+        }
+        foreach ($this->resolver->all() as $mount) {
+            $hints[] = $mount->root();
+        }
+
+        return new DirectoryBrowser($this->system['browseRoots'], $hints, $this->resolver);
+    }
+
+    /**
+     * Rohe Sektion eines vorhandenen Orts (Schlüssel wörtlich, z. B. ein
+     * relativer path bleibt relativ) samt der Schreibweise ihres Namens.
+     *
+     * @return array{0: string, 1: array<string, string>}
+     */
+    private function mountSection(string $file, string $name): array
+    {
+        if ($name === '' || MountConfig::isReserved($name)) {
+            throw ApiException::badRequest('MOUNT-UNKNOWN', [$name]);
+        }
+        foreach (Config::raw($file) as $section => $values) {
+            if (is_array($values) && strtolower((string) $section) === strtolower($name)) {
+                return [(string) $section, array_map('strval', $values)];
+            }
+        }
+        throw ApiException::notFound('MOUNT-UNKNOWN', [$name]);
+    }
+
+    private function cleanMountLabel(mixed $label): string
+    {
+        $label = trim((string) $label);
+        if ($label === '' || mb_strlen($label) > self::MOUNT_LABEL_MAX
+            || preg_match('/["\x00-\x1F]/u', $label) === 1
+        ) {
+            throw ApiException::badRequest('MOUNT-LABEL-INVALID', [self::MOUNT_LABEL_MAX]);
+        }
+
+        return $label;
     }
 
     // ---- Kontenverwaltung (nur Mehrbenutzer, nur Rolle admin) --------------

@@ -122,6 +122,43 @@ final class MountConfig
     private const GIT_SECTION = 'git';
     private const SHOP_SECTION = 'shop';
 
+    /** Alle reservierten Sektionsnamen — kein Mount darf so heißen. */
+    private const RESERVED_SECTIONS = [
+        self::HUGO_SECTION, self::LICENSE_SECTION, self::PAGESPEED_SECTION,
+        self::LIVE_ANALYSIS_SECTION, self::SEO_REPORT_SECTION, self::IMPROVE_SECTION,
+        self::CRON_SECTION, self::GIT_SECTION, self::SHOP_SECTION,
+    ];
+
+    /** Ist $name eine reservierte Sektion (kein Mount)? */
+    public static function isReserved(string $name): bool
+    {
+        return in_array(strtolower($name), self::RESERVED_SECTIONS, true);
+    }
+
+    /**
+     * Sektions-ID für einen neuen Ort, aus dem Verzeichnisnamen abgeleitet
+     * (Hugo-Verzeichnisse heißen ohnehin englisch: content, static …). Nur
+     * [a-z0-9_-]; reservierte und vergebene Namen bekommen eine Nummer, ein
+     * unbrauchbarer Name wird „place“.
+     *
+     * @param list<string> $taken vorhandene Sektionsnamen
+     */
+    public static function newMountName(string $dir, array $taken): string
+    {
+        $base = strtolower(basename($dir));
+        $base = trim((string) preg_replace('/[^a-z0-9_-]+/', '-', $base), '-_');
+        if ($base === '') {
+            $base = 'place';
+        }
+        $taken = array_map('strtolower', $taken);
+        $name = $base;
+        for ($i = 2; self::isReserved($name) || in_array($name, $taken, true); $i++) {
+            $name = $base . '-' . $i;
+        }
+
+        return $name;
+    }
+
     /** Vorgeschlagene Commit-Nachricht, wenn keine konfiguriert ist. */
     public const string GIT_COMMIT_MESSAGE_DEFAULT = 'Automatische Veröffentlichung terminierter Freigaben';
 

@@ -19,6 +19,7 @@ import LinkScanView from './components/LinkScanView.vue'
 import EditorPanel from './components/EditorPanel.vue'
 import ReconfigureDialog from './components/ReconfigureDialog.vue'
 import ProjectSettingsDialog from './components/ProjectSettingsDialog.vue'
+import PlacesDialog from './components/PlacesDialog.vue'
 import AccountDialog from './components/AccountDialog.vue'
 import LicenseDialog from './components/LicenseDialog.vue'
 import RepositoryDialog from './components/RepositoryDialog.vue'
@@ -383,6 +384,18 @@ const editorPanelRef = ref(null)
 const reconfigureOpen = ref(false)
 // Einstellungen nur DIESER Webseite (Mount-Konfiguration).
 const projectSettingsOpen = ref(false)
+// Orte verwalten (Mounts dieser Webseite) — nur Administratoren.
+const placesDialogOpen = ref(false)
+
+// Nach einer Änderung der Orte die Liste neu laden. Ist der gerade angezeigte
+// Ort entfernt worden, in den ersten wechseln — sonst liefe die nächste
+// Auflistung ins Leere (MOUNT-UNKNOWN).
+async function onPlacesChanged() {
+  await files.loadMounts()
+  if (!files.trashMode && files.mounts.length && !files.mounts.some((m) => m.name === files.activeMount)) {
+    await files.openDir(files.mounts[0].id)
+  }
+}
 // Sektion, zu der der Dialog beim Öffnen scrollen soll (z. B. 'cron' aus dem
 // Systemstatus). Leer = normal von oben.
 const projectSettingsFocus = ref('')
@@ -904,6 +917,27 @@ async function build() {
                 </template>
               </v-tooltip>
 
+              <!-- Orte verwalten (Mounts) — nur Administratoren, nur bei einer
+                   Mount-Datei (nicht bei programmatischer custom.php). -->
+              <v-tooltip
+                v-if="auth.projectConfigurable && auth.manageConfig"
+                :text="$t('places.open')"
+                location="right"
+                :disabled="!toolbarCollapsed"
+              >
+                <template #activator="{ props }">
+                  <button
+                    v-bind="props"
+                    type="button"
+                    class="nemo-tool-btn"
+                    @click="placesDialogOpen = true"
+                  >
+                    <v-icon icon="mdi-folder-edit-outline" size="20" />
+                    <span class="nemo-tool-label">{{ $t('places.open') }}</span>
+                  </button>
+                </template>
+              </v-tooltip>
+
               <!-- Konfiguration ändern (nur bei INI-basierter Installation) -->
               <v-tooltip v-if="auth.reconfigurable" :text="$t('reconfigure.open')" location="right" :disabled="!toolbarCollapsed">
                 <template #activator="{ props }">
@@ -1020,6 +1054,7 @@ async function build() {
       :focus-section="projectSettingsFocus"
       @saved="onProjectSettingsSaved"
     />
+    <PlacesDialog v-model="placesDialogOpen" @changed="onPlacesChanged" />
     <AccountDialog v-model="accountOpen" @changed="onAccountChanged" @saved="onAccountSaved" />
 
     <!-- Pro-Lizenz aktivieren · Git-Versionierung (Pro-Funktion) -->

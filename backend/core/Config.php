@@ -38,6 +38,10 @@ use HugoCMS\FileManager\Exception\ApiException;
  *   [editor]
  *   extra_editable = sh, conf ; weitere Endungen für den Texteditor (optional)
  *
+ *   [system]
+ *   browse_roots = /srv/www, /home/web ; Einstiegspunkte der Verzeichnisauswahl
+ *                                      ; (optional; leer = abgeleitet)
+ *
  * Die Sektion [hugo] enthält hier NUR das Programm (bin) — es gibt installa-
  * tionsweit nur eine Hugo-Binärdatei. Die je Webseite unterschiedlichen Pfade
  * (source/destination) stehen in der jeweiligen Mount-Konfiguration.
@@ -140,7 +144,33 @@ final class Config
             'mail' => self::mailSection($raw['mail'] ?? null),
             'seoReport' => self::seoReportSection($raw['seo_report'] ?? null),
             'editor' => self::editorSection($raw['editor'] ?? null),
+            'system' => [
+                'browseRoots' => self::normalizeBrowseRoots((string) ($raw['system']['browse_roots'] ?? '')),
+            ],
         ];
+    }
+
+    /**
+     * Einstiegspunkte der Verzeichnisauswahl ([system] browse_roots):
+     * kommagetrennte ABSOLUTE Pfade. Relative oder leere Einträge werden
+     * verworfen, Doppelte entfernt. Ob ein Pfad existiert, prüft erst der
+     * {@see DirectoryBrowser} — ein gerade nicht eingehängtes Laufwerk soll die
+     * Einstellung nicht zerstören.
+     *
+     * @return list<string>
+     */
+    public static function normalizeBrowseRoots(string $raw): array
+    {
+        $out = [];
+        foreach (preg_split('/[,\r\n]+/', $raw) ?: [] as $entry) {
+            $path = trim((string) $entry);
+            if ($path === '' || $path[0] !== '/' || str_contains($path, '"')) {
+                continue;
+            }
+            $out[$path === '/' ? '/' : rtrim($path, '/')] = true;
+        }
+
+        return array_keys($out);
     }
 
     /**
@@ -530,10 +560,15 @@ final class Config
         $existing = is_file($configPath) ? (string) @file_get_contents($configPath) : '';
 
         // Sektionsreihenfolge: vorhandene zuerst (Position bleibt), neue ans Ende.
+        // $original merkt die Schreibweise der Kopfzeile: Mount-IDs sind
+        // Sektionsnamen, eine geänderte Sektion [Inhalte] soll nicht als
+        // [inhalte] zurückkommen (sonst änderte sich ihre ID).
         $order = [];
+        $original = [];
         foreach (preg_split('/\r\n|\r|\n/', $existing) ?: [] as $line) {
             if (preg_match('/^\s*\[(.+?)\]\s*$/', $line, $m) === 1) {
                 $order[] = strtolower(trim($m[1]));
+                $original[strtolower(trim($m[1]))] ??= trim($m[1]);
             }
         }
         foreach (array_keys($changes) as $name) {
@@ -548,7 +583,7 @@ final class Config
                 if ($changes[$name] === null) {
                     continue; // Sektion entfernen
                 }
-                $blocks[] = self::serializeSection($name, $changes[$name]);
+                $blocks[] = self::serializeSection($original[$name] ?? $name, $changes[$name]);
             } else {
                 $block = self::extractSection($existing, $name);
                 if ($block !== null) {

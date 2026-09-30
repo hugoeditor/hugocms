@@ -48,12 +48,21 @@ final class MountResolver
             throw ApiException::badRequest('MOUNT-NAME-TAKEN', [$name]);
         }
         // Nur den Mount-Namen melden, nie den Serverpfad.
-        if ($this->protectedDir !== null
-            && (self::isWithin($this->protectedDir, $mount->root()) || self::isWithin($mount->root(), $this->protectedDir))
-        ) {
+        if ($this->isProtected($mount->root())) {
             throw ApiException::denied('MOUNT-PATH-PROTECTED', [$name]);
         }
         $this->mounts[$name] = $mount;
+    }
+
+    /**
+     * Berührt dieses Verzeichnis (realpath) das geschützte backend/ — liegt es
+     * darin oder enthält es? Auch für die Orte-Verwaltung, die einen neuen Pfad
+     * vor dem Schreiben prüft.
+     */
+    public function isProtected(string $realPath): bool
+    {
+        return $this->protectedDir !== null
+            && (self::isWithin($this->protectedDir, $realPath) || self::isWithin($realPath, $this->protectedDir));
     }
 
     /** Liegt $path in $dir oder ist es $dir selbst? Beide als realpath. */

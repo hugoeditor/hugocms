@@ -30,6 +30,8 @@ const hugoClean = ref(false)
 // Kommaliste; die eingebauten nennt der Hinweis.
 const editorExtraEditable = ref('')
 const editorDefaultEditable = ref([])
+// Einstiegspunkte der Verzeichnisauswahl ([system] browse_roots), einer je Zeile.
+const systemBrowseRoots = ref('')
 
 // KI-Assistent. Der Schlüssel wird nie geladen (Geheimnis); leeres Feld lässt
 // ihn unverändert. aiConfigured zeigt nur an, ob bereits einer gesetzt ist.
@@ -186,6 +188,7 @@ watch(model, async (open) => {
     hugoClean.value = !!cfg.hugoClean
     editorExtraEditable.value = cfg.editorExtraEditable ?? ''
     editorDefaultEditable.value = cfg.editorDefaultEditable ?? []
+    systemBrowseRoots.value = cfg.systemBrowseRoots ?? ''
     aiApiKey.value = ''
     aiModel.value = cfg.aiModel || 'claude-opus-5'
     aiModelCron.value = cfg.aiModelCron || ''
@@ -239,6 +242,7 @@ async function submit() {
       hugoBin: hugoBin.value,
       hugoClean: hugoClean.value,
       editorExtraEditable: editorExtraEditable.value,
+      systemBrowseRoots: systemBrowseRoots.value,
       aiApiKey: aiApiKey.value, // leer = unverändert
       aiModel: aiModel.value,
       aiModelCron: aiModelCron.value, // leer = wie Assistenten-Modell
@@ -410,6 +414,21 @@ async function submit() {
           <v-alert type="warning" variant="tonal" density="compact" class="mb-4">
             {{ $t('editorConfig.scriptWarning') }}
           </v-alert>
+
+          <v-divider class="my-3" />
+          <div class="text-subtitle-2 mb-2">{{ $t('browseConfig.section') }}</div>
+          <div class="text-caption text-medium-emphasis mb-2">{{ $t('browseConfig.rootsHint') }}</div>
+          <v-textarea
+            v-model="systemBrowseRoots"
+            :label="$t('browseConfig.roots')"
+            :placeholder="$t('browseConfig.rootsPlaceholder')"
+            prepend-inner-icon="mdi-folder-search-outline"
+            variant="outlined"
+            density="comfortable"
+            rows="2"
+            auto-grow
+            class="mb-4"
+          />
 
           <v-divider class="my-3" />
           <!-- Überschrift mit Aktualisieren-Knopf: holt die Modell-Liste von der
