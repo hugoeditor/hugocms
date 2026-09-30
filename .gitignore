@@ -32,6 +32,7 @@ backend/var/pagespeed/
 backend/var/analyze/
 backend/var/cron/
 backend/var/build/
+backend/var/shop/
 .DS_Store
 node_modules/
 tmp/
@@ -39,6 +40,7 @@ tmp/
 # Beispiel-Datenverzeichnis (in echten Installationen nicht versionieren)
 daten/
 site/
+sonic24.de/
 
 # Auslieferungs-Repo mit dem fertigen Produkt (eigenes Repo: hugocms-release)
 hugocms-release/

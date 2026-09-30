@@ -27,15 +27,15 @@ $appRoot    = dirname($backendDir); // Anwendungswurzel (neben app/)
 // gut lesbaren hugocms.ini, während die Mounts dynamisch entstehen können.
 $connector = new Connector(['config' => $backendDir . '/hugocms.ini']);
 
-$connector->mount('inhalte', $appRoot . '/daten/inhalte', [
+$connector->mount('content', $appRoot . '/daten/inhalte', [
     'label' => 'Inhalte',
     'accept' => ['md', 'markdown', 'html', 'htm', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'],
 ]);
-$connector->mount('vorlagen', $appRoot . '/daten/vorlagen', [
+$connector->mount('layouts', $appRoot . '/daten/vorlagen', [
     'label' => 'Vorlagen',
     'permissions' => ['read', 'write'],
 ]);
-$connector->mount('medien', $appRoot . '/daten/medien', [
+$connector->mount('static', $appRoot . '/daten/medien', [
     'label' => 'Medien',
 ]);
 

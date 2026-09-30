@@ -163,7 +163,11 @@ write_mode = confirm          ; readonly | confirm | auto (Standard: confirm)
 
 Jede `[Sektion]` ist ein Mount (Sektionsname = interne ID). Felder:
 `path` (Pflicht), `label`, `permissions`, `accept`, `readonly`. Relative Pfade
-gelten relativ zur Mount-Datei.
+gelten relativ zur Mount-Datei. Sektions- und Schlüsselnamen sind englisch
+(`[content]`, `[layouts]`, `[static]`, `[project]`); der sichtbare Name steht in
+`label`. Von älteren `install.sh`-Versionen erzeugte Dateien tragen `[projekt]`
+statt `[project]` — das bleibt gültig, und `install.sh` ergänzt dann kein
+zweites `[project]`.
 
 ```ini
 [content]
@@ -315,13 +319,14 @@ Das Skript:
 1. **Hugo bereitstellen** – fehlt `bin/hugo/`, lädt `get-hugo.sh` den
    Static-Site-Generator (Variante *extended*, gepinnte Version) und prüft die
    Prüfsumme. Das Binary ist nicht Teil des Repos.
-2. **Mount-Datei erzeugen** – `backend/mounts/<hash>.ini`. Erster Mount ist
-   `projekt` → das gesamte Hugo-Projektverzeichnis (ohne Endungsfilter, also
-   Zugriff auf alle Dateien inkl. `config.*` und Theme-Ordner); dazu die
-   bequemen Direktzugänge `content` → `content/`, `layouts` → `layouts/`,
-   `static` → `static/` (Elternverzeichnis des Publish-Ordners). Eine bestehende
-   Datei bleibt erhalten; fehlende Standard-Sektionen (auch `[hugo]`) werden
-   ergänzt.
+2. **Mount-Datei erzeugen** – `backend/mounts/<hash>.ini`. Die Direktzugänge
+   `content` → `content/`, `layouts` → `layouts/`, `static` → `static/`
+   (Elternverzeichnis des Publish-Ordners) und als letzter Mount `project` →
+   das gesamte Hugo-Projektverzeichnis (ohne Endungsfilter, also Zugriff auf
+   alle Dateien inkl. `config.*` und Theme-Ordner). Eine bestehende Datei bleibt
+   erhalten; fehlende Standard-Sektionen (auch `[hugo]`) werden ergänzt. Trägt
+   sie noch das ältere `[projekt]`, gilt der Projekt-Mount als vorhanden — es
+   entsteht kein zweites `[project]`.
 3. **Hugo-Programm zentral eintragen** – existiert die `hugocms.ini` bereits und
    hat noch keine `[hugo]`-Sektion, wird `bin` ergänzt; sonst ein Hinweis (die
    Datei entsteht erst beim Einrichtungs-Setup).

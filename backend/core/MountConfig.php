@@ -8,15 +8,17 @@ use HugoCMS\FileManager\Exception\ApiException;
 
 /**
  * Liest Mount-Definitionen aus einer INI-Konfigurationsdatei. Format: je
- * [Sektion] ein Mount, der Sektionsname ist die interne ID. Beispiel:
+ * [Sektion] ein Mount, der Sektionsname ist die interne ID (englisch wie alle
+ * INI-Schlüssel; ältere Dateien tragen noch [projekt] — bleibt gültig, der
+ * Name wird nirgends ausgewertet). Beispiel:
  *
- *   [inhalte]
- *   path = daten/inhalte
- *   label = Inhalte
+ *   [content]
+ *   path = /pfad/zum/hugo-projekt/content
+ *   label = Inhalt
  *   accept = md, markdown, html, png, jpg
  *
- *   [vorlagen]
- *   path = daten/vorlagen
+ *   [layouts]
+ *   path = /pfad/zum/hugo-projekt/layouts
  *   permissions = read, write
  *
  * Felder je Sektion:

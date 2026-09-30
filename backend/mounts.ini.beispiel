@@ -18,7 +18,9 @@
 ;
 ; Regeln:
 ;   • Jede [Sektion] ist ein Mount. Der Sektionsname ist die interne ID
-;     (kurz, ohne Leer- und Sonderzeichen).
+;     (kurz, ohne Leer- und Sonderzeichen). Sektions- und Schlüsselnamen sind
+;     englisch; der sichtbare Name steht in `label`. Ältere Dateien tragen
+;     noch [projekt] statt [project] — das bleibt gültig.
 ;   • path        (Pflicht)  Verzeichnis des Mounts. Relative Pfade gelten
 ;                            relativ zu DIESER Datei. Absolute Pfade empfohlen.
 ;                            Darf das backend/ von HugoCMS weder enthalten
@@ -46,19 +48,24 @@
 ; install.sh trägt die Sektion bei der Einrichtung automatisch ein.
 ; ===========================================================================
 
-[inhalte]
-path = daten/inhalte
-label = Inhalte
+[content]
+path = /pfad/zum/hugo-projekt/content
+label = Inhalt
 accept = md, markdown, html, htm, png, jpg, jpeg, gif, webp, svg
 
-[vorlagen]
-path = daten/vorlagen
+[layouts]
+path = /pfad/zum/hugo-projekt/layouts
 label = Vorlagen
 permissions = read, write
 
-[medien]
-path = daten/medien
+[static]
+path = /pfad/zum/hugo-projekt/static
 label = Medien
+
+; Das gesamte Hugo-Projekt (Konfiguration, Theme …), ohne accept-Einschränkung.
+[project]
+path = /pfad/zum/hugo-projekt
+label = Alle Dateien
 
 ;[hugo]
 ;source = /pfad/zum/hugo-projekt

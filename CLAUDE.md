@@ -66,6 +66,11 @@ offensichtlich ist — die ausführliche Funktionsübersicht steht in der README
   `bin/crontab-entries.sh` erkennen sie in beiden Sprachen.
 - **i18n**: jede nutzersichtbare Zeichenkette in `frontend/src/i18n/de.js` UND
   `en.js`. Backend-Fehler tragen nur Codes/Schlüssel; der Client übersetzt.
+- **INI-Schlüssel englisch**: Sektions- und Schlüsselnamen in allen INI-Dateien
+  (hugocms.ini, Mount- und Kontodateien) sind englisch; Nutzersichtbares steht
+  in Werten wie `label`. Ausnahme aus Kompatibilität: Bestehende Mount-Dateien
+  tragen noch `[projekt]` (neu: `[project]`) — nicht umbenennen, nicht
+  auswerten.
 - **`*.ini`** ist gitignored (instanzspezifisch); nur `*.ini.beispiel` gehört
   ins Repo.
 
