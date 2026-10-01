@@ -36,7 +36,16 @@
 #   packaging.sh --no-push    bauen und committen, aber NICHT pushen.
 #   packaging.sh --no-commit  nur bauen; weder committen noch pushen (danach
 #                             'git status' des Release-Repos).
+#   packaging.sh --skip-audit Sicherheitsprüfung der Abhängigkeiten auslassen
+#                             (mit den anderen Flags kombinierbar).
 # Ohne Flag wird also committet UND gepusht.
+#
+# Vor dem Build prüft 'npm audit' die Laufzeit-Abhängigkeiten des Frontends
+# (nur 'dependencies' — sie landen im ausgelieferten app/; Build-Werkzeuge aus
+# 'devDependencies' nicht). Bei Funden der Stufe high/critical fragt das Skript
+# nach, ob trotzdem gebaut werden soll (Default: Nein). Es wird bewusst NICHTS
+# automatisch behoben: 'npm audit fix' änderte die Lock-Datei, und das Release
+# entspräche keinem Commit mehr.
 #
 # Zum Schluss wird zusätzlich die vom Release-Build hochgezählte Buildnummer
 # (frontend/build-number.json) im QUELL-Repo mit der Message
@@ -50,11 +59,13 @@ set -euo pipefail
 # --no-commit unterdrückt beides.
 DO_COMMIT=1
 DO_PUSH=1
+DO_AUDIT=1
 for arg in "$@"; do
     case "$arg" in
-        --no-commit) DO_COMMIT=0; DO_PUSH=0 ;;
-        --no-push)   DO_PUSH=0 ;;
-        -h|--help) echo "Aufruf: $0 [--no-commit | --no-push]"; exit 0 ;;
+        --no-commit)  DO_COMMIT=0; DO_PUSH=0 ;;
+        --no-push)    DO_PUSH=0 ;;
+        --skip-audit) DO_AUDIT=0 ;;
+        -h|--help) echo "Aufruf: $0 [--no-commit | --no-push] [--skip-audit]"; exit 0 ;;
         *) echo "Unbekannte Option: $arg" >&2; exit 1 ;;
     esac
 done
@@ -87,6 +98,66 @@ fi
 if [ -d "$PKG_REPO/hugocms" ]; then
     echo "Alte Struktur hugocms-release/hugocms/ wird entfernt."
     rm -rf "$PKG_REPO/hugocms"
+fi
+
+# 0c. Sicherheitsprüfung der Laufzeit-Abhängigkeiten (nur lesend, siehe Kopf).
+#     Funde der Stufe high/critical erfordern eine Bestätigung; ohne
+#     interaktives Terminal wird abgebrochen. Ist die Registry nicht erreichbar,
+#     gibt es nur eine Warnung — ein Release soll daran nicht scheitern.
+#     Einzelne Pakete genauer untersuchen: scripts/pkg-check.sh <paket>
+if [ "$DO_AUDIT" = 1 ]; then
+    echo "0c. Sicherheitsprüfung der Laufzeit-Abhängigkeiten (npm audit --omit=dev)..."
+    if ! command -v npm &>/dev/null; then
+        echo "⚠️  npm nicht gefunden — Prüfung übersprungen."
+        AUDIT_STATUS=0
+    else
+        # npm audit endet bei Funden mit Exit-Code ≠ 0 — das ist hier kein Fehler.
+        AUDIT_JSON="$(npm audit --prefix "$PROJECT_DIR/frontend" --omit=dev --json 2>/dev/null || true)"
+        # Exit-Code: 0 = keine Funde high/critical, 1 = Funde, 2 = keine Daten.
+        AUDIT_STATUS=0
+        node -e '
+let data;
+try { data = JSON.parse(require("fs").readFileSync(0, "utf8")); } catch { process.exit(2); }
+if (data.error || !data.metadata) process.exit(2);
+const c = data.metadata.vulnerabilities;
+console.log(`   Gefunden: ${c.critical} critical, ${c.high} high, ${c.moderate} moderate, ${c.low} low`);
+const hits = Object.values(data.vulnerabilities || {})
+    .filter(v => v.severity === "high" || v.severity === "critical");
+if (!hits.length) process.exit(0);
+console.log("");
+for (const v of hits) {
+    const own = (v.via || []).find(x => typeof x === "object");
+    const why = own ? own.title : "über " + v.via.join(", ");
+    const fix = v.fixAvailable === true ? "behebbar per: npm audit fix --prefix frontend"
+        : v.fixAvailable ? `Update ${v.fixAvailable.name}@${v.fixAvailable.version}`
+        : "kein automatischer Fix";
+    console.log(`   [${v.severity}] ${v.name} — ${why} (${fix})`);
+}
+process.exit(1);
+' <<< "$AUDIT_JSON" || AUDIT_STATUS=$?
+    fi
+
+    case "$AUDIT_STATUS" in
+        0) echo "   Keine Funde der Stufe high/critical." ;;
+        2) echo "⚠️  npm audit lieferte keine Daten (Registry nicht erreichbar?) — Prüfung übersprungen." ;;
+        *)
+            echo ""
+            echo "   Details je Paket: scripts/pkg-check.sh <paket>"
+            if [ -t 0 ]; then
+                printf 'Sicherheitsfunde high/critical — trotzdem bauen? [j/N] '
+                read -r reply || reply=""
+                case "$reply" in
+                    [jJyY]*) echo "Fortgesetzt trotz Sicherheitsfunden." ;;
+                    *) echo "Abgebrochen — kein Release erzeugt."; exit 1 ;;
+                esac
+            else
+                echo "❌ Sicherheitsfunde high/critical und kein interaktives Terminal — Abbruch."
+                echo "   Bewusst trotzdem bauen: $0 --skip-audit"
+                exit 1
+            fi
+            ;;
+    esac
+    echo ""
 fi
 
 # 1. Frontend bauen (erzeugt frontend/dist über das vorhandene build.sh)
