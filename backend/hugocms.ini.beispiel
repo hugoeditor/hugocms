@@ -128,10 +128,11 @@ bin = ../bin/hugo/hugo
 ; Texteditor. Optional.
 ;   extra_editable  Weitere Dateiendungen, die der Texteditor öffnen und
 ;                   speichern darf — kommagetrennt, ohne Punkt. Sie ERGÄNZEN
-;                   die eingebauten (html, htm, md, markdown, txt, css, js,
-;                   json, xml, yaml, yml, svg, toml). Die accept-Liste des
+;                   die eingebauten (html, htm, md, markdown, txt, css, json,
+;                   xml, yaml, yml, svg, toml — bewusst ohne js, das im Browser
+;                   ausgeführt wird). Die accept-Liste des
 ;                   jeweiligen Mounts gilt beim Speichern weiterhin.
-;                   VORSICHT bei Skripten (sh, php, py …): Führt der Server
+;                   VORSICHT bei Skripten (sh, js, php, py …): Führt der Server
 ;                   oder ein Cron-Job sie aus, kann jeder mit Schreibrecht auf
 ;                   den Mount — auch der KI-Assistent — Befehle auf dem Server
 ;                   ausführen lassen.
@@ -144,7 +145,8 @@ bin = ../bin/hugo/hugo
 ;                 Liste — so lässt sich die Sicht auf einem gemeinsam
 ;                 genutzten Server beschneiden. Außerhalb davon lässt sich
 ;                 kein Ort anlegen, auch nicht per eingetipptem Pfad. Fehlt er,
-;                 gelten: das Release-Verzeichnis und sein Elternverzeichnis,
+;                 gelten: das Elternverzeichnis des Release-Verzeichnisses
+;                 (steht vorn und ist die Vorgabe für neue Orte),
 ;                 das Hugo-Projekt der Webseite, die Elternverzeichnisse der
 ;                 vorhandenen Orte sowie /srv, /var/www, /mnt und /media.
 ;                 Lässt sich auch im Dialog „Konfiguration ändern“ setzen.

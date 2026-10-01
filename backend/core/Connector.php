@@ -162,6 +162,9 @@ final class Connector
     /** [system]-Sektion der hugocms.ini (Einstiegspunkte der Verzeichnisauswahl). */
     private array $system = ['browseRoots' => []];
 
+    /** @var list<string> [editor] extra_editable, wie konfiguriert (auch Endungen, die schon eingebaut sind). */
+    private array $extraEditable = [];
+
     /** @var list<string> Endungen, die der Texteditor öffnet (Standard + [editor] extra_editable). */
     private array $editableTypes = [];
 
@@ -363,6 +366,7 @@ final class Connector
         }
 
         $this->resolver = new MountResolver();
+        $this->extraEditable = $extraEditable;
         $this->editableTypes = $options['editable'] ?? array_values(array_unique([...FileService::DEFAULT_EDITABLE, ...$extraEditable]));
         $this->files = new FileService(
             $this->resolver,
@@ -571,7 +575,7 @@ final class Connector
                 'reconfigure' => $this->cmdReconfigure($request),
                 'mountadmin' => $this->cmdMountAdmin(),
                 'mountadd' => $this->cmdMountAdd($request),
-                'mountrename' => $this->cmdMountRename($request),
+                'mountupdate' => $this->cmdMountUpdate($request),
                 'mountdelete' => $this->cmdMountDelete($request),
                 'browsedirs' => $this->cmdBrowseDirs($request),
                 'aimodels' => $this->cmdAiModels(),
@@ -5042,6 +5046,31 @@ final class Connector
     // Sektionen bleiben wörtlich erhalten. Umbenennen ändert nur `label`: Die
     // Sektions-ID steckt in den Datei-IDs des Clients und bleibt deshalb fest.
 
+    /**
+     * Alle Dateitypen, die HugoCMS verarbeitet: was der Texteditor öffnet
+     * (Standard + [editor] extra_editable) und die Bildformate für Hochladen
+     * und Bild-Editor. Vorschläge für die Dateityp-Einschränkung je Konto und
+     * für „Alle Dateitypen erlauben“ (accept) in der Orte-Verwaltung — eine
+     * per extra_editable freigeschaltete Endung erscheint so in beiden.
+     *
+     * Ohne $withExtra die redaktionelle Grundausstattung: eingebaute
+     * Editor-Endungen und Bildformate OHNE alles, was in extra_editable steht
+     * (oft Skripte wie sh, die nur Administratoren brauchen). Ausdrücklich auch
+     * dann ohne, wenn eine Endung zugleich eingebaut ist (etwa js): Wer sie in
+     * extra_editable einträgt, kennzeichnet sie damit als nicht für Redakteure.
+     *
+     * @return list<string>
+     */
+    private function availableFileTypes(bool $withExtra = true): array
+    {
+        if ($withExtra) {
+            return array_values(array_unique([...$this->editableTypes, ...self::IMAGE_TYPES]));
+        }
+        $base = array_unique([...FileService::DEFAULT_EDITABLE, ...self::IMAGE_TYPES]);
+
+        return array_values(array_diff($base, $this->extraEditable));
+    }
+
     /** Maximale Länge eines Ortsnamens (label). */
     private const MOUNT_LABEL_MAX = 80;
 
@@ -5079,15 +5108,26 @@ final class Connector
                 'missing' => $real === false || !is_dir($real),
                 'readonly' => !empty($spec['options']['readonly']),
                 'accept' => $spec['options']['accept'] ?? [],
-                'permissions' => $spec['options']['permissions'] ?? null,
+                // Ohne Schlüssel gelten alle Rechte — ausgeschrieben, damit der
+                // Dialog die Häkchen direkt setzen kann.
+                'permissions' => $spec['options']['permissions'] ?? Mount::ALL_PERMISSIONS,
             ];
         }
 
         return [
             'mounts' => $mounts,
+            'allPermissions' => Mount::ALL_PERMISSIONS,
+            // Für „Alle Dateitypen erlauben“ bzw. „Dateitypen für den
+            // Redakteur erlauben“ im accept-Feld eines Orts.
+            'fileTypes' => $this->availableFileTypes(),
+            'editorFileTypes' => $this->availableFileTypes(false),
+            // Was „Dateitypen für den Redakteur erlauben“ wieder entfernt.
+            'extraFileTypes' => $this->extraEditable,
             // Rückfall-Datei: gilt für ALLE Webseiten ohne eigene Datei — der
             // Dialog weist darauf hin.
             'shared' => basename($path) === 'mounts.ini',
+            // Vorgabe für das Verzeichnisfeld eines neuen Orts.
+            'defaultPath' => $this->directoryBrowser()->defaultPath(),
         ];
     }
 
@@ -5104,7 +5144,7 @@ final class Connector
         // Nur Verzeichnisse unterhalb der Einstiegspunkte — wie im Dialog.
         $dir = $this->directoryBrowser()->resolve((string) $request['path']);
         if ($this->resolver->isProtected($dir)) {
-            throw ApiException::denied('MOUNT-PATH-PROTECTED', [$label]);
+            throw ApiException::denied('MOUNT-DIR-PROTECTED', [$dir]);
         }
 
         $existing = MountConfig::load($file)['mounts'];
@@ -5113,6 +5153,7 @@ final class Connector
                 throw ApiException::badRequest('MOUNT-PATH-DUPLICATE', [$spec['options']['label'] ?? $spec['name']]);
             }
         }
+        $this->assertMountLabelFree($file, $label);
         $raw = Config::raw($file);
         $name = MountConfig::newMountName($dir, array_map('strval', array_keys($raw)));
 
@@ -5122,16 +5163,75 @@ final class Connector
         return $this->mountAdminState($file);
     }
 
-    /** mountrename — sichtbaren Namen (label) eines Orts ändern. */
-    private function cmdMountRename(array $request): array
+    /**
+     * mountupdate — Name und Einschränkungen eines Orts ändern. Jedes Feld ist
+     * optional; nur genannte werden geschrieben, übrige Schlüssel der Sektion
+     * (auch von Hand ergänzte) bleiben erhalten:
+     *
+     *   label        sichtbarer Name
+     *   readonly     true = nur Lesen (überschreibt permissions); false
+     *                entfernt den Schlüssel
+     *   permissions  Liste aus Mount::ALL_PERMISSIONS, muss „read“ enthalten;
+     *                alle Rechte = Schlüssel entfernen (Vorgabe)
+     *   accept       erlaubte Endungen; leer = Schlüssel entfernen (alle)
+     *
+     * Schlüssel mit Vorgabewert werden entfernt statt geschrieben: Die Mount-
+     * Datei liest „false“ in Anführungszeichen als wahr (INI_SCANNER_TYPED).
+     */
+    private function cmdMountUpdate(array $request): array
     {
         $file = $this->requireMountAdmin();
         $this->requireMethod('POST');
 
         [$name, $section] = $this->mountSection($file, (string) ($request['name'] ?? ''));
-        $section['label'] = $this->cleanMountLabel($request['label'] ?? '');
+
+        if (array_key_exists('label', $request)) {
+            $section['label'] = $this->cleanMountLabel($request['label']);
+            $this->assertMountLabelFree($file, $section['label'], $name);
+        }
+        if (array_key_exists('readonly', $request)) {
+            if (!is_bool($request['readonly'])) {
+                throw ApiException::badRequest('PARAM-INVALID', ['readonly']);
+            }
+            unset($section['readonly']);
+            if ($request['readonly']) {
+                $section['readonly'] = 'true';
+            }
+        }
+        if (array_key_exists('permissions', $request)) {
+            $perms = $request['permissions'];
+            if (!is_array($perms)) {
+                throw ApiException::badRequest('PARAM-INVALID', ['permissions']);
+            }
+            $perms = array_values(array_unique(array_map(static fn ($p) => strtolower(trim((string) $p)), $perms)));
+            foreach ($perms as $perm) {
+                if (!in_array($perm, Mount::ALL_PERMISSIONS, true)) {
+                    throw ApiException::badRequest('MOUNT-PERMISSION-INVALID', [$perm]);
+                }
+            }
+            // Ohne Lesen wäre der Ort nicht einmal auflistbar.
+            if (!in_array('read', $perms, true)) {
+                throw ApiException::badRequest('MOUNT-PERMISSION-READ');
+            }
+            unset($section['permissions']);
+            if (count($perms) < count(Mount::ALL_PERMISSIONS)) {
+                // In der Reihenfolge von ALL_PERMISSIONS — die Datei bleibt lesbar.
+                $section['permissions'] = implode(', ', array_values(array_intersect(Mount::ALL_PERMISSIONS, $perms)));
+            }
+        }
+        if (array_key_exists('accept', $request)) {
+            if (!is_array($request['accept'])) {
+                throw ApiException::badRequest('PARAM-INVALID', ['accept']);
+            }
+            $accept = UserStore::normalizeFileTypes(array_map('strval', $request['accept']));
+            unset($section['accept']);
+            if ($accept !== []) {
+                $section['accept'] = implode(', ', $accept);
+            }
+        }
+
         Config::updateSections($file, [strtolower($name) => $section]);
-        $this->logger->info('Ort umbenannt: ' . $name . ' → ' . $section['label']);
+        $this->logger->info('Ort geändert: ' . $name . ' (' . implode(', ', array_keys($request)) . ')');
 
         return $this->mountAdminState($file);
     }
@@ -5195,6 +5295,26 @@ final class Connector
             }
         }
         throw ApiException::notFound('MOUNT-UNKNOWN', [$name]);
+    }
+
+    /**
+     * Zwei Orte mit demselben Namen wären in der Orte-Liste nicht zu
+     * unterscheiden. Verglichen wird ohne Belang der Groß-/Kleinschreibung;
+     * ein Ort ohne label heißt wie seine Sektion.
+     *
+     * @param ?string $except Sektion, die umbenannt wird (ihr eigener Name zählt nicht)
+     */
+    private function assertMountLabelFree(string $file, string $label, ?string $except = null): void
+    {
+        $key = mb_strtolower($label);
+        foreach (MountConfig::load($file)['mounts'] as $spec) {
+            if ($except !== null && strcasecmp($spec['name'], $except) === 0) {
+                continue;
+            }
+            if (mb_strtolower(trim((string) ($spec['options']['label'] ?? $spec['name']))) === $key) {
+                throw ApiException::badRequest('MOUNT-LABEL-TAKEN', [$label]);
+            }
+        }
     }
 
     private function cleanMountLabel(mixed $label): string
@@ -5312,7 +5432,7 @@ final class Connector
             'roles' => [UserAdminInterface::ROLE_ADMIN, UserAdminInterface::ROLE_EDITOR],
             // Vorschläge für die Dateityp-Einschränkung: alles, was der Editor
             // öffnet, dazu die Bildformate (Hochladen, Bild-Editor).
-            'fileTypes' => array_values(array_unique([...$this->editableTypes, ...self::IMAGE_TYPES])),
+            'fileTypes' => $this->availableFileTypes(),
         ];
     }
 

@@ -1,13 +1,17 @@
 <script setup>
-// Orte verwalten: Mounts dieser Webseite hinzufügen, umbenennen, entfernen.
+// Orte verwalten: Mounts dieser Webseite hinzufügen, bearbeiten, entfernen.
 // Nur für Administratoren (auth.manageConfig); der Server prüft das selbst.
 //
-// Umbenennen ändert nur den sichtbaren Namen (label) — die Sektions-ID steckt
-// in den Datei-IDs und bleibt fest. Entfernen löscht nur den Eintrag, nicht
+// Jeder Ort ist ein Expansion-Panel; ausgeklappt lassen sich Name und
+// Einschränkungen (readonly, permissions, accept) bearbeiten. Gespeichert wird
+// selbsttätig nach jeder Änderung (Schalter und Auswahlen sofort, der Name kurz
+// nach dem letzten Tastendruck bzw. beim Verlassen des Felds). Umbenennen
+// ändert nur den sichtbaren Namen (label) — die Sektions-ID steckt in den
+// Datei-IDs und bleibt fest. Entfernen löscht nur den Eintrag, nicht
 // die Dateien im Verzeichnis. Das Verzeichnis eines neuen Orts wählt der
 // Verzeichnis-Picker (DirectoryPickerDialog); das Feld bleibt frei
 // beschreibbar, der Server prüft den Pfad gegen dieselben Einstiegspunkte.
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../api/client'
 import { errorText } from '../i18n/apiMessage'
@@ -25,22 +29,95 @@ const MAX_LABEL = 80
 
 const loading = ref(false)
 const busy = ref(false)
+// Eine Fehlermeldung für alle Aktionen (Laden, Anlegen, Speichern, Entfernen).
+// Sie steht unter der Einleitung außerhalb des scrollenden Bereichs und ist
+// damit sichtbar, wo im Dialog man auch gerade arbeitet.
 const error = ref(null)
 const mounts = ref([])
 const shared = ref(false) // Rückfall-Datei mounts.ini, gilt für mehrere Webseiten
+// Vorgabe des Servers für das Verzeichnisfeld (Elternverzeichnis des
+// Release-Verzeichnisses); der Picker öffnet ebenfalls dort.
+const defaultPath = ref('')
 
-// Umbenennen direkt in der Zeile.
-const editName = ref(null)
-const editLabel = ref('')
+// Alle Rechte eines Mounts (vom Server, Reihenfolge wie Mount::ALL_PERMISSIONS).
+const allPermissions = ref([])
+// Bearbeitungsstand je Ort (Sektions-ID → Formularwerte); wird bei jeder
+// Serverantwort neu aus dem gespeicherten Stand gebildet — außer für Orte, an
+// denen gerade noch getippt wird (geplantes Speichern), sonst verschwände die
+// laufende Eingabe.
+const drafts = ref({})
+// Autosave: geplante Speichervorgänge je Ort (Timer) und Anzeige „wird
+// gespeichert“. Die Aufrufe laufen nacheinander (chain), damit sich zwei
+// Antworten nicht überholen.
+const LABEL_DELAY = 800
+const timers = {}
+const saving = ref({})
+let chain = Promise.resolve()
+// Ausgeklappte Panels (Sektions-IDs).
+const expanded = ref([])
+
+const permissionItems = computed(() =>
+  allPermissions.value.map((p) => ({ value: p, title: t(`places.perm.${p}`) })),
+)
+// Vorschläge für accept: die Endungen der vorhandenen Orte.
+// Alle Dateitypen, die HugoCMS verarbeitet (vom Server: Editor-Endungen samt
+// [editor] extra_editable und Bildformate) — Ziel von „Alle Dateitypen
+// erlauben“.
+const availableTypes = ref([])
+// Grundausstattung für Redakteure: dieselben ohne die per extra_editable
+// freigeschalteten Endungen.
+const editorTypes = ref([])
+// Die Endungen aus extra_editable, wie konfiguriert — auch solche, die zugleich
+// eingebaut sind (etwa js). Genau diese entfernt der Redakteurs-Eintrag.
+const extraTypes = ref([])
+// Vorschläge für accept: die verfügbaren Typen und die Endungen der Orte.
+const acceptSuggestions = computed(() =>
+  [...new Set([...availableTypes.value, ...mounts.value.flatMap((m) => m.accept ?? [])])].sort(),
+)
+
+// „Alle Dateitypen erlauben“: trägt alle verfügbaren Typen ins Feld ein (die
+// vorhandenen bleiben, auch von Hand ergänzte). Leer bleibt weiterhin „alle“.
+function allowTypes(name, types) {
+  const d = drafts.value[name]
+  d.accept = [...new Set([...d.accept, ...types])]
+  scheduleSave(name)
+}
+
+// „Dateitypen für den Redakteur erlauben“: die Grundausstattung eintragen und
+// die per extra_editable freigeschalteten Endungen (etwa sh) wieder entfernen.
+// Übrige, von Hand ergänzte Typen bleiben.
+function allowEditorTypes(name) {
+  const d = drafts.value[name]
+  d.accept = [...new Set([...d.accept, ...editorTypes.value])].filter((type) => !extraTypes.value.includes(type))
+  scheduleSave(name)
+}
 
 // Neuer Ort.
 const newLabel = ref('')
 const newPath = ref('')
 const pickerOpen = ref(false)
 
+function draftOf(mount) {
+  return {
+    label: mount.label,
+    readonly: !!mount.readonly,
+    permissions: [...(mount.permissions ?? [])],
+    accept: [...(mount.accept ?? [])],
+  }
+}
+
 function applyState(data) {
   mounts.value = data.mounts ?? []
+  allPermissions.value = data.allPermissions ?? []
+  availableTypes.value = data.fileTypes ?? []
+  editorTypes.value = data.editorFileTypes ?? []
+  extraTypes.value = data.extraFileTypes ?? []
+  drafts.value = Object.fromEntries(
+    mounts.value.map((m) => [m.name, timers[m.name] && drafts.value[m.name] ? drafts.value[m.name] : draftOf(m)]),
+  )
   shared.value = !!data.shared
+  defaultPath.value = data.defaultPath ?? ''
+  if (!newPath.value) newPath.value = defaultPath.value
 }
 
 async function load() {
@@ -55,8 +132,8 @@ async function load() {
   }
 }
 
-// Gemeinsamer Ablauf der drei Schreibbefehle: Fehler im Dialog anzeigen,
-// Erfolg an App melden.
+// Gemeinsamer Ablauf für Anlegen und Entfernen: Erfolg an App melden, einen
+// Fehler in der Meldungszeile anzeigen.
 async function write(cmd, body) {
   busy.value = true
   error.value = null
@@ -72,14 +149,63 @@ async function write(cmd, body) {
   }
 }
 
-function startEdit(mount) {
-  editName.value = mount.name
-  editLabel.value = mount.label
+// Freie Eingaben der accept-Combobox angleichen (klein, ohne Punkt); die
+// endgültige Prüfung macht der Server.
+function cleanAccept(list) {
+  return [...new Set(list.map((e) => String(e).trim().replace(/^\./, '').toLowerCase()).filter(Boolean))]
 }
 
-async function saveEdit() {
-  if (await write('mountrename', { name: editName.value, label: editLabel.value })) {
-    editName.value = null
+function sameSet(a, b) {
+  return a.length === b.length && a.every((x) => b.includes(x))
+}
+
+// Weicht das Formular vom gespeicherten Stand ab?
+function isDirty(mount) {
+  const d = drafts.value[mount.name]
+  if (!d) return false
+  return d.label.trim() !== mount.label
+    || d.readonly !== !!mount.readonly
+    || !sameSet(d.permissions, mount.permissions ?? [])
+    || !sameSet(cleanAccept(d.accept), mount.accept ?? [])
+}
+
+// Speichern für einen Ort vormerken; delay 0 = gleich (nach dem aktuellen
+// Ereignis, damit v-model den Entwurf schon aktualisiert hat).
+function scheduleSave(name, delay = 0) {
+  clearTimeout(timers[name])
+  saving.value = { ...saving.value, [name]: true }
+  timers[name] = setTimeout(() => {
+    delete timers[name]
+    chain = chain.then(() => saveNow(name))
+  }, delay)
+}
+
+// Alle vorgemerkten Speichervorgänge sofort ausführen (Dialog schließt).
+function flushSaves() {
+  for (const name of Object.keys(timers)) scheduleSave(name, 0)
+}
+
+async function saveNow(name) {
+  const mount = mounts.value.find((m) => m.name === name)
+  const d = drafts.value[name]
+  // Ohne Namen nicht speichern — das Feld zeigt den Fehler, der Ort bleibt
+  // als „nicht gespeichert“ markiert.
+  if (!mount || !d || !isDirty(mount) || !d.label.trim()) {
+    if (!timers[name]) saving.value = { ...saving.value, [name]: false }
+    return
+  }
+  const body = { name, label: d.label, readonly: d.readonly, accept: cleanAccept(d.accept) }
+  // Bei „nur lesen“ überschreibt readonly die Rechte — die Auswahl bleibt dann
+  // unverändert in der Datei stehen und greift wieder, sobald readonly fällt.
+  if (!d.readonly) body.permissions = d.permissions
+  try {
+    applyState(await api.post('mountupdate', body))
+    error.value = null
+    emit('changed')
+  } catch (e) {
+    error.value = errorText(t, e)
+  } finally {
+    if (!timers[name]) saving.value = { ...saving.value, [name]: false }
   }
 }
 
@@ -96,7 +222,7 @@ async function remove(mount) {
 async function add() {
   if (await write('mountadd', { label: newLabel.value, path: newPath.value })) {
     newLabel.value = ''
-    newPath.value = ''
+    newPath.value = defaultPath.value
   }
 }
 
@@ -107,8 +233,12 @@ function onPicked(path) {
 }
 
 watch(open, (isOpen) => {
-  if (!isOpen) return
-  editName.value = null
+  if (!isOpen) {
+    flushSaves()
+    return
+  }
+  expanded.value = []
+  error.value = null
   newLabel.value = ''
   newPath.value = ''
   load()
@@ -121,75 +251,163 @@ watch(open, (isOpen) => {
       <v-card-title class="text-h6 d-flex align-center">
         <v-icon icon="mdi-folder-edit-outline" class="mr-2" />
         {{ $t('places.title') }}
+        <v-spacer />
+        <v-btn
+          icon="mdi-close"
+          size="small"
+          variant="text"
+          :title="$t('common.close')"
+          :disabled="busy"
+          @click="open = false"
+        />
       </v-card-title>
       <v-card-subtitle class="text-wrap">{{ $t('places.intro') }}</v-card-subtitle>
+      <!-- Außerhalb von v-card-text: scrollt nicht mit und bleibt sichtbar. -->
+      <v-alert
+        v-if="error"
+        type="error"
+        density="comfortable"
+        closable
+        class="mx-4 mt-2"
+        @click:close="error = null"
+      >
+        {{ error }}
+      </v-alert>
 
       <v-card-text>
         <v-alert v-if="shared" type="warning" variant="tonal" density="compact" class="mb-3">
           {{ $t('places.sharedHint') }}
         </v-alert>
-        <v-alert v-if="error" type="error" density="compact" class="mb-3">{{ error }}</v-alert>
         <v-progress-linear v-if="loading" indeterminate class="mb-2" />
 
-        <v-table density="comfortable" class="pl-table">
-          <thead>
-            <tr>
-              <th>{{ $t('places.label') }}</th>
-              <th>{{ $t('places.path') }}</th>
-              <th class="text-right" />
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="mount in mounts" :key="mount.name">
-              <td class="pl-label">
-                <v-text-field
-                  v-if="editName === mount.name"
-                  v-model="editLabel"
-                  :maxlength="MAX_LABEL"
-                  density="compact"
+        <v-expansion-panels v-model="expanded" multiple variant="accordion" class="pl-panels">
+          <v-expansion-panel v-for="mount in mounts" :key="mount.name" :value="mount.name">
+            <v-expansion-panel-title>
+              <div class="pl-head">
+                <div class="pl-head-line">
+                  <v-icon icon="mdi-folder-outline" size="18" class="mr-2" />
+                  <span class="font-weight-medium">{{ mount.label }}</span>
+                  <v-chip v-if="mount.readonly" size="x-small" variant="tonal" color="warning" class="ml-2">
+                    {{ $t('places.readonly') }}
+                  </v-chip>
+                  <v-chip
+                    v-else-if="(mount.permissions ?? []).length < allPermissions.length"
+                    size="x-small"
+                    variant="tonal"
+                    class="ml-2"
+                  >
+                    {{ $t('places.restricted') }}
+                  </v-chip>
+                  <v-chip v-if="mount.accept?.length" size="x-small" variant="tonal" class="ml-1">
+                    {{ mount.accept.length }} {{ $t('places.types') }}
+                  </v-chip>
+                  <v-chip v-if="saving[mount.name]" size="x-small" color="primary" variant="tonal" class="ml-1">
+                    {{ $t('places.saving') }}
+                  </v-chip>
+                  <v-chip v-else-if="isDirty(mount)" size="x-small" color="error" variant="tonal" class="ml-1">
+                    {{ $t('places.unsaved') }}
+                  </v-chip>
+                </div>
+                <div class="text-caption text-medium-emphasis pl-path" :title="mount.path">
+                  <v-icon v-if="mount.missing" icon="mdi-alert-outline" size="14" color="warning" :title="$t('places.missing')" />
+                  {{ mount.path }}
+                </div>
+              </div>
+            </v-expansion-panel-title>
+
+            <v-expansion-panel-text v-if="drafts[mount.name]">
+              <v-text-field
+                v-model="drafts[mount.name].label"
+                :label="$t('places.label')"
+                :maxlength="MAX_LABEL"
+                :error-messages="drafts[mount.name].label.trim() ? [] : [$t('places.labelRequired')]"
+                prepend-inner-icon="mdi-label-outline"
+                variant="outlined"
+                density="comfortable"
+                class="mb-1"
+                @update:model-value="scheduleSave(mount.name, LABEL_DELAY)"
+                @blur="timers[mount.name] && scheduleSave(mount.name)"
+                @keyup.enter="scheduleSave(mount.name)"
+              />
+              <v-switch
+                v-model="drafts[mount.name].readonly"
+                :label="$t('places.readonlyLabel')"
+                @update:model-value="scheduleSave(mount.name)"
+                :hint="$t('places.readonlyHint')"
+                persistent-hint
+                color="warning"
+                density="compact"
+                class="mb-3"
+              />
+              <div class="text-caption text-medium-emphasis mb-1">{{ $t('places.permissionsHint') }}</div>
+              <v-chip-group
+                v-model="drafts[mount.name].permissions"
+                multiple
+                @update:model-value="scheduleSave(mount.name)"
+                column
+                selected-class="text-primary"
+                :disabled="drafts[mount.name].readonly"
+                class="mb-3"
+              >
+                <v-chip
+                  v-for="item in permissionItems"
+                  :key="item.value"
+                  :value="item.value"
+                  :disabled="drafts[mount.name].readonly || item.value === 'read'"
+                  filter
                   variant="outlined"
-                  hide-details
-                  autofocus
-                  @keyup.enter="saveEdit"
-                  @keyup.esc="editName = null"
-                />
-                <template v-else>
-                  {{ mount.label }}
-                  <v-chip v-if="mount.readonly" size="x-small" variant="tonal" class="ml-1">{{ $t('places.readonly') }}</v-chip>
-                </template>
-              </td>
-              <td class="text-caption pl-path" :title="mount.path">
-                <v-icon v-if="mount.missing" icon="mdi-alert-outline" size="14" color="warning" :title="$t('places.missing')" />
-                {{ mount.path }}
-              </td>
-              <td class="text-right text-no-wrap">
-                <template v-if="editName === mount.name">
-                  <v-btn icon="mdi-check" size="small" variant="text" color="primary" :loading="busy" @click="saveEdit" />
-                  <v-btn icon="mdi-close" size="small" variant="text" :disabled="busy" @click="editName = null" />
-                </template>
-                <template v-else>
-                  <v-btn
-                    icon="mdi-pencil"
-                    size="small"
-                    variant="text"
-                    :title="$t('places.rename')"
-                    :disabled="busy"
-                    @click="startEdit(mount)"
+                  size="small"
+                >
+                  {{ item.title }}
+                </v-chip>
+              </v-chip-group>
+              <v-combobox
+                v-model="drafts[mount.name].accept"
+                :items="acceptSuggestions"
+                @update:model-value="scheduleSave(mount.name)"
+                :label="$t('places.accept')"
+                :placeholder="$t('places.acceptAll')"
+                :hint="$t('places.acceptHint')"
+                persistent-hint
+                multiple
+                chips
+                closable-chips
+                prepend-inner-icon="mdi-file-check-outline"
+                variant="outlined"
+                density="comfortable"
+              >
+                <!-- Oben in der Liste: alle verfügbaren Typen bzw. die Grundausstattung
+                     für Redakteure (ohne extra_editable) auf einmal eintragen. -->
+                <template #prepend-item>
+                  <v-list-item
+                    prepend-icon="mdi-check-all"
+                    :title="$t('places.acceptAllTypes')"
+                    :subtitle="availableTypes.join(', ')"
+                    @click="allowTypes(mount.name, availableTypes)"
                   />
-                  <v-btn
-                    icon="mdi-delete"
-                    size="small"
-                    variant="text"
-                    color="error"
-                    :title="$t('places.deleteAction')"
-                    :disabled="busy || mounts.length <= 1"
-                    @click="remove(mount)"
+                  <v-list-item
+                    prepend-icon="mdi-account-edit-outline"
+                    :title="$t('places.acceptEditorTypes')"
+                    :subtitle="editorTypes.join(', ')"
+                    @click="allowEditorTypes(mount.name)"
                   />
+                  <v-divider class="my-1" />
                 </template>
-              </td>
-            </tr>
-          </tbody>
-        </v-table>
+              </v-combobox>
+              <div class="d-flex align-center mt-4">
+                <v-btn
+                  color="error"
+                  variant="text"
+                  prepend-icon="mdi-delete"
+                  :disabled="busy || mounts.length <= 1"
+                  @click="remove(mount)"
+                >
+                  {{ $t('places.deleteAction') }}
+                </v-btn>
+              </div>
+            </v-expansion-panel-text>
+          </v-expansion-panel>
+        </v-expansion-panels>
 
         <v-divider class="my-4" />
         <div class="text-subtitle-2 mb-2">{{ $t('places.addTitle') }}</div>
@@ -246,9 +464,10 @@ watch(open, (isOpen) => {
 </template>
 
 <style scoped>
-.pl-label { min-width: 180px; }
+.pl-head { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.pl-head-line { display: flex; align-items: center; flex-wrap: wrap; }
 .pl-path {
-  max-width: 340px;
+  max-width: 600px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

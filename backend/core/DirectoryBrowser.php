@@ -21,12 +21,16 @@ use HugoCMS\FileManager\Exception\ApiException;
  *   - Steht [system] browse_roots in der hugocms.ini, gilt allein diese Liste
  *     (kommagetrennt) — so lässt sich die Sicht auf einem gemeinsam genutzten
  *     Server beschneiden.
- *   - Sonst werden die Einstiegspunkte abgeleitet: das Release-Verzeichnis und
- *     sein Elternverzeichnis, das Hugo-Projekt der Webseite, die
- *     Elternverzeichnisse der vorhandenen Mounts sowie /srv, /var/www, /mnt
- *     und /media, soweit vorhanden.
+ *   - Sonst werden die Einstiegspunkte abgeleitet: das Elternverzeichnis des
+ *     Release-Verzeichnisses (das Release-Verzeichnis selbst nicht — dort
+ *     liegt nichts, was ein Ort werden soll), das Hugo-Projekt der Webseite,
+ *     die Elternverzeichnisse der vorhandenen Mounts sowie /srv, /var/www,
+ *     /mnt und /media, soweit vorhanden.
  *
- * Eine Wurzel, die unter einer anderen liegt, fällt weg. Versteckte
+ * Eine Wurzel, die unter einer anderen liegt, fällt weg. Die Wurzel mit dem
+ * Elternverzeichnis des Release-Verzeichnisses steht vorn, und dieses
+ * Verzeichnis ist die Vorgabe für neue Orte ({@see defaultPath()}) —
+ * typischerweise liegen die Hugo-Projekte neben der Installation. Versteckte
  * Verzeichnisse (Punkt am Anfang) blendet die Auflistung aus.
  */
 final class DirectoryBrowser
@@ -36,6 +40,9 @@ final class DirectoryBrowser
 
     /** @var list<string> */
     private readonly array $roots;
+
+    /** Elternverzeichnis des Release-Verzeichnisses (realpath) oder null. */
+    private readonly ?string $releaseParent;
 
     /**
      * @param list<string> $configured [system] browse_roots (leer = ableiten)
@@ -47,7 +54,24 @@ final class DirectoryBrowser
         array $hints,
         private readonly MountResolver $resolver,
     ) {
-        $this->roots = self::rootDirs($configured, $hints);
+        $release = realpath(dirname(__DIR__, 2));
+        $parent = $release !== false ? realpath(dirname($release)) : false;
+        $this->releaseParent = $parent !== false ? $parent : null;
+        $this->roots = self::rootDirs($configured, $hints, $this->releaseParent);
+    }
+
+    /**
+     * Vorgabe für das Verzeichnisfeld eines neuen Orts: das Elternverzeichnis
+     * des Release-Verzeichnisses, sofern es unter einem Einstiegspunkt liegt
+     * (mit browse_roots muss es das nicht), sonst der erste Einstiegspunkt.
+     */
+    public function defaultPath(): string
+    {
+        if ($this->releaseParent !== null && $this->rootOf($this->releaseParent) !== null) {
+            return $this->releaseParent;
+        }
+
+        return $this->roots[0] ?? '';
     }
 
     /** @return list<string> */
@@ -155,15 +179,14 @@ final class DirectoryBrowser
      * @param list<string> $hints
      * @return list<string>
      */
-    private static function rootDirs(array $configured, array $hints): array
+    private static function rootDirs(array $configured, array $hints, ?string $releaseParent): array
     {
         if ($configured !== []) {
             $candidates = $configured;
         } else {
-            // Release-Verzeichnis (über backend/) und sein Elternverzeichnis:
-            // damit ist auch ein Hugo-Projekt neben der Installation erreichbar.
-            $release = realpath(dirname(__DIR__, 2));
-            $candidates = $release !== false ? [$release, dirname($release)] : [];
+            // Elternverzeichnis des Release-Verzeichnisses: Dort liegen
+            // typischerweise die Hugo-Projekte neben der Installation.
+            $candidates = $releaseParent !== null ? [$releaseParent] : [];
             foreach ($hints as $hint) {
                 $candidates[] = $hint;
                 $candidates[] = dirname($hint);
@@ -196,6 +219,17 @@ final class DirectoryBrowser
             }
         }
         sort($result);
+
+        // Die Wurzel mit dem Elternverzeichnis des Release-Verzeichnisses nach
+        // vorn: Mit ihr öffnet der Picker, wenn kein Pfad vorgegeben ist.
+        if ($releaseParent !== null) {
+            foreach ($result as $i => $root) {
+                if ($releaseParent === $root || str_starts_with($releaseParent . '/', rtrim($root, '/') . '/')) {
+                    array_unshift($result, ...array_splice($result, $i, 1));
+                    break;
+                }
+            }
+        }
 
         return $result;
     }

@@ -34,8 +34,11 @@ final class FileService
     /**
      * Endungen, die der Texteditor von Haus aus öffnet. Weitere schaltet
      * [editor] extra_editable in der hugocms.ini frei ({@see Config::load}).
+     * Bewusst OHNE js: JavaScript wird im Browser ausgeführt und zählt damit
+     * wie Skripte (sh, php …) zu dem, was ein Administrator ausdrücklich
+     * freigibt.
      */
-    public const DEFAULT_EDITABLE = ['html', 'htm', 'md', 'markdown', 'txt', 'css', 'js', 'json', 'xml', 'yaml', 'yml', 'svg', 'toml'];
+    public const DEFAULT_EDITABLE = ['html', 'htm', 'md', 'markdown', 'txt', 'css', 'json', 'xml', 'yaml', 'yml', 'svg', 'toml'];
 
     /** @var list<string> Endungen, die der Texteditor öffnen darf. */
     private array $editable;

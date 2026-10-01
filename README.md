@@ -190,13 +190,31 @@ Geschrieben wird in deren Mount-Datei (`mounts/<hash>.ini`, sonst der Rückfall
 eigene Datei gilt) über `Config::updateSections`; die übrigen Sektionen bleiben
 wörtlich erhalten, die Schreibweise des Sektionsnamens ebenso.
 
-- **Umbenennen** ändert nur `label`. Die Sektions-ID steckt in den Datei-IDs
-  des Clients und bleibt fest.
+- **Bearbeiten**: Jeder Ort ist ein aufklappbarer Eintrag. Ausgeklappt lassen
+  sich Name (`label`), `readonly`, `permissions` und `accept` ändern
+  (`mountupdate`); gespeichert wird selbsttätig nach jeder Änderung (Schalter
+  und Auswahlen sofort, der Name kurz nach dem letzten Tastendruck oder beim
+  Verlassen des Felds). Umbenennen ändert nur `label` — die Sektions-ID steckt in den
+  Datei-IDs des Clients und bleibt fest. Vorgabewerte werden nicht
+  geschrieben, sondern der Schlüssel entfernt: alle Rechte = kein
+  `permissions`, leere Liste = kein `accept`, nicht schreibgeschützt = kein
+  `readonly`. Ganz oben in der Auswahlliste von `accept` trägt „Alle Dateitypen
+  erlauben“ alle Typen ein, die HugoCMS verarbeitet (Editor-Endungen samt
+  `[editor] extra_editable` und Bildformate) — so lässt sich eine per
+  `extra_editable` freigeschaltete Endung gezielt einem Ort hinzufügen.
+  Darunter trägt „Dateitypen für den Redakteur erlauben“ die eingebauten
+  Editor-Endungen und Bildformate ein und entfernt alles, was in
+  `extra_editable` steht — auch eine Endung, die zugleich eingebaut ist (etwa
+  `js`): Der Eintrag in `extra_editable` kennzeichnet sie als nicht für
+  Redakteure; ein
+  leeres Feld erlaubt weiterhin alles. `read` lässt sich nicht entziehen (`MOUNT-PERMISSION-READ`); bei
+  `readonly` bleibt eine vorhandene `permissions`-Liste stehen und greift
+  wieder, sobald `readonly` fällt. Von Hand ergänzte Schlüssel bleiben
+  erhalten.
 - **Hinzufügen**: Name und Verzeichnis. Die Sektions-ID leitet sich aus dem
   Verzeichnisnamen ab (`[a-z0-9_-]`, bei Kollision mit Nummer; reservierte
-  Namen wie `hugo` sind ausgeschlossen). Geschrieben werden nur `path`
-  (absolut) und `label` — `permissions`, `accept` und `readonly` bei Bedarf
-  von Hand ergänzen. Abgewiesen werden ein Verzeichnis, das bereits ein Ort
+  Namen wie `hugo` sind ausgeschlossen). Geschrieben werden `path` (absolut)
+  und `label`; Einschränkungen danach im ausgeklappten Eintrag. Abgewiesen werden ein Verzeichnis, das bereits ein Ort
   ist, sowie das `backend/` (`MOUNT-PATH-PROTECTED`).
 - **Entfernen** löscht nur den Eintrag, nicht die Dateien. Der letzte Ort
   bleibt (`MOUNT-LAST`).
@@ -209,7 +227,8 @@ deshalb listet der Server auf (`browsedirs`, nach dem Vorbild von
 OpensourceERP) und der Dialog navigiert darin. Sichtbar ist nur, was unterhalb
 eines Einstiegspunkts liegt: `[system] browse_roots` in der `hugocms.ini`
 (kommagetrennt; steht der Schlüssel, gilt allein diese Liste), sonst
-abgeleitet — Release-Verzeichnis und sein Elternverzeichnis, Hugo-Projekt,
+abgeleitet — das Elternverzeichnis des Release-Verzeichnisses (steht vorn und
+ist die Vorgabe im Verzeichnisfeld eines neuen Orts), Hugo-Projekt,
 Elternverzeichnisse der vorhandenen Orte, `/srv`, `/var/www`, `/mnt`,
 `/media`. Dieselbe Grenze prüft `mountadd` für einen eingetippten Pfad.
 Versteckte Verzeichnisse blendet der Picker aus.
@@ -951,7 +970,7 @@ verläuft entlang SCHREIBEN, nicht LESEN:
 | `reconfigure`, `aimodels`, `activate` | nein | verändern die Installation bzw. die Lizenz (`requireConfigAdmin()`) |
 | `projectconfig`, `projectreconfigure` | ja | Einstellungen EINER Webseite (SEO-Ausschlüsse, Verbesserer, Cron-Pausen, automatischer Versionsstand, Analyse-Adressen) — redaktionelle Arbeit |
 | `users…` | nein | Kontenverwaltung (`users.manage`) |
-| `mountadmin`, `mountadd`, `mountrename`, `mountdelete`, `browsedirs` | nein | Orte der Webseite verwalten; die Antwort nennt Serverpfade (`requireConfigAdmin()`) |
+| `mountadmin`, `mountadd`, `mountupdate`, `mountdelete`, `browsedirs` | nein | Orte der Webseite verwalten; die Antwort nennt Serverpfade (`requireConfigAdmin()`) |
 | `shopkeycreate`, `shopkeydelete` | nein | Schlüssel der Shop-Anbindung — ein Zugang, keine redaktionelle Einstellung (`requireConfigAdmin()`) |
 
 Entsprechend melden `reconfigurable` und `projectConfigurable` nur, ob es
@@ -1321,7 +1340,7 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `setuserprefs`| POST | `contentWidth`?, `toolbarCollapsed`?, `sessionLifetime`? (Stunden), `updateLastmod`? (`null` = nachfragen) | Eigene `[user]`-Einstellungen schreiben; nur die genannten Felder |
 | `mountadmin` | GET   | –                                    | Orte der Webseite mit Serverpfad (nur Administratoren) |
 | `mountadd` | POST    | `label`, `path`                      | Ort anlegen (nur Administratoren)       |
-| `mountrename`| POST  | `name`, `label`                      | Anzeigenamen eines Orts ändern (nur Administratoren) |
+| `mountupdate`| POST  | `name`, `label`?, `readonly`?, `permissions`?, `accept`? | Name und Einschränkungen eines Orts ändern (nur Administratoren) |
 | `mountdelete`| POST  | `name`                               | Ort entfernen, Dateien bleiben (nur Administratoren) |
 | `browsedirs` | GET   | `path`?                              | Unterverzeichnisse für den Verzeichnis-Picker (nur Administratoren) |
 | `users`    | GET     | –                                    | **Pro/multiuser:** Konten, bekannte Webseiten, Rollen |

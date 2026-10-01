@@ -432,7 +432,9 @@ final class MountConfig
                 $options['accept'] = self::toList($section['accept']);
             }
             if (isset($section['readonly'])) {
-                $options['readonly'] = (bool) $section['readonly'];
+                // filter_var statt (bool): Ein in Anführungszeichen stehendes
+                // "false" (so schreibt Config::updateSections) wäre sonst wahr.
+                $options['readonly'] = filter_var($section['readonly'], FILTER_VALIDATE_BOOLEAN);
             }
 
             $mounts[] = ['name' => (string) $name, 'path' => $path, 'options' => $options];

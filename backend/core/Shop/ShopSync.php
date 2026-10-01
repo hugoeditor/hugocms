@@ -77,7 +77,9 @@ final class ShopSync
         $this->mount = new Mount('shop', $source, 'Shop', ['read', 'write', 'delete', 'mkdir'], self::ACCEPT);
         $this->resolver = new MountResolver();
         $this->resolver->add($this->mount);
-        $this->files = new FileService($this->resolver);
+        // Eigene Endungsliste statt der Editor-Vorgabe: Die Anbindung schreibt
+        // auch .js (oserp-shop/), das der Texteditor nur mit extra_editable öffnet.
+        $this->files = new FileService($this->resolver, self::ACCEPT);
     }
 
     // --- Bau-Markierung -------------------------------------------------------
