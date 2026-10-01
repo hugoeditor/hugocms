@@ -77,9 +77,18 @@ const acceptSuggestions = computed(() =>
 
 // „Alle Dateitypen erlauben“: trägt alle verfügbaren Typen ins Feld ein (die
 // vorhandenen bleiben, auch von Hand ergänzte). Leer bleibt weiterhin „alle“.
+// Geöffnete Auswahlliste des accept-Felds je Ort — die beiden Sammel-
+// Einträge schließen sie nach getaner Arbeit.
+const acceptMenus = ref({})
+
+function closeAcceptMenu(name) {
+  acceptMenus.value = { ...acceptMenus.value, [name]: false }
+}
+
 function allowTypes(name, types) {
   const d = drafts.value[name]
   d.accept = [...new Set([...d.accept, ...types])]
+  closeAcceptMenu(name)
   scheduleSave(name)
 }
 
@@ -89,6 +98,7 @@ function allowTypes(name, types) {
 function allowEditorTypes(name) {
   const d = drafts.value[name]
   d.accept = [...new Set([...d.accept, ...editorTypes.value])].filter((type) => !extraTypes.value.includes(type))
+  closeAcceptMenu(name)
   scheduleSave(name)
 }
 
@@ -363,6 +373,7 @@ watch(open, (isOpen) => {
               </v-chip-group>
               <v-combobox
                 v-model="drafts[mount.name].accept"
+                v-model:menu="acceptMenus[mount.name]"
                 :items="acceptSuggestions"
                 @update:model-value="scheduleSave(mount.name)"
                 :label="$t('places.accept')"
