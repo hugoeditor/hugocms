@@ -5,7 +5,7 @@
 // prüft die Anwendung, jener die veröffentlichten Seiten.
 //
 // Als Overlay-Ansicht wie ReviewQueueView/AuditView (nicht als v-dialog).
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useStatusStore } from '../stores/status'
 import { useAuthStore } from '../stores/auth'
@@ -175,6 +175,54 @@ const quotaColor = computed(() => {
   if (q.exceeded || q.percent >= 90) return 'error'
   return q.percent >= 75 ? 'warning' : 'success'
 })
+
+// --- Shop-Anbindung (OpensourceERP) -----------------------------------------
+// HugoCMS wird von OpensourceERP nur aufgerufen; der Server vermerkt jeden
+// gültigen Aufruf. Die Karte erscheint, sobald ein Schlüssel hinterlegt ist
+// oder schon einmal etwas ankam.
+const SHOP_TASK_ICON = {
+  sync: 'mdi-file-sync-outline',
+  thumbnails: 'mdi-image-multiple-outline',
+  build: 'mdi-hammer',
+}
+
+const shop = computed(() => store.shop)
+const shopVisible = computed(() => !!(shop.value && (shop.value.configured || shop.value.contact || shop.value.last)))
+
+// Fortschritt der laufenden Aufgabe; der Bau meldet keinen Zwischenstand.
+function shopProgressText(r) {
+  const d = r.detail ?? {}
+  if (r.task === 'sync' && d.needed != null) return t('status.shop.syncProgress', [d.stored ?? 0, d.needed, d.total ?? d.needed])
+  if (r.task === 'thumbnails' && d.total != null) return t('status.shop.thumbnailsProgress', [d.done ?? 0, d.total])
+  return ''
+}
+
+// Ergebnis der letzten Aufgabe in einer Zeile.
+function shopResultText(l) {
+  const d = l.detail ?? {}
+  if (l.task === 'sync' && l.success) return t('status.shop.syncResult', [d.written ?? 0, d.deleted ?? 0, d.unchanged ?? 0])
+  if (l.task === 'thumbnails' && d.created != null) {
+    const parts = [t('status.shop.thumbnailsResult', [d.created, d.current ?? 0])]
+    if (d.missing) parts.push(t('status.shop.thumbnailsMissing', [d.missing]))
+    if (d.failed) parts.push(t('status.shop.thumbnailsFailed', [d.failed]))
+    return parts.join(', ')
+  }
+  if (l.task === 'build' && d.paused) return t('status.shop.buildPaused')
+  if (l.task === 'build' && d.seconds != null) return t('status.shop.buildResult', [d.seconds])
+  return ''
+}
+
+// Läuft eine Aufgabe, wird die Ansicht alle 10 Sekunden neu geladen, bis sie
+// endet — der Server meldet sich nicht von selbst.
+let shopPoll = null
+watch(
+  () => store.open && !!shop.value?.running,
+  (active) => {
+    clearInterval(shopPoll)
+    shopPoll = active ? setInterval(() => store.loading || store.fetch(), 10000) : null
+  },
+)
+onBeforeUnmount(() => clearInterval(shopPoll))
 
 // --- Protokoll --------------------------------------------------------------
 // Erst auf Wunsch geladen: Es ist der umfangreichste Teil und für den
@@ -525,6 +573,77 @@ function scoreColor(score) {
               >
                 {{ $t('status.cron.manage') }}
               </v-btn>
+            </div>
+          </section>
+
+          <!-- Shop-Anbindung: letzter Kontakt, laufende und letzte Aufgabe -->
+          <section v-if="shopVisible" class="st-card">
+            <h2 class="st-card-title">
+              <v-icon icon="mdi-storefront-outline" size="18" />
+              {{ $t('status.shop.heading') }}
+            </h2>
+            <p class="st-hint">{{ $t('status.shop.hint') }}</p>
+
+            <div class="st-row">
+              <v-icon icon="mdi-lan-connect" size="18" class="st-row-icon" />
+              <div class="st-row-main">
+                <div class="st-row-title">{{ $t('status.shop.connection') }}</div>
+                <div class="st-row-sub">
+                  <template v-if="shop.contact">
+                    {{ $t('status.shop.lastContact', [relativeTime(shop.contact.at), formatDate(shop.contact.at)]) }}
+                  </template>
+                  <template v-else>{{ $t('status.shop.noContact') }}</template>
+                </div>
+                <div v-if="!shop.configured" class="st-row-check text-warning">
+                  <v-icon icon="mdi-key-remove" size="14" />
+                  {{ $t('status.shop.noKey') }}
+                </div>
+              </div>
+              <v-icon
+                :icon="shop.contact && shop.configured ? 'mdi-check-circle-outline' : 'mdi-minus-circle-outline'"
+                :color="shop.contact && shop.configured ? 'success' : 'grey'"
+                size="18"
+              />
+            </div>
+
+            <div v-if="shop.running" class="st-row">
+              <v-icon :icon="SHOP_TASK_ICON[shop.running.task]" size="18" class="st-row-icon" />
+              <div class="st-row-main">
+                <div class="st-row-title">
+                  {{ $t('status.shop.running', [$t(`status.shop.task.${shop.running.task}`)]) }}
+                </div>
+                <div class="st-row-sub">
+                  {{ $t('status.shop.runningSince', [relativeTime(shop.running.startedAt)]) }}
+                  <template v-if="shopProgressText(shop.running)"> · {{ shopProgressText(shop.running) }}</template>
+                </div>
+              </div>
+              <v-progress-circular indeterminate color="primary" size="18" width="2" />
+            </div>
+
+            <div class="st-row">
+              <v-icon :icon="SHOP_TASK_ICON[shop.last?.task] ?? 'mdi-history'" size="18" class="st-row-icon" />
+              <div class="st-row-main">
+                <template v-if="shop.last">
+                  <div class="st-row-title">
+                    {{ $t('status.shop.last', [$t(`status.shop.task.${shop.last.task}`)]) }}
+                  </div>
+                  <div class="st-row-sub">
+                    {{ relativeTime(shop.last.finishedAt) }} ({{ formatDate(shop.last.finishedAt) }})
+                    <template v-if="shopResultText(shop.last)"> · {{ shopResultText(shop.last) }}</template>
+                  </div>
+                  <div v-if="shop.last.error" class="st-row-check text-error">
+                    <v-icon icon="mdi-alert-circle-outline" size="14" />
+                    {{ errorText(t, shop.last.error) }}
+                  </div>
+                </template>
+                <div v-else class="st-row-sub">{{ $t('status.shop.noTask') }}</div>
+              </div>
+              <v-icon
+                v-if="shop.last"
+                :icon="shop.last.success ? 'mdi-check-circle-outline' : 'mdi-alert-circle-outline'"
+                :color="shop.last.success ? 'success' : 'error'"
+                size="18"
+              />
             </div>
           </section>
 

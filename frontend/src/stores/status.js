@@ -29,13 +29,18 @@ export const useStatusStore = defineStore('status', {
     cron: (state) => state.data?.cron ?? [],
     scheduled: (state) => state.data?.tasks?.scheduled ?? [],
     improve: (state) => state.data?.tasks?.improve ?? [],
+    // Shop-Anbindung: { configured, contact, running, last } oder null
+    // (ohne Hugo-Projekt).
+    shop: (state) => state.data?.shop ?? null,
     // Anzahl Aufgaben, die auf einen Cron-Lauf warten — Abzeichen der Werkzeugschiene.
     pendingCount: (state) =>
       (state.data?.tasks?.scheduled?.length ?? 0) + (state.data?.tasks?.improve?.length ?? 0),
     // Etwas verlangt Aufmerksamkeit: eine überfällige oder zuletzt
-    // fehlgeschlagene Cron-Aufgabe, oder ein Zugang, der sich nicht meldet.
+    // fehlgeschlagene Cron-Aufgabe, eine gescheiterte Aufgabe der
+    // Shop-Anbindung, oder ein Zugang, der sich nicht meldet.
     hasProblem: (state) =>
       (state.data?.cron ?? []).some((c) => c.seen && (c.overdue || !c.success)) ||
+      state.data?.shop?.last?.success === false ||
       Object.values(state.checks ?? {}).some((c) => c.status === 'error'),
   },
 

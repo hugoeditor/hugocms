@@ -19,6 +19,7 @@ use HugoCMS\FileManager\Cron\Heartbeat;
 use HugoCMS\FileManager\Exception\ApiException;
 use HugoCMS\FileManager\Review\FrontMatter;
 use HugoCMS\FileManager\Review\ReviewStore;
+use HugoCMS\FileManager\Shop\ShopActivity;
 use HugoCMS\FileManager\Shop\ShopKey;
 use HugoCMS\FileManager\Shop\ShopSync;
 use HugoCMS\FileManager\Shop\ShopThumbnails;
@@ -2035,8 +2036,11 @@ final class Connector
      * Keine Sitzung, kein CSRF-Token: Es ruft kein Browser, sondern ein Server.
      * Unverschlüsselt nimmt der Zugang nichts an, außer über die
      * Loopback-Adresse ({@see ShopKey::transportSecure()}).
+     *
+     * Ein gültiger Aufruf wird als Kontakt vermerkt ({@see ShopActivity}) —
+     * der Systemstatus zeigt so, wann OpensourceERP zuletzt durchkam.
      */
-    private function requireShopKey(): void
+    private function requireShopKey(string $cmd): void
     {
         if (!ShopKey::transportSecure($_SERVER)) {
             throw new ApiException('EINSECURE', 403, 'SHOP-HTTPS-REQUIRED');
@@ -2048,6 +2052,37 @@ final class Connector
             // Nur protokollieren, woher — der vorgelegte Wert gehört nicht ins Log
             $this->logger->warning('Shop-Anbindung: ungültiger Schlüssel von ' . ($_SERVER['REMOTE_ADDR'] ?? '?'));
             throw ApiException::unauthorized('SHOP-KEY-INVALID');
+        }
+        $this->shopActivity()->contact($cmd);
+    }
+
+    private function shopActivity(): ShopActivity
+    {
+        return new ShopActivity($this->shopVarDir());
+    }
+
+    /**
+     * Führt einen Schritt einer Shop-Aufgabe aus. Scheitert er, endet die
+     * Aufgabe im Systemstatus mit genau dieser Meldung — OpensourceERP bricht
+     * danach ab und meldet sich nicht mehr.
+     *
+     * @param callable(): array<string, mixed> $step
+     * @return array<string, mixed>
+     */
+    private function shopStep(string $task, callable $step): array
+    {
+        try {
+            return $step();
+        } catch (ApiException $e) {
+            $this->shopActivity()->finish($task, false, [], [
+                'code' => $e->errorCode(),
+                'key' => $e->messageKey(),
+                'params' => $e->params(),
+            ]);
+            throw $e;
+        } catch (Throwable $e) {
+            $this->shopActivity()->finish($task, false, [], ['code' => 'EINTERNAL', 'key' => null, 'params' => []]);
+            throw $e;
         }
     }
 
@@ -2064,9 +2099,12 @@ final class Connector
      */
     private function cmdShopBuild(): array
     {
-        $this->requireShopKey();
+        $this->requireShopKey('shopbuild');
         $this->requireMethod('POST', false);
+        $activity = $this->shopActivity();
         if (!empty($this->cronPause['pauseBuild'])) {
+            $activity->finish('build', true, ['paused' => true]);
+
             return ['paused' => true];
         }
 
@@ -2074,7 +2112,16 @@ final class Connector
         // übrigen langen Web-Aufträgen.
         @set_time_limit(600);
 
-        return ['paused' => false] + $this->runHugoBuild(true, 'shop');
+        return $this->shopStep('build', function () use ($activity): array {
+            $activity->progress('build', [], [], true);
+            $result = $this->runHugoBuild(true, 'shop');
+            $activity->finish('build', $result['success'], [
+                'seconds' => $result['seconds'],
+                'exitCode' => $result['exitCode'],
+            ]);
+
+            return ['paused' => false] + $result;
+        });
     }
 
     /**
@@ -2083,7 +2130,7 @@ final class Connector
      */
     private function cmdShopBuildStatus(): array
     {
-        $this->requireShopKey();
+        $this->requireShopKey('shopbuildstatus');
         $buildable = $this->hugo !== null && $this->hugoBin !== null;
 
         return [
@@ -2192,19 +2239,35 @@ final class Connector
      */
     private function cmdShopManifest(array $request): array
     {
-        $this->requireShopKey();
+        $this->requireShopKey('shopmanifest');
         $this->requireMethod('POST', false);
 
-        return $this->shopSync()->manifest($request['files'] ?? null);
+        // Der Abgleich eröffnet eine Lieferung — auch eine zuvor abgebrochene
+        // beginnt damit von vorn.
+        return $this->shopStep('sync', function () use ($request): array {
+            $result = $this->shopSync()->manifest($request['files'] ?? null);
+            $this->shopActivity()->progress('sync', [
+                'total' => $result['total'],
+                'needed' => count($result['needed']),
+                'stored' => 0,
+            ], [], true);
+
+            return $result;
+        });
     }
 
     /** Übertragung einer Portion Dateien in die Bereitstellung — noch nicht in die Webseite. */
     private function cmdShopUpload(array $request): array
     {
-        $this->requireShopKey();
+        $this->requireShopKey('shopupload');
         $this->requireMethod('POST', false);
 
-        return $this->shopSync()->upload((string) ($request['syncId'] ?? ''), $request['files'] ?? null);
+        return $this->shopStep('sync', function () use ($request): array {
+            $result = $this->shopSync()->upload((string) ($request['syncId'] ?? ''), $request['files'] ?? null);
+            $this->shopActivity()->progress('sync', [], ['stored' => $result['stored']]);
+
+            return $result;
+        });
     }
 
     /**
@@ -2215,20 +2278,36 @@ final class Connector
      */
     private function cmdShopThumbnails(array $request): array
     {
-        $this->requireShopKey();
+        $this->requireShopKey('shopthumbnails');
         $this->requireMethod('POST', false);
         if ($this->hugo === null) {
             throw new ApiException('ECONFIG', 500, 'HUGO-NOT-CONFIGURED');
         }
         @set_time_limit(120);
 
-        $result = (new ShopThumbnails((string) $this->hugo['source'], $this->shop['images'], $this->shop['thumbnails']))
-            ->run($request['names'] ?? null, (int) ($request['size'] ?? 0), (int) ($request['offset'] ?? 0));
-        if ($result['created'] > 0) {
-            ShopSync::markBuildPending($this->shopVarDir());
-        }
+        return $this->shopStep('thumbnails', function () use ($request): array {
+            $offset = (int) ($request['offset'] ?? 0);
+            $result = (new ShopThumbnails((string) $this->hugo['source'], $this->shop['images'], $this->shop['thumbnails']))
+                ->run($request['names'] ?? null, (int) ($request['size'] ?? 0), $offset);
+            if ($result['created'] > 0) {
+                ShopSync::markBuildPending($this->shopVarDir());
+            }
 
-        return $result + ['buildPending' => ShopSync::buildPending($this->shopVarDir())];
+            // OpensourceERP ruft in Abschnitten auf; der erste (offset 0)
+            // beginnt die Aufgabe, der mit done beendet sie.
+            $activity = $this->shopActivity();
+            $activity->progress('thumbnails', ['total' => $result['total'], 'done' => $result['next']], [
+                'created' => $result['created'],
+                'current' => $result['current'],
+                'missing' => count($result['missing']),
+                'failed' => count($result['failed']),
+            ], $offset === 0);
+            if ($result['done']) {
+                $activity->finish('thumbnails', true);
+            }
+
+            return $result + ['buildPending' => ShopSync::buildPending($this->shopVarDir())];
+        });
     }
 
     /**
@@ -2238,19 +2317,26 @@ final class Connector
      */
     private function cmdShopCommit(array $request): array
     {
-        $this->requireShopKey();
+        $this->requireShopKey('shopcommit');
         $this->requireMethod('POST', false);
         @set_time_limit(300);
 
-        $result = $this->shopSync()->commit((string) ($request['syncId'] ?? ''));
-        $this->logger->info(sprintf(
-            'Shop-Anbindung: Lieferung übernommen (%d geschrieben, %d gelöscht, %d unverändert)',
-            $result['written'],
-            $result['deleted'],
-            $result['unchanged'],
-        ));
+        return $this->shopStep('sync', function () use ($request): array {
+            $result = $this->shopSync()->commit((string) ($request['syncId'] ?? ''));
+            $this->logger->info(sprintf(
+                'Shop-Anbindung: Lieferung übernommen (%d geschrieben, %d gelöscht, %d unverändert)',
+                $result['written'],
+                $result['deleted'],
+                $result['unchanged'],
+            ));
+            $this->shopActivity()->finish('sync', true, [
+                'written' => $result['written'],
+                'deleted' => $result['deleted'],
+                'unchanged' => $result['unchanged'],
+            ]);
 
-        return $result;
+            return $result;
+        });
     }
 
     /**
@@ -5692,7 +5778,24 @@ final class Connector
             'hugo' => $this->hugoVersionInfo(),
             'cron' => $this->cronStatusList(),
             'tasks' => $this->pendingCronTasks(),
+            'shop' => $this->shopStatus(),
         ];
+    }
+
+    /**
+     * Shop-Anbindung (OpensourceERP) für den Systemstatus: ob ein Schlüssel
+     * hinterlegt ist, wann OpensourceERP zuletzt durchkam, was gerade läuft und
+     * wie die letzte Aufgabe ausging. Ohne Hugo-Projekt gibt es keine Anbindung.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function shopStatus(): ?array
+    {
+        if ($this->hugo === null) {
+            return null;
+        }
+
+        return ['configured' => $this->shop['keyHash'] !== null] + $this->shopActivity()->state();
     }
 
     /**
