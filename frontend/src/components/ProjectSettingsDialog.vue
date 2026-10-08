@@ -131,7 +131,8 @@ async function createShopKey() {
   try {
     const res = await auth.shopKeyCreate()
     newShopKey.value = res.key
-    shopKey.value = { set: true, hint: res.hint, created: res.created }
+    // Bereiche und Signaturschlüssel bleiben, wie sie sind
+    shopKey.value = { ...shopKey.value, set: true, hint: res.hint, created: res.created }
   } catch (e) {
     shopError.value = errorText(t, e)
   } finally {
@@ -152,7 +153,46 @@ async function deleteShopKey() {
   try {
     await auth.shopKeyDelete()
     newShopKey.value = ''
-    shopKey.value = { set: false, hint: null, created: null }
+    shopKey.value = { ...shopKey.value, set: false, hint: null, created: null }
+  } catch (e) {
+    shopError.value = errorText(t, e)
+  } finally {
+    shopBusy.value = false
+  }
+}
+
+// Signaturschlüssel von OpensourceERP: Erst damit nimmt die Anbindung die
+// PHP-Einstiegspunkte des Pakets an (Weiterleiter, 404-Seite), und nur
+// signiert. Der Schlüssel ist öffentlich — er darf angezeigt werden.
+const newSigningKey = ref('')
+
+async function setSigningKey() {
+  shopBusy.value = true
+  shopError.value = null
+  try {
+    const res = await auth.shopSigningKeySet(newSigningKey.value.trim())
+    shopKey.value = { ...shopKey.value, signingKey: res.signingKey, signingAvailable: res.signingAvailable }
+    newSigningKey.value = ''
+  } catch (e) {
+    shopError.value = errorText(t, e)
+  } finally {
+    shopBusy.value = false
+  }
+}
+
+async function deleteSigningKey() {
+  const ok = await confirm({
+    title: t('projectConfig.shopSigningDeleteTitle'),
+    message: t('projectConfig.shopSigningDeleteConfirm'),
+    confirmText: t('projectConfig.shopSigningDelete'),
+    color: 'error',
+  })
+  if (!ok) return
+  shopBusy.value = true
+  shopError.value = null
+  try {
+    await auth.shopSigningKeyDelete()
+    shopKey.value = { ...shopKey.value, signingKey: null }
   } catch (e) {
     shopError.value = errorText(t, e)
   } finally {
@@ -201,6 +241,7 @@ watch(model, async (open) => {
     gitRepo.value = !!cfg.gitRepo
     shopKey.value = cfg.shopKey ?? { set: false, hint: null, created: null }
     newShopKey.value = ''
+    newSigningKey.value = ''
     shopError.value = null
     shopCopied.value = false
   } catch (e) {
@@ -598,6 +639,61 @@ async function submit() {
                 @click="deleteShopKey"
               >
                 {{ $t('projectConfig.shopKeyDelete') }}
+              </v-btn>
+            </div>
+
+            <!-- Signaturschlüssel von OpensourceERP: Weiterleiter und 404-Seite
+                 (PHP) nimmt die Anbindung nur signiert an. Wirkt sofort. -->
+            <div class="text-subtitle-2 mt-5 mb-1">{{ $t('projectConfig.shopSigningSection') }}</div>
+            <div class="text-caption text-medium-emphasis mb-2">
+              {{ $t('projectConfig.shopSigningHint') }}
+              <code v-for="pfad in shopKey.signedPhp ?? []" :key="pfad" class="ml-1">{{ pfad }}</code>
+            </div>
+            <v-alert
+              v-if="shopKey.signingAvailable === false"
+              type="warning"
+              variant="tonal"
+              density="compact"
+              class="mb-2"
+            >
+              {{ $t('projectConfig.shopSigningUnavailable') }}
+            </v-alert>
+            <div class="text-body-2 mb-2">
+              <template v-if="shopKey.signingKey">
+                {{ $t('projectConfig.shopSigningSet', [shopKey.signingKey.slice(-6)]) }}
+              </template>
+              <template v-else>{{ $t('projectConfig.shopSigningNone') }}</template>
+            </div>
+            <v-text-field
+              v-model="newSigningKey"
+              :label="$t('projectConfig.shopSigningKey')"
+              :hint="$t('projectConfig.shopSigningKeyHint')"
+              prepend-inner-icon="mdi-shield-key-outline"
+              variant="outlined"
+              density="comfortable"
+              persistent-hint
+              class="mb-3"
+            />
+            <div class="d-flex flex-wrap" style="gap: 8px">
+              <v-btn
+                variant="tonal"
+                color="primary"
+                prepend-icon="mdi-shield-key"
+                :loading="shopBusy"
+                :disabled="!newSigningKey.trim() || loading || saving"
+                @click="setSigningKey"
+              >
+                {{ $t('projectConfig.shopSigningSave') }}
+              </v-btn>
+              <v-btn
+                v-if="shopKey.signingKey"
+                variant="text"
+                color="error"
+                prepend-icon="mdi-shield-remove"
+                :disabled="shopBusy || loading || saving"
+                @click="deleteSigningKey"
+              >
+                {{ $t('projectConfig.shopSigningDelete') }}
               </v-btn>
             </div>
             <v-alert v-if="shopError" type="error" density="compact" class="mt-2">{{ shopError }}</v-alert>

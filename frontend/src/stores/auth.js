@@ -190,6 +190,17 @@ export const useAuthStore = defineStore('auth', {
       return api.post('shopkeydelete')
     },
 
+    // Hinterlegt den öffentlichen Signaturschlüssel von OpensourceERP — erst
+    // damit nimmt die Anbindung Weiterleiter und 404-Seite (PHP) an, signiert.
+    async shopSigningKeySet(key) {
+      return api.post('shopsigningkeyset', { key })
+    },
+
+    // Entfernt den Signaturschlüssel; PHP nimmt die Anbindung danach nicht mehr an.
+    async shopSigningKeyDelete() {
+      return api.post('shopsigningkeydelete')
+    },
+
     // Prüft den seo-success-Schlüssel (eingegeben oder hinterlegt) gegen den
     // Dienst, ohne etwas zu speichern. Bedient den Konfigurationsdialog und die
     // Kontingentanzeige der Live-Analyse. Wirft bei ungültigem Schlüssel oder

@@ -108,6 +108,12 @@ use HugoCMS\FileManager\Exception\ApiException;
  *               Hugo-Quelle. Standard: static/images/products.
  *   thumbnails  (optional, von Hand) Verzeichnis, in das HugoCMS die
  *               Vorschaubilder schreibt. Standard: static/images/thumbnails.
+ *   signing_key (optional) öffentlicher Ed25519-Schlüssel von OpensourceERP,
+ *               Base64. Nur damit nimmt die Anbindung die PHP-Einstiegspunkte
+ *               des Pakets an, und nur signiert ({@see Shop\ShopSync::SIGNED_PHP}).
+ *               Gesetzt über die Projekteinstellungen
+ *               (shopsigningkeyset/shopsigningkeydelete), nie über die
+ *               shop*-Befehle der Anbindung.
  */
 final class MountConfig
 {
@@ -206,7 +212,7 @@ final class MountConfig
      *   improve: array{auto: bool, windowStart: string, windowEnd: string, perDay: int, skipWeekends: bool},
      *   cron: array{pauseBuild: bool, pauseImprove: bool, pauseHealthcheck: bool},
      *   git: array{autoCommit: bool, commitMessage: string, commitMessagePending: string},
-     *   shop: array{keyHash: ?string, keyHint: ?string, keyCreated: ?string, areas: list<string>, images: string, thumbnails: string},
+     *   shop: array{keyHash: ?string, keyHint: ?string, keyCreated: ?string, areas: list<string>, images: string, thumbnails: string, signingKey: ?string},
      *   warnings: list<array{key: string, params: list<mixed>}>
      * }
      */
@@ -279,7 +285,8 @@ final class MountConfig
             'tagLabel' => self::GIT_TAG_LABEL_DEFAULT,
         ];
         $shop = ['keyHash' => null, 'keyHint' => null, 'keyCreated' => null, 'areas' => Shop\ShopSync::DEFAULT_AREAS,
-                 'images' => Shop\ShopThumbnails::DEFAULT_IMAGES, 'thumbnails' => Shop\ShopThumbnails::DEFAULT_THUMBNAILS];
+                 'images' => Shop\ShopThumbnails::DEFAULT_IMAGES, 'thumbnails' => Shop\ShopThumbnails::DEFAULT_THUMBNAILS,
+                 'signingKey' => null];
         $warnings = [];
 
         foreach ($raw as $name => $section) {
@@ -377,7 +384,16 @@ final class MountConfig
                     'areas' => $areas,
                     'images' => self::shopDirectory($section['images'] ?? '', Shop\ShopThumbnails::DEFAULT_IMAGES),
                     'thumbnails' => self::shopDirectory($section['thumbnails'] ?? '', Shop\ShopThumbnails::DEFAULT_THUMBNAILS),
+                    'signingKey' => null,
                 ];
+                $signing = trim((string) ($section['signing_key'] ?? ''));
+                if ($signing !== '') {
+                    $shop['signingKey'] = Shop\ShopSync::normalizeSigningKey($signing);
+                    if ($shop['signingKey'] === null) {
+                        // Unbrauchbarer Schlüssel: dann eben kein PHP, aber sichtbar
+                        $warnings[] = ['key' => 'SHOP-SIGNING-KEY-INVALID', 'params' => [$configPath]];
+                    }
+                }
                 continue;
             }
 

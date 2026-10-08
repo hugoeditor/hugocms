@@ -194,10 +194,11 @@ final class Connector
      * Mount-Konfiguration: nur Hash, Kennung und Erzeugungszeit, nie der
      * Schlüssel selbst ({@see ShopKey}).
      *
-     * @var array{keyHash: ?string, keyHint: ?string, keyCreated: ?string, areas: list<string>, images: string, thumbnails: string}
+     * @var array{keyHash: ?string, keyHint: ?string, keyCreated: ?string, areas: list<string>, images: string, thumbnails: string, signingKey: ?string}
      */
     private array $shop = ['keyHash' => null, 'keyHint' => null, 'keyCreated' => null, 'areas' => ShopSync::DEFAULT_AREAS,
-                           'images' => ShopThumbnails::DEFAULT_IMAGES, 'thumbnails' => ShopThumbnails::DEFAULT_THUMBNAILS];
+                           'images' => ShopThumbnails::DEFAULT_IMAGES, 'thumbnails' => ShopThumbnails::DEFAULT_THUMBNAILS,
+                           'signingKey' => null];
 
     /**
      * Automatischer Commit rund um die zeitgesteuerte Veröffentlichung, aus der
@@ -637,6 +638,8 @@ final class Connector
                 'shopthumbnails' => $this->cmdShopThumbnails($request),
                 'shopkeycreate' => $this->cmdShopKeyCreate(),
                 'shopkeydelete' => $this->cmdShopKeyDelete(),
+                'shopsigningkeyset' => $this->cmdShopSigningKeySet($request),
+                'shopsigningkeydelete' => $this->cmdShopSigningKeyDelete(),
                 default => throw ApiException::badRequest('UNKNOWN-COMMAND', [$cmd]),
             };
 
@@ -2145,6 +2148,14 @@ final class Connector
             'accept' => ShopSync::ACCEPT,
             'images' => $this->shop['images'],
             'thumbnails' => $this->shop['thumbnails'],
+            // Signierte PHP-Einstiegspunkte: ready, sobald ein Administrator den
+            // öffentlichen Schlüssel von OpensourceERP hinterlegt hat und PHP
+            // Signaturen prüfen kann. Der Schlüssel selbst geht nicht mit —
+            // OpensourceERP kennt seinen eigenen.
+            'signedPhp' => [
+                'ready' => ShopSync::signedPhpReady($this->shop['signingKey']),
+                'paths' => ShopSync::SIGNED_PHP,
+            ],
         ];
     }
 
@@ -2183,6 +2194,48 @@ final class Connector
         Config::updateSections($this->mountsPath, ['shop' => $rest === [] ? null : $rest]);
         $this->shop = MountConfig::load((string) $this->mountsPath)['shop'];
         $this->logger->info('Shop-Anbindung: Schlüssel entfernt');
+
+        return ['removed' => true];
+    }
+
+    /**
+     * Hinterlegt den öffentlichen Signaturschlüssel von OpensourceERP.
+     *
+     * Erst damit nimmt die Anbindung die PHP-Einstiegspunkte des Pakets an,
+     * und nur signiert ({@see ShopSync::SIGNED_PHP}). Bewusst nur für
+     * Administratoren und nie über die shop*-Befehle: sonst könnte der
+     * Schlüssel der Anbindung sich seinen eigenen Prüfschlüssel setzen.
+     */
+    private function cmdShopSigningKeySet(array $request): array
+    {
+        $this->requireShopKeyAdmin();
+
+        $key = ShopSync::normalizeSigningKey((string) ($request['key'] ?? ''));
+        if ($key === null) {
+            throw ApiException::badRequest('SHOP-SIGNING-KEY-INVALID', [(string) $this->mountsPath]);
+        }
+
+        $section = Config::raw((string) $this->mountsPath)['shop'] ?? [];
+        $section = is_array($section) ? $section : [];
+        $section['signing_key'] = $key;
+        Config::updateSections($this->mountsPath, ['shop' => $section]);
+        $this->shop = MountConfig::load((string) $this->mountsPath)['shop'];
+        $this->logger->info('Shop-Anbindung: Signaturschlüssel von OpensourceERP hinterlegt (…' . substr($key, -6) . ')');
+
+        return ['signingKey' => $key, 'signingAvailable' => ShopSync::signingAvailable()];
+    }
+
+    /** Entfernt den Signaturschlüssel; PHP nimmt die Anbindung danach nicht mehr an. */
+    private function cmdShopSigningKeyDelete(): array
+    {
+        $this->requireShopKeyAdmin();
+
+        $section = Config::raw((string) $this->mountsPath)['shop'] ?? [];
+        $section = is_array($section) ? $section : [];
+        unset($section['signing_key']);
+        Config::updateSections($this->mountsPath, ['shop' => $section === [] ? null : $section]);
+        $this->shop = MountConfig::load((string) $this->mountsPath)['shop'];
+        $this->logger->info('Shop-Anbindung: Signaturschlüssel von OpensourceERP entfernt');
 
         return ['removed' => true];
     }
@@ -2230,7 +2283,8 @@ final class Connector
             throw new ApiException('ECONFIG', 500, 'HUGO-NOT-CONFIGURED');
         }
 
-        return new ShopSync((string) $this->hugo['source'], $this->shopVarDir(), $this->shop['areas']);
+        return new ShopSync((string) $this->hugo['source'], $this->shopVarDir(), $this->shop['areas'],
+            $this->shop['signingKey']);
     }
 
     /**
@@ -4769,6 +4823,11 @@ final class Connector
                 // Was OpensourceERP beschreiben darf — nur zur Anzeige, gepflegt
                 // in der Mount-Datei ([shop] areas)
                 'areas' => $this->shop['areas'],
+                // Öffentlicher Signaturschlüssel von OpensourceERP — kein
+                // Geheimnis, darf deshalb zurück an die Oberfläche
+                'signingKey' => $this->shop['signingKey'],
+                'signingAvailable' => ShopSync::signingAvailable(),
+                'signedPhp' => ShopSync::SIGNED_PHP,
             ],
         ];
     }

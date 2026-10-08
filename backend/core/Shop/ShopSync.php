@@ -39,14 +39,35 @@ use HugoCMS\FileManager\MountResolver;
  *     meldet sich mit Schlüssel an, nicht als Benutzer, und nutzt eine eigene
  *     FileService-Instanz.
  *
+ * Einzige Ausnahme sind die PHP-Einstiegspunkte des Webseiten-Pakets
+ * ({@see SIGNED_PHP}: Weiterleiter und 404-Seite). Sie nimmt die Anbindung nur
+ * signiert an: Ein Administrator hinterlegt den öffentlichen Ed25519-Schlüssel
+ * von OpensourceERP ([shop] signing_key), und jede dieser Dateien braucht im
+ * Abgleich eine Signatur über Pfad und Prüfsumme ({@see signatureMessage()}).
+ * Der Schlüssel der Anbindung allein reicht so nicht, um PHP auf den
+ * Webserver zu bringen. Ohne hinterlegten Schlüssel oder ohne die
+ * Sodium-Erweiterung von PHP bleibt es beim Verbot.
+ *
  * Gelöscht wird nur, was OpensourceERP bei der VORIGEN Übernahme selbst
  * geliefert hat (last-manifest.json). Von Hand angelegte Dateien in einem
  * Bereich — etwa content/de/produkt/_index.md — bleiben dadurch unberührt.
+ * Die signierten PHP-Einstiegspunkte ({@see SIGNED_PHP}) löscht die Anbindung
+ * nie: Sie werden ersetzt, entfernt nur von Hand.
  */
 final class ShopSync
 {
     /** Endungen, die die Anbindung schreiben darf. */
     public const ACCEPT = ['md', 'json', 'html', 'js', 'css'];
+
+    /**
+     * Die einzigen PHP-Dateien, die die Anbindung schreiben darf — und nur
+     * signiert. Fest im Code, nicht in der Konfiguration: welche PHP-Dateien
+     * es überhaupt geben darf, entscheidet HugoCMS, nicht die Lieferung.
+     */
+    public const SIGNED_PHP = ['oserp-shop/static/shop-api/index.php', 'oserp-shop/static/not_found.php'];
+
+    /** Zweck der Signatur — sie taugt für nichts anderes. */
+    private const SIGNATURE_CONTEXT = "hugocms-shop-php\n";
 
     /** Bereiche, wenn [shop] areas fehlt: der Aufbau, den OpensourceERP erzeugt. */
     public const DEFAULT_AREAS = ['content/de/produkt/', 'data/category_groups.json', 'oserp-shop/'];
@@ -64,22 +85,84 @@ final class ShopSync
     private readonly MountResolver $resolver;
     private readonly FileService $files;
 
+    /** Nimmt die Anbindung signierte PHP-Dateien an? */
+    private readonly bool $signedPhp;
+
     /**
      * @param string $source Hugo-Quellverzeichnis der Webseite
      * @param string $varDir Laufzeitverzeichnis, etwa var/shop/<sha1(Quelle)>
      * @param list<string> $areas erlaubte Bereiche, relativ zur Quelle
+     * @param ?string $signingKey öffentlicher Ed25519-Schlüssel von OpensourceERP
+     *                            (Base64, aus [shop] signing_key), null = kein PHP
      */
     public function __construct(
         string $source,
         private readonly string $varDir,
         private readonly array $areas,
+        private readonly ?string $signingKey = null,
     ) {
-        $this->mount = new Mount('shop', $source, 'Shop', ['read', 'write', 'delete', 'mkdir'], self::ACCEPT);
+        $this->signedPhp = self::signedPhpReady($signingKey);
+        // php nur mit Schlüssel — welche Pfade, entscheidet allowedPath()
+        $accept = $this->signedPhp ? [...self::ACCEPT, 'php'] : self::ACCEPT;
+        $this->mount = new Mount('shop', $source, 'Shop', ['read', 'write', 'delete', 'mkdir'], $accept);
         $this->resolver = new MountResolver();
         $this->resolver->add($this->mount);
         // Eigene Endungsliste statt der Editor-Vorgabe: Die Anbindung schreibt
         // auch .js (oserp-shop/), das der Texteditor nur mit extra_editable öffnet.
-        $this->files = new FileService($this->resolver, self::ACCEPT);
+        $this->files = new FileService($this->resolver, $accept);
+    }
+
+    // --- Signierte PHP-Dateien -------------------------------------------------
+
+    /** Kann diese Installation Signaturen prüfen (Sodium-Erweiterung von PHP)? */
+    public static function signingAvailable(): bool
+    {
+        return function_exists('sodium_crypto_sign_verify_detached');
+    }
+
+    /** Nimmt die Anbindung mit diesem Schlüssel signierte PHP-Dateien an? */
+    public static function signedPhpReady(?string $signingKey): bool
+    {
+        return $signingKey !== null && self::signingAvailable();
+    }
+
+    /**
+     * Prüft einen öffentlichen Ed25519-Schlüssel und bringt ihn in die
+     * gespeicherte Form (Base64 ohne Leerraum).
+     *
+     * @return ?string null, wenn es kein gültiger Schlüssel ist
+     */
+    public static function normalizeSigningKey(string $value): ?string
+    {
+        $bytes = base64_decode(preg_replace('/\s+/', '', $value) ?? '', true);
+        if ($bytes === false || strlen($bytes) !== 32) {
+            return null;
+        }
+
+        return base64_encode($bytes);
+    }
+
+    /**
+     * Was OpensourceERP signiert: Zweck, Pfad und Prüfsumme. Die Signatur
+     * taugt damit weder für eine andere Datei noch für einen anderen Ort.
+     */
+    public static function signatureMessage(string $path, string $sha256): string
+    {
+        return self::SIGNATURE_CONTEXT . $path . "\n" . strtolower($sha256);
+    }
+
+    private function signatureValid(string $path, string $sha256, mixed $signature): bool
+    {
+        if (!$this->signedPhp || !is_string($signature)) {
+            return false;
+        }
+        $bytes = base64_decode($signature, true);
+        $key = base64_decode((string) $this->signingKey, true);
+        if ($bytes === false || $key === false || strlen($bytes) !== 64 || strlen($key) !== 32) {
+            return false;
+        }
+
+        return sodium_crypto_sign_verify_detached($bytes, self::signatureMessage($path, $sha256), $key);
     }
 
     // --- Bau-Markierung -------------------------------------------------------
@@ -118,7 +201,8 @@ final class ShopSync
     /**
      * Nimmt das Verzeichnis der Lieferung entgegen und nennt, was fehlt.
      *
-     * @param mixed $entries Liste aus {path, sha256}
+     * @param mixed $entries Liste aus {path, sha256}, bei {@see SIGNED_PHP}
+     *                      zusätzlich signature (Base64)
      * @return array{syncId: string, needed: list<string>, unchanged: int, total: int}
      */
     public function manifest(mixed $entries): array
@@ -142,6 +226,11 @@ final class ShopSync
             }
             if (isset($files[$path])) {
                 throw ApiException::badRequest('SHOP-PATH-DUPLICATE', [$path]);
+            }
+            // PHP nur signiert: Die Prüfsumme deckt danach in upload() den Inhalt
+            if (in_array($path, self::SIGNED_PHP, true)
+                && !$this->signatureValid($path, $hash, $entry['signature'] ?? null)) {
+                throw ApiException::denied('SHOP-SIGNATURE-INVALID', [$path]);
             }
             $files[$path] = $hash;
         }
@@ -261,6 +350,13 @@ final class ShopSync
             if (isset($manifest['files'][$path]) || !is_string($path)) {
                 continue;
             }
+            // Die PHP-Einstiegspunkte nie löschen, nur ersetzen: Fehlen sie in
+            // einer Lieferung — etwa weil OpensourceERP seinen Schlüssel
+            // gerade nicht lesen kann —, legte ein Löschen den ganzen Shop
+            // still (ohne Weiterleiter kein Warenkorb, keine Kasse)
+            if (in_array($path, self::SIGNED_PHP, true)) {
+                continue;
+            }
             try {
                 $path = $this->allowedPath($path);
                 $target = $this->resolver->resolve($this->resolver->encodeId('shop', $path), true);
@@ -320,6 +416,12 @@ final class ShopSync
         }
         if (!$inside) {
             throw ApiException::denied('SHOP-PATH-NOT-ALLOWED', [$path]);
+        }
+        // PHP nur an den festen Pfaden und nur mit hinterlegtem Schlüssel —
+        // der Mount nimmt php dann zwar an, aber nicht an beliebiger Stelle
+        if (strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'php'
+            && (!$this->signedPhp || !in_array($path, self::SIGNED_PHP, true))) {
+            throw ApiException::denied('SHOP-FILETYPE-NOT-ALLOWED', [$path]);
         }
         if (!$this->mount->accepts(basename($path))) {
             throw ApiException::denied('SHOP-FILETYPE-NOT-ALLOWED', [$path]);

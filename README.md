@@ -972,6 +972,7 @@ verläuft entlang SCHREIBEN, nicht LESEN:
 | `users…` | nein | Kontenverwaltung (`users.manage`) |
 | `mountadmin`, `mountadd`, `mountupdate`, `mountdelete`, `browsedirs` | nein | Orte der Webseite verwalten; die Antwort nennt Serverpfade (`requireConfigAdmin()`) |
 | `shopkeycreate`, `shopkeydelete` | nein | Schlüssel der Shop-Anbindung — ein Zugang, keine redaktionelle Einstellung (`requireConfigAdmin()`) |
+| `shopsigningkeyset`, `shopsigningkeydelete` | nein | Signaturschlüssel von OpensourceERP — entscheidet, ob die Anbindung PHP schreiben darf (`requireConfigAdmin()`) |
 
 Entsprechend melden `reconfigurable` und `projectConfigurable` nur, ob es
 überhaupt eine Datei zum Anzeigen gibt; die Befugnis zum Speichern steht getrennt
@@ -1382,9 +1383,11 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `reviewdiscard`| POST | `key`                               | Entwurf verwerfen (Live-Datei bleibt)                  |
 | `shopkeycreate`| POST | –                                   | Schlüssel der Shop-Anbindung erzeugen oder ersetzen; die Antwort trägt ihn — das einzige Mal (`config.manage`) |
 | `shopkeydelete`| POST | –                                   | Schlüssel der Shop-Anbindung entfernen (`config.manage`) |
+| `shopsigningkeyset` | POST | `key` (Ed25519, Base64)        | Öffentlichen Signaturschlüssel von OpensourceERP hinterlegen oder ersetzen (`config.manage`) |
+| `shopsigningkeydelete` | POST | –                           | Signaturschlüssel entfernen; PHP nimmt die Anbindung danach nicht mehr an (`config.manage`) |
 | `shopbuild`    | POST | –                                   | **Mit Schlüssel statt Sitzung:** Webseite bauen, auf Anstoß von OpensourceERP (siehe „Shop-Anbindung") |
 | `shopbuildstatus`| GET | –                                  | **Mit Schlüssel statt Sitzung:** Baustand — läuft ein Hugo-Lauf, wie ging der letzte aus, wartet eine Lieferung; dazu Bereiche und Endungen |
-| `shopmanifest` | POST | `files` (Liste aus `path`, `sha256`) | **Mit Schlüssel:** Abgleich einer Lieferung — nennt, was fehlt oder abweicht, und vergibt eine `syncId` |
+| `shopmanifest` | POST | `files` (Liste aus `path`, `sha256`, bei signiertem PHP `signature`) | **Mit Schlüssel:** Abgleich einer Lieferung — nennt, was fehlt oder abweicht, und vergibt eine `syncId` |
 | `shopupload`   | POST | `syncId`, `files` (Liste aus `path`, `content` Base64) | **Mit Schlüssel:** eine Portion in die Bereitstellung, noch nicht in die Webseite |
 | `shopcommit`   | POST | `syncId`                            | **Mit Schlüssel:** Übernahme — schreiben, nicht mehr Geliefertes löschen, Bau vormerken |
 | `shopthumbnails` | POST | `names` (Dateinamen), `size`?, `offset`? | **Mit Schlüssel:** Vorschaubilder der Produktbilder erzeugen, abschnittsweise (`next`, `done`) |
@@ -1454,11 +1457,25 @@ sonst wäre die ganze Webseite schreibbar. Zwei Listen begrenzen ihn:
   erzeugt. Die Projekteinstellungen zeigen, was gilt.
 - **Endungen:** `md`, `json`, `html`, `js`, `css`. **Kein PHP** — der
   Texteditor schreibt ebenfalls keines, und die Anbindung soll nicht mehr
-  dürfen als ein Redakteur. Die beiden PHP-Einstiegspunkte aus dem
-  Webseiten-Paket von OpensourceERP (Weiterleiter `shop-api/index.php`,
-  404-Seite `not_found.php`) legt man deshalb einmal von Hand nach
-  `oserp-shop/static/`; ihre Konfiguration kommt als `oserp-shop/config.json`
-  über die Übertragung.
+  dürfen als ein Redakteur. Ihre Konfiguration kommt als
+  `oserp-shop/config.json` über die Übertragung.
+
+**Signiertes PHP** (seit 2026-10-08, Plan in OpensourceERP unter
+`dev/shop-php-signatur.md`). Einzige Ausnahme sind die beiden
+PHP-Einstiegspunkte aus dem Webseiten-Paket von OpensourceERP (Weiterleiter
+`oserp-shop/static/shop-api/index.php`, 404-Seite
+`oserp-shop/static/not_found.php`, fest in `ShopSync::SIGNED_PHP`). Sie nimmt
+die Anbindung nur an, wenn ein Administrator in den Projekteinstellungen den
+öffentlichen Ed25519-Schlüssel von OpensourceERP hinterlegt hat
+(`[shop] signing_key`) und jede dieser Dateien im Abgleich eine gültige
+Signatur über Zweck, Pfad und Prüfsumme trägt
+(`"hugocms-shop-php\n<pfad>\n<sha256>"`). Der Schlüssel der Anbindung allein
+reicht so nicht, um PHP auf den Webserver zu bringen. Geprüft wird mit der
+Sodium-Erweiterung von PHP; fehlt sie, bleibt PHP gesperrt, und man legt die
+beiden Dateien von Hand nach `oserp-shop/static/`. `shopbuildstatus` meldet
+unter `signedPhp`, ob signiertes PHP angenommen wird. Gelöscht werden die beiden Dateien von
+der Anbindung nie, nur ersetzt — fehlen sie in einer Lieferung, bleiben sie
+stehen; ohne Weiterleiter stünde der ganze Shop still.
 
 Gelöscht wird nur, was OpensourceERP bei der **vorigen** Übernahme selbst
 geliefert hat (`last-manifest.json`) — von Hand angelegte Dateien in einem
