@@ -43,9 +43,10 @@
 # Vor dem Build prüft 'npm audit' die Laufzeit-Abhängigkeiten des Frontends
 # (nur 'dependencies' — sie landen im ausgelieferten app/; Build-Werkzeuge aus
 # 'devDependencies' nicht). Bei Funden der Stufe high/critical fragt das Skript
-# nach, ob trotzdem gebaut werden soll (Default: Nein). Es wird bewusst NICHTS
-# automatisch behoben: 'npm audit fix' änderte die Lock-Datei, und das Release
-# entspräche keinem Commit mehr.
+# nach, ob trotzdem gebaut werden soll (Default: Nein). Ohne Nachfrage wird
+# NICHTS behoben: 'npm audit fix' ändert die Lock-Datei, und das Release
+# entspräche keinem Commit mehr. Sind Funde automatisch behebbar, bietet die
+# Nachfrage [f] an — der Fix läuft dann nur auf ausdrücklichen Wunsch.
 #
 # Zum Schluss wird zusätzlich die vom Release-Build hochgezählte Buildnummer
 # (frontend/build-number.json) im QUELL-Repo mit der Message
@@ -105,15 +106,20 @@ fi
 #     interaktives Terminal wird abgebrochen. Ist die Registry nicht erreichbar,
 #     gibt es nur eine Warnung — ein Release soll daran nicht scheitern.
 #     Einzelne Pakete genauer untersuchen: scripts/pkg-check.sh <paket>
-if [ "$DO_AUDIT" = 1 ]; then
-    echo "0c. Sicherheitsprüfung der Laufzeit-Abhängigkeiten (npm audit --omit=dev)..."
+#     Ist mindestens ein Fund per 'npm audit fix' behebbar, bietet die Nachfrage
+#     zusätzlich [f] an: Fix ausführen, danach erneut prüfen. Das ändert
+#     package-lock.json — der Release-Commit wird dann als -dev markiert.
+
+# Setzt AUDIT_STATUS: 0 = keine Funde high/critical, 1 = Funde ohne
+# automatischen Fix, 2 = keine Daten, 3 = Funde, davon mindestens einer per
+# 'npm audit fix' behebbar.
+run_audit() {
     if ! command -v npm &>/dev/null; then
         echo "⚠️  npm nicht gefunden — Prüfung übersprungen."
         AUDIT_STATUS=0
     else
         # npm audit endet bei Funden mit Exit-Code ≠ 0 — das ist hier kein Fehler.
         AUDIT_JSON="$(npm audit --prefix "$PROJECT_DIR/frontend" --omit=dev --json 2>/dev/null || true)"
-        # Exit-Code: 0 = keine Funde high/critical, 1 = Funde, 2 = keine Daten.
         AUDIT_STATUS=0
         node -e '
 let data;
@@ -133,30 +139,55 @@ for (const v of hits) {
         : "kein automatischer Fix";
     console.log(`   [${v.severity}] ${v.name} — ${why} (${fix})`);
 }
-process.exit(1);
+process.exit(hits.some(v => v.fixAvailable === true) ? 3 : 1);
 ' <<< "$AUDIT_JSON" || AUDIT_STATUS=$?
     fi
+}
 
-    case "$AUDIT_STATUS" in
-        0) echo "   Keine Funde der Stufe high/critical." ;;
-        2) echo "⚠️  npm audit lieferte keine Daten (Registry nicht erreichbar?) — Prüfung übersprungen." ;;
-        *)
-            echo ""
-            echo "   Details je Paket: scripts/pkg-check.sh <paket>"
-            if [ -t 0 ]; then
-                printf 'Sicherheitsfunde high/critical — trotzdem bauen? [j/N] '
-                read -r reply || reply=""
-                case "$reply" in
-                    [jJyY]*) echo "Fortgesetzt trotz Sicherheitsfunden." ;;
-                    *) echo "Abgebrochen — kein Release erzeugt."; exit 1 ;;
-                esac
-            else
-                echo "❌ Sicherheitsfunde high/critical und kein interaktives Terminal — Abbruch."
-                echo "   Bewusst trotzdem bauen: $0 --skip-audit"
-                exit 1
-            fi
-            ;;
-    esac
+if [ "$DO_AUDIT" = 1 ]; then
+    echo "0c. Sicherheitsprüfung der Laufzeit-Abhängigkeiten (npm audit --omit=dev)..."
+    FIX_TRIED=0
+    while true; do
+        run_audit
+        case "$AUDIT_STATUS" in
+            0) echo "   Keine Funde der Stufe high/critical."; break ;;
+            2) echo "⚠️  npm audit lieferte keine Daten (Registry nicht erreichbar?) — Prüfung übersprungen."; break ;;
+        esac
+
+        echo ""
+        echo "   Details je Paket: scripts/pkg-check.sh <paket>"
+        if [ ! -t 0 ]; then
+            echo "❌ Sicherheitsfunde high/critical und kein interaktives Terminal — Abbruch."
+            echo "   Bewusst trotzdem bauen: $0 --skip-audit"
+            exit 1
+        fi
+        # [f] nur anbieten, wenn ein Fund automatisch behebbar ist und der Fix
+        # in diesem Lauf noch nicht versucht wurde (sonst Endlosschleife).
+        OFFER_FIX=0
+        if [ "$AUDIT_STATUS" = 3 ] && [ "$FIX_TRIED" = 0 ]; then
+            OFFER_FIX=1
+            printf 'Sicherheitsfunde high/critical — trotzdem bauen, f = npm audit fix ausführen? [j/f/N] '
+        else
+            printf 'Sicherheitsfunde high/critical — trotzdem bauen? [j/N] '
+        fi
+        read -r reply || reply=""
+        case "$reply" in
+            [jJyY]*) echo "Fortgesetzt trotz Sicherheitsfunden."; break ;;
+            [fF]*)
+                if [ "$OFFER_FIX" = 1 ]; then
+                    FIX_TRIED=1
+                    echo "npm audit fix --prefix frontend ..."
+                    if ! npm audit fix --prefix "$PROJECT_DIR/frontend"; then
+                        echo "⚠️  npm audit fix endete mit Fehler — es wird erneut geprüft."
+                    fi
+                    echo ""
+                    echo "Erneute Sicherheitsprüfung nach dem Fix..."
+                    continue
+                fi
+                echo "Abgebrochen — kein Release erzeugt."; exit 1 ;;
+            *) echo "Abgebrochen — kein Release erzeugt."; exit 1 ;;
+        esac
+    done
     echo ""
 fi
 
