@@ -188,6 +188,8 @@ const SHOP_TASK_ICON = {
 
 const shop = computed(() => store.shop)
 const shopVisible = computed(() => !!(shop.value && (shop.value.configured || shop.value.contact || shop.value.last)))
+// Ausgeschaltet weist HugoCMS jeden Aufruf ab — dann zählt ein früherer Kontakt nicht.
+const shopConnected = computed(() => shop.value?.enabled !== false && !!shop.value?.contact && !!shop.value?.configured)
 
 // Fortschritt der laufenden Aufgabe; der Bau meldet keinen Zwischenstand.
 function shopProgressText(r) {
@@ -594,14 +596,18 @@ function scoreColor(score) {
                   </template>
                   <template v-else>{{ $t('status.shop.noContact') }}</template>
                 </div>
-                <div v-if="!shop.configured" class="st-row-check text-warning">
+                <div v-if="shop.enabled === false" class="st-row-check text-warning">
+                  <v-icon icon="mdi-power-plug-off-outline" size="14" />
+                  {{ $t('status.shop.disabled') }}
+                </div>
+                <div v-else-if="!shop.configured" class="st-row-check text-warning">
                   <v-icon icon="mdi-key-remove" size="14" />
                   {{ $t('status.shop.noKey') }}
                 </div>
               </div>
               <v-icon
-                :icon="shop.contact && shop.configured ? 'mdi-check-circle-outline' : 'mdi-minus-circle-outline'"
-                :color="shop.contact && shop.configured ? 'success' : 'grey'"
+                :icon="shopConnected ? 'mdi-check-circle-outline' : 'mdi-minus-circle-outline'"
+                :color="shopConnected ? 'success' : 'grey'"
                 size="18"
               />
             </div>

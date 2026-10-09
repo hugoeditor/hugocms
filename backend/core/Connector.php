@@ -190,14 +190,15 @@ final class Connector
     private array $cronPause = ['pauseBuild' => false, 'pauseImprove' => false, 'pauseHealthcheck' => false];
 
     /**
-     * Zugang der Shop-Anbindung (OpensourceERP) aus der [shop]-Sektion der
-     * Mount-Konfiguration: nur Hash, Kennung und Erzeugungszeit, nie der
-     * Schlüssel selbst ({@see ShopKey}).
+     * Shop-Erweiterung (Anbindung an OpensourceERP) aus der [shop]-Sektion der
+     * Mount-Konfiguration: Schalter, Freigaben und vom Zugang nur Hash,
+     * Kennung und Erzeugungszeit, nie der Schlüssel selbst ({@see ShopKey}).
+     * Ohne Mount-Datei (custom.php) bleibt die Erweiterung aus.
      *
-     * @var array{keyHash: ?string, keyHint: ?string, keyCreated: ?string, areas: list<string>, images: string, thumbnails: string, signingKey: ?string}
+     * @var array{enabled: bool, keyHash: ?string, keyHint: ?string, keyCreated: ?string, contentDir: ?string, categoryGroups: ?string, images: ?string, thumbnails: ?string, signingKey: ?string}
      */
-    private array $shop = ['keyHash' => null, 'keyHint' => null, 'keyCreated' => null, 'areas' => ShopSync::DEFAULT_AREAS,
-                           'images' => ShopThumbnails::DEFAULT_IMAGES, 'thumbnails' => ShopThumbnails::DEFAULT_THUMBNAILS,
+    private array $shop = ['enabled' => false, 'keyHash' => null, 'keyHint' => null, 'keyCreated' => null,
+                           'contentDir' => null, 'categoryGroups' => null, 'images' => null, 'thumbnails' => null,
                            'signingKey' => null];
 
     /**
@@ -627,9 +628,9 @@ final class Connector
                 'reviewget' => $this->cmdReviewGet($request),
                 'reviewapprove' => $this->cmdReviewApprove($request),
                 'reviewdiscard' => $this->cmdReviewDiscard($request),
-                // Shop-Anbindung: shopbuild und shopbuildstatus ruft
-                // OpensourceERP mit Schlüssel auf, die beiden anderen ein
-                // angemeldeter Administrator in den Projekteinstellungen.
+                // Shop-Erweiterung: shopbuild bis shopthumbnails ruft
+                // OpensourceERP mit Schlüssel auf, die übrigen ein angemeldeter
+                // Administrator in den Projekteinstellungen.
                 'shopbuild' => $this->cmdShopBuild(),
                 'shopbuildstatus' => $this->cmdShopBuildStatus(),
                 'shopmanifest' => $this->cmdShopManifest($request),
@@ -640,6 +641,8 @@ final class Connector
                 'shopkeydelete' => $this->cmdShopKeyDelete(),
                 'shopsigningkeyset' => $this->cmdShopSigningKeySet($request),
                 'shopsigningkeydelete' => $this->cmdShopSigningKeyDelete(),
+                'shopsettingsset' => $this->cmdShopSettingsSet($request),
+                'shopbrowsedirs' => $this->cmdShopBrowseDirs($request),
                 default => throw ApiException::badRequest('UNKNOWN-COMMAND', [$cmd]),
             };
 
@@ -836,6 +839,9 @@ final class Connector
             // Programm braucht sie nicht (sie baut nichts), daher nicht an
             // `buildable` gebunden. Keine Pro-Bindung — sie läuft rein lokal.
             'linkScan' => $this->hugo !== null,
+            // Shop-Erweiterung (Anbindung an OpensourceERP) eingeschaltet? Kein
+            // Pro-Merkmal; ohne Hugo-Projekt gibt es nichts zu beliefern.
+            'shop' => $this->hugo !== null && $this->shop['enabled'],
             // Automatikmodus des Cron-Verbesserers dieser Webseite. Der Client
             // zeigt ihn als Schalter in der Liste „zu verbessern“ und in den
             // Projekteinstellungen. `effectivePerDay` ist die Menge, die im
@@ -2040,11 +2046,17 @@ final class Connector
      * Unverschlüsselt nimmt der Zugang nichts an, außer über die
      * Loopback-Adresse ({@see ShopKey::transportSecure()}).
      *
+     * Ist die Shop-Erweiterung ausgeschaltet, antwortet die Anbindung nur mit
+     * SHOP-DISABLED — ohne den Schlüssel überhaupt zu prüfen.
+     *
      * Ein gültiger Aufruf wird als Kontakt vermerkt ({@see ShopActivity}) —
      * der Systemstatus zeigt so, wann OpensourceERP zuletzt durchkam.
      */
     private function requireShopKey(string $cmd): void
     {
+        if (!$this->shop['enabled']) {
+            throw ApiException::denied('SHOP-DISABLED');
+        }
         if (!ShopKey::transportSecure($_SERVER)) {
             throw new ApiException('EINSECURE', 403, 'SHOP-HTTPS-REQUIRED');
         }
@@ -2142,12 +2154,22 @@ final class Connector
             'running' => $buildable && $this->buildLock()->isRunning(),
             'buildPending' => $this->hugo !== null && ShopSync::buildPending($this->shopVarDir()),
             'last' => $buildable ? $this->buildLock()->last() : null,
-            // Was die Anbindung beschreiben darf — OpensourceERP prüft damit
-            // vorab, statt erst am Abgleich zu scheitern
-            'areas' => $this->shop['areas'],
+            // Freigaben: wohin die Anbindung schreiben darf, festgelegt von
+            // einem Administrator in den Projekteinstellungen. OpensourceERP
+            // legt die Dateien genau dort ab, statt erst am Abgleich zu
+            // scheitern; null = unbrauchbar eingetragen, nichts freigegeben
+            'grants' => $this->shopGrants(),
+            // Dieselben Freigaben als Bereiche, für OpensourceERP vor dem
+            // 2026-10-09: Es liest areas, und ohne sie ließe es jede Datei
+            // aus — die Übernahme löschte dann die vorige Lieferung. Entfällt,
+            // sobald alle Installationen aktualisiert sind.
+            'areas' => array_values(array_filter([
+                $this->shop['contentDir'] !== null ? $this->shop['contentDir'] . '/' : null,
+                $this->shop['categoryGroups'],
+                ShopSync::PACKAGE_DIR . '/',
+            ])),
+            // Endungen im Webseiten-Paket; Produktseiten sind immer Markdown
             'accept' => ShopSync::ACCEPT,
-            'images' => $this->shop['images'],
-            'thumbnails' => $this->shop['thumbnails'],
             // Signierte PHP-Einstiegspunkte: ready, sobald ein Administrator den
             // öffentlichen Schlüssel von OpensourceERP hinterlegt hat und PHP
             // Signaturen prüfen kann. Der Schlüssel selbst geht nicht mit —
@@ -2169,17 +2191,15 @@ final class Connector
     private function cmdShopKeyCreate(): array
     {
         $this->requireShopKeyAdmin();
+        $this->requireShopEnabled();
 
         $key = ShopKey::generate();
         $created = gmdate('c');
-        // updateSections ersetzt die Sektion als Ganzes — von Hand gepflegte
-        // Einträge wie areas deshalb übernehmen
-        Config::updateSections($this->mountsPath, ['shop' => [
+        $this->writeShopSection([
             'key_hash' => ShopKey::hash($key),
             'key_hint' => ShopKey::hint($key),
             'key_created' => $created,
-        ] + $this->shopSectionRest()]);
-        $this->shop = MountConfig::load((string) $this->mountsPath)['shop'];
+        ]);
         $this->logger->info('Shop-Anbindung: neuer Schlüssel erzeugt (…' . ShopKey::hint($key) . ')');
 
         return ['key' => $key, 'hint' => ShopKey::hint($key), 'created' => $created];
@@ -2190,9 +2210,7 @@ final class Connector
     {
         $this->requireShopKeyAdmin();
 
-        $rest = $this->shopSectionRest();
-        Config::updateSections($this->mountsPath, ['shop' => $rest === [] ? null : $rest]);
-        $this->shop = MountConfig::load((string) $this->mountsPath)['shop'];
+        $this->writeShopSection(['key_hash' => null, 'key_hint' => null, 'key_created' => null]);
         $this->logger->info('Shop-Anbindung: Schlüssel entfernt');
 
         return ['removed' => true];
@@ -2209,17 +2227,14 @@ final class Connector
     private function cmdShopSigningKeySet(array $request): array
     {
         $this->requireShopKeyAdmin();
+        $this->requireShopEnabled();
 
         $key = ShopSync::normalizeSigningKey((string) ($request['key'] ?? ''));
         if ($key === null) {
             throw ApiException::badRequest('SHOP-SIGNING-KEY-INVALID', [(string) $this->mountsPath]);
         }
 
-        $section = Config::raw((string) $this->mountsPath)['shop'] ?? [];
-        $section = is_array($section) ? $section : [];
-        $section['signing_key'] = $key;
-        Config::updateSections($this->mountsPath, ['shop' => $section]);
-        $this->shop = MountConfig::load((string) $this->mountsPath)['shop'];
+        $this->writeShopSection(['signing_key' => $key]);
         $this->logger->info('Shop-Anbindung: Signaturschlüssel von OpensourceERP hinterlegt (…' . substr($key, -6) . ')');
 
         return ['signingKey' => $key, 'signingAvailable' => ShopSync::signingAvailable()];
@@ -2230,14 +2245,150 @@ final class Connector
     {
         $this->requireShopKeyAdmin();
 
-        $section = Config::raw((string) $this->mountsPath)['shop'] ?? [];
-        $section = is_array($section) ? $section : [];
-        unset($section['signing_key']);
-        Config::updateSections($this->mountsPath, ['shop' => $section === [] ? null : $section]);
-        $this->shop = MountConfig::load((string) $this->mountsPath)['shop'];
+        $this->writeShopSection(['signing_key' => null]);
         $this->logger->info('Shop-Anbindung: Signaturschlüssel von OpensourceERP entfernt');
 
         return ['removed' => true];
+    }
+
+    /**
+     * Schaltet die Shop-Erweiterung dieser Webseite ein oder aus und legt die
+     * Freigaben fest — wohin OpensourceERP schreiben darf. Nur für
+     * Administratoren und nie über die shop*-Befehle: sonst könnte sich der
+     * Schlüssel der Anbindung selbst mehr erlauben.
+     *
+     * Jedes Feld ist optional; was fehlt, bleibt. Wer Freigaben speichert,
+     * entfernt damit auch das abgelöste [shop] areas. Ausschalten lässt
+     * Schlüssel und Freigaben stehen — wieder eingeschaltet, geht es weiter
+     * wie zuvor.
+     *
+     * @param array<string, mixed> $request enabled, contentDir, categoryGroups, images, thumbnails
+     * @return array<string, mixed> Stand wie projectconfig.shop
+     */
+    private function cmdShopSettingsSet(array $request): array
+    {
+        $this->requireShopKeyAdmin();
+
+        $changes = [];
+        $grants = $this->shopGrants();
+        foreach (MountConfig::SHOP_GRANTS as $key => [$field, $file]) {
+            if (!array_key_exists($field, $request)) {
+                continue;
+            }
+            $value = is_string($request[$field]) ? $request[$field] : '';
+            $path = MountConfig::shopGrantPath($value, $file);
+            if ($path === null) {
+                throw ApiException::badRequest('SHOP-GRANT-INVALID', [['t' => 'projectConfig.shopGrant.' . $field], $value]);
+            }
+            $changes[$key] = $path;
+            $grants[$field] = $path;
+        }
+        // Gleiche Namen, anderes Verzeichnis: Läge beides zusammen, überschrieben
+        // die Vorschaubilder die Produktbilder
+        if ($grants['images'] !== null && $grants['images'] === $grants['thumbnails']) {
+            throw ApiException::badRequest('SHOP-GRANTS-SAME', [
+                ['t' => 'projectConfig.shopGrant.images'],
+                ['t' => 'projectConfig.shopGrant.thumbnails'],
+            ]);
+        }
+        if ($changes !== []) {
+            $changes['areas'] = null;
+        }
+        if (array_key_exists('enabled', $request)) {
+            $changes['enabled'] = filter_var($request['enabled'], FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
+        }
+
+        $before = $this->shop;
+        $this->writeShopSection($changes);
+        if ($before['enabled'] !== $this->shop['enabled']) {
+            $this->logger->info('Shop-Erweiterung ' . ($this->shop['enabled'] ? 'eingeschaltet' : 'ausgeschaltet'));
+        }
+        $changed = [];
+        foreach (MountConfig::SHOP_GRANTS as $key => [$field]) {
+            if ($before[$field] !== $this->shop[$field]) {
+                $changed[] = $key . ' = ' . $this->shop[$field];
+            }
+        }
+        if ($changed !== []) {
+            $this->logger->info('Shop-Anbindung: Freigaben geändert (' . implode(', ', $changed) . ')');
+        }
+
+        return $this->shopConfigState();
+    }
+
+    /**
+     * shopbrowsedirs — Verzeichnisauswahl für die Freigaben, begrenzt auf die
+     * Hugo-Quelle dieser Webseite: Freigeben lässt sich nur, was darin liegt.
+     * Nur für Administratoren, die Antwort nennt Serverpfade.
+     */
+    private function cmdShopBrowseDirs(array $request): array
+    {
+        $this->requireConfigAdmin();
+        if ($this->mountsPath === null) {
+            throw new ApiException('ECONFIG', 409, 'PROJECT-CONFIG-UNAVAILABLE');
+        }
+        if ($this->hugo === null) {
+            throw new ApiException('ECONFIG', 500, 'HUGO-NOT-CONFIGURED');
+        }
+
+        return (new DirectoryBrowser([(string) $this->hugo['source']], [], $this->resolver))
+            ->list((string) ($request['path'] ?? ''));
+    }
+
+    /**
+     * Freigaben der Shop-Anbindung, wie OpensourceERP und die
+     * Projekteinstellungen sie sehen: relativ zur Hugo-Quelle, null =
+     * unbrauchbar eingetragen. Das Paketverzeichnis steht fest.
+     *
+     * @return array{contentDir: ?string, categoryGroups: ?string, images: ?string, thumbnails: ?string, package: string}
+     */
+    private function shopGrants(): array
+    {
+        return [
+            'contentDir' => $this->shop['contentDir'],
+            'categoryGroups' => $this->shop['categoryGroups'],
+            'images' => $this->shop['images'],
+            'thumbnails' => $this->shop['thumbnails'],
+            'package' => ShopSync::PACKAGE_DIR,
+        ];
+    }
+
+    /**
+     * Stand der Shop-Erweiterung für die Projekteinstellungen. Vom Schlüssel
+     * nur, ob einer hinterlegt ist — er selbst ist nirgends gespeichert. Den
+     * Serverpfad der Hugo-Quelle (für die Verzeichnisauswahl der Freigaben)
+     * bekommen nur Administratoren.
+     *
+     * @return array<string, mixed>
+     */
+    private function shopConfigState(): array
+    {
+        $state = [
+            'enabled' => $this->shop['enabled'],
+            'set' => $this->shop['keyHash'] !== null,
+            'hint' => $this->shop['keyHint'],
+            'created' => $this->shop['keyCreated'],
+            'grants' => $this->shopGrants(),
+            // Öffentlicher Signaturschlüssel von OpensourceERP — kein
+            // Geheimnis, darf deshalb zurück an die Oberfläche
+            'signingKey' => $this->shop['signingKey'],
+            'signingAvailable' => ShopSync::signingAvailable(),
+            'signedPhp' => ShopSync::SIGNED_PHP,
+        ];
+        if ($this->hugo !== null && $this->auth->can('config.manage')) {
+            $source = realpath((string) $this->hugo['source']);
+            $state['source'] = $source !== false ? $source : (string) $this->hugo['source'];
+        }
+
+        return $state;
+    }
+
+    /** Schlüssel und Signaturschlüssel gibt es nur bei eingeschalteter Erweiterung. */
+    private function requireShopEnabled(): void
+    {
+        if (!$this->shop['enabled']) {
+            throw new ApiException('ECONFLICT', 409, 'SHOP-DISABLED');
+        }
     }
 
     /**
@@ -2255,20 +2406,30 @@ final class Connector
     }
 
     /**
-     * Einträge der [shop]-Sektion außer dem Schlüssel — was ein Administrator
-     * von Hand eingetragen hat (areas) und beim Schlüsselwechsel bleiben soll.
+     * Ändert Einträge der [shop]-Sektion (null entfernt einen) und lädt den
+     * Stand neu. Alles Übrige bleibt, wie es dasteht — updateSections ersetzt
+     * die Sektion sonst als Ganzes.
      *
-     * @return array<string, mixed>
+     * Der Schalter wird dabei immer ausdrücklich geschrieben: Fehlt er, hängt
+     * er am Schlüssel ({@see MountConfig}), und wer den Schlüssel entfernt,
+     * schaltete die Erweiterung sonst ungewollt mit aus.
+     *
+     * @param array<string, ?string> $changes
      */
-    private function shopSectionRest(): array
+    private function writeShopSection(array $changes): void
     {
         $section = Config::raw((string) $this->mountsPath)['shop'] ?? [];
-        if (!is_array($section)) {
-            return [];
+        $section = is_array($section) ? $section : [];
+        $section['enabled'] = $this->shop['enabled'] ? 'true' : 'false';
+        foreach ($changes as $key => $value) {
+            if ($value === null) {
+                unset($section[$key]);
+            } else {
+                $section[$key] = $value;
+            }
         }
-        unset($section['key_hash'], $section['key_hint'], $section['key_created']);
-
-        return $section;
+        Config::updateSections((string) $this->mountsPath, ['shop' => $section]);
+        $this->shop = MountConfig::load((string) $this->mountsPath)['shop'];
     }
 
     /** Laufzeitdaten der Shop-Anbindung dieser Webseite, unter var/shop/<sha1(Quelle)>. */
@@ -2283,8 +2444,8 @@ final class Connector
             throw new ApiException('ECONFIG', 500, 'HUGO-NOT-CONFIGURED');
         }
 
-        return new ShopSync((string) $this->hugo['source'], $this->shopVarDir(), $this->shop['areas'],
-            $this->shop['signingKey']);
+        return new ShopSync((string) $this->hugo['source'], $this->shopVarDir(), $this->shop['contentDir'],
+            $this->shop['categoryGroups'], $this->shop['signingKey']);
     }
 
     /**
@@ -2340,6 +2501,11 @@ final class Connector
         @set_time_limit(120);
 
         return $this->shopStep('thumbnails', function () use ($request): array {
+            foreach (['images', 'thumbnails'] as $grant) {
+                if ($this->shop[$grant] === null) {
+                    throw new ApiException('ECONFIG', 409, 'SHOP-GRANT-UNUSABLE', [$grant]);
+                }
+            }
             $offset = (int) ($request['offset'] ?? 0);
             $result = (new ShopThumbnails((string) $this->hugo['source'], $this->shop['images'], $this->shop['thumbnails']))
                 ->run($request['names'] ?? null, (int) ($request['size'] ?? 0), $offset);
@@ -4814,21 +4980,10 @@ final class Connector
             'tagLabel' => (string) $this->gitAuto['tagLabel'],
             // Ist die Quelle ein Git-Repository? Für den Hinweis im Formular.
             'gitRepo' => $this->sourceIsGitRepo(),
-            // Shop-Anbindung: ob ein Schlüssel hinterlegt ist. Der Schlüssel
-            // selbst ist nirgends gespeichert und kommt nie zurück.
-            'shopKey' => [
-                'set' => $this->shop['keyHash'] !== null,
-                'hint' => $this->shop['keyHint'],
-                'created' => $this->shop['keyCreated'],
-                // Was OpensourceERP beschreiben darf — nur zur Anzeige, gepflegt
-                // in der Mount-Datei ([shop] areas)
-                'areas' => $this->shop['areas'],
-                // Öffentlicher Signaturschlüssel von OpensourceERP — kein
-                // Geheimnis, darf deshalb zurück an die Oberfläche
-                'signingKey' => $this->shop['signingKey'],
-                'signingAvailable' => ShopSync::signingAvailable(),
-                'signedPhp' => ShopSync::SIGNED_PHP,
-            ],
+            // Shop-Erweiterung: Schalter, Freigaben, ob ein Schlüssel
+            // hinterlegt ist. Der Schlüssel selbst ist nirgends gespeichert
+            // und kommt nie zurück.
+            'shop' => $this->shopConfigState(),
         ];
     }
 
@@ -5854,7 +6009,8 @@ final class Connector
             return null;
         }
 
-        return ['configured' => $this->shop['keyHash'] !== null] + $this->shopActivity()->state();
+        return ['enabled' => $this->shop['enabled'], 'configured' => $this->shop['keyHash'] !== null]
+            + $this->shopActivity()->state();
     }
 
     /**

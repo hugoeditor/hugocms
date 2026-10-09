@@ -6,7 +6,8 @@
 // immer den Rechner des Benutzers. Deshalb listet das Backend auf (Befehl
 // browsedirs, nur für Administratoren), und dieser Dialog navigiert darin.
 // Sichtbar ist nur, was unterhalb eines Einstiegspunkts liegt ([system]
-// browse_roots in der hugocms.ini, sonst abgeleitet).
+// browse_roots in der hugocms.ini, sonst abgeleitet). Mit command="shopbrowsedirs"
+// ist es allein das Hugo-Projekt der Webseite (Freigaben der Shop-Anbindung).
 //
 //   <DirectoryPickerDialog v-model="open" :start="path" @select="path = $event" />
 import { computed, ref, watch } from 'vue'
@@ -17,6 +18,8 @@ import { errorText } from '../i18n/apiMessage'
 const props = defineProps({
   // Pfad, bei dem der Dialog öffnet (leer = erster Einstiegspunkt).
   start: { type: String, default: '' },
+  // Befehl, der die Verzeichnisse auflistet.
+  command: { type: String, default: 'browsedirs' },
 })
 const emit = defineEmits(['select'])
 const open = defineModel({ type: Boolean, default: false })
@@ -47,7 +50,7 @@ async function load(path = '') {
   loading.value = true
   error.value = ''
   try {
-    state.value = await api.get('browsedirs', { path })
+    state.value = await api.get(props.command, { path })
   } catch (e) {
     error.value = errorText(t, e)
     // Ein gespeicherter Pfad außerhalb der Einstiegspunkte (oder nicht mehr

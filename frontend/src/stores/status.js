@@ -29,7 +29,7 @@ export const useStatusStore = defineStore('status', {
     cron: (state) => state.data?.cron ?? [],
     scheduled: (state) => state.data?.tasks?.scheduled ?? [],
     improve: (state) => state.data?.tasks?.improve ?? [],
-    // Shop-Anbindung: { configured, contact, running, last } oder null
+    // Shop-Anbindung: { enabled, configured, contact, running, last } oder null
     // (ohne Hugo-Projekt).
     shop: (state) => state.data?.shop ?? null,
     // Anzahl Aufgaben, die auf einen Cron-Lauf warten — Abzeichen der Werkzeugschiene.

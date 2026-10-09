@@ -192,28 +192,35 @@ label = Alle Dateien
 ;changelog = false
 ;changelog_path = "de/changelog.md, en/changelog.md"
 
-; Reservierte Sektion [shop] (KEIN Mount): Zugang der Shop-Anbindung
-; (OpensourceERP). Ist ein Schlüssel hinterlegt, darf OpensourceERP die
-; shop*-Befehle dieser Webseite ohne Sitzung aufrufen (Übertragung, Vorschau-
-; bilder, Bau, Baustand).
-; NICHT von Hand anlegen: Der Schlüssel wird in den Projekteinstellungen unter
-; „Shop-Anbindung" erzeugt und dort einmal angezeigt; hier steht nur sein Hash.
-;   key_hash     Hash des Schlüssels (sha256:…)
-;   key_hint     letzte vier Zeichen, zum Wiedererkennen
-;   key_created  Zeitpunkt der Erzeugung
-;   areas        (optional, DARF von Hand gepflegt werden) Bereiche, die die
-;                Anbindung beschreiben darf, kommagetrennt und relativ zur
-;                Hugo-Quelle: Verzeichnisse mit / am Ende, sonst einzelne
-;                Dateien. Standard: der Aufbau, den OpensourceERP erzeugt.
-;                Die Schlüsselverwaltung lässt diesen Eintrag unangetastet.
-;   images       (optional, von Hand) Verzeichnis der Produktbilder, relativ
-;                zur Hugo-Quelle. Standard: static/images/products
-;   thumbnails   (optional, von Hand) Verzeichnis, in das shopthumbnails die
-;                Vorschaubilder schreibt. Standard: static/images/thumbnails
+; Reservierte Sektion [shop] (KEIN Mount): Shop-Erweiterung (Anbindung an
+; OpensourceERP). Ist sie eingeschaltet und ein Schlüssel hinterlegt, darf
+; OpensourceERP die shop*-Befehle dieser Webseite ohne Sitzung aufrufen
+; (Übertragung, Vorschaubilder, Bau, Baustand).
+; NICHT von Hand anlegen: Schalter, Freigaben und Schlüssel werden in den
+; Projekteinstellungen unter „Shop-Erweiterung" gesetzt (nur Administratoren);
+; vom Schlüssel steht hier nur sein Hash.
+;   enabled          Shop-Erweiterung an oder aus. Fehlt der Eintrag, gilt sie
+;                    als eingeschaltet, sobald ein Schlüssel hinterlegt ist.
+;   key_hash         Hash des Schlüssels (sha256:…)
+;   key_hint         letzte vier Zeichen, zum Wiedererkennen
+;   key_created      Zeitpunkt der Erzeugung
+;   Freigaben, relativ zur Hugo-Quelle — wohin die Anbindung schreiben darf:
+;   content_dir      Produktseiten (nur Markdown). Standard: content/de/produkt
+;   category_groups  Kategorieübersicht, eine .json-Datei.
+;                    Standard: data/category_groups.json
+;   images           Produktbilder, aus denen HugoCMS die Vorschaubilder
+;                    erzeugt. Standard: static/images/products
+;   thumbnails       Vorschaubilder, die HugoCMS schreibt (nicht dasselbe
+;                    Verzeichnis wie images). Standard: static/images/thumbnails
+;   Das Shop-Paket liegt fest in oserp-shop/. Ein früheres „areas“ wird nicht
+;   mehr ausgewertet; das Speichern der Freigaben entfernt es.
+;   signing_key      öffentlicher Signaturschlüssel von OpensourceERP (Base64)
 ;[shop]
+;enabled = "true"
 ;key_hash = "sha256:…"
 ;key_hint = "…"
 ;key_created = "2026-01-01T00:00:00+00:00"
-;areas = "content/de/produkt/, data/category_groups.json, oserp-shop/"
+;content_dir = "content/de/produkt"
+;category_groups = "data/category_groups.json"
 ;images = "static/images/products"
 ;thumbnails = "static/images/thumbnails"

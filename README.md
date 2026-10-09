@@ -973,6 +973,7 @@ verläuft entlang SCHREIBEN, nicht LESEN:
 | `mountadmin`, `mountadd`, `mountupdate`, `mountdelete`, `browsedirs` | nein | Orte der Webseite verwalten; die Antwort nennt Serverpfade (`requireConfigAdmin()`) |
 | `shopkeycreate`, `shopkeydelete` | nein | Schlüssel der Shop-Anbindung — ein Zugang, keine redaktionelle Einstellung (`requireConfigAdmin()`) |
 | `shopsigningkeyset`, `shopsigningkeydelete` | nein | Signaturschlüssel von OpensourceERP — entscheidet, ob die Anbindung PHP schreiben darf (`requireConfigAdmin()`) |
+| `shopsettingsset`, `shopbrowsedirs` | nein | Shop-Erweiterung ein-/ausschalten und Freigaben festlegen — entscheidet, wohin die Anbindung schreiben darf; die Auswahl nennt Serverpfade (`requireConfigAdmin()`) |
 
 Entsprechend melden `reconfigurable` und `projectConfigurable` nur, ob es
 überhaupt eine Datei zum Anzeigen gibt; die Befugnis zum Speichern steht getrennt
@@ -1385,8 +1386,10 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `shopkeydelete`| POST | –                                   | Schlüssel der Shop-Anbindung entfernen (`config.manage`) |
 | `shopsigningkeyset` | POST | `key` (Ed25519, Base64)        | Öffentlichen Signaturschlüssel von OpensourceERP hinterlegen oder ersetzen (`config.manage`) |
 | `shopsigningkeydelete` | POST | –                           | Signaturschlüssel entfernen; PHP nimmt die Anbindung danach nicht mehr an (`config.manage`) |
+| `shopsettingsset` | POST | `enabled`?, `contentDir`?, `categoryGroups`?, `images`?, `thumbnails`? | Shop-Erweiterung ein-/ausschalten, Freigaben speichern (relativ zur Hugo-Quelle); Antwort wie `projectconfig.shop` (`config.manage`) |
+| `shopbrowsedirs` | GET | `path`?                           | Verzeichnisauswahl für die Freigaben, auf die Hugo-Quelle begrenzt (`config.manage`) |
 | `shopbuild`    | POST | –                                   | **Mit Schlüssel statt Sitzung:** Webseite bauen, auf Anstoß von OpensourceERP (siehe „Shop-Anbindung") |
-| `shopbuildstatus`| GET | –                                  | **Mit Schlüssel statt Sitzung:** Baustand — läuft ein Hugo-Lauf, wie ging der letzte aus, wartet eine Lieferung; dazu Bereiche und Endungen |
+| `shopbuildstatus`| GET | –                                  | **Mit Schlüssel statt Sitzung:** Baustand — läuft ein Hugo-Lauf, wie ging der letzte aus, wartet eine Lieferung; dazu Freigaben (`grants`, übergangsweise auch als `areas` für ältere OpensourceERP) und Endungen |
 | `shopmanifest` | POST | `files` (Liste aus `path`, `sha256`, bei signiertem PHP `signature`) | **Mit Schlüssel:** Abgleich einer Lieferung — nennt, was fehlt oder abweicht, und vergibt eine `syncId` |
 | `shopupload`   | POST | `syncId`, `files` (Liste aus `path`, `content` Base64) | **Mit Schlüssel:** eine Portion in die Bereitstellung, noch nicht in die Webseite |
 | `shopcommit`   | POST | `syncId`                            | **Mit Schlüssel:** Übernahme — schreiben, nicht mehr Geliefertes löschen, Bau vormerken |
@@ -1420,12 +1423,21 @@ der Webseite an. Der Plan dazu steht im OpensourceERP-Repository unter
 `dev/shop-hugocms-trennung.md`. Umgesetzt sind Zugang, Bau und die
 Übertragung der Inhaltsdateien; die Vorschaubilder erzeugt HugoCMS noch nicht.
 
-**Einrichten.** In den Projekteinstellungen unter „Shop-Anbindung" einen
-Schlüssel erzeugen (nur Administratoren). Er wird genau einmal angezeigt; in
-OpensourceERP werden er und die dort angezeigte Adresse eingetragen. HugoCMS
-erkennt die Webseite an Host und Endpunkt — ein Schlüssel gilt deshalb nur für
-die Webseite, zu der er gehört. Abgelegt wird er als Hash in der
-`[shop]`-Sektion ihrer Mount-Datei.
+**Shop-Erweiterung.** Je Webseite einschaltbar, kein Pro-Merkmal
+(Projekteinstellungen → „Shop-Erweiterung", nur Administratoren,
+`[shop] enabled`). Ausgeschaltet antworten alle `shop*`-Befehle der Anbindung
+nur mit `SHOP-DISABLED`, ohne den Schlüssel zu prüfen; Schlüssel und Freigaben
+bleiben gespeichert. Fehlt der Eintrag, gilt eine Webseite mit Schlüssel als
+eingeschaltet — Shops aus der Zeit vor dem Schalter laufen weiter. Plan in
+OpensourceERP unter `dev/shop-hugocms-verzeichnisse.md`.
+
+**Einrichten.** In den Projekteinstellungen unter „Shop-Erweiterung" die
+Erweiterung einschalten und einen Schlüssel erzeugen (nur Administratoren). Er
+wird genau einmal angezeigt; in OpensourceERP werden er und die dort angezeigte
+Adresse eingetragen. HugoCMS erkennt die Webseite an Host und Endpunkt — ein
+Schlüssel gilt deshalb nur für die Webseite, zu der er gehört. Abgelegt wird er
+als Hash in der `[shop]`-Sektion ihrer Mount-Datei. Danach die Freigaben prüfen
+(siehe unten).
 
 **Anmeldung.** Bewusst kein Treiber der `AuthInterface`: Die beschreibt die
 Anmeldung von Benutzern (Passwort, Sitzung, Konten); ein Schlüssel für
@@ -1449,16 +1461,31 @@ Lieferung gebaut wird:
 
 Geschrieben wird über `FileService` und einen eigenen `MountResolver` mit einem
 Mount auf die Hugo-Quelle. Er ist bewusst nicht im Resolver der Redakteure —
-sonst wäre die ganze Webseite schreibbar. Zwei Listen begrenzen ihn:
+sonst wäre die ganze Webseite schreibbar. Innerhalb davon darf die Anbindung
+nur, was ein Administrator in den Projekteinstellungen **freigegeben** hat
+(`ShopSync::allowedPath()`). Die Freigaben stehen relativ zur Hugo-Quelle in
+der `[shop]`-Sektion, gewählt mit einer Verzeichnisauswahl, die auf die Quelle
+begrenzt ist (`shopbrowsedirs`); OpensourceERP fragt sie über
+`shopbuildstatus` ab (`grants`) und zeigt sie nur an:
 
-- **Bereiche** (`[shop] areas`, von Hand in der Mount-Datei): Verzeichnisse mit
-  `/` am Ende, sonst einzelne Dateien. Vorgabe: `content/de/produkt/`,
-  `data/category_groups.json`, `oserp-shop/` — der Aufbau, den OpensourceERP
-  erzeugt. Die Projekteinstellungen zeigen, was gilt.
-- **Endungen:** `md`, `json`, `html`, `js`, `css`. **Kein PHP** — der
-  Texteditor schreibt ebenfalls keines, und die Anbindung soll nicht mehr
-  dürfen als ein Redakteur. Ihre Konfiguration kommt als
-  `oserp-shop/config.json` über die Übertragung.
+| Freigabe | Schlüssel | Vorgabe | Anbindung darf |
+|---|---|---|---|
+| Produktseiten | `content_dir` | `content/de/produkt` | Markdown schreiben und löschen |
+| Kategorieübersicht | `category_groups` | `data/category_groups.json` | genau diese Datei |
+| Produktbilder | `images` | `static/images/products` | nichts — HugoCMS liest sie für die Vorschaubilder |
+| Vorschaubilder | `thumbnails` | `static/images/thumbnails` | nichts — HugoCMS schreibt sie |
+| Shop-Paket | fest `oserp-shop/` | – | `md`, `json`, `html`, `js`, `css`; PHP nur signiert |
+
+Ein unbrauchbarer Eintrag (absolut, `..`, versteckte Bestandteile, andere
+Zeichen als Buchstaben, Ziffern, `- _ .` und Leerzeichen) gibt nichts frei und
+erscheint als Hinweis nach der Anmeldung — lieber steht der Shop, als dass die
+Anbindung stillschweigend an die Vorgabe schreibt. Produkt- und Vorschaubilder
+dürfen nicht im selben Verzeichnis liegen (gleiche Dateinamen). Das frühere
+`[shop] areas` wird nicht mehr ausgewertet (Hinweis `SHOP-AREAS-OBSOLETE`);
+das Speichern der Freigaben entfernt es. **Kein PHP** außerhalb der beiden
+signierten Einstiegspunkte — der Texteditor schreibt ebenfalls keines, und die
+Anbindung soll nicht mehr dürfen als ein Redakteur. Ihre Konfiguration kommt
+als `oserp-shop/config.json` über die Übertragung.
 
 **Signiertes PHP** (seit 2026-10-08, Plan in OpensourceERP unter
 `dev/shop-php-signatur.md`). Einzige Ausnahme sind die beiden
@@ -1478,16 +1505,18 @@ der Anbindung nie, nur ersetzt — fehlen sie in einer Lieferung, bleiben sie
 stehen; ohne Weiterleiter stünde der ganze Shop still.
 
 Gelöscht wird nur, was OpensourceERP bei der **vorigen** Übernahme selbst
-geliefert hat (`last-manifest.json`) — von Hand angelegte Dateien in einem
-Bereich, etwa `content/de/produkt/_index.md`, bleiben unberührt.
+geliefert hat (`last-manifest.json`) — von Hand angelegte Dateien in einer
+Freigabe, etwa `content/de/produkt/_index.md`, bleiben unberührt. Das gilt auch
+nach dem Verlegen einer Freigabe: Die Seiten am alten Ort stammen aus einer
+Lieferung und werden gelöscht, statt verwaist mit alten Preisen veröffentlicht
+zu bleiben (`ShopSync::deletablePath()`).
 
 **Vorschaubilder** (`Shop\ShopThumbnails`). Die Produktbilder liegen auf dem
 Webserver, nicht in OpensourceERP. OpensourceERP nennt mit `shopthumbnails` nur
 die Dateinamen (das erste Bild jedes Artikels) und die größte Seite der
 Vorschau (`size`, Vorgabe 200, erlaubt 16–2000); verkleinert wird hier. Quelle
-und Ziel stehen in der Mount-Datei (`[shop] images`, Vorgabe
-`static/images/products`; `[shop] thumbnails`, Vorgabe
-`static/images/thumbnails`), nicht in der Anfrage.
+und Ziel sind die Freigaben „Produktbilder" und „Vorschaubilder"
+(`[shop] images`, `[shop] thumbnails`), nicht Teil der Anfrage.
 
 - Eingepasst mit gleichem Seitenverhältnis, nie vergrößert; Transparenz und
   Format der Quelle bleiben. Braucht die PHP-Erweiterung GD.
@@ -1625,8 +1654,10 @@ verlässliche Weg bleibt der im Web-Request.
   `X-HugoCMS-Key`). Gespeichert ist nur sein SHA-256-Hash; verglichen wird in
   konstanter Zeit. Unverschlüsselt nimmt der Zugang nichts an, außer über die
   Loopback-Adresse. Der Schlüssel öffnet nur diese Befehle — keine
-  Datei-Befehle, keine Konfiguration. Geschrieben wird nur in die Bereiche
-  (`[shop] areas`) und ins Verzeichnis der Vorschaubilder, und kein PHP.
+  Datei-Befehle, keine Konfiguration. Ohne eingeschaltete Shop-Erweiterung
+  antworten sie gar nicht (`SHOP-DISABLED`). Geschrieben wird nur in die
+  Freigaben, die ein Administrator festlegt, und kein PHP außer den beiden
+  signierten Einstiegspunkten des Shop-Pakets.
 - **CSRF-Token:** Alle Schreibbefehle verlangen das sitzungsgebundene Token
   aus `whoami` im Header `X-CSRF-Token` (zweite Schicht neben `SameSite=Lax`).
   Das einmalige Einrichtungs-Setup (vor Existenz der `hugocms.ini`) läuft ohne

@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/auth'
 import { errorText } from '../i18n/apiMessage'
 import { endpointUrl } from '../api/client'
 import { useConfirm } from '../util/confirm'
+import DirectoryPickerDialog from './DirectoryPickerDialog.vue'
 
 const { t, locale } = useI18n()
 const auth = useAuthStore()
@@ -95,19 +96,114 @@ const perDayTooHigh = computed(
   () => windowMinutes.value !== null && Number(improvePerDay.value) > windowMinutes.value,
 )
 
-// Shop-Anbindung (OpensourceERP): Stand des Schlüssels dieser Webseite. Der
-// Schlüssel selbst kommt nur einmal, direkt nach dem Erzeugen — dann steht er in
-// newShopKey, bis der Dialog schließt.
-const shopKey = ref({ set: false, hint: null, created: null })
+// Shop-Erweiterung (OpensourceERP): Schalter, Freigaben und Schlüssel dieser
+// Webseite, nur für Administratoren. Der Schlüssel selbst kommt nur einmal,
+// direkt nach dem Erzeugen — dann steht er in newShopKey, bis der Dialog
+// schließt. Schalter und Schlüssel wirken sofort, die Freigaben mit „Speichern“.
+const SHOP_EMPTY = { enabled: false, set: false, hint: null, created: null, grants: {} }
+const shop = ref({ ...SHOP_EMPTY })
 const newShopKey = ref('')
 const shopBusy = ref(false)
 const shopError = ref(null)
 const shopCopied = ref(false)
 const shopEndpoint = endpointUrl()
 
+// Freigaben: wohin OpensourceERP schreiben darf, relativ zum Hugo-Projekt.
+// file = eine Datei statt eines Verzeichnisses (die Auswahl liefert dann nur
+// das Verzeichnis, der Dateiname bleibt).
+const SHOP_GRANTS = [
+  { field: 'contentDir', icon: 'mdi-file-document-multiple-outline', file: false },
+  { field: 'categoryGroups', icon: 'mdi-file-tree-outline', file: true },
+  { field: 'images', icon: 'mdi-image-multiple-outline', file: false },
+  { field: 'thumbnails', icon: 'mdi-image-size-select-small', file: false },
+]
+const shopGrants = ref({})
+
+function resetShopGrants() {
+  shopGrants.value = Object.fromEntries(SHOP_GRANTS.map(({ field }) => [field, shop.value.grants?.[field] ?? '']))
+}
+
+const shopGrantsDirty = computed(() =>
+  SHOP_GRANTS.some(({ field }) => String(shopGrants.value[field] ?? '').trim() !== (shop.value.grants?.[field] ?? '')),
+)
+
+// Dieselben Regeln wie auf dem Server (MountConfig::shopGrantPath), damit ein
+// Fehler schon beim Tippen auffällt.
+const shopGrantRule = (file) => (v) => {
+  const value = String(v ?? '').trim().replace(/\/+$/, '')
+  if (!value) return t('projectConfig.shopGrantRequired')
+  const segments = value.split('/').filter(Boolean)
+  if (value.startsWith('/') || segments.some((part) => part.startsWith('.') || !/^[\p{L}\p{N}_\-. ]+$/u.test(part))) {
+    return t('projectConfig.shopGrantInvalid')
+  }
+  if (file && !value.toLowerCase().endsWith('.json')) return t('projectConfig.shopGrantJson')
+  return true
+}
+
+// Verzeichnisauswahl, auf das Hugo-Projekt begrenzt (shopbrowsedirs). Den
+// Serverpfad des Projekts kennt die Oberfläche nur als Administrator.
+const pickerOpen = ref(false)
+const pickerField = ref(null)
+const pickerStart = computed(() => {
+  const grant = SHOP_GRANTS.find(({ field }) => field === pickerField.value)
+  const value = String(shopGrants.value[pickerField.value] ?? '').replace(/^\/+|\/+$/g, '')
+  const dir = grant?.file ? value.split('/').slice(0, -1).join('/') : value
+  return shop.value.source ? (dir ? `${shop.value.source}/${dir}` : shop.value.source) : ''
+})
+
+function pickGrant(field) {
+  pickerField.value = field
+  pickerOpen.value = true
+}
+
+function onGrantPicked(path) {
+  const source = shop.value.source ?? ''
+  const grant = SHOP_GRANTS.find(({ field }) => field === pickerField.value)
+  if (!grant || !source) return
+  const dir = path === source ? '' : path.startsWith(`${source}/`) ? path.slice(source.length + 1) : null
+  if (dir === null) return
+  if (grant.file) {
+    const name = String(shopGrants.value[grant.field] || 'category_groups.json').split('/').pop()
+    shopGrants.value[grant.field] = dir ? `${dir}/${name}` : name
+    return
+  }
+  if (!dir) {
+    shopError.value = t('projectConfig.shopGrantRoot')
+    return
+  }
+  shopError.value = null
+  shopGrants.value[grant.field] = dir
+}
+
+// Ein- und Ausschalten wirkt sofort. Aus heißt: Die Anbindung weist
+// OpensourceERP ab; Schlüssel und Freigaben bleiben gespeichert.
+async function toggleShop(enabled) {
+  if (!enabled) {
+    const ok = await confirm({
+      title: t('projectConfig.shopDisableTitle'),
+      message: t('projectConfig.shopDisableConfirm'),
+      confirmText: t('projectConfig.shopDisable'),
+      color: 'warning',
+    })
+    if (!ok) return
+  }
+  shopBusy.value = true
+  shopError.value = null
+  try {
+    shop.value = await auth.shopSettingsSet({ enabled })
+    resetShopGrants()
+    // Der Systemstatus und andere Ansichten lesen den Schalter aus whoami
+    await auth.check()
+  } catch (e) {
+    shopError.value = errorText(t, e)
+  } finally {
+    shopBusy.value = false
+  }
+}
+
 // Wie in der Freigabe-Warteschlange: toLocaleString in der Oberflächensprache
 const shopKeyCreatedText = computed(() => {
-  const created = shopKey.value.created
+  const created = shop.value.created
   if (!created) return ''
   const date = new Date(created)
   return Number.isNaN(date.getTime()) ? created : date.toLocaleString(locale.value)
@@ -116,7 +212,7 @@ const shopKeyCreatedText = computed(() => {
 async function createShopKey() {
   // Ein vorhandener Schlüssel gilt nach dem Ersetzen sofort nicht mehr —
   // OpensourceERP braucht dann den neuen.
-  if (shopKey.value.set) {
+  if (shop.value.set) {
     const ok = await confirm({
       title: t('projectConfig.shopKeyReplaceTitle'),
       message: t('projectConfig.shopKeyReplaceConfirm'),
@@ -131,8 +227,8 @@ async function createShopKey() {
   try {
     const res = await auth.shopKeyCreate()
     newShopKey.value = res.key
-    // Bereiche und Signaturschlüssel bleiben, wie sie sind
-    shopKey.value = { ...shopKey.value, set: true, hint: res.hint, created: res.created }
+    // Schalter, Freigaben und Signaturschlüssel bleiben, wie sie sind
+    shop.value = { ...shop.value, set: true, hint: res.hint, created: res.created }
   } catch (e) {
     shopError.value = errorText(t, e)
   } finally {
@@ -153,7 +249,7 @@ async function deleteShopKey() {
   try {
     await auth.shopKeyDelete()
     newShopKey.value = ''
-    shopKey.value = { ...shopKey.value, set: false, hint: null, created: null }
+    shop.value = { ...shop.value, set: false, hint: null, created: null }
   } catch (e) {
     shopError.value = errorText(t, e)
   } finally {
@@ -171,7 +267,7 @@ async function setSigningKey() {
   shopError.value = null
   try {
     const res = await auth.shopSigningKeySet(newSigningKey.value.trim())
-    shopKey.value = { ...shopKey.value, signingKey: res.signingKey, signingAvailable: res.signingAvailable }
+    shop.value = { ...shop.value, signingKey: res.signingKey, signingAvailable: res.signingAvailable }
     newSigningKey.value = ''
   } catch (e) {
     shopError.value = errorText(t, e)
@@ -192,7 +288,7 @@ async function deleteSigningKey() {
   shopError.value = null
   try {
     await auth.shopSigningKeyDelete()
-    shopKey.value = { ...shopKey.value, signingKey: null }
+    shop.value = { ...shop.value, signingKey: null }
   } catch (e) {
     shopError.value = errorText(t, e)
   } finally {
@@ -239,7 +335,8 @@ watch(model, async (open) => {
     changelogPath.value = cfg.changelogPath ?? ''
     tagLabel.value = cfg.tagLabel ?? ''
     gitRepo.value = !!cfg.gitRepo
-    shopKey.value = cfg.shopKey ?? { set: false, hint: null, created: null }
+    shop.value = cfg.shop ?? { ...SHOP_EMPTY }
+    resetShopGrants()
     newShopKey.value = ''
     newSigningKey.value = ''
     shopError.value = null
@@ -264,6 +361,14 @@ async function submit() {
   saving.value = true
   error.value = null
   try {
+    // Freigaben der Shop-Anbindung zuerst: Sie prüft der Server streng, und
+    // ein Fehler darin bricht ab, bevor der Rest gespeichert ist.
+    if (auth.manageConfig && shop.value.enabled && shopGrantsDirty.value) {
+      shop.value = await auth.shopSettingsSet(
+        Object.fromEntries(SHOP_GRANTS.map(({ field }) => [field, String(shopGrants.value[field] ?? '').trim()])),
+      )
+      resetShopGrants()
+    }
     await auth.projectReconfigure({
       seoExcludePrefixes: seoExcludePrefixes.value,
       seoExcludeFiles: seoExcludeFiles.value,
@@ -558,150 +663,212 @@ async function submit() {
             class="mb-2 mt-5"
           />
 
-          <!-- Shop-Anbindung: Schlüssel, mit dem OpensourceERP den Bau dieser
-               Webseite anstößt. Wirkt sofort, nicht erst mit „Speichern“ —
-               wie bei jedem Zugangsschlüssel. -->
+          <!-- Shop-Erweiterung: Anbindung an OpensourceERP, nur für
+               Administratoren. Schalter und Schlüssel wirken sofort, die
+               Freigaben mit „Speichern“. -->
           <template v-if="auth.manageConfig">
             <v-divider class="my-4" />
             <div class="text-subtitle-2 mb-1">{{ $t('projectConfig.shopSection') }}</div>
             <div class="text-caption text-medium-emphasis mb-2">{{ $t('projectConfig.shopHint') }}</div>
-
-            <v-text-field
-              :model-value="shopEndpoint"
-              :label="$t('projectConfig.shopEndpoint')"
-              :hint="$t('projectConfig.shopEndpointHint')"
-              prepend-inner-icon="mdi-link-variant"
-              variant="outlined"
-              density="comfortable"
-              readonly
-              persistent-hint
-              class="mb-3"
-            />
-
-            <div class="text-caption text-medium-emphasis mb-3">
-              {{ $t('projectConfig.shopAreas') }}
-              <code v-for="bereich in shopKey.areas ?? []" :key="bereich" class="ml-1">{{ bereich }}</code>
-            </div>
-
-            <div class="text-body-2 mb-2">
-              <template v-if="shopKey.set">
-                {{ $t('projectConfig.shopKeySet', [shopKey.hint ?? '', shopKeyCreatedText]) }}
-              </template>
-              <template v-else>{{ $t('projectConfig.shopKeyNone') }}</template>
-            </div>
-
-            <v-alert
-              v-if="newShopKey"
-              type="warning"
-              variant="tonal"
+            <v-switch
+              :model-value="shop.enabled"
+              :label="$t('projectConfig.shopEnabled')"
+              :loading="shopBusy"
+              :disabled="shopBusy || loading || saving"
+              color="primary"
               density="compact"
+              hide-details
               class="mb-2"
-            >
-              <div class="mb-2">{{ $t('projectConfig.shopKeyShownOnce') }}</div>
+              @update:model-value="toggleShop"
+            />
+            <div v-if="!shop.enabled" class="text-caption text-medium-emphasis mb-2">
+              {{ $t('projectConfig.shopDisabledHint') }}
+            </div>
+
+            <template v-if="shop.enabled">
               <v-text-field
-                :model-value="newShopKey"
+                :model-value="shopEndpoint"
+                :label="$t('projectConfig.shopEndpoint')"
+                :hint="$t('projectConfig.shopEndpointHint')"
+                prepend-inner-icon="mdi-link-variant"
                 variant="outlined"
-                density="compact"
+                density="comfortable"
                 readonly
-                hide-details
-                class="shop-key"
-                @focus="$event.target.select()"
+                persistent-hint
+                class="mb-3 mt-2"
+              />
+
+              <div class="text-body-2 mb-2">
+                <template v-if="shop.set">
+                  {{ $t('projectConfig.shopKeySet', [shop.hint ?? '', shopKeyCreatedText]) }}
+                </template>
+                <template v-else>{{ $t('projectConfig.shopKeyNone') }}</template>
+              </div>
+
+              <v-alert
+                v-if="newShopKey"
+                type="warning"
+                variant="tonal"
+                density="compact"
+                class="mb-2"
+              >
+                <div class="mb-2">{{ $t('projectConfig.shopKeyShownOnce') }}</div>
+                <v-text-field
+                  :model-value="newShopKey"
+                  variant="outlined"
+                  density="compact"
+                  readonly
+                  hide-details
+                  class="shop-key"
+                  @focus="$event.target.select()"
+                >
+                  <template #append-inner>
+                    <v-btn
+                      :icon="shopCopied ? 'mdi-check' : 'mdi-content-copy'"
+                      variant="text"
+                      size="small"
+                      :aria-label="$t('projectConfig.shopKeyCopy')"
+                      @click="copyShopKey"
+                    />
+                  </template>
+                </v-text-field>
+              </v-alert>
+
+              <div class="d-flex flex-wrap" style="gap: 8px">
+                <v-btn
+                  variant="tonal"
+                  color="primary"
+                  prepend-icon="mdi-key-plus"
+                  :loading="shopBusy"
+                  :disabled="loading || saving"
+                  @click="createShopKey"
+                >
+                  {{ shop.set ? $t('projectConfig.shopKeyReplace') : $t('projectConfig.shopKeyCreate') }}
+                </v-btn>
+                <v-btn
+                  v-if="shop.set"
+                  variant="text"
+                  color="error"
+                  prepend-icon="mdi-key-remove"
+                  :disabled="shopBusy || loading || saving"
+                  @click="deleteShopKey"
+                >
+                  {{ $t('projectConfig.shopKeyDelete') }}
+                </v-btn>
+              </div>
+
+              <!-- Freigaben: wohin OpensourceERP schreiben darf. OpensourceERP
+                   zeigt sie nur an und übernimmt sie bei jedem Lauf. -->
+              <div class="text-subtitle-2 mt-5 mb-1">{{ $t('projectConfig.shopGrantsSection') }}</div>
+              <div class="text-caption text-medium-emphasis mb-3">{{ $t('projectConfig.shopGrantsHint') }}</div>
+              <v-text-field
+                v-for="grant in SHOP_GRANTS"
+                :key="grant.field"
+                v-model="shopGrants[grant.field]"
+                :label="$t(`projectConfig.shopGrant.${grant.field}`)"
+                :hint="$t(`projectConfig.shopGrantHint.${grant.field}`)"
+                :rules="[shopGrantRule(grant.file)]"
+                :prepend-inner-icon="grant.icon"
+                :disabled="loading || saving"
+                variant="outlined"
+                density="comfortable"
+                persistent-hint
+                class="mb-3"
               >
                 <template #append-inner>
                   <v-btn
-                    :icon="shopCopied ? 'mdi-check' : 'mdi-content-copy'"
+                    icon="mdi-folder-search-outline"
                     variant="text"
                     size="small"
-                    :aria-label="$t('projectConfig.shopKeyCopy')"
-                    @click="copyShopKey"
+                    :disabled="!shop.source || loading || saving"
+                    :aria-label="$t('projectConfig.shopGrantPick')"
+                    :title="$t('projectConfig.shopGrantPick')"
+                    @click="pickGrant(grant.field)"
                   />
                 </template>
               </v-text-field>
-            </v-alert>
+              <v-text-field
+                :model-value="`${shop.grants?.package ?? 'oserp-shop'}/`"
+                :label="$t('projectConfig.shopGrant.package')"
+                :hint="$t('projectConfig.shopGrantHint.package')"
+                prepend-inner-icon="mdi-package-variant-closed"
+                variant="outlined"
+                density="comfortable"
+                readonly
+                persistent-hint
+                class="mb-2"
+              />
+              <div v-if="shopGrantsDirty" class="text-caption text-warning mb-2">
+                {{ $t('projectConfig.shopGrantsUnsaved') }}
+              </div>
 
-            <div class="d-flex flex-wrap" style="gap: 8px">
-              <v-btn
+              <!-- Signaturschlüssel von OpensourceERP: Weiterleiter und 404-Seite
+                   (PHP) nimmt die Anbindung nur signiert an. Wirkt sofort. -->
+              <div class="text-subtitle-2 mt-5 mb-1">{{ $t('projectConfig.shopSigningSection') }}</div>
+              <div class="text-caption text-medium-emphasis mb-2">
+                {{ $t('projectConfig.shopSigningHint') }}
+                <code v-for="pfad in shop.signedPhp ?? []" :key="pfad" class="ml-1">{{ pfad }}</code>
+              </div>
+              <v-alert
+                v-if="shop.signingAvailable === false"
+                type="warning"
                 variant="tonal"
-                color="primary"
-                prepend-icon="mdi-key-plus"
-                :loading="shopBusy"
-                :disabled="loading || saving"
-                @click="createShopKey"
+                density="compact"
+                class="mb-2"
               >
-                {{ shopKey.set ? $t('projectConfig.shopKeyReplace') : $t('projectConfig.shopKeyCreate') }}
-              </v-btn>
-              <v-btn
-                v-if="shopKey.set"
-                variant="text"
-                color="error"
-                prepend-icon="mdi-key-remove"
-                :disabled="shopBusy || loading || saving"
-                @click="deleteShopKey"
-              >
-                {{ $t('projectConfig.shopKeyDelete') }}
-              </v-btn>
-            </div>
-
-            <!-- Signaturschlüssel von OpensourceERP: Weiterleiter und 404-Seite
-                 (PHP) nimmt die Anbindung nur signiert an. Wirkt sofort. -->
-            <div class="text-subtitle-2 mt-5 mb-1">{{ $t('projectConfig.shopSigningSection') }}</div>
-            <div class="text-caption text-medium-emphasis mb-2">
-              {{ $t('projectConfig.shopSigningHint') }}
-              <code v-for="pfad in shopKey.signedPhp ?? []" :key="pfad" class="ml-1">{{ pfad }}</code>
-            </div>
-            <v-alert
-              v-if="shopKey.signingAvailable === false"
-              type="warning"
-              variant="tonal"
-              density="compact"
-              class="mb-2"
-            >
-              {{ $t('projectConfig.shopSigningUnavailable') }}
-            </v-alert>
-            <div class="text-body-2 mb-2">
-              <template v-if="shopKey.signingKey">
-                {{ $t('projectConfig.shopSigningSet', [shopKey.signingKey.slice(-6)]) }}
-              </template>
-              <template v-else>{{ $t('projectConfig.shopSigningNone') }}</template>
-            </div>
-            <v-text-field
-              v-model="newSigningKey"
-              :label="$t('projectConfig.shopSigningKey')"
-              :hint="$t('projectConfig.shopSigningKeyHint')"
-              prepend-inner-icon="mdi-shield-key-outline"
-              variant="outlined"
-              density="comfortable"
-              persistent-hint
-              class="mb-3"
-            />
-            <div class="d-flex flex-wrap" style="gap: 8px">
-              <v-btn
-                variant="tonal"
-                color="primary"
-                prepend-icon="mdi-shield-key"
-                :loading="shopBusy"
-                :disabled="!newSigningKey.trim() || loading || saving"
-                @click="setSigningKey"
-              >
-                {{ $t('projectConfig.shopSigningSave') }}
-              </v-btn>
-              <v-btn
-                v-if="shopKey.signingKey"
-                variant="text"
-                color="error"
-                prepend-icon="mdi-shield-remove"
-                :disabled="shopBusy || loading || saving"
-                @click="deleteSigningKey"
-              >
-                {{ $t('projectConfig.shopSigningDelete') }}
-              </v-btn>
-            </div>
+                {{ $t('projectConfig.shopSigningUnavailable') }}
+              </v-alert>
+              <div class="text-body-2 mb-2">
+                <template v-if="shop.signingKey">
+                  {{ $t('projectConfig.shopSigningSet', [shop.signingKey.slice(-6)]) }}
+                </template>
+                <template v-else>{{ $t('projectConfig.shopSigningNone') }}</template>
+              </div>
+              <v-text-field
+                v-model="newSigningKey"
+                :label="$t('projectConfig.shopSigningKey')"
+                :hint="$t('projectConfig.shopSigningKeyHint')"
+                prepend-inner-icon="mdi-shield-key-outline"
+                variant="outlined"
+                density="comfortable"
+                persistent-hint
+                class="mb-3"
+              />
+              <div class="d-flex flex-wrap" style="gap: 8px">
+                <v-btn
+                  variant="tonal"
+                  color="primary"
+                  prepend-icon="mdi-shield-key"
+                  :loading="shopBusy"
+                  :disabled="!newSigningKey.trim() || loading || saving"
+                  @click="setSigningKey"
+                >
+                  {{ $t('projectConfig.shopSigningSave') }}
+                </v-btn>
+                <v-btn
+                  v-if="shop.signingKey"
+                  variant="text"
+                  color="error"
+                  prepend-icon="mdi-shield-remove"
+                  :disabled="shopBusy || loading || saving"
+                  @click="deleteSigningKey"
+                >
+                  {{ $t('projectConfig.shopSigningDelete') }}
+                </v-btn>
+              </div>
+            </template>
             <v-alert v-if="shopError" type="error" density="compact" class="mt-2">{{ shopError }}</v-alert>
           </template>
 
           <v-alert v-if="error" type="error" density="compact" class="mt-2">{{ error }}</v-alert>
           <div class="text-caption text-medium-emphasis mt-3">{{ $t('projectConfig.note') }}</div>
         </v-form>
+        <DirectoryPickerDialog
+          v-model="pickerOpen"
+          command="shopbrowsedirs"
+          :start="pickerStart"
+          @select="onGrantPicked"
+        />
       </v-card-text>
       <v-card-actions v-if="!loading">
         <v-spacer />

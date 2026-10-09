@@ -27,17 +27,20 @@ use HugoCMS\FileManager\MountResolver;
  * Geschrieben wird ausschließlich über FileService und einen eigenen
  * MountResolver mit genau einem Mount auf das Hugo-Quellverzeichnis. Der Mount
  * ist bewusst NICHT im Resolver der Redakteure registriert: Über ihn wäre sonst
- * die ganze Webseite schreibbar. Innerhalb des Mounts begrenzen zwei Listen,
- * was die Anbindung anfassen darf:
+ * die ganze Webseite schreibbar. Innerhalb des Mounts darf die Anbindung nur,
+ * was ein Administrator in den Projekteinstellungen freigegeben hat ([shop],
+ * {@see allowedPath()}):
  *
- *   - Bereiche ([shop] areas): Verzeichnisse (mit / am Ende) und einzelne
- *     Dateien. Vorgabe ist der Aufbau, den OpensourceERP erzeugt.
- *   - Endungen ({@see ACCEPT}): nur Text — kein PHP. Der Texteditor von
- *     HugoCMS schreibt ebenfalls kein PHP; die Anbindung soll nicht mehr
- *     dürfen als ein Redakteur ohne Dateityp-Einschränkung. Eine
- *     Einschränkung je Konto (file_types) gilt hier nicht: Die Anbindung
- *     meldet sich mit Schlüssel an, nicht als Benutzer, und nutzt eine eigene
- *     FileService-Instanz.
+ *   - Produktseiten ([shop] content_dir): nur Markdown.
+ *   - Kategorieübersicht ([shop] category_groups): genau diese eine Datei.
+ *   - Webseiten-Paket ({@see PACKAGE_DIR}, fest): die Endungen aus
+ *     {@see ACCEPT}, nur Text — kein PHP. Der Texteditor von HugoCMS schreibt
+ *     ebenfalls kein PHP; die Anbindung soll nicht mehr dürfen als ein
+ *     Redakteur ohne Dateityp-Einschränkung.
+ *
+ * Eine Einschränkung je Konto (file_types) gilt hier nicht: Die Anbindung
+ * meldet sich mit Schlüssel an, nicht als Benutzer, und nutzt eine eigene
+ * FileService-Instanz.
  *
  * Einzige Ausnahme sind die PHP-Einstiegspunkte des Webseiten-Pakets
  * ({@see SIGNED_PHP}: Weiterleiter und 404-Seite). Sie nimmt die Anbindung nur
@@ -49,15 +52,30 @@ use HugoCMS\FileManager\MountResolver;
  * Sodium-Erweiterung von PHP bleibt es beim Verbot.
  *
  * Gelöscht wird nur, was OpensourceERP bei der VORIGEN Übernahme selbst
- * geliefert hat (last-manifest.json). Von Hand angelegte Dateien in einem
- * Bereich — etwa content/de/produkt/_index.md — bleiben dadurch unberührt.
- * Die signierten PHP-Einstiegspunkte ({@see SIGNED_PHP}) löscht die Anbindung
- * nie: Sie werden ersetzt, entfernt nur von Hand.
+ * geliefert hat (last-manifest.json). Von Hand angelegte Dateien in einer
+ * Freigabe — etwa content/de/produkt/_index.md — bleiben dadurch unberührt.
+ * Das gilt auch, nachdem ein Administrator eine Freigabe verlegt hat: Die
+ * Seiten am alten Ort stammen aus einer Lieferung und gehen deshalb, statt
+ * verwaist mit alten Preisen veröffentlicht zu bleiben
+ * ({@see deletablePath()}). Die signierten PHP-Einstiegspunkte
+ * ({@see SIGNED_PHP}) löscht die Anbindung nie: Sie werden ersetzt, entfernt
+ * nur von Hand.
  */
 final class ShopSync
 {
     /** Endungen, die die Anbindung schreiben darf. */
     public const ACCEPT = ['md', 'json', 'html', 'js', 'css'];
+
+    /**
+     * Verzeichnis des Webseiten-Pakets (Vorlagen, Skripte, Konfiguration),
+     * relativ zur Hugo-Quelle. Fest, nicht wählbar: Die Vorlagen von
+     * OpensourceERP binden es unter diesem Namen ein.
+     */
+    public const PACKAGE_DIR = 'oserp-shop';
+
+    /** Freigaben, solange in [shop] nichts anderes steht: der Aufbau, den OpensourceERP erzeugt. */
+    public const DEFAULT_CONTENT_DIR = 'content/de/produkt';
+    public const DEFAULT_CATEGORY_GROUPS = 'data/category_groups.json';
 
     /**
      * Die einzigen PHP-Dateien, die die Anbindung schreiben darf — und nur
@@ -68,9 +86,6 @@ final class ShopSync
 
     /** Zweck der Signatur — sie taugt für nichts anderes. */
     private const SIGNATURE_CONTEXT = "hugocms-shop-php\n";
-
-    /** Bereiche, wenn [shop] areas fehlt: der Aufbau, den OpensourceERP erzeugt. */
-    public const DEFAULT_AREAS = ['content/de/produkt/', 'data/category_groups.json', 'oserp-shop/'];
 
     /** Höchstzahl der Dateien in einem Abgleich. */
     private const MAX_FILES = 20000;
@@ -91,14 +106,18 @@ final class ShopSync
     /**
      * @param string $source Hugo-Quellverzeichnis der Webseite
      * @param string $varDir Laufzeitverzeichnis, etwa var/shop/<sha1(Quelle)>
-     * @param list<string> $areas erlaubte Bereiche, relativ zur Quelle
+     * @param ?string $contentDir Freigabe der Produktseiten, relativ zur Quelle
+     *                            (null = unbrauchbar eingetragen, nichts freigegeben)
+     * @param ?string $categoryGroups Freigabe der Kategorieübersicht (eine Datei),
+     *                                relativ zur Quelle, null wie oben
      * @param ?string $signingKey öffentlicher Ed25519-Schlüssel von OpensourceERP
      *                            (Base64, aus [shop] signing_key), null = kein PHP
      */
     public function __construct(
         string $source,
         private readonly string $varDir,
-        private readonly array $areas,
+        private readonly ?string $contentDir,
+        private readonly ?string $categoryGroups,
         private readonly ?string $signingKey = null,
     ) {
         $this->signedPhp = self::signedPhpReady($signingKey);
@@ -358,10 +377,10 @@ final class ShopSync
                 continue;
             }
             try {
-                $path = $this->allowedPath($path);
+                $path = $this->deletablePath($path);
                 $target = $this->resolver->resolve($this->resolver->encodeId('shop', $path), true);
             } catch (ApiException) {
-                // Gibt es nicht mehr oder liegt inzwischen außerhalb der Bereiche
+                // Gibt es nicht mehr
                 continue;
             }
             $this->files->remove($this->mount, $target['abs']);
@@ -391,40 +410,68 @@ final class ShopSync
     // --- Hilfen ----------------------------------------------------------------
 
     /**
-     * Prüft einen Pfad der Lieferung: relativ, ohne .. und ohne versteckte
-     * Bestandteile, innerhalb eines Bereichs und mit erlaubter Endung.
+     * Prüft einen Pfad der Lieferung: gültig ({@see validPath()}), innerhalb
+     * einer Freigabe und mit der Endung, die diese Freigabe erlaubt.
      */
     private function allowedPath(string $path): string
+    {
+        $path = $this->validPath($path);
+        $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+
+        if ($this->categoryGroups !== null && $path === $this->categoryGroups) {
+            // Kategorieübersicht: genau diese Datei, ihre Endung prüft schon
+            // die Freigabe (json)
+        } elseif (str_starts_with($path, self::PACKAGE_DIR . '/')) {
+            // PHP nur an den festen Pfaden und nur mit hinterlegtem Schlüssel —
+            // der Mount nimmt php dann zwar an, aber nicht an beliebiger Stelle
+            if ($extension === 'php' && (!$this->signedPhp || !in_array($path, self::SIGNED_PHP, true))) {
+                throw ApiException::denied('SHOP-FILETYPE-NOT-ALLOWED', [$path]);
+            }
+        } elseif ($this->contentDir !== null && str_starts_with($path, $this->contentDir . '/')) {
+            // Produktseiten: nur Markdown
+            if ($extension !== 'md') {
+                throw ApiException::denied('SHOP-FILETYPE-NOT-ALLOWED', [$path]);
+            }
+        } else {
+            throw ApiException::denied('SHOP-PATH-NOT-ALLOWED', [$path]);
+        }
+        if (!$this->mount->accepts(basename($path))) {
+            throw ApiException::denied('SHOP-FILETYPE-NOT-ALLOWED', [$path]);
+        }
+
+        return $path;
+    }
+
+    /**
+     * Darf die Übernahme einen Pfad der vorigen Lieferung löschen? Bewusst
+     * NICHT gegen die heutigen Freigaben geprüft: Hat ein Administrator eine
+     * Freigabe verlegt, liegen die alten Seiten außerhalb — sie stammen aber
+     * aus einer Lieferung, die damals geprüft wurde, und sollen nicht verwaist
+     * veröffentlicht bleiben. Was in last-manifest.json steht, hat nur die
+     * Übernahme selbst geschrieben. Gelöscht wird trotzdem nur Gültiges mit
+     * einer Endung der Anbindung, nie PHP.
+     */
+    private function deletablePath(string $path): string
+    {
+        $path = $this->validPath($path);
+        if (!in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), self::ACCEPT, true)) {
+            throw ApiException::denied('SHOP-FILETYPE-NOT-ALLOWED', [$path]);
+        }
+
+        return $path;
+    }
+
+    /** Relativ, ohne .. und ohne versteckte Bestandteile. */
+    private function validPath(string $path): string
     {
         if (str_contains($path, "\0") || str_contains($path, '\\')) {
             throw ApiException::badRequest('SHOP-PATH-INVALID', [$path]);
         }
-        $segments = explode('/', $path);
-        foreach ($segments as $segment) {
+        foreach (explode('/', $path) as $segment) {
             // leer (//, führendes /), . und .. sowie versteckte Namen wie .htaccess
             if ($segment === '' || str_starts_with($segment, '.')) {
                 throw ApiException::badRequest('SHOP-PATH-INVALID', [$path]);
             }
-        }
-
-        $inside = false;
-        foreach ($this->areas as $area) {
-            if (str_ends_with($area, '/') ? str_starts_with($path, $area) : $path === $area) {
-                $inside = true;
-                break;
-            }
-        }
-        if (!$inside) {
-            throw ApiException::denied('SHOP-PATH-NOT-ALLOWED', [$path]);
-        }
-        // PHP nur an den festen Pfaden und nur mit hinterlegtem Schlüssel —
-        // der Mount nimmt php dann zwar an, aber nicht an beliebiger Stelle
-        if (strtolower(pathinfo($path, PATHINFO_EXTENSION)) === 'php'
-            && (!$this->signedPhp || !in_array($path, self::SIGNED_PHP, true))) {
-            throw ApiException::denied('SHOP-FILETYPE-NOT-ALLOWED', [$path]);
-        }
-        if (!$this->mount->accepts(basename($path))) {
-            throw ApiException::denied('SHOP-FILETYPE-NOT-ALLOWED', [$path]);
         }
 
         return $path;

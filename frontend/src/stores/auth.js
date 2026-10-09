@@ -43,6 +43,7 @@ export const useAuthStore = defineStore('auth', {
     siteUrlDetected: '', // aus der Hugo-baseURL erkannte Adresse (Vorbelegung, geteilt)
     review: false, // gestaffelte Veröffentlichung: Entwürfe zur Freigabe (Hugo-Projekt)
     linkScan: false, // Hyperlink-Suche in content/ und public/ (Hugo-Projekt, frei)
+    shop: false, // Shop-Erweiterung (Anbindung an OpensourceERP) eingeschaltet, kein Pro-Merkmal
     // Automatikmodus des Cron-Verbesserers dieser Webseite ([improve] der
     // Mount-Konfiguration): Ist `auto` an, terminiert der Cron jeden erzeugten
     // Entwurf gleich selbst — zufällig im Tagesfenster, höchstens perDay je Tag.
@@ -119,6 +120,7 @@ export const useAuthStore = defineStore('auth', {
       this.siteUrlDetected = data.siteUrlDetected ?? ''
       this.review = data.review ?? false
       this.linkScan = data.linkScan ?? false
+      this.shop = data.shop ?? false
       this.improve = data.improve ?? { auto: false, windowStart: '07:00', windowEnd: '16:00', perDay: 3, effectivePerDay: 3, skipWeekends: true }
       this.cronPause = data.cronPause ?? { pauseBuild: false, pauseImprove: false, pauseHealthcheck: false }
       this.features = data.features ?? {}
@@ -199,6 +201,13 @@ export const useAuthStore = defineStore('auth', {
     // Entfernt den Signaturschlüssel; PHP nimmt die Anbindung danach nicht mehr an.
     async shopSigningKeyDelete() {
       return api.post('shopsigningkeydelete')
+    },
+
+    // Schaltet die Shop-Erweiterung um ({ enabled }) und/oder speichert die
+    // Freigaben ({ contentDir, categoryGroups, images, thumbnails }). Die
+    // Antwort ist der neue Stand wie projectconfig.shop.
+    async shopSettingsSet(fields) {
+      return api.post('shopsettingsset', fields)
     },
 
     // Prüft den seo-success-Schlüssel (eingegeben oder hinterlegt) gegen den

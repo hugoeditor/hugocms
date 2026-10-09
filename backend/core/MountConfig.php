@@ -92,28 +92,37 @@ use HugoCMS\FileManager\Exception\ApiException;
  *                          im Dialog kommt er vom Client, beim Cron von hier.
  *                          Leer = nur die Nummer. Standard: siehe unten.
  *
- * Reservierte Sektion [shop] (kein Mount): Zugang der Shop-Anbindung
- * (OpensourceERP). Ist ein Schlüssel hinterlegt, darf OpensourceERP die
- * shop*-Befehle dieser Webseite ohne Sitzung aufrufen ({@see Shop\ShopKey}).
- * Geschrieben wird die Sektion ausschließlich über die Projekteinstellungen
- * (Befehle shopkeycreate/shopkeydelete), nie von Hand.
+ * Reservierte Sektion [shop] (kein Mount): Shop-Erweiterung (Anbindung an
+ * OpensourceERP). Ist sie eingeschaltet und ein Schlüssel hinterlegt, darf
+ * OpensourceERP die shop*-Befehle dieser Webseite ohne Sitzung aufrufen
+ * ({@see Shop\ShopKey}). Geschrieben wird die Sektion über die
+ * Projekteinstellungen (shopsettingsset, shopkeycreate/shopkeydelete,
+ * shopsigningkeyset/shopsigningkeydelete), nur von Administratoren.
+ *   enabled     Shop-Erweiterung an (true) oder aus. Fehlt der Eintrag, gilt
+ *               sie als eingeschaltet, wenn ein Schlüssel hinterlegt ist — so
+ *               bleiben Shops aus der Zeit vor dem Schalter am Netz.
  *   key_hash    Hash des Schlüssels (sha256:…). Der Schlüssel selbst steht nirgends.
  *   key_hint    letzte vier Zeichen des Schlüssels, zum Wiedererkennen.
  *   key_created Zeitpunkt der Erzeugung (ISO 8601).
- *   areas       (optional, von Hand) Bereiche, die die Anbindung beschreiben
- *               darf, kommagetrennt und relativ zur Hugo-Quelle: Verzeichnisse
- *               mit / am Ende, sonst einzelne Dateien. Standard: der Aufbau,
- *               den OpensourceERP erzeugt ({@see Shop\ShopSync::DEFAULT_AREAS}).
- *   images      (optional, von Hand) Verzeichnis der Produktbilder, relativ zur
- *               Hugo-Quelle. Standard: static/images/products.
- *   thumbnails  (optional, von Hand) Verzeichnis, in das HugoCMS die
- *               Vorschaubilder schreibt. Standard: static/images/thumbnails.
+ *   Freigaben, jeweils relativ zur Hugo-Quelle, ohne .. und ohne versteckte
+ *   Bestandteile ({@see shopGrantPath()}). Ein unbrauchbarer Eintrag gibt
+ *   nichts frei (Hinweis SHOP-GRANT-UNUSABLE) — lieber steht der Shop, als
+ *   dass die Anbindung stillschweigend an die Vorgabe schreibt:
+ *   content_dir     Produktseiten (nur Markdown). Standard: content/de/produkt.
+ *   category_groups Kategorieübersicht, genau eine .json-Datei.
+ *                   Standard: data/category_groups.json.
+ *   images          Produktbilder, aus denen HugoCMS die Vorschaubilder
+ *                   erzeugt. Standard: static/images/products.
+ *   thumbnails      Vorschaubilder, die HugoCMS schreibt.
+ *                   Standard: static/images/thumbnails.
+ *   Das Webseiten-Paket liegt fest in oserp-shop/ ({@see Shop\ShopSync::PACKAGE_DIR}).
+ *   areas       wird nicht mehr ausgewertet (abgelöst durch die Freigaben,
+ *               Hinweis SHOP-AREAS-OBSOLETE); das Speichern der Freigaben
+ *               entfernt den Eintrag.
  *   signing_key (optional) öffentlicher Ed25519-Schlüssel von OpensourceERP,
  *               Base64. Nur damit nimmt die Anbindung die PHP-Einstiegspunkte
  *               des Pakets an, und nur signiert ({@see Shop\ShopSync::SIGNED_PHP}).
- *               Gesetzt über die Projekteinstellungen
- *               (shopsigningkeyset/shopsigningkeydelete), nie über die
- *               shop*-Befehle der Anbindung.
+ *               Nie über die shop*-Befehle der Anbindung gesetzt.
  */
 final class MountConfig
 {
@@ -127,6 +136,17 @@ final class MountConfig
     private const CRON_SECTION = 'cron';
     private const GIT_SECTION = 'git';
     private const SHOP_SECTION = 'shop';
+
+    /**
+     * Freigaben der Shop-Anbindung: Schlüssel in [shop] => [Feld im Ergebnis,
+     * eine Datei (true) statt eines Verzeichnisses, Vorgabe].
+     */
+    public const SHOP_GRANTS = [
+        'content_dir' => ['contentDir', false, Shop\ShopSync::DEFAULT_CONTENT_DIR],
+        'category_groups' => ['categoryGroups', true, Shop\ShopSync::DEFAULT_CATEGORY_GROUPS],
+        'images' => ['images', false, Shop\ShopThumbnails::DEFAULT_IMAGES],
+        'thumbnails' => ['thumbnails', false, Shop\ShopThumbnails::DEFAULT_THUMBNAILS],
+    ];
 
     /** Alle reservierten Sektionsnamen — kein Mount darf so heißen. */
     private const RESERVED_SECTIONS = [
@@ -212,48 +232,10 @@ final class MountConfig
      *   improve: array{auto: bool, windowStart: string, windowEnd: string, perDay: int, skipWeekends: bool},
      *   cron: array{pauseBuild: bool, pauseImprove: bool, pauseHealthcheck: bool},
      *   git: array{autoCommit: bool, commitMessage: string, commitMessagePending: string},
-     *   shop: array{keyHash: ?string, keyHint: ?string, keyCreated: ?string, areas: list<string>, images: string, thumbnails: string, signingKey: ?string},
+     *   shop: array{enabled: bool, keyHash: ?string, keyHint: ?string, keyCreated: ?string, contentDir: ?string, categoryGroups: ?string, images: ?string, thumbnails: ?string, signingKey: ?string},
      *   warnings: list<array{key: string, params: list<mixed>}>
      * }
      */
-    /**
-     * Zerlegt [shop] areas. Ungültige Einträge (absolut, mit .. oder
-     * versteckten Bestandteilen) fallen weg.
-     *
-     * @return list<string>
-     */
-    private static function shopAreas(string $value): array
-    {
-        $areas = [];
-        foreach (explode(',', $value) as $area) {
-            $area = trim(str_replace('\\', '/', $area));
-            $directory = str_ends_with($area, '/');
-            $segments = array_values(array_filter(explode('/', $area), static fn ($s) => $s !== ''));
-            $valid = $segments !== [] && !str_starts_with($area, '/');
-            foreach ($segments as $segment) {
-                if ($segment === '..' || str_starts_with($segment, '.')) {
-                    $valid = false;
-                }
-            }
-            if ($valid) {
-                $areas[] = implode('/', $segments) . ($directory ? '/' : '');
-            }
-        }
-
-        return array_values(array_unique($areas));
-    }
-
-    /**
-     * Ein Verzeichnis der Shop-Anbindung, relativ zur Hugo-Quelle. Leer oder
-     * ungültig (absolut, mit .. oder Verstecktem) ergibt die Vorgabe.
-     */
-    private static function shopDirectory(mixed $value, string $default): string
-    {
-        $areas = self::shopAreas(trim((string) $value) . '/');
-
-        return count($areas) === 1 ? rtrim($areas[0], '/') : $default;
-    }
-
     public static function load(string $configPath): array
     {
         if (!is_file($configPath) || !is_readable($configPath)) {
@@ -284,10 +266,8 @@ final class MountConfig
             'changelogPaths' => [self::GIT_CHANGELOG_PATH_DEFAULT],
             'tagLabel' => self::GIT_TAG_LABEL_DEFAULT,
         ];
-        $shop = ['keyHash' => null, 'keyHint' => null, 'keyCreated' => null, 'areas' => Shop\ShopSync::DEFAULT_AREAS,
-                 'images' => Shop\ShopThumbnails::DEFAULT_IMAGES, 'thumbnails' => Shop\ShopThumbnails::DEFAULT_THUMBNAILS,
-                 'signingKey' => null];
         $warnings = [];
+        $shop = self::shopSection([], $configPath, $warnings);
 
         foreach ($raw as $name => $section) {
             if (!is_array($section)) {
@@ -362,38 +342,9 @@ final class MountConfig
                 continue;
             }
 
-            // Zugang der Shop-Anbindung (optional, pro Webseite). Nur der Hash;
-            // ein leerer Wert zählt als „kein Schlüssel“.
+            // Shop-Erweiterung (optional, pro Webseite).
             if (strtolower((string) $name) === self::SHOP_SECTION) {
-                $hash = trim((string) ($section['key_hash'] ?? ''));
-                $hint = trim((string) ($section['key_hint'] ?? ''));
-                $created = trim((string) ($section['key_created'] ?? ''));
-                $areas = Shop\ShopSync::DEFAULT_AREAS;
-                if (trim((string) ($section['areas'] ?? '')) !== '') {
-                    $areas = self::shopAreas((string) $section['areas']);
-                    if ($areas === []) {
-                        // Nur Ungültiges eingetragen: lieber gar nichts
-                        // beschreibbar als stillschweigend die Vorgabe
-                        $warnings[] = ['key' => 'SHOP-AREAS-INVALID', 'params' => [$configPath]];
-                    }
-                }
-                $shop = [
-                    'keyHash' => $hash === '' ? null : $hash,
-                    'keyHint' => $hash === '' || $hint === '' ? null : $hint,
-                    'keyCreated' => $hash === '' || $created === '' ? null : $created,
-                    'areas' => $areas,
-                    'images' => self::shopDirectory($section['images'] ?? '', Shop\ShopThumbnails::DEFAULT_IMAGES),
-                    'thumbnails' => self::shopDirectory($section['thumbnails'] ?? '', Shop\ShopThumbnails::DEFAULT_THUMBNAILS),
-                    'signingKey' => null,
-                ];
-                $signing = trim((string) ($section['signing_key'] ?? ''));
-                if ($signing !== '') {
-                    $shop['signingKey'] = Shop\ShopSync::normalizeSigningKey($signing);
-                    if ($shop['signingKey'] === null) {
-                        // Unbrauchbarer Schlüssel: dann eben kein PHP, aber sichtbar
-                        $warnings[] = ['key' => 'SHOP-SIGNING-KEY-INVALID', 'params' => [$configPath]];
-                    }
-                }
+                $shop = self::shopSection($section, $configPath, $warnings);
                 continue;
             }
 
@@ -473,6 +424,89 @@ final class MountConfig
             'shop' => $shop,
             'warnings' => $warnings,
         ];
+    }
+
+    /**
+     * Liest die [shop]-Sektion. Vom Schlüssel steht nur der Hash da; ein
+     * leerer Wert zählt als „kein Schlüssel“.
+     *
+     * @param array<string, mixed> $section
+     * @param list<array{key: string, params: list<mixed>}> $warnings
+     * @return array{enabled: bool, keyHash: ?string, keyHint: ?string, keyCreated: ?string, contentDir: ?string, categoryGroups: ?string, images: ?string, thumbnails: ?string, signingKey: ?string}
+     */
+    private static function shopSection(array $section, string $configPath, array &$warnings): array
+    {
+        $hash = trim((string) ($section['key_hash'] ?? ''));
+        $hint = trim((string) ($section['key_hint'] ?? ''));
+        $created = trim((string) ($section['key_created'] ?? ''));
+        $shop = [
+            // Fehlt der Schalter, hängt er am Schlüssel: Shops aus der Zeit vor
+            // dem Schalter laufen weiter, neue Webseiten bleiben aus, bis ein
+            // Administrator die Erweiterung einschaltet.
+            'enabled' => array_key_exists('enabled', $section)
+                ? filter_var($section['enabled'], FILTER_VALIDATE_BOOLEAN)
+                : $hash !== '',
+            'keyHash' => $hash === '' ? null : $hash,
+            'keyHint' => $hash === '' || $hint === '' ? null : $hint,
+            'keyCreated' => $hash === '' || $created === '' ? null : $created,
+            'signingKey' => null,
+        ];
+        foreach (self::SHOP_GRANTS as $key => [$field, $file, $default]) {
+            $value = trim((string) ($section[$key] ?? ''));
+            $shop[$field] = $value === '' ? $default : self::shopGrantPath($value, $file);
+            // Vorschaubilder tragen den Namen ihres Produktbilds: im selben
+            // Verzeichnis überschrieben sie es
+            if ($field === 'thumbnails' && $shop[$field] !== null && $shop[$field] === $shop['images']) {
+                $shop[$field] = null;
+            }
+            if ($shop[$field] === null) {
+                // Unbrauchbar eingetragen: lieber nichts freigegeben als
+                // stillschweigend die Vorgabe
+                $warnings[] = ['key' => 'SHOP-GRANT-UNUSABLE', 'params' => [$key, $configPath]];
+            }
+        }
+        if (array_key_exists('areas', $section)) {
+            $warnings[] = ['key' => 'SHOP-AREAS-OBSOLETE', 'params' => [$configPath]];
+        }
+        $signing = trim((string) ($section['signing_key'] ?? ''));
+        if ($signing !== '') {
+            $shop['signingKey'] = Shop\ShopSync::normalizeSigningKey($signing);
+            if ($shop['signingKey'] === null) {
+                // Unbrauchbarer Schlüssel: dann eben kein PHP, aber sichtbar
+                $warnings[] = ['key' => 'SHOP-SIGNING-KEY-INVALID', 'params' => [$configPath]];
+            }
+        }
+
+        return $shop;
+    }
+
+    /**
+     * Prüft eine Freigabe der Shop-Anbindung und bringt sie in die
+     * gespeicherte Form: relativ zur Hugo-Quelle, mit / getrennt, ohne / am
+     * Anfang und Ende. Abgewiesen werden absolute Pfade, .., versteckte
+     * Bestandteile (.git, .htaccess), die Quelle selbst und Zeichen außer
+     * Buchstaben, Ziffern, - _ . und Leerzeichen (die Mount-Datei setzt Werte
+     * in Anführungszeichen); eine Datei ($file) muss auf .json enden.
+     *
+     * @return ?string null, wenn der Wert unbrauchbar ist
+     */
+    public static function shopGrantPath(string $value, bool $file): ?string
+    {
+        $value = trim(str_replace('\\', '/', $value));
+        if ($value === '' || self::isAbsolute($value) || ($file && str_ends_with($value, '/'))) {
+            return null;
+        }
+        $segments = array_values(array_filter(explode('/', $value), static fn (string $s): bool => $s !== ''));
+        foreach ($segments as $segment) {
+            if (str_starts_with($segment, '.') || preg_match('/^[\p{L}\p{N}_\-. ]+$/u', $segment) !== 1) {
+                return null;
+            }
+        }
+        if ($segments === [] || ($file && strtolower(pathinfo(end($segments), PATHINFO_EXTENSION)) !== 'json')) {
+            return null;
+        }
+
+        return implode('/', $segments);
     }
 
     /**
