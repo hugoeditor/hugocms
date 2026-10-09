@@ -53,9 +53,11 @@ offensichtlich ist — die ausführliche Funktionsübersicht steht in der README
 - **Sprache**: Kommentare, Commit-Messages und UI-Texte auf klarem Hochdeutsch
   (siehe globale `~/.claude/CLAUDE.md`). Fachbegriffe (Mount, Commit, Cache)
   bleiben.
-- **Shell-Skripte auf Englisch**: Skripte unter `bin/` (und generell alle
-  Shell-Skripte) sind für Profi-Admins gedacht — ihr Kommentar- und Terminal-
-  Ausgabe-Text ist **englisch**.
+- **Ausgelieferte Shell-Skripte auf Englisch**: Skripte, die mit
+  `hugocms-release` ausgeliefert werden (z. B. unter `bin/`), sind für
+  Profi-Admins gedacht — ihr Kommentar- und Terminal-Ausgabe-Text ist
+  **englisch**. Interne Entwicklungsskripte unter `scripts/` (z. B.
+  `packaging.sh`) bleiben auf Deutsch.
 - **Erzeugte Mount-Datei mehrsprachig**: Der lesbare Text der von `install.sh`
   erzeugten `mounts/<hash>.ini` (die `label`-Werte im CMS-Dateibaum, die
   Kopfzeilen und der `[hugo]`-Kommentar) folgt `install.sh --lang=en|de`
