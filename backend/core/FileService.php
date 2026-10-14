@@ -28,6 +28,21 @@ final class FileService
     /** Obergrenze besuchter Einträge je Suche (Schutz vor Endlos-Bäumen). */
     private const SEARCH_VISIT_LIMIT = 20_000;
 
+    /**
+     * Grenzen der Inhaltssuche. Sie läuft in EINEM Request (kein Index, kein
+     * Hintergrundlauf), deshalb begrenzen Bytes je Datei, Bytes je Lauf und
+     * Zeit den Aufwand — auf Shared Hosting bricht ein Request sonst ab, bevor
+     * er antworten kann. Beim Erreichen einer Grenze endet die Suche sauber
+     * mit „truncated“.
+     */
+    private const SEARCH_FILE_BYTES = 1_048_576; // 1 MiB je Datei
+    private const SEARCH_TOTAL_BYTES = 67_108_864; // 64 MiB je Lauf
+    private const SEARCH_TIME_LIMIT = 8.0; // Sekunden
+    /** So viel vom Dateianfang entscheidet, ob eine Datei Text oder Binär ist. */
+    private const SEARCH_SNIFF_BYTES = 512;
+    /** Zeichen je Seite um die Fundstelle im Vorschauausschnitt. */
+    private const SEARCH_SNIPPET_CONTEXT = 40;
+
     /** So viel vom Dateianfang genügt, um das Front Matter zu lesen. */
     private const FRONT_MATTER_BYTES = 8192;
 
@@ -598,45 +613,158 @@ final class FileService
     // --- Stufe 4: Suche ------------------------------------------------------
 
     /**
-     * Rekursive Namenssuche (Teilstring, ohne Groß-/Kleinschreibung) ab einem
-     * Verzeichnis. Versteckte Einträge (inkl. .trash) bleiben außen vor. Die
-     * Treffer tragen zusätzlich "path" — den Pfad relativ zur Suchwurzel.
+     * Rekursive Suche ab einem Verzeichnis — nach dem Vorbild von Nemo mit
+     * zwei Kriterien, die beide erfüllt sein müssen:
      *
-     * @return list<array>
+     * - $pattern (Dateiname): Enthält er `*` oder `?`, gilt er als Muster
+     *   (fnmatch, Groß-/Kleinschreibung egal), sonst als Teilstring. Leer heißt
+     *   „jeder Name“.
+     * - $text (Inhalt): Teilstring ohne Groß-/Kleinschreibung. Leer heißt
+     *   „keine Inhaltsprüfung“. Mit Text zählen nur Dateien, die der Editor
+     *   öffnen dürfte (Endung, Benutzerfreigabe, Größe) und die keinen
+     *   Binärinhalt haben; Verzeichnisse scheiden aus. Treffer tragen dann
+     *   zusätzlich "line" (1-basiert) und "snippet" (Ausschnitt der Zeile).
+     *
+     * Versteckte Einträge (inkl. .trash) bleiben außen vor. Jeder Treffer
+     * trägt "path" — den Pfad relativ zur Suchwurzel. Die Suche endet mit
+     * truncated = true, sobald eine Grenze greift (Treffer, besuchte Einträge,
+     * gelesene Bytes, Zeit); die bis dahin gefundenen Treffer werden geliefert.
+     *
+     * @return array{entries: list<array>, truncated: bool}
      */
-    public function search(Mount $mount, string $rootRel, string $rootAbs, string $query): array
+    public function search(Mount $mount, string $rootRel, string $rootAbs, string $pattern, string $text = ''): array
     {
         $results = [];
         $visited = 0;
+        $bytes = 0;
+        $started = microtime(true);
+        $matchesName = self::nameMatcher($pattern);
         // Iterativ mit Stapel: [relativ zur Suchwurzel, absolut]
         $stack = [['', $rootAbs]];
 
-        while ($stack !== [] && count($results) < self::SEARCH_LIMIT && $visited < self::SEARCH_VISIT_LIMIT) {
+        while ($stack !== []) {
             [$dirPath, $dirAbs] = array_pop($stack);
             foreach (scandir($dirAbs) ?: [] as $name) {
                 if ($name === '' || $name[0] === '.') {
                     continue;
                 }
-                $visited++;
+                if (++$visited > self::SEARCH_VISIT_LIMIT || microtime(true) - $started > self::SEARCH_TIME_LIMIT) {
+                    return ['entries' => $results, 'truncated' => true];
+                }
                 $childPath = $dirPath === '' ? $name : $dirPath . '/' . $name;
                 $childAbs = $dirAbs . '/' . $name;
+                $isDir = is_dir($childAbs);
+                if ($isDir && !is_link($childAbs)) {
+                    $stack[] = [$childPath, $childAbs];
+                }
+                if (!$matchesName($name)) {
+                    continue;
+                }
 
-                if (mb_stripos($name, $query) !== false) {
-                    $rel = $rootRel === '' ? $childPath : $rootRel . '/' . $childPath;
-                    $entry = $this->entryInfo($mount, $rel, $childAbs);
-                    $entry['path'] = $childPath;
-                    $results[] = $entry;
-                    if (count($results) >= self::SEARCH_LIMIT) {
-                        break;
+                $hit = null;
+                if ($text !== '') {
+                    if ($isDir || !$this->isEditable($name) || !$this->userAllows($name)) {
+                        continue;
+                    }
+                    $size = (int) (filesize($childAbs) ?: 0);
+                    if ($size > self::SEARCH_FILE_BYTES) {
+                        continue; // zu groß für die Inhaltssuche: wird übersprungen
+                    }
+                    if ($bytes + $size > self::SEARCH_TOTAL_BYTES) {
+                        return ['entries' => $results, 'truncated' => true];
+                    }
+                    $bytes += $size;
+                    $hit = self::contentHit($childAbs, $text);
+                    if ($hit === null) {
+                        continue;
                     }
                 }
-                if (is_dir($childAbs) && !is_link($childAbs)) {
-                    $stack[] = [$childPath, $childAbs];
+
+                $rel = $rootRel === '' ? $childPath : $rootRel . '/' . $childPath;
+                $entry = $this->entryInfo($mount, $rel, $childAbs);
+                $entry['path'] = $childPath;
+                if ($hit !== null) {
+                    $entry += $hit;
+                }
+                $results[] = $entry;
+                if (count($results) >= self::SEARCH_LIMIT) {
+                    return ['entries' => $results, 'truncated' => true];
                 }
             }
         }
 
-        return $results;
+        return ['entries' => $results, 'truncated' => false];
+    }
+
+    /**
+     * Vergleichsfunktion für Dateinamen: Muster mit `*`/`?` über fnmatch
+     * (FNM_CASEFOLD faltet nur ASCII — für Dateinamen ausreichend), sonst
+     * Teilstring ohne Groß-/Kleinschreibung. Leeres Muster passt auf alles.
+     *
+     * @return \Closure(string): bool
+     */
+    private static function nameMatcher(string $pattern): \Closure
+    {
+        if ($pattern === '') {
+            return static fn (string $name): bool => true;
+        }
+        if (strpbrk($pattern, '*?') !== false) {
+            return static fn (string $name): bool => fnmatch($pattern, $name, FNM_CASEFOLD);
+        }
+
+        return static fn (string $name): bool => mb_stripos($name, $pattern) !== false;
+    }
+
+    /**
+     * Erste Fundstelle des Suchtexts in einer Datei: Zeilennummer (1-basiert)
+     * und ein Ausschnitt der Zeile um die Fundstelle. null, wenn die Datei
+     * nicht lesbar ist, Binärinhalt hat (NUL-Byte im Dateianfang) oder den
+     * Text nicht enthält. Ungültiges UTF-8 wird vor dem Vergleich bereinigt,
+     * damit die mb_-Funktionen verlässlich arbeiten.
+     *
+     * @return ?array{line: int, snippet: string}
+     */
+    private static function contentHit(string $abs, string $text): ?array
+    {
+        $content = @file_get_contents($abs);
+        if ($content === false || $content === '') {
+            return null;
+        }
+        if (str_contains(substr($content, 0, self::SEARCH_SNIFF_BYTES), "\0")) {
+            return null;
+        }
+        if (!mb_check_encoding($content, 'UTF-8')) {
+            $content = mb_convert_encoding($content, 'UTF-8', 'UTF-8');
+        }
+        $pos = mb_stripos($content, $text);
+        if ($pos === false) {
+            return null;
+        }
+
+        // Zeile der Fundstelle ausschneiden (Zeichenpositionen, nicht Bytes).
+        $before = mb_substr($content, 0, $pos);
+        $lineStart = mb_strrpos($before, "\n");
+        $lineStart = $lineStart === false ? 0 : $lineStart + 1;
+        $lineEnd = mb_strpos($content, "\n", $pos);
+        $line = mb_substr($content, $lineStart, $lineEnd === false ? null : $lineEnd - $lineStart);
+        $line = rtrim($line, "\r");
+
+        // Ausschnitt um die Fundstelle kürzen.
+        $offset = $pos - $lineStart;
+        $from = max(0, $offset - self::SEARCH_SNIPPET_CONTEXT);
+        $length = ($offset - $from) + mb_strlen($text) + self::SEARCH_SNIPPET_CONTEXT;
+        $snippet = trim(mb_substr($line, $from, $length));
+        if ($from > 0) {
+            $snippet = '…' . $snippet;
+        }
+        if ($from + $length < mb_strlen($line)) {
+            $snippet .= '…';
+        }
+
+        return [
+            'line' => substr_count($before, "\n") + 1,
+            'snippet' => $snippet,
+        ];
     }
 
     /**

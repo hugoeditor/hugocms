@@ -1,4 +1,5 @@
 <script setup>
+import { nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useFilesStore } from '../stores/files'
 
@@ -9,10 +10,25 @@ function crumb(item) {
   files.openDir(item.id)
 }
 
-// Enter im Filterfeld: rekursive Serversuche ab dem aktuellen Ordner.
+// Enter in einem der Suchfelder: rekursive Serversuche ab dem aktuellen
+// Ordner mit beiden Kriterien (Name und/oder Inhalt).
 function onSearch() {
-  const q = files.filter.trim()
-  if (q.length >= 2) files.search(q)
+  files.search()
+}
+
+// Inhaltssuche: zweites Feld nach Nemo-Vorbild, nur auf Wunsch sichtbar.
+// Beim Ausblenden wird sein Text verworfen, sonst suchte er unsichtbar mit.
+const contentOpen = ref(files.contentText !== '')
+const contentInput = ref(null)
+
+async function toggleContent() {
+  contentOpen.value = !contentOpen.value
+  if (contentOpen.value) {
+    await nextTick()
+    contentInput.value?.focus()
+  } else {
+    files.setContentText('')
+  }
 }
 
 // Entwurfsfilter umschalten: zeigt alle Seiten mit `draft: true` ab dem
@@ -138,7 +154,7 @@ function toggleDrafts() {
 
     <!-- Schnellfilter (tippen) und Serversuche (Enter) -->
     <div v-if="files.cwd" class="nemo-filter">
-      <v-icon icon="mdi-magnify" size="18" class="nemo-filter-icon" />
+      <v-icon :icon="files.searchBusy ? 'mdi-timer-sand' : 'mdi-magnify'" size="18" class="nemo-filter-icon" />
       <input
         :value="files.filter"
         :placeholder="t('search.placeholder')"
@@ -148,6 +164,33 @@ function toggleDrafts() {
         @keydown.escape="files.exitSearch()"
       />
     </div>
+
+    <!-- Inhaltssuche: Text, der in der Datei vorkommen muss -->
+    <div v-if="files.cwd && contentOpen" class="nemo-filter">
+      <v-icon icon="mdi-text-search" size="18" class="nemo-filter-icon" />
+      <input
+        ref="contentInput"
+        :value="files.contentText"
+        :placeholder="t('search.contentPlaceholder')"
+        class="nemo-filter-input"
+        @input="files.setContentText($event.target.value)"
+        @keydown.enter="onSearch"
+        @keydown.escape="files.exitSearch()"
+      />
+    </div>
+    <v-tooltip v-if="files.cwd" :text="t('search.contentHint')" location="bottom">
+      <template #activator="{ props }">
+        <button
+          v-bind="props"
+          class="nemo-iconbtn"
+          :class="{ active: contentOpen }"
+          :aria-pressed="contentOpen"
+          @click="toggleContent"
+        >
+          <v-icon icon="mdi-text-search" size="18" />
+        </button>
+      </template>
+    </v-tooltip>
 
     <!-- Entwurfsfilter: alle Seiten mit draft: true ab dem aktuellen Ordner -->
     <v-tooltip v-if="files.cwd" :text="t('search.draftsHint')" location="bottom">

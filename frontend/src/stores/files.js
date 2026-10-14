@@ -38,10 +38,15 @@ export const useFilesStore = defineStore('files', {
     viewerId: null, // im Bildbetrachter geöffneter Eintrag (oder null)
     editImageId: null, // im Bild-Editor geöffneter Eintrag (oder null)
 
-    // Serverseitige Suche (Stufe 4): aktiv, solange searchQuery gesetzt ist.
-    searchQuery: '',
+    // Serverseitige Suche (Stufe 4) nach Nemo-Vorbild: Dateiname (Teilstring
+    // oder Muster mit */?) und/oder Text im Inhalt. Aktiv, solange eines der
+    // beiden Kriterien gesetzt ist (Getter searchActive).
+    contentText: '', // Eingabefeld der Inhaltssuche (Gegenstück zu filter)
+    searchQuery: '', // Namenskriterium der laufenden Ergebnisanzeige
+    searchText: '', // Inhaltskriterium der laufenden Ergebnisanzeige
     searchResults: [],
     searchTruncated: false,
+    searchBusy: false, // Lauf läuft (Inhaltssuche liest Dateien, dauert spürbar)
     // Entwurfsfilter: zeigt ab dem aktuellen Verzeichnis alle Content-Dateien
     // mit `draft: true` im Front Matter. Nutzt dieselbe Ergebnisliste wie die
     // Suche — die beiden schließen einander aus.
@@ -74,11 +79,19 @@ export const useFilesStore = defineStore('files', {
     canBack: (s) => s.historyIndex > 0,
     canForward: (s) => s.historyIndex < s.history.length - 1,
     canUp: (s) => s.breadcrumb.length > 1,
+    // Schnellfilter auf das aktuelle Verzeichnis. Mit * oder ? gilt die
+    // Eingabe als Muster — dieselbe Regel wie bei der Serversuche, damit das
+    // Feld vor und nach Enter gleich reagiert.
     visibleEntries: (s) => {
       const q = s.filter.trim().toLowerCase()
       if (q === '') return s.entries
+      if (/[*?]/.test(q)) {
+        const re = new RegExp('^' + q.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$')
+        return s.entries.filter((e) => re.test(e.name.toLowerCase()))
+      }
       return s.entries.filter((e) => e.name.toLowerCase().includes(q))
     },
+    searchActive: (s) => s.searchQuery !== '' || s.searchText !== '',
     isSelected: (s) => (id) => s.selectedIds.includes(id),
     selectedCount: (s) => s.selectedIds.length,
     hasClipboard: (s) => s.clipboard.ids.length > 0,
@@ -197,6 +210,10 @@ export const useFilesStore = defineStore('files', {
       this.filter = value
     },
 
+    setContentText(value) {
+      this.contentText = value
+    },
+
     requestNew(kind) {
       this.newRequest = kind
     },
@@ -286,16 +303,29 @@ export const useFilesStore = defineStore('files', {
 
     // --- Stufe 4: Suche und Papierkorb ------------------------------------
 
-    async search(query) {
-      const q = query.trim()
-      if (!this.cwd || q.length < 2) return
-      const data = await api.get('search', { target: this.cwd.id, q })
-      this.searchQuery = data.query
-      this.draftFilter = false // Suche und Entwurfsfilter schließen einander aus
-      this.searchResults = data.entries
-      this.searchTruncated = data.truncated
-      this.selectedIds = []
-      this.selectionAnchor = null
+    // Serversuche ab dem aktuellen Ordner. Beide Kriterien stammen aus den
+    // Eingabefeldern der Werkzeugleiste; der Server verlangt für jedes
+    // angegebene mindestens zwei Zeichen und mindestens eines von beiden.
+    async search() {
+      const q = this.filter.trim()
+      const text = this.contentText.trim()
+      if (!this.cwd || this.searchBusy || (q === '' && text === '')) return
+      this.searchBusy = true
+      this.searchError = null
+      try {
+        const data = await api.get('search', { target: this.cwd.id, q, text })
+        this.searchQuery = data.query
+        this.searchText = data.text
+        this.draftFilter = false // Suche und Entwurfsfilter schließen einander aus
+        this.searchResults = data.entries
+        this.searchTruncated = data.truncated
+        this.selectedIds = []
+        this.selectionAnchor = null
+      } catch (e) {
+        this.searchError = e
+      } finally {
+        this.searchBusy = false
+      }
     },
 
     // Alle nicht veröffentlichten Seiten (draft: true) ab dem aktuellen
@@ -308,6 +338,7 @@ export const useFilesStore = defineStore('files', {
       try {
         const data = await api.get('draftsearch', { target: this.cwd.id })
         this.searchQuery = ''
+        this.searchText = ''
         this.draftFilter = true
         this.searchResults = data.entries
         this.searchTruncated = data.truncated
@@ -325,6 +356,7 @@ export const useFilesStore = defineStore('files', {
     // weil auch _list(), openTrash() und openAudit() diese Aktion nutzen.
     leaveSearch() {
       this.searchQuery = ''
+      this.searchText = ''
       this.draftFilter = false
       this.searchResults = []
       this.searchTruncated = false
@@ -332,13 +364,14 @@ export const useFilesStore = defineStore('files', {
 
     /**
      * Zurück aus Suchergebnissen oder Entwurfsfilter in die Ordneransicht:
-     * Suchzustand abräumen, das Eingabefeld leeren — sonst wirkt der stehen
+     * Suchzustand abräumen, die Eingabefelder leeren — sonst wirkt der stehen
      * gebliebene Text weiter als Schnellfilter — und das Verzeichnis frisch
      * laden, weil sich währenddessen etwas geändert haben kann.
      */
     async exitSearch() {
       this.leaveSearch()
       this.filter = ''
+      this.contentText = ''
       await this.refresh()
     },
 

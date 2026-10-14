@@ -35,7 +35,7 @@ function isMarkdown(entry) {
 function isContentPage(entry) {
   return auth.buildable
     && !!files.cwd?.contentDir
-    && !files.searchQuery
+    && !files.searchActive
     && entry?.type === 'file'
     && /\.(md|markdown|html?)$/i.test(entry.name || '')
 }
@@ -61,6 +61,19 @@ async function previewEntry(entry) {
 }
 
 const entries = computed(() => files.visibleEntries)
+
+// Kopfzeile und Leermeldung der Suchergebnisse: je nachdem, ob nach Name,
+// Inhalt oder beidem gesucht wurde, ein anderer Satz.
+const searchKind = computed(() => {
+  if (files.searchQuery && files.searchText) return 'Both'
+  return files.searchText ? 'Text' : ''
+})
+const searchHeadline = computed(() =>
+  t('search.resultsFor' + searchKind.value, [files.searchQuery || files.searchText, files.searchText]),
+)
+const searchEmptyText = computed(() =>
+  t('search.none' + searchKind.value, [files.searchQuery || files.searchText, files.searchText]),
+)
 
 // Der Entwurfsfilter wird in der Werkzeugleiste ausgelöst, die keine eigene
 // Meldezeile hat — der Fehler kommt deshalb über den Store hierher.
@@ -446,11 +459,11 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
         </div>
 
         <!-- Ergebnisliste: Serversuche (Stufe 4) oder Entwurfsfilter -->
-        <template v-if="files.searchQuery || files.draftFilter">
+        <template v-if="files.searchActive || files.draftFilter">
           <div class="nemo-search-head nemo-noselect">
             <v-icon :icon="files.draftFilter ? 'mdi-file-document-alert-outline' : 'mdi-magnify'" size="18" />
             <span v-if="files.draftFilter">{{ $t('search.draftsResults', [files.searchResults.length]) }}</span>
-            <span v-else>{{ $t('search.resultsFor', [files.searchQuery]) }}</span>
+            <span v-else>{{ searchHeadline }}</span>
             <span v-if="files.searchTruncated" class="nemo-search-trunc">
               {{ $t('search.truncated', [files.searchResults.length]) }}
             </span>
@@ -463,7 +476,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
           <div v-if="files.searchResults.length === 0" class="nemo-empty">
             <v-icon icon="mdi-file-search-outline" size="56" class="nemo-empty-icon" />
             <p v-if="files.draftFilter">{{ $t('search.draftsNone') }}</p>
-            <p v-else>{{ $t('search.none', [files.searchQuery]) }}</p>
+            <p v-else>{{ searchEmptyText }}</p>
           </div>
 
           <table v-else class="nemo-list">
@@ -471,6 +484,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
               <tr>
                 <th class="col-name">{{ $t('files.colName') }}</th>
                 <th>{{ $t('search.colPath') }}</th>
+                <th v-if="files.searchText" class="col-match">{{ $t('search.colMatch') }}</th>
                 <th class="col-size">{{ $t('files.colSize') }}</th>
                 <th class="col-date">{{ $t('files.colModified') }}</th>
               </tr>
@@ -492,6 +506,10 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
                   </div>
                 </td>
                 <td class="col-path">{{ entry.path }}</td>
+                <td v-if="files.searchText" class="col-match" :title="entry.snippet">
+                  <span class="nemo-match-line">{{ $t('search.line', [entry.line]) }}</span>
+                  {{ entry.snippet }}
+                </td>
                 <td class="col-size">{{ entry.type === 'dir' ? '' : formatSize(entry.size) }}</td>
                 <td class="col-date">{{ formatDate(entry.mtime) }}</td>
               </tr>
@@ -572,14 +590,14 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 
       <!-- Statusleiste -->
       <footer class="nemo-statusbar nemo-noselect">
-        <span v-if="files.searchQuery || files.draftFilter">
+        <span v-if="files.searchActive || files.draftFilter">
           {{ files.searchResults.length === 1 ? $t('statusbar.itemOne') : $t('statusbar.items', [files.searchResults.length]) }}
         </span>
         <span v-else>
           {{ files.entries.length === 1 ? $t('statusbar.itemOne') : $t('statusbar.items', [files.entries.length]) }}
         </span>
         <span v-if="files.selectedCount" class="nemo-status-sel">· {{ $t('statusbar.selected', [files.selectedCount]) }}</span>
-        <span v-if="files.filter && !files.searchQuery && !files.draftFilter" class="nemo-status-sel">· {{ entries.length }}/{{ files.entries.length }}</span>
+        <span v-if="files.filter && !files.searchActive && !files.draftFilter" class="nemo-status-sel">· {{ entries.length }}/{{ files.entries.length }}</span>
       </footer>
     </template>
 
@@ -724,6 +742,19 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 }
 .col-path {
   color: var(--mint-text-muted);
+}
+/* Fundstelle der Inhaltssuche: eine Zeile, Rest per Tooltip (title). */
+.col-match {
+  max-width: 36ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, 'DejaVu Sans Mono', Menlo, monospace;
+  font-size: 0.8rem;
+}
+.nemo-match-line {
+  color: var(--mint-text-muted);
+  margin-right: 6px;
 }
 
 .nemo-empty {

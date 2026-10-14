@@ -1238,6 +1238,29 @@ eindeutig zu genau einer Webpräsenz. Zwei Folgen für den Mehrfach-Betrieb:
   so dieselbe Quelle, teilen sie sich auch den Review-Ordner. Im sauber
   eingerichteten Mehrfach-Betrieb hat jede Domain ihre eigene Mount-Datei.
 
+## Dateisuche
+
+Das Suchfeld der Werkzeugleiste filtert beim Tippen das angezeigte
+Verzeichnis; **Enter** startet die rekursive Serversuche ab diesem Ordner
+(Befehl `search`). Nach dem Vorbild von Nemo gibt es zwei Kriterien, die beide
+erfüllt sein müssen:
+
+- **Dateiname.** Enthält die Eingabe `*` oder `?`, gilt sie als Muster
+  (`*.md`, `kontakt-?.html`; PHP `fnmatch`, Groß-/Kleinschreibung egal), sonst
+  als Teilstring. Der Schnellfilter folgt derselben Regel.
+- **Inhalt.** Der Knopf `mdi-text-search` blendet ein zweites Feld ein; der
+  Text muss (ohne Groß-/Kleinschreibung) in der Datei vorkommen. Geprüft werden
+  nur Dateien, die der Editor öffnen dürfte (Endung aus `[editor]`, Freigabe je
+  Benutzer) und die keinen Binärinhalt haben. Treffer zeigen Zeilennummer und
+  einen Ausschnitt der Fundstelle (`line`, `snippet`).
+
+Die Suche läuft in **einem Request** — ohne Index, Hintergrundprozess oder
+Shell-Aufruf (`find`/`grep`), damit sie auf jedem Hosting und nur innerhalb des
+Mounts arbeitet. Dafür begrenzen sie: 200 Treffer, 20.000 besuchte Einträge,
+1 MiB je gelesener Datei (größere werden übersprungen), 64 MiB je Lauf und
+8 Sekunden. Greift eine Grenze, liefert die Antwort die bis dahin gefundenen
+Treffer mit `truncated: true`; die Oberfläche weist darauf hin.
+
 ## Entwurfsfilter im Dateimanager
 
 Rechts neben dem Suchfeld schaltet ein Knopf (`mdi-file-document-alert-outline`)
@@ -1326,7 +1349,7 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `download` | GET     | `target` (ID)                        | Datei herunterladen (attachment)       |
 | `raw`      | GET     | `target` (ID)                        | Bild inline ausliefern (Betrachter)    |
 | `thumb`    | GET     | `target` (ID), `size`?               | Bildvorschau (GD; ohne GD das Original)|
-| `search`   | GET     | `target` (Ordner-ID), `q` (≥ 2 Z.)   | Rekursive Namenssuche (max. 200)       |
+| `search`   | GET     | `target` (Ordner-ID), `q`?, `text`? (je ≥ 2 Z., mind. eines) | Rekursive Suche nach Dateiname (`q`: Teilstring oder Muster mit `*`/`?`) und/oder Inhalt (`text`); Treffer mit `path`, bei Inhaltssuche auch `line` und `snippet`; `truncated`, sobald eine Grenze greift (siehe „Dateisuche") |
 | `draftsearch`| GET  | `target`                             | Entwurfsfilter: alle Content-Dateien ab `target` mit `draft: true` im Front Matter (rekursiv, gleiche Antwortform wie `search`) |
 | `linkscan` | GET     | `url` (≥ 2 Z.), `cursor`?            | Hyperlink-Suche in `content/` und im gebauten Ordner — EIN Segment je Aufruf (siehe „Hyperlink-Suche") |
 | `trashlist`| GET     | –                                    | Papierkörbe aller Mounts auflisten     |

@@ -1267,14 +1267,25 @@ final class Connector
         if (!is_dir($target['abs'])) {
             throw ApiException::badRequest('NOT-A-DIRECTORY');
         }
-        $q = trim($this->requireParam($request, 'q'));
-        if (mb_strlen($q) < 2) {
+        // Zwei Kriterien wie in Nemo: Dateiname (Teilstring oder Muster mit
+        // */?) und Text im Inhalt. Mindestens eines muss angegeben sein; ein
+        // angegebenes braucht mindestens zwei Zeichen, sonst trifft es fast
+        // alles und der Lauf verpufft im Treffer-Limit.
+        $q = trim($this->optionalParam($request, 'q'));
+        $text = trim($this->optionalParam($request, 'text'));
+        if ($q === '' && $text === '') {
+            throw ApiException::badRequest('PARAM-MISSING', ['q']);
+        }
+        if ($q !== '' && mb_strlen($q) < 2) {
             throw ApiException::badRequest('PARAM-INVALID', ['q']);
         }
+        if ($text !== '' && mb_strlen($text) < 2) {
+            throw ApiException::badRequest('PARAM-INVALID', ['text']);
+        }
 
-        $results = $this->files->search($target['mount'], $target['rel'], $target['abs'], $q);
+        $found = $this->files->search($target['mount'], $target['rel'], $target['abs'], $q, $text);
 
-        return ['query' => $q, 'entries' => $results, 'truncated' => count($results) >= FileService::SEARCH_LIMIT];
+        return ['query' => $q, 'text' => $text, 'entries' => $found['entries'], 'truncated' => $found['truncated']];
     }
 
     /**
@@ -7310,6 +7321,17 @@ final class Connector
         $value = $request[$name] ?? null;
         if (!is_string($value) || $value === '') {
             throw ApiException::badRequest('PARAM-MISSING', [$name]);
+        }
+
+        return $value;
+    }
+
+    /** Wie requireParam(), aber ein fehlender Parameter ergibt die leere Zeichenkette. */
+    private function optionalParam(array $request, string $name): string
+    {
+        $value = $request[$name] ?? '';
+        if (!is_string($value)) {
+            throw ApiException::badRequest('PARAM-INVALID', [$name]);
         }
 
         return $value;
