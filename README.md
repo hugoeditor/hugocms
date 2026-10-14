@@ -1432,6 +1432,7 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `shopupload`   | POST | `syncId`, `files` (Liste aus `path`, `content` Base64) | **Mit Schlüssel:** eine Portion in die Bereitstellung, noch nicht in die Webseite |
 | `shopcommit`   | POST | `syncId`                            | **Mit Schlüssel:** Übernahme — schreiben, nicht mehr Geliefertes löschen, Bau vormerken |
 | `shopthumbnails` | POST | `names` (Dateinamen), `size`?, `offset`? | **Mit Schlüssel:** Vorschaubilder der Produktbilder erzeugen, abschnittsweise (`next`, `done`) |
+| `shopdownloads` | POST | `names` (Dateinamen)                   | **Mit Schlüssel:** welche Download-Dateien der Produktseiten in der Freigabe „Downloads“ fehlen (`missing`, `invalid`) — nur lesen |
 
 Alle POST-Befehle verlangen das **CSRF-Token** aus `whoami` (Feld `csrf`) im
 Header `X-CSRF-Token`; sonst antwortet das Backend mit `ECSRF` (403).
@@ -1512,6 +1513,7 @@ begrenzt ist (`shopbrowsedirs`); OpensourceERP fragt sie über
 | Kategorieübersicht | `category_groups` | `data/category_groups.json` | genau diese Datei |
 | Produktbilder | `images` | `static/images/products` | nichts — HugoCMS liest sie für die Vorschaubilder |
 | Vorschaubilder | `thumbnails` | `static/images/thumbnails` | nichts — HugoCMS schreibt sie |
+| Downloads | `downloads` | `static/downloads` | nichts — HugoCMS prüft für OpensourceERP, ob die Dateien da sind (`shopdownloads`) |
 | Shop-Paket | fest `oserp-shop/` | – | `md`, `json`, `html`, `js`, `css`; PHP nur signiert |
 
 Ein unbrauchbarer Eintrag (absolut, `..`, versteckte Bestandteile, andere

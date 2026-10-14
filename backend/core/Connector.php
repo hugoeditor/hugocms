@@ -20,6 +20,7 @@ use HugoCMS\FileManager\Exception\ApiException;
 use HugoCMS\FileManager\Review\FrontMatter;
 use HugoCMS\FileManager\Review\ReviewStore;
 use HugoCMS\FileManager\Shop\ShopActivity;
+use HugoCMS\FileManager\Shop\ShopDownloads;
 use HugoCMS\FileManager\Shop\ShopKey;
 use HugoCMS\FileManager\Shop\ShopSync;
 use HugoCMS\FileManager\Shop\ShopThumbnails;
@@ -195,11 +196,11 @@ final class Connector
      * Kennung und Erzeugungszeit, nie der Schlüssel selbst ({@see ShopKey}).
      * Ohne Mount-Datei (custom.php) bleibt die Erweiterung aus.
      *
-     * @var array{enabled: bool, keyHash: ?string, keyHint: ?string, keyCreated: ?string, contentDir: ?string, categoryGroups: ?string, images: ?string, thumbnails: ?string, signingKey: ?string}
+     * @var array{enabled: bool, keyHash: ?string, keyHint: ?string, keyCreated: ?string, contentDir: ?string, categoryGroups: ?string, images: ?string, thumbnails: ?string, downloads: ?string, signingKey: ?string}
      */
     private array $shop = ['enabled' => false, 'keyHash' => null, 'keyHint' => null, 'keyCreated' => null,
                            'contentDir' => null, 'categoryGroups' => null, 'images' => null, 'thumbnails' => null,
-                           'signingKey' => null];
+                           'downloads' => null, 'signingKey' => null];
 
     /**
      * Automatischer Commit rund um die zeitgesteuerte Veröffentlichung, aus der
@@ -637,6 +638,7 @@ final class Connector
                 'shopupload' => $this->cmdShopUpload($request),
                 'shopcommit' => $this->cmdShopCommit($request),
                 'shopthumbnails' => $this->cmdShopThumbnails($request),
+                'shopdownloads' => $this->cmdShopDownloads($request),
                 'shopkeycreate' => $this->cmdShopKeyCreate(),
                 'shopkeydelete' => $this->cmdShopKeyDelete(),
                 'shopsigningkeyset' => $this->cmdShopSigningKeySet($request),
@@ -2351,7 +2353,7 @@ final class Connector
      * Projekteinstellungen sie sehen: relativ zur Hugo-Quelle, null =
      * unbrauchbar eingetragen. Das Paketverzeichnis steht fest.
      *
-     * @return array{contentDir: ?string, categoryGroups: ?string, images: ?string, thumbnails: ?string, package: string}
+     * @return array{contentDir: ?string, categoryGroups: ?string, images: ?string, thumbnails: ?string, downloads: ?string, package: string}
      */
     private function shopGrants(): array
     {
@@ -2360,6 +2362,7 @@ final class Connector
             'categoryGroups' => $this->shop['categoryGroups'],
             'images' => $this->shop['images'],
             'thumbnails' => $this->shop['thumbnails'],
+            'downloads' => $this->shop['downloads'],
             'package' => ShopSync::PACKAGE_DIR,
         ];
     }
@@ -2539,6 +2542,26 @@ final class Connector
 
             return $result + ['buildPending' => ShopSync::buildPending($this->shopVarDir())];
         });
+    }
+
+    /**
+     * Prüft für OpensourceERP, welche Download-Dateien der Produktseiten auf
+     * der Webseite fehlen — nur lesen, in der Freigabe „Downloads“. Kein
+     * Bau, keine Aufgabe im Systemstatus: eine Nachfrage, kein Vorgang.
+     */
+    private function cmdShopDownloads(array $request): array
+    {
+        $this->requireShopKey('shopdownloads');
+        $this->requireMethod('POST', false);
+        if ($this->hugo === null) {
+            throw new ApiException('ECONFIG', 500, 'HUGO-NOT-CONFIGURED');
+        }
+        if ($this->shop['downloads'] === null) {
+            throw new ApiException('ECONFIG', 409, 'SHOP-GRANT-UNUSABLE', ['downloads']);
+        }
+
+        return (new ShopDownloads((string) $this->hugo['source'], $this->shop['downloads']))
+            ->check($request['names'] ?? null);
     }
 
     /**

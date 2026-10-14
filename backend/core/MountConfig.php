@@ -115,6 +115,9 @@ use HugoCMS\FileManager\Exception\ApiException;
  *                   erzeugt. Standard: static/images/products.
  *   thumbnails      Vorschaubilder, die HugoCMS schreibt.
  *                   Standard: static/images/thumbnails.
+ *   downloads       Download-Dateien der Produktseiten (Datenblätter,
+ *                   Anleitungen). HugoCMS prüft für OpensourceERP, ob sie
+ *                   vorhanden sind (shopdownloads). Standard: static/downloads.
  *   Das Webseiten-Paket liegt fest in oserp-shop/ ({@see Shop\ShopSync::PACKAGE_DIR}).
  *   areas       wird nicht mehr ausgewertet (abgelöst durch die Freigaben,
  *               Hinweis SHOP-AREAS-OBSOLETE); das Speichern der Freigaben
@@ -146,6 +149,7 @@ final class MountConfig
         'category_groups' => ['categoryGroups', true, Shop\ShopSync::DEFAULT_CATEGORY_GROUPS],
         'images' => ['images', false, Shop\ShopThumbnails::DEFAULT_IMAGES],
         'thumbnails' => ['thumbnails', false, Shop\ShopThumbnails::DEFAULT_THUMBNAILS],
+        'downloads' => ['downloads', false, Shop\ShopDownloads::DEFAULT_DOWNLOADS],
     ];
 
     /** Alle reservierten Sektionsnamen — kein Mount darf so heißen. */
@@ -232,7 +236,7 @@ final class MountConfig
      *   improve: array{auto: bool, windowStart: string, windowEnd: string, perDay: int, skipWeekends: bool},
      *   cron: array{pauseBuild: bool, pauseImprove: bool, pauseHealthcheck: bool},
      *   git: array{autoCommit: bool, commitMessage: string, commitMessagePending: string},
-     *   shop: array{enabled: bool, keyHash: ?string, keyHint: ?string, keyCreated: ?string, contentDir: ?string, categoryGroups: ?string, images: ?string, thumbnails: ?string, signingKey: ?string},
+     *   shop: array{enabled: bool, keyHash: ?string, keyHint: ?string, keyCreated: ?string, contentDir: ?string, categoryGroups: ?string, images: ?string, thumbnails: ?string, downloads: ?string, signingKey: ?string},
      *   warnings: list<array{key: string, params: list<mixed>}>
      * }
      */
@@ -432,7 +436,7 @@ final class MountConfig
      *
      * @param array<string, mixed> $section
      * @param list<array{key: string, params: list<mixed>}> $warnings
-     * @return array{enabled: bool, keyHash: ?string, keyHint: ?string, keyCreated: ?string, contentDir: ?string, categoryGroups: ?string, images: ?string, thumbnails: ?string, signingKey: ?string}
+     * @return array{enabled: bool, keyHash: ?string, keyHint: ?string, keyCreated: ?string, contentDir: ?string, categoryGroups: ?string, images: ?string, thumbnails: ?string, downloads: ?string, signingKey: ?string}
      */
     private static function shopSection(array $section, string $configPath, array &$warnings): array
     {

@@ -116,6 +116,7 @@ const SHOP_GRANTS = [
   { field: 'categoryGroups', icon: 'mdi-file-tree-outline', file: true },
   { field: 'images', icon: 'mdi-image-multiple-outline', file: false },
   { field: 'thumbnails', icon: 'mdi-image-size-select-small', file: false },
+  { field: 'downloads', icon: 'mdi-download-outline', file: false },
 ]
 const shopGrants = ref({})
 

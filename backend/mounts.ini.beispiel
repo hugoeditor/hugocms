@@ -212,6 +212,8 @@ label = Alle Dateien
 ;                    erzeugt. Standard: static/images/products
 ;   thumbnails       Vorschaubilder, die HugoCMS schreibt (nicht dasselbe
 ;                    Verzeichnis wie images). Standard: static/images/thumbnails
+;   downloads        Download-Dateien der Produktseiten; HugoCMS prüft für
+;                    OpensourceERP, ob sie da sind. Standard: static/downloads
 ;   Das Shop-Paket liegt fest in oserp-shop/. Ein früheres „areas“ wird nicht
 ;   mehr ausgewertet; das Speichern der Freigaben entfernt es.
 ;   signing_key      öffentlicher Signaturschlüssel von OpensourceERP (Base64)
@@ -224,3 +226,4 @@ label = Alle Dateien
 ;category_groups = "data/category_groups.json"
 ;images = "static/images/products"
 ;thumbnails = "static/images/thumbnails"
+;downloads = "static/downloads"

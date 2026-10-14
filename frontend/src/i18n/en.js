@@ -198,6 +198,7 @@ export default {
       categoryGroups: 'Category overview',
       images: 'Product images',
       thumbnails: 'Thumbnails',
+      downloads: 'Downloads',
       package: 'Shop package',
     },
     shopGrantHint: {
@@ -205,6 +206,7 @@ export default {
       categoryGroups: 'A JSON file. The standard template set of OpensourceERP reads it at data/category_groups.json.',
       images: 'The product images live here; HugoCMS creates the thumbnails from them. OpensourceERP writes nothing here.',
       thumbnails: 'HugoCMS writes the thumbnails here — not the same directory as the product images.',
+      downloads: 'The download files of the product pages live here (data sheets, manuals). HugoCMS checks for OpensourceERP whether they exist; nothing is written here.',
       package: 'Templates, scripts and settings of the shop. Fixed, cannot be changed.',
     },
     shopGrantPick: 'Choose a directory in the Hugo project',
@@ -1722,6 +1724,8 @@ export default {
     'SHOP-THUMBNAILS-INVALID': 'The list of image names for the thumbnails is invalid.',
     'SHOP-THUMBNAILS-TOO-MANY': 'More than {0} images in one call.',
     'SHOP-THUMBNAILS-NO-GD': 'The PHP extension GD is missing — thumbnails cannot be created.',
+    'SHOP-DOWNLOADS-INVALID': 'The list of download file names is invalid.',
+    'SHOP-DOWNLOADS-TOO-MANY': 'More than {0} download files in one call.',
 
     'CONFIG-WRITE-FAILED': 'The configuration could not be written.',
     'RECONFIGURE-UNAVAILABLE': 'The configuration cannot be changed at runtime for this installation.',

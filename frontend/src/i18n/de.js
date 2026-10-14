@@ -198,6 +198,7 @@ export default {
       categoryGroups: 'Kategorieübersicht',
       images: 'Produktbilder',
       thumbnails: 'Vorschaubilder',
+      downloads: 'Downloads',
       package: 'Shop-Paket',
     },
     shopGrantHint: {
@@ -205,6 +206,7 @@ export default {
       categoryGroups: 'Eine JSON-Datei. Der Standard-Vorlagensatz von OpensourceERP liest sie unter data/category_groups.json.',
       images: 'Hier liegen die Produktbilder; HugoCMS erzeugt daraus die Vorschaubilder. OpensourceERP schreibt hier nichts.',
       thumbnails: 'Hierhin schreibt HugoCMS die Vorschaubilder — nicht dasselbe Verzeichnis wie die Produktbilder.',
+      downloads: 'Hier liegen die Download-Dateien der Produktseiten (Datenblätter, Anleitungen). HugoCMS prüft für OpensourceERP, ob sie vorhanden sind; geschrieben wird hier nichts.',
       package: 'Vorlagen, Skripte und Einstellungen des Shops. Fest, nicht änderbar.',
     },
     shopGrantPick: 'Verzeichnis im Hugo-Projekt auswählen',
@@ -1727,6 +1729,8 @@ export default {
     'SHOP-THUMBNAILS-INVALID': 'Die Liste der Bildnamen für die Vorschaubilder ist ungültig.',
     'SHOP-THUMBNAILS-TOO-MANY': 'Mehr als {0} Bilder in einem Aufruf.',
     'SHOP-THUMBNAILS-NO-GD': 'Die PHP-Erweiterung GD fehlt — Vorschaubilder lassen sich nicht erzeugen.',
+    'SHOP-DOWNLOADS-INVALID': 'Die Liste der Download-Dateinamen ist ungültig.',
+    'SHOP-DOWNLOADS-TOO-MANY': 'Mehr als {0} Download-Dateien in einem Aufruf.',
 
     'CONFIG-WRITE-FAILED': 'Die Konfiguration konnte nicht geschrieben werden.',
     'RECONFIGURE-UNAVAILABLE': 'Die Konfiguration lässt sich für diese Installation nicht im laufenden Betrieb ändern.',
