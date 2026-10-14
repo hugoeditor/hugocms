@@ -142,6 +142,34 @@ final class MountResolver
     }
 
     /**
+     * Ordnet einen absoluten Pfad (realpath) dem Ort zu, in dem er liegt —
+     * der Rückweg zu resolve(): Für den Verzeichnis-Picker, der außerhalb der
+     * Orte navigiert, aber nur innerhalb eines Orts anlegen darf. Liegt der
+     * Pfad in keinem Ort, null; bei verschachtelten Orten gewinnt der tiefste.
+     *
+     * @return ?array{mount: Mount, rel: string, id: string}
+     */
+    public function locate(string $real): ?array
+    {
+        $best = null;
+        foreach ($this->mounts as $mount) {
+            $root = $mount->root();
+            if ($real !== $root && !str_starts_with($real, $root . '/')) {
+                continue;
+            }
+            if ($best === null || strlen($root) > strlen($best->root())) {
+                $best = $mount;
+            }
+        }
+        if ($best === null) {
+            return null;
+        }
+        $rel = $real === $best->root() ? '' : substr($real, strlen($best->root()) + 1);
+
+        return ['mount' => $best, 'rel' => $rel, 'id' => $this->encodeId($best->name(), $rel)];
+    }
+
+    /**
      * Erzeugt die ID eines Kindes relativ zu einem aufgelösten Pfad.
      */
     public function childId(Mount $mount, string $parentRel, string $childName): string

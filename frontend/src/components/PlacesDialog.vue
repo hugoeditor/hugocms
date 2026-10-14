@@ -470,7 +470,7 @@ watch(open, (isOpen) => {
       </v-card-actions>
     </v-card>
 
-    <DirectoryPickerDialog v-model="pickerOpen" :start="newPath" @select="onPicked" />
+    <DirectoryPickerDialog v-model="pickerOpen" :start="newPath" :purpose="$t('places.pickerPurpose')" @select="onPicked" />
   </v-dialog>
 </template>
 

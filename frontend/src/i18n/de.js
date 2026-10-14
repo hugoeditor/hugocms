@@ -1069,6 +1069,7 @@ export default {
   },
   directoryPicker: {
     title: 'Verzeichnis auswählen',
+    titleFor: 'Verzeichnis auswählen für {0}',
     browse: 'Verzeichnis auf dem Server auswählen',
     root: 'Einstiegspunkt',
     up: 'Übergeordnetes Verzeichnis',
@@ -1081,9 +1082,14 @@ export default {
     protected: 'Das Backend-Verzeichnis von HugoCMS (oder ein Verzeichnis, das es enthält) kann kein Ort werden.',
     selection: 'Auswahl',
     apply: 'Übernehmen',
+    newFolder: 'Neuer Ordner',
+    newFolderHint: 'Ordner lassen sich nur innerhalb eines bestehenden Orts anlegen.',
+    newFolderName: 'Name des neuen Ordners',
+    create: 'Anlegen',
   },
   places: {
     open: 'Orte verwalten',
+    pickerPurpose: 'den neuen Ort',
     title: 'Orte verwalten',
     intro: 'Die Orte (Mounts) dieser Webseite. Umbenennen ändert nur den angezeigten Namen; Entfernen löscht nur den Eintrag, nicht die Dateien im Verzeichnis.',
     sharedHint: 'Diese Webseite nutzt die gemeinsame Rückfall-Datei mounts.ini. Änderungen gelten für alle Webseiten ohne eigene Mount-Datei.',

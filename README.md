@@ -233,6 +233,14 @@ Elternverzeichnisse der vorhandenen Orte, `/srv`, `/var/www`, `/mnt`,
 `/media`. Dieselbe Grenze prüft `mountadd` für einen eingetippten Pfad.
 Versteckte Verzeichnisse blendet der Picker aus.
 
+Der Picker kann einen **neuen Ordner anlegen**, aber nur, wenn das aktuelle
+Verzeichnis in einem bestehenden Ort liegt, der `mkdir` erlaubt: Die Antwort
+von `browsedirs` nennt dann in `mountTarget` die Ort-ID des Verzeichnisses,
+und der Dialog ruft den normalen Befehl `mkdir` auf — das Anlegen läuft damit
+über die Mount-Schicht (Einsperrung, Rechte, Namensprüfung). Außerhalb der
+Orte ist der Picker ein reiner Leser; ein neues Projektverzeichnis neben der
+Installation bleibt Sache des Administrators auf der Shell.
+
 ### Programmatische Alternative: `backend/custom/custom.php`
 
 Für dynamische Mounts oder eigene `AuthInterface`-Implementierungen. Die Datei
@@ -1374,7 +1382,7 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `mountadd` | POST    | `label`, `path`                      | Ort anlegen (nur Administratoren)       |
 | `mountupdate`| POST  | `name`, `label`?, `readonly`?, `permissions`?, `accept`? | Name und Einschränkungen eines Orts ändern (nur Administratoren) |
 | `mountdelete`| POST  | `name`                               | Ort entfernen, Dateien bleiben (nur Administratoren) |
-| `browsedirs` | GET   | `path`?                              | Unterverzeichnisse für den Verzeichnis-Picker (nur Administratoren) |
+| `browsedirs` | GET   | `path`?                              | Unterverzeichnisse für den Verzeichnis-Picker (nur Administratoren); `mountTarget` = Ort-ID des Verzeichnisses, wenn es in einem Ort mit `mkdir`-Recht liegt, sonst `null` |
 | `users`    | GET     | –                                    | **Pro/multiuser:** Konten, bekannte Webseiten, Rollen |
 | `usercreate`| POST   | `username`, `password`, `role`, `sites` | **Pro/multiuser:** Konto anlegen        |
 | `userupdate`| POST   | `username`, `role`?, `sites`?, `disabled`? | **Pro/multiuser:** Rolle, Zuordnung oder Sperre ändern |

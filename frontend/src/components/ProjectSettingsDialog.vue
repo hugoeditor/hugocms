@@ -867,6 +867,7 @@ async function submit() {
           v-model="pickerOpen"
           command="shopbrowsedirs"
           :start="pickerStart"
+          :purpose="pickerField ? $t('projectConfig.shopGrant.' + pickerField) : ''"
           @select="onGrantPicked"
         />
       </v-card-text>

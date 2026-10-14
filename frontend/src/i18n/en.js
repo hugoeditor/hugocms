@@ -1068,6 +1068,7 @@ export default {
   },
   directoryPicker: {
     title: 'Choose directory',
+    titleFor: 'Choose directory for {0}',
     browse: 'Choose a directory on the server',
     root: 'Entry point',
     up: 'Parent directory',
@@ -1080,9 +1081,14 @@ export default {
     protected: 'The HugoCMS backend directory (or a directory containing it) cannot become a place.',
     selection: 'Selection',
     apply: 'Apply',
+    newFolder: 'New folder',
+    newFolderHint: 'Folders can only be created inside an existing place.',
+    newFolderName: 'Name of the new folder',
+    create: 'Create',
   },
   places: {
     open: 'Manage places',
+    pickerPurpose: 'the new place',
     title: 'Manage places',
     intro: 'The places (mounts) of this site. Renaming only changes the displayed name; removing only deletes the entry, not the files in the directory.',
     sharedHint: 'This site uses the shared fallback file mounts.ini. Changes apply to every site without its own mount file.',

@@ -147,6 +147,14 @@ final class DirectoryBrowser
             ];
         }
 
+        // Anlegen eines Unterverzeichnisses bietet der Dialog nur an, wenn das
+        // aktuelle Verzeichnis in einem bestehenden Ort liegt, der mkdir
+        // erlaubt: Dann läuft das Anlegen über den normalen mkdir-Befehl und
+        // damit über die Mount-Schicht. Außerhalb der Orte wird nicht
+        // geschrieben — der Picker ist dort nur Leser.
+        $located = $this->resolver->locate($current);
+        $mountTarget = $located !== null && $located['mount']->allows('mkdir') ? $located['id'] : null;
+
         return [
             'roots' => $this->roots,
             'root' => $root,
@@ -156,6 +164,7 @@ final class DirectoryBrowser
             // Das eigene backend/ (und alles, was es enthält) darf kein Ort
             // werden — der Dialog bietet die Übernahme dann nicht an.
             'selectable' => !$this->resolver->isProtected($current),
+            'mountTarget' => $mountTarget,
             'entries' => array_values($entries),
             'fileCount' => $fileCount,
             'truncated' => $truncated,

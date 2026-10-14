@@ -10,7 +10,12 @@
 // ist es allein das Hugo-Projekt der Webseite (Freigaben der Shop-Anbindung).
 //
 //   <DirectoryPickerDialog v-model="open" :start="path" @select="path = $event" />
-import { computed, ref, watch } from 'vue'
+//
+// Anlegen eines neuen Ordners ist nur möglich, wenn das aktuelle Verzeichnis
+// in einem bestehenden Ort liegt (Antwortfeld mountTarget): Dann läuft es über
+// den normalen mkdir-Befehl und damit über die Mount-Schicht. Außerhalb der
+// Orte bleibt der Dialog ein reiner Leser.
+import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '../api/client'
 import { errorText } from '../i18n/apiMessage'
@@ -20,6 +25,9 @@ const props = defineProps({
   start: { type: String, default: '' },
   // Befehl, der die Verzeichnisse auflistet.
   command: { type: String, default: 'browsedirs' },
+  // Wofür das Verzeichnis gewählt wird, bereits übersetzt (z. B. „Vorschaubilder“);
+  // erscheint in der Überschrift. Leer = allgemeiner Titel.
+  purpose: { type: String, default: '' },
 })
 const emit = defineEmits(['select'])
 const open = defineModel({ type: Boolean, default: false })
@@ -35,10 +43,48 @@ const state = ref({
   parent: null,
   writable: false,
   selectable: false,
+  mountTarget: null,
   entries: [],
   fileCount: 0,
   truncated: false,
 })
+
+// Neuer Ordner: Eingabezeile unter der Pfadzeile, Enter legt an.
+const creating = ref(false)
+const newName = ref('')
+const nameInput = ref(null)
+const canCreate = computed(() => !!state.value.mountTarget && state.value.writable && !loading.value)
+
+async function startCreate() {
+  if (!canCreate.value) return
+  creating.value = true
+  newName.value = ''
+  await nextTick()
+  nameInput.value?.focus()
+}
+
+function cancelCreate() {
+  creating.value = false
+  newName.value = ''
+}
+
+async function create() {
+  const name = newName.value.trim()
+  if (!name || !canCreate.value) return
+  loading.value = true
+  error.value = ''
+  try {
+    await api.post('mkdir', { target: state.value.mountTarget, name })
+    creating.value = false
+    newName.value = ''
+    // In den neuen Ordner wechseln: „Übernehmen“ wählt ihn dann direkt.
+    await load(state.value.path + '/' + name)
+  } catch (e) {
+    error.value = errorText(t, e)
+  } finally {
+    loading.value = false
+  }
+}
 
 // Ein Verzeichnis ohne Unterverzeichnisse heißt nur dann „leer“, wenn auch
 // keine Dateien darin liegen.
@@ -70,6 +116,7 @@ function apply() {
 watch(open, (isOpen) => {
   if (isOpen) {
     state.value = { ...state.value, path: '' }
+    cancelCreate()
     load(props.start || '')
   }
 })
@@ -80,7 +127,7 @@ watch(open, (isOpen) => {
     <v-card>
       <v-card-title class="d-flex align-center">
         <v-icon icon="mdi-folder-search-outline" class="mr-2" />
-        {{ $t('directoryPicker.title') }}
+        {{ props.purpose ? $t('directoryPicker.titleFor', [props.purpose]) : $t('directoryPicker.title') }}
         <v-spacer />
         <v-btn icon="mdi-close" size="small" variant="text" @click="open = false" />
       </v-card-title>
@@ -100,7 +147,7 @@ watch(open, (isOpen) => {
           @update:model-value="load"
         />
 
-        <div class="d-flex align-center ga-2 mb-2">
+        <div class="d-flex align-center ga-2 mb-2 bg-grey-lighten-2">
           <v-btn
             size="small"
             variant="text"
@@ -109,9 +156,17 @@ watch(open, (isOpen) => {
             :title="$t('directoryPicker.up')"
             @click="load(state.parent)"
           />
-          <div class="text-body-2 text-medium-emphasis flex-grow-1 text-truncate" :title="state.path">
+          <div class="text-body-1 flex-grow-1 text-truncate" :title="state.path">
             {{ state.path }}
           </div>
+          <v-btn
+            size="small"
+            variant="text"
+            icon="mdi-folder-plus-outline"
+            :disabled="!canCreate"
+            :title="canCreate ? $t('directoryPicker.newFolder') : $t('directoryPicker.newFolderHint')"
+            @click="startCreate"
+          />
           <v-btn
             size="small"
             variant="text"
@@ -120,6 +175,27 @@ watch(open, (isOpen) => {
             :title="$t('common.refresh')"
             @click="load(state.path)"
           />
+        </div>
+
+        <!-- Eingabezeile für den neuen Ordner -->
+        <div v-if="creating" class="d-flex align-center ga-2 mb-2">
+          <v-text-field
+            ref="nameInput"
+            v-model="newName"
+            :label="$t('directoryPicker.newFolderName')"
+            density="compact"
+            variant="outlined"
+            hide-details
+            class="flex-grow-1"
+            @keydown.enter.prevent="create"
+            @keydown.escape.prevent="cancelCreate"
+          />
+          <v-btn size="small" color="primary" variant="flat" :disabled="!newName.trim() || loading" @click="create">
+            {{ $t('directoryPicker.create') }}
+          </v-btn>
+          <v-btn size="small" variant="text" :disabled="loading" @click="cancelCreate">
+            {{ $t('common.cancel') }}
+          </v-btn>
         </div>
 
         <v-alert v-if="error" type="error" variant="tonal" density="compact" class="mb-2" :text="error" />
