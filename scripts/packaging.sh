@@ -42,11 +42,14 @@
 #
 # Vor dem Build prüft 'npm audit' die Laufzeit-Abhängigkeiten des Frontends
 # (nur 'dependencies' — sie landen im ausgelieferten app/; Build-Werkzeuge aus
-# 'devDependencies' nicht). Bei Funden der Stufe high/critical fragt das Skript
-# nach, ob trotzdem gebaut werden soll (Default: Nein). Ohne Nachfrage wird
+# 'devDependencies' nicht). Bei Funden jeder Stufe (low bis critical) fragt das
+# Skript nach, ob trotzdem gebaut werden soll (Default: Nein). Ohne Nachfrage wird
 # NICHTS behoben: 'npm audit fix' ändert die Lock-Datei, und das Release
 # entspräche keinem Commit mehr. Sind Funde automatisch behebbar, bietet die
 # Nachfrage [f] an — der Fix läuft dann nur auf ausdrücklichen Wunsch.
+# Nennt npm als Fix ein Update auf eine neue Hauptversion, bietet die Nachfrage
+# [u] an: Die betroffenen Pakete werden installiert, das Release wird aber
+# NICHT gebaut — Codeanpassung, Test und Commit folgen von Hand.
 #
 # Zum Schluss wird zusätzlich die vom Release-Build hochgezählte Buildnummer
 # (frontend/build-number.json) im QUELL-Repo mit der Message
@@ -102,18 +105,33 @@ if [ -d "$PKG_REPO/hugocms" ]; then
 fi
 
 # 0c. Sicherheitsprüfung der Laufzeit-Abhängigkeiten (nur lesend, siehe Kopf).
-#     Funde der Stufe high/critical erfordern eine Bestätigung; ohne
+#     Jeder Fund (auch low/moderate) erfordert eine Bestätigung; ohne
 #     interaktives Terminal wird abgebrochen. Ist die Registry nicht erreichbar,
 #     gibt es nur eine Warnung — ein Release soll daran nicht scheitern.
 #     Einzelne Pakete genauer untersuchen: scripts/pkg-check.sh <paket>
 #     Ist mindestens ein Fund per 'npm audit fix' behebbar, bietet die Nachfrage
 #     zusätzlich [f] an: Fix ausführen, danach erneut prüfen. Das ändert
 #     package-lock.json — der Release-Commit wird dann als -dev markiert.
+#     Verlangt ein Fund ein Update auf eine neue Hauptversion (npm meldet
+#     dann 'fixAvailable' als Objekt), bietet die Nachfrage [u] an: Die
+#     betroffenen direkten Abhängigkeiten werden per 'npm install' auf die von
+#     npm genannte Version gehoben. Danach wird der Release-Lauf BEWUSST
+#     abgebrochen — ein Hauptversionssprung verlangt in aller Regel
+#     Codeanpassungen, Tests und einen eigenen Commit. Pakete, die selbst nicht
+#     verwundbar sind, aber zum Verbund gehören (z. B. @tiptap/pm), kennt das
+#     Audit nicht; run_upgrade ermittelt sie über die Abhängigkeiten der
+#     Zielversionen (npm view) und hebt sie mit. 'npm ls' prüft zum Schluss
+#     den Baum auf Reste.
 
-# Setzt AUDIT_STATUS: 0 = keine Funde high/critical, 1 = Funde ohne
-# automatischen Fix, 2 = keine Daten, 3 = Funde, davon mindestens einer per
-# 'npm audit fix' behebbar.
+# Setzt AUDIT_STATUS: 0 = keine Funde, 1 = Funde ohne automatischen Fix,
+# 2 = keine Daten, 3 = Funde, davon mindestens einer per 'npm audit fix'
+# behebbar. Alle Schweregrade (low bis critical) zählen gleichermaßen.
+# Füllt zusätzlich AUDIT_UPGRADES (Array "paket@version", eine Zeile je
+# direkter Abhängigkeit) mit den Updates, die npm als Fix nennt, und
+# AUDIT_UPGRADES_MAJOR=1, wenn darunter ein Hauptversionssprung ist.
 run_audit() {
+    AUDIT_UPGRADES=()
+    AUDIT_UPGRADES_MAJOR=0
     if ! command -v npm &>/dev/null; then
         echo "⚠️  npm nicht gefunden — Prüfung übersprungen."
         AUDIT_STATUS=0
@@ -121,16 +139,23 @@ run_audit() {
         # npm audit endet bei Funden mit Exit-Code ≠ 0 — das ist hier kein Fehler.
         AUDIT_JSON="$(npm audit --prefix "$PROJECT_DIR/frontend" --omit=dev --json 2>/dev/null || true)"
         AUDIT_STATUS=0
-        node -e '
+        # Die Update-Liste wandert über eine Datei zurück nach Bash — die
+        # Standardausgabe des Node-Skripts ist für den Menschen bestimmt.
+        local upgrade_file
+        upgrade_file="$(mktemp)"
+        AUDIT_UPGRADE_FILE="$upgrade_file" node -e '
 let data;
 try { data = JSON.parse(require("fs").readFileSync(0, "utf8")); } catch { process.exit(2); }
 if (data.error || !data.metadata) process.exit(2);
 const c = data.metadata.vulnerabilities;
 console.log(`   Gefunden: ${c.critical} critical, ${c.high} high, ${c.moderate} moderate, ${c.low} low`);
-const hits = Object.values(data.vulnerabilities || {})
-    .filter(v => v.severity === "high" || v.severity === "critical");
+// Alle Schweregrade zählen — auch low und moderate blockieren das Release.
+const hits = Object.values(data.vulnerabilities || {});
 if (!hits.length) process.exit(0);
 console.log("");
+// Updates, die npm als Fix nennt (immer eine direkte Abhängigkeit), je Paket
+// einmal. Format je Zeile: "<major|minor> <paket>@<version>".
+const upgrades = new Map();
 for (const v of hits) {
     const own = (v.via || []).find(x => typeof x === "object");
     const why = own ? own.title : "über " + v.via.join(", ");
@@ -138,10 +163,183 @@ for (const v of hits) {
         : v.fixAvailable ? `Update ${v.fixAvailable.name}@${v.fixAvailable.version}`
         : "kein automatischer Fix";
     console.log(`   [${v.severity}] ${v.name} — ${why} (${fix})`);
+    if (v.fixAvailable && typeof v.fixAvailable === "object") {
+        const f = v.fixAvailable;
+        upgrades.set(f.name, `${f.isSemVerMajor ? "major" : "minor"} ${f.name}@${f.version}`);
+    }
 }
+require("fs").writeFileSync(process.env.AUDIT_UPGRADE_FILE, [...upgrades.values()].join("\n"));
 process.exit(hits.some(v => v.fixAvailable === true) ? 3 : 1);
 ' <<< "$AUDIT_JSON" || AUDIT_STATUS=$?
+        local kind spec
+        # '|| [ -n "$spec" ]': auch die letzte Zeile ohne Zeilenumbruch lesen.
+        while read -r kind spec || [ -n "$spec" ]; do
+            [ -n "$spec" ] || continue
+            AUDIT_UPGRADES+=("$spec")
+            [ "$kind" = major ] && AUDIT_UPGRADES_MAJOR=1
+        done < "$upgrade_file"
+        rm -f "$upgrade_file"
     fi
+}
+
+# Hebt die vom Audit genannten direkten Abhängigkeiten auf die Zielversion
+# (AUDIT_UPGRADES) und beendet das Skript — siehe Kommentar zu [u] oben.
+run_upgrade() {
+    # Zugehörige Pakete: Die Zielpakete verlangen — auch über Zwischenstufen,
+    # z. B. starter-kit → core → pm — bestimmte Versionen anderer Pakete. Ist
+    # so ein Paket im Projekt eine DIREKTE Abhängigkeit, die die verlangte
+    # Spanne nicht erfüllt, muss es im selben Install-Aufruf mitgehoben werden,
+    # sonst scheitert npm mit ERESOLVE. Nicht-direkte Pakete installiert npm
+    # von selbst passend.
+    # Durchlaufen werden Peer-Abhängigkeiten immer, reguläre Abhängigkeiten nur
+    # innerhalb derselben Paketfamilie (gleicher Scope wie das Elternpaket oder
+    # direkte Projektabhängigkeit) — sonst liefe die Suche durch den gesamten
+    # Baum (ProseMirror, linkify, …), und dort nistet npm Versionen ohnehin.
+    # Die Prüfung "erfüllt die Spanne?" läuft ohne semver-Bibliothek: npm view
+    # liefert alle Versionen der Spanne; steht die installierte darunter, passt sie.
+    echo ""
+    echo "Zugehörige Pakete über Abhängigkeiten der Zielversionen ermitteln (npm view, dauert etwas)..."
+    local spec reason
+    while IFS=$'\t' read -r spec reason || [ -n "$spec" ]; do
+        [ -n "$spec" ] || continue
+        AUDIT_UPGRADES+=("$spec")
+        echo "   + $spec ($reason)"
+    done < <(FRONTEND_DIR="$PROJECT_DIR/frontend" node -e '
+const { execFileSync } = require("child_process");
+const fs = require("fs");
+const dir = process.env.FRONTEND_DIR;
+const direct = JSON.parse(fs.readFileSync(dir + "/package.json", "utf8")).dependencies || {};
+let installed = {};
+try { installed = JSON.parse(fs.readFileSync(dir + "/package-lock.json", "utf8")).packages || {}; } catch {}
+// npm view <spec> [feld] --json; null bei Fehler oder leerer Antwort. Trifft
+// die Spezifikation mehrere Versionen, antwortet npm mit einem Array — dann
+// zählt der letzte (höchste) Eintrag. Ergebnisse werden je Aufruf gemerkt.
+const cache = new Map();
+const view = (...args) => {
+    const key = args.join(" ");
+    if (cache.has(key)) return cache.get(key);
+    let result = null;
+    try {
+        const out = execFileSync("npm", ["view", ...args, "--json"],
+            { stdio: ["ignore", "pipe", "ignore"], encoding: "utf8" }).trim();
+        if (out) result = JSON.parse(out);
+    } catch {}
+    cache.set(key, result);
+    return result;
+};
+const last = (v) => Array.isArray(v) ? v[v.length - 1] : v;
+const isExact = (range) => /^\d+\.\d+\.\d+(-[\w.]+)?$/.test(range);
+const scopeOf = (name) => name.startsWith("@") ? name.split("/")[0] : null;
+const split = (s) => { const i = s.lastIndexOf("@"); return [s.slice(0, i), s.slice(i + 1)]; };
+
+const targets = new Map(process.argv.slice(1).map(split));
+const queue = [...targets];
+const seen = new Set();
+while (queue.length) {
+    const [name, version] = queue.shift();
+    const key = `${name}@${version}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const manifest = last(view(key));
+    if (!manifest || typeof manifest !== "object") continue;
+    const edges = [
+        ...Object.entries(manifest.peerDependencies || {}).map(([n, r]) => [n, r, true]),
+        ...Object.entries(manifest.dependencies || {}).map(([n, r]) => [n, r, false]),
+    ];
+    for (const [dep, range, isPeer] of edges) {
+        const isDirect = dep in direct;
+        if (!isPeer && !isDirect && scopeOf(dep) !== scopeOf(name)) continue;
+        const current = installed["node_modules/" + dep]?.version;
+        let resolved, satisfied;
+        if (isExact(range)) {
+            resolved = range;
+            satisfied = current === range;
+        } else {
+            let matching = view(`${dep}@${range}`, "version");
+            if (matching == null) continue;
+            if (!Array.isArray(matching)) matching = [matching];
+            resolved = matching[matching.length - 1];
+            satisfied = matching.includes(current);
+        }
+        if (isDirect && !targets.has(dep) && !satisfied) {
+            targets.set(dep, resolved);
+            process.stdout.write(`${dep}@${resolved}\t${isPeer ? "Peer-Abhängigkeit" : "Abhängigkeit"} von ${name}\n`);
+        }
+        queue.push([dep, isDirect && satisfied ? current : resolved]);
+    }
+}
+' "${AUDIT_UPGRADES[@]}")
+
+    echo ""
+    echo "Folgende Pakete werden auf die von npm genannte Version gehoben:"
+    local spec
+    for spec in "${AUDIT_UPGRADES[@]}"; do
+        echo "   $spec"
+    done
+    if [ "$AUDIT_UPGRADES_MAJOR" = 1 ]; then
+        echo "   Mindestens ein Hauptversionssprung — Codeanpassungen sind zu erwarten."
+    fi
+    echo "   Das ändert package.json und package-lock.json; der Release-Lauf"
+    echo "   wird danach beendet."
+    printf 'Update ausführen? [j/N] '
+    local reply
+    read -r reply || reply=""
+    case "$reply" in
+        [jJyY]*) ;;
+        *) echo "Abgebrochen — kein Update, kein Release."; exit 1 ;;
+    esac
+
+    # Zwei Schritte statt eines 'npm install': Wechselt eine Familie über Peer-
+    # Abhängigkeiten gekoppelter Pakete gemeinsam die Hauptversion, prüft npm
+    # jedes neue Paket gegen den noch alten Baum und scheitert mit ERESOLVE —
+    # auch wenn alle Zielversionen zusammen angegeben sind. Werden die alten
+    # Versionen erst entfernt, löst npm die neuen widerspruchsfrei auf; alle
+    # übrigen Pakete behalten ihren Stand aus package-lock.json.
+    local names=()
+    for spec in "${AUDIT_UPGRADES[@]}"; do
+        names+=("${spec%@*}")
+    done
+    echo ""
+    echo "npm uninstall --prefix frontend ${names[*]} ..."
+    if ! npm uninstall --prefix "$PROJECT_DIR/frontend" "${names[@]}"; then
+        echo "❌ npm uninstall endete mit Fehler — Stand wiederherstellen:"
+        echo "   git checkout -- frontend/package.json frontend/package-lock.json"
+        echo "   npm ci --prefix frontend"
+        exit 1
+    fi
+    echo ""
+    echo "npm install --prefix frontend ${AUDIT_UPGRADES[*]} ..."
+    if ! npm install --prefix "$PROJECT_DIR/frontend" "${AUDIT_UPGRADES[@]}"; then
+        echo "❌ npm install endete mit Fehler — Stand wiederherstellen:"
+        echo "   git checkout -- frontend/package.json frontend/package-lock.json"
+        echo "   npm ci --prefix frontend"
+        exit 1
+    fi
+
+    # Sicherheitsnetz: Verbundpakete, die die Suche oben nicht erfasst hat
+    # (etwa außerhalb des Scopes), fallen hier als unerfüllte Peer-Abhängigkeit
+    # oder ungültige Version auf.
+    echo ""
+    echo "Prüfung des Abhängigkeitsbaums (npm ls)..."
+    local ls_out
+    if ls_out="$(npm ls --prefix "$PROJECT_DIR/frontend" --omit=dev --depth=0 2>&1)"; then
+        echo "   Abhängigkeitsbaum ist konsistent."
+    else
+        echo "⚠️  npm ls meldet Probleme — vermutlich fehlen zugehörige Pakete, die"
+        echo "   die Suche oben nicht erfasst hat:"
+        echo "$ls_out" | grep -iE "invalid|missing|peer|ERESOLVE|ELSPROBLEMS" | sed 's/^/   /' || true
+        echo "   Diese Pakete von Hand auf dieselbe Hauptversion heben:"
+        echo "   npm install --prefix frontend <paket>@<version>"
+    fi
+
+    echo ""
+    echo "Update eingespielt — kein Release erzeugt. Nächste Schritte:"
+    echo "   1. Code an die neue Version anpassen (bei Hauptversionssprung die"
+    echo "      Migrationshinweise des Pakets beachten)."
+    echo "   2. scripts/build.sh ausführen und die Anwendung testen."
+    echo "   3. Änderungen committen."
+    echo "   4. $0 erneut starten."
+    exit 1
 }
 
 if [ "$DO_AUDIT" = 1 ]; then
@@ -150,26 +348,36 @@ if [ "$DO_AUDIT" = 1 ]; then
     while true; do
         run_audit
         case "$AUDIT_STATUS" in
-            0) echo "   Keine Funde der Stufe high/critical."; break ;;
+            0) echo "   Keine Sicherheitsfunde."; break ;;
             2) echo "⚠️  npm audit lieferte keine Daten (Registry nicht erreichbar?) — Prüfung übersprungen."; break ;;
         esac
 
         echo ""
         echo "   Details je Paket: scripts/pkg-check.sh <paket>"
         if [ ! -t 0 ]; then
-            echo "❌ Sicherheitsfunde high/critical und kein interaktives Terminal — Abbruch."
+            echo "❌ Sicherheitsfunde und kein interaktives Terminal — Abbruch."
             echo "   Bewusst trotzdem bauen: $0 --skip-audit"
             exit 1
         fi
         # [f] nur anbieten, wenn ein Fund automatisch behebbar ist und der Fix
         # in diesem Lauf noch nicht versucht wurde (sonst Endlosschleife).
+        # [u] nur, wenn npm ein konkretes Update einer direkten Abhängigkeit
+        # nennt (siehe run_upgrade).
         OFFER_FIX=0
+        OFFER_UPGRADE=0
+        PROMPT='Sicherheitsfunde — trotzdem bauen'
+        KEYS='j'
         if [ "$AUDIT_STATUS" = 3 ] && [ "$FIX_TRIED" = 0 ]; then
             OFFER_FIX=1
-            printf 'Sicherheitsfunde high/critical — trotzdem bauen, f = npm audit fix ausführen? [j/f/N] '
-        else
-            printf 'Sicherheitsfunde high/critical — trotzdem bauen? [j/N] '
+            PROMPT="$PROMPT, f = npm audit fix ausführen"
+            KEYS="$KEYS/f"
         fi
+        if [ "${#AUDIT_UPGRADES[@]}" -gt 0 ]; then
+            OFFER_UPGRADE=1
+            PROMPT="$PROMPT, u = Pakete auf die genannte Version heben (danach Abbruch)"
+            KEYS="$KEYS/u"
+        fi
+        printf '%s? [%s/N] ' "$PROMPT" "$KEYS"
         read -r reply || reply=""
         case "$reply" in
             [jJyY]*) echo "Fortgesetzt trotz Sicherheitsfunden."; break ;;
@@ -183,6 +391,11 @@ if [ "$DO_AUDIT" = 1 ]; then
                     echo ""
                     echo "Erneute Sicherheitsprüfung nach dem Fix..."
                     continue
+                fi
+                echo "Abgebrochen — kein Release erzeugt."; exit 1 ;;
+            [uU]*)
+                if [ "$OFFER_UPGRADE" = 1 ]; then
+                    run_upgrade
                 fi
                 echo "Abgebrochen — kein Release erzeugt."; exit 1 ;;
             *) echo "Abgebrochen — kein Release erzeugt."; exit 1 ;;
