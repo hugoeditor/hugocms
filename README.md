@@ -1240,19 +1240,26 @@ eindeutig zu genau einer Webpräsenz. Zwei Folgen für den Mehrfach-Betrieb:
 
 ## Dateisuche
 
-Das Suchfeld der Werkzeugleiste filtert beim Tippen das angezeigte
-Verzeichnis; **Enter** startet die rekursive Serversuche ab diesem Ordner
-(Befehl `search`). Nach dem Vorbild von Nemo gibt es zwei Kriterien, die beide
-erfüllt sein müssen:
+Zwei getrennte Werkzeuge, wie in Nemo:
 
-- **Dateiname.** Enthält die Eingabe `*` oder `?`, gilt sie als Muster
-  (`*.md`, `kontakt-?.html`; PHP `fnmatch`, Groß-/Kleinschreibung egal), sonst
-  als Teilstring. Der Schnellfilter folgt derselben Regel.
-- **Inhalt.** Der Knopf `mdi-text-search` blendet ein zweites Feld ein; der
-  Text muss (ohne Groß-/Kleinschreibung) in der Datei vorkommen. Geprüft werden
-  nur Dateien, die der Editor öffnen dürfte (Endung aus `[editor]`, Freigabe je
-  Benutzer) und die keinen Binärinhalt haben. Treffer zeigen Zeilennummer und
-  einen Ausschnitt der Fundstelle (`line`, `snippet`).
+- Der **Schnellfilter** in der Werkzeugleiste grenzt beim Tippen nur das
+  angezeigte Verzeichnis ein (clientseitig, kein Request). Mit `*` oder `?`
+  gilt die Eingabe als Muster, sonst als Teilstring.
+- Die **erweiterte Suche** klappt über den Lupen-Knopf als eigene Leiste unter
+  der Werkzeugleiste aus und durchsucht den ganzen Ort (Mount) rekursiv —
+  oder, mit „Nur ab aktuellem Ordner", nur den angezeigten Teilbaum (Befehl
+  `search`). Zwei Kriterien, die beide erfüllt sein müssen:
+  - **Dateiname.** Enthält die Eingabe `*` oder `?`, gilt sie als Muster
+    (`*.md`, `kontakt-?.html`; PHP `fnmatch`, Groß-/Kleinschreibung egal),
+    sonst als Teilstring.
+  - **Inhalt.** Der Text muss (ohne Groß-/Kleinschreibung) in der Datei
+    vorkommen. Geprüft werden nur Dateien, die der Editor öffnen dürfte
+    (Endung aus `[editor]`, Freigabe je Benutzer) und die keinen Binärinhalt
+    haben. Treffer zeigen Zeilennummer und einen Ausschnitt der Fundstelle
+    (`line`, `snippet`).
+
+  Enter in einem Feld oder „Suchen" startet den Lauf; „Suche verlassen" bzw.
+  das Schließen der Leiste führt zur Ordneransicht zurück.
 
 Die Suche läuft in **einem Request** — ohne Index, Hintergrundprozess oder
 Shell-Aufruf (`find`/`grep`), damit sie auf jedem Hosting und nur innerhalb des
@@ -1268,7 +1275,7 @@ die Ansicht auf **Entwürfe** um: alle Content-Dateien ab dem angezeigten
 Verzeichnis, deren Front Matter `draft: true` trägt — also die Seiten, die Hugo
 nicht veröffentlicht. Gesucht wird rekursiv über den Befehl `draftsearch`; die
 Treffer erscheinen in derselben Ergebnisliste wie die Namenssuche, samt
-Pfadspalte. Ein zweiter Klick führt zurück.
+Ordnerspalte. Ein zweiter Klick führt zurück.
 
 Erkannt wird das Kennzeichen von `FrontMatter::isTrue()` — dieselbe
 Formaterkennung wie beim Setzen (YAML `---`, TOML `+++`, JSON), ohne zusätzlichen

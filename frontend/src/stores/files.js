@@ -38,12 +38,19 @@ export const useFilesStore = defineStore('files', {
     viewerId: null, // im Bildbetrachter geöffneter Eintrag (oder null)
     editImageId: null, // im Bild-Editor geöffneter Eintrag (oder null)
 
-    // Serverseitige Suche (Stufe 4) nach Nemo-Vorbild: Dateiname (Teilstring
-    // oder Muster mit */?) und/oder Text im Inhalt. Aktiv, solange eines der
-    // beiden Kriterien gesetzt ist (Getter searchActive).
-    contentText: '', // Eingabefeld der Inhaltssuche (Gegenstück zu filter)
+    // Erweiterte Suche (Stufe 4) nach Nemo-Vorbild: eine eigene, ausklappbare
+    // Suchleiste mit Dateiname (Teilstring oder Muster mit */?) und/oder Text
+    // im Inhalt — getrennt vom Schnellfilter (filter), der nur das angezeigte
+    // Verzeichnis beim Tippen eingrenzt. Gesucht wird im ganzen Ort oder, auf
+    // Wunsch, nur ab dem aktuellen Ordner. Ergebnisse gelten als aktiv, solange
+    // eines der beiden Kriterien gesetzt ist (Getter searchActive).
+    searchOpen: false, // Suchleiste sichtbar
+    searchName: '', // Eingabefeld Dateiname/Muster
+    contentText: '', // Eingabefeld Inhaltstext
+    searchFromCwd: false, // nur ab aktuellem Ordner statt im ganzen Ort
     searchQuery: '', // Namenskriterium der laufenden Ergebnisanzeige
     searchText: '', // Inhaltskriterium der laufenden Ergebnisanzeige
+    searchScopeCwd: false, // Ergebnisanzeige stammt aus einer Suche ab cwd
     searchResults: [],
     searchTruncated: false,
     searchBusy: false, // Lauf läuft (Inhaltssuche liest Dateien, dauert spürbar)
@@ -210,8 +217,26 @@ export const useFilesStore = defineStore('files', {
       this.filter = value
     },
 
+    setSearchName(value) {
+      this.searchName = value
+    },
+
     setContentText(value) {
       this.contentText = value
+    },
+
+    setSearchFromCwd(value) {
+      this.searchFromCwd = !!value
+    },
+
+    // Suchleiste ein-/ausblenden. Beim Ausblenden endet eine laufende
+    // Ergebnisanzeige (siehe exitSearch), die Eingaben werden verworfen.
+    async toggleSearchBar() {
+      if (this.searchOpen) {
+        await this.exitSearch()
+      } else {
+        this.searchOpen = true
+      }
     },
 
     requestNew(kind) {
@@ -303,19 +328,21 @@ export const useFilesStore = defineStore('files', {
 
     // --- Stufe 4: Suche und Papierkorb ------------------------------------
 
-    // Serversuche ab dem aktuellen Ordner. Beide Kriterien stammen aus den
-    // Eingabefeldern der Werkzeugleiste; der Server verlangt für jedes
-    // angegebene mindestens zwei Zeichen und mindestens eines von beiden.
+    // Serversuche im ganzen Ort (Mount-Wurzel) oder ab dem aktuellen Ordner.
+    // Beide Kriterien stammen aus der Suchleiste; der Server verlangt für
+    // jedes angegebene mindestens zwei Zeichen und mindestens eines von beiden.
     async search() {
-      const q = this.filter.trim()
+      const q = this.searchName.trim()
       const text = this.contentText.trim()
-      if (!this.cwd || this.searchBusy || (q === '' && text === '')) return
+      const root = this.searchFromCwd ? this.cwd : this.breadcrumb[0]
+      if (!root || this.searchBusy || (q === '' && text === '')) return
       this.searchBusy = true
       this.searchError = null
       try {
-        const data = await api.get('search', { target: this.cwd.id, q, text })
+        const data = await api.get('search', { target: root.id, q, text })
         this.searchQuery = data.query
         this.searchText = data.text
+        this.searchScopeCwd = this.searchFromCwd
         this.draftFilter = false // Suche und Entwurfsfilter schließen einander aus
         this.searchResults = data.entries
         this.searchTruncated = data.truncated
@@ -364,13 +391,15 @@ export const useFilesStore = defineStore('files', {
 
     /**
      * Zurück aus Suchergebnissen oder Entwurfsfilter in die Ordneransicht:
-     * Suchzustand abräumen, die Eingabefelder leeren — sonst wirkt der stehen
-     * gebliebene Text weiter als Schnellfilter — und das Verzeichnis frisch
-     * laden, weil sich währenddessen etwas geändert haben kann.
+     * Suchzustand abräumen, die Suchleiste schließen und ihre Eingaben leeren,
+     * dann das Verzeichnis frisch laden, weil sich währenddessen etwas
+     * geändert haben kann. Der Schnellfilter bleibt unberührt — er gehört zur
+     * Ordneransicht, nicht zur Suche.
      */
     async exitSearch() {
       this.leaveSearch()
-      this.filter = ''
+      this.searchOpen = false
+      this.searchName = ''
       this.contentText = ''
       await this.refresh()
     },

@@ -1,5 +1,5 @@
 <script setup>
-import { nextTick, ref } from 'vue'
+import { nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useFilesStore } from '../stores/files'
 
@@ -10,25 +10,22 @@ function crumb(item) {
   files.openDir(item.id)
 }
 
-// Enter in einem der Suchfelder: rekursive Serversuche ab dem aktuellen
-// Ordner mit beiden Kriterien (Name und/oder Inhalt).
+// Erweiterte Suche: eigene Leiste nach Nemo-Vorbild, getrennt vom
+// Schnellfilter. Enter in einem ihrer Felder oder der Suchknopf starten die
+// Serversuche; beim Öffnen bekommt das Namensfeld den Fokus.
+const nameInput = ref(null)
+
+watch(
+  () => files.searchOpen,
+  async (open) => {
+    if (!open) return
+    await nextTick()
+    nameInput.value?.focus()
+  },
+)
+
 function onSearch() {
   files.search()
-}
-
-// Inhaltssuche: zweites Feld nach Nemo-Vorbild, nur auf Wunsch sichtbar.
-// Beim Ausblenden wird sein Text verworfen, sonst suchte er unsichtbar mit.
-const contentOpen = ref(files.contentText !== '')
-const contentInput = ref(null)
-
-async function toggleContent() {
-  contentOpen.value = !contentOpen.value
-  if (contentOpen.value) {
-    await nextTick()
-    contentInput.value?.focus()
-  } else {
-    files.setContentText('')
-  }
 }
 
 // Entwurfsfilter umschalten: zeigt alle Seiten mit `draft: true` ab dem
@@ -152,42 +149,29 @@ function toggleDrafts() {
 
     <div class="nemo-spacer" />
 
-    <!-- Schnellfilter (tippen) und Serversuche (Enter) -->
+    <!-- Schnellfilter: grenzt beim Tippen das angezeigte Verzeichnis ein -->
     <div v-if="files.cwd" class="nemo-filter">
-      <v-icon :icon="files.searchBusy ? 'mdi-timer-sand' : 'mdi-magnify'" size="18" class="nemo-filter-icon" />
+      <v-icon icon="mdi-filter-outline" size="18" class="nemo-filter-icon" />
       <input
         :value="files.filter"
         :placeholder="t('search.placeholder')"
         class="nemo-filter-input"
         @input="files.setFilter($event.target.value)"
-        @keydown.enter="onSearch"
-        @keydown.escape="files.exitSearch()"
+        @keydown.escape="files.setFilter('')"
       />
     </div>
 
-    <!-- Inhaltssuche: Text, der in der Datei vorkommen muss -->
-    <div v-if="files.cwd && contentOpen" class="nemo-filter">
-      <v-icon icon="mdi-text-search" size="18" class="nemo-filter-icon" />
-      <input
-        ref="contentInput"
-        :value="files.contentText"
-        :placeholder="t('search.contentPlaceholder')"
-        class="nemo-filter-input"
-        @input="files.setContentText($event.target.value)"
-        @keydown.enter="onSearch"
-        @keydown.escape="files.exitSearch()"
-      />
-    </div>
-    <v-tooltip v-if="files.cwd" :text="t('search.contentHint')" location="bottom">
+    <!-- Erweiterte Suche ein-/ausblenden -->
+    <v-tooltip v-if="files.cwd" :text="t('search.toggle')" location="bottom">
       <template #activator="{ props }">
         <button
           v-bind="props"
           class="nemo-iconbtn"
-          :class="{ active: contentOpen }"
-          :aria-pressed="contentOpen"
-          @click="toggleContent"
+          :class="{ active: files.searchOpen }"
+          :aria-pressed="files.searchOpen"
+          @click="files.toggleSearchBar()"
         >
-          <v-icon icon="mdi-text-search" size="18" />
+          <v-icon icon="mdi-magnify" size="20" />
         </button>
       </template>
     </v-tooltip>
@@ -235,6 +219,56 @@ function toggleDrafts() {
         </template>
       </v-tooltip>
     </div>
+  </div>
+
+  <!-- Erweiterte Suchleiste (ausklappbar, wie in Nemo unter der Werkzeugleiste) -->
+  <div v-if="files.cwd && files.searchOpen" class="nemo-searchbar nemo-noselect">
+    <div class="nemo-filter nemo-searchbar-field">
+      <v-icon icon="mdi-file-search-outline" size="18" class="nemo-filter-icon" />
+      <input
+        ref="nameInput"
+        :value="files.searchName"
+        :placeholder="t('search.namePlaceholder')"
+        class="nemo-filter-input"
+        @input="files.setSearchName($event.target.value)"
+        @keydown.enter="onSearch"
+        @keydown.escape="files.exitSearch()"
+      />
+    </div>
+    <div class="nemo-filter nemo-searchbar-field">
+      <v-icon icon="mdi-text-search" size="18" class="nemo-filter-icon" />
+      <input
+        :value="files.contentText"
+        :placeholder="t('search.contentPlaceholder')"
+        class="nemo-filter-input"
+        @input="files.setContentText($event.target.value)"
+        @keydown.enter="onSearch"
+        @keydown.escape="files.exitSearch()"
+      />
+    </div>
+    <label class="nemo-searchbar-scope">
+      <input
+        type="checkbox"
+        :checked="files.searchFromCwd"
+        @change="files.setSearchFromCwd($event.target.checked)"
+      />
+      {{ t('search.fromCwd') }}
+    </label>
+    <button
+      class="nemo-searchbar-run"
+      :disabled="files.searchBusy || (!files.searchName.trim() && !files.contentText.trim())"
+      @click="onSearch"
+    >
+      <v-icon :icon="files.searchBusy ? 'mdi-timer-sand' : 'mdi-magnify'" size="16" class="mr-1" />
+      {{ t('search.run') }}
+    </button>
+    <v-tooltip :text="t('search.close')" location="bottom">
+      <template #activator="{ props }">
+        <button v-bind="props" class="nemo-iconbtn" @click="files.exitSearch()">
+          <v-icon icon="mdi-close" size="18" />
+        </button>
+      </template>
+    </v-tooltip>
   </div>
 </template>
 
@@ -377,5 +411,49 @@ function toggleDrafts() {
 }
 .nemo-filter-input::placeholder {
   color: #a3a39f;
+}
+
+/* Erweiterte Suchleiste: eigene Zeile unter der Werkzeugleiste. */
+.nemo-searchbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  background: var(--mint-green-soft);
+  border-bottom: 1px solid var(--mint-border);
+  flex: 0 0 auto;
+}
+.nemo-searchbar-field {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.nemo-searchbar-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.84rem;
+  color: var(--mint-green-soft-text);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.nemo-searchbar-run {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--mint-border);
+  border-radius: var(--mint-radius);
+  background: #fff;
+  font-size: 0.84rem;
+  color: var(--mint-text);
+  cursor: pointer;
+}
+.nemo-searchbar-run:hover:not(:disabled) {
+  background: var(--mint-panel-hover);
+}
+.nemo-searchbar-run:disabled {
+  color: #b6b6b3;
+  cursor: default;
 }
 </style>

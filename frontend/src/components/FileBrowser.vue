@@ -75,6 +75,14 @@ const searchEmptyText = computed(() =>
   t('search.none' + searchKind.value, [files.searchQuery || files.searchText, files.searchText]),
 )
 
+// Ordner eines Treffers, relativ zur Suchwurzel: Der Dateiname steht schon in
+// der Namensspalte, ihn zu wiederholen macht den Pfad nur länger. Treffer in
+// der Suchwurzel selbst zeigen „/“.
+function dirOf(path) {
+  const i = (path || '').lastIndexOf('/')
+  return i < 0 ? '/' : '/' + path.slice(0, i)
+}
+
 // Der Entwurfsfilter wird in der Werkzeugleiste ausgelöst, die keine eigene
 // Meldezeile hat — der Fehler kommt deshalb über den Store hierher.
 watch(
@@ -464,6 +472,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
             <v-icon :icon="files.draftFilter ? 'mdi-file-document-alert-outline' : 'mdi-magnify'" size="18" />
             <span v-if="files.draftFilter">{{ $t('search.draftsResults', [files.searchResults.length]) }}</span>
             <span v-else>{{ searchHeadline }}</span>
+            <span v-if="!files.draftFilter && files.searchScopeCwd" class="nemo-search-trunc">
+              {{ $t('search.scopeCwd') }}
+            </span>
             <span v-if="files.searchTruncated" class="nemo-search-trunc">
               {{ $t('search.truncated', [files.searchResults.length]) }}
             </span>
@@ -505,7 +516,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
                     <span class="nemo-row-name">{{ entry.name }}</span>
                   </div>
                 </td>
-                <td class="col-path">{{ entry.path }}</td>
+                <td class="col-path" :title="entry.path">{{ dirOf(entry.path) }}</td>
                 <td v-if="files.searchText" class="col-match" :title="entry.snippet">
                   <span class="nemo-match-line">{{ $t('search.line', [entry.line]) }}</span>
                   {{ entry.snippet }}
@@ -740,8 +751,14 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 .nemo-search-leave:hover {
   background: var(--mint-panel-hover);
 }
-.col-path {
-  color: var(--mint-text-muted);
+/* Ordnerspalte der Suchergebnisse: in Textfarbe statt gedämpft, darf umbrechen
+   statt abgeschnitten zu werden; der volle Pfad steht im Tooltip (title). */
+.nemo-row td.col-path {
+  color: var(--mint-text);
+  white-space: normal;
+  word-break: break-all;
+  font-size: 0.84rem;
+  line-height: 1.3;
 }
 /* Fundstelle der Inhaltssuche: eine Zeile, Rest per Tooltip (title). */
 .col-match {
