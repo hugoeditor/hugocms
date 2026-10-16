@@ -636,6 +636,7 @@ final class Connector
                 'shopbuildstatus' => $this->cmdShopBuildStatus(),
                 'shopmanifest' => $this->cmdShopManifest($request),
                 'shopupload' => $this->cmdShopUpload($request),
+                'shopmediaupload' => $this->cmdShopMediaUpload($request),
                 'shopcommit' => $this->cmdShopCommit($request),
                 'shopthumbnails' => $this->cmdShopThumbnails($request),
                 'shopdownloads' => $this->cmdShopDownloads($request),
@@ -2183,6 +2184,19 @@ final class Connector
             ])),
             // Endungen im Webseiten-Paket; Produktseiten sind immer Markdown
             'accept' => ShopSync::ACCEPT,
+            // Medien aus der Bibliothek von OpensourceERP (seit 2026-10-15):
+            // Produkt- und Vorschaubilder sowie Downloads kommen mit der
+            // Lieferung in ihre Freigaben, stückweise über shopmediaupload.
+            // Ein OpensourceERP, das dies liest, lässt shopthumbnails und
+            // shopdownloads aus; ein älteres kennt das Feld nicht und arbeitet
+            // wie bisher
+            'media' => [
+                'accepted' => true,
+                'chunkBytes' => ShopSync::chunkBytes(),
+                'maxBytes' => ShopSync::MAX_MEDIA_BYTES,
+                'images' => ShopSync::MEDIA_IMAGE_EXT,
+                'downloads' => ShopSync::MEDIA_DOWNLOAD_EXT,
+            ],
             // Signierte PHP-Einstiegspunkte: ready, sobald ein Administrator den
             // öffentlichen Schlüssel von OpensourceERP hinterlegt hat und PHP
             // Signaturen prüfen kann. Der Schlüssel selbst geht nicht mit —
@@ -2459,7 +2473,8 @@ final class Connector
         }
 
         return new ShopSync((string) $this->hugo['source'], $this->shopVarDir(), $this->shop['contentDir'],
-            $this->shop['categoryGroups'], $this->shop['signingKey']);
+            $this->shop['categoryGroups'], $this->shop['signingKey'],
+            $this->shop['images'], $this->shop['thumbnails'], $this->shop['downloads']);
     }
 
     /**
@@ -2494,6 +2509,33 @@ final class Connector
         return $this->shopStep('sync', function () use ($request): array {
             $result = $this->shopSync()->upload((string) ($request['syncId'] ?? ''), $request['files'] ?? null);
             $this->shopActivity()->progress('sync', [], ['stored' => $result['stored']]);
+
+            return $result;
+        });
+    }
+
+    /**
+     * Ein Stück einer Mediendatei (Produktbild, Vorschaubild, Download) aus der
+     * Bibliothek von OpensourceERP: Binärdaten als Datei-Upload `chunk`
+     * (multipart/form-data), dazu die Felder `syncId`, `path` und `offset`.
+     * Vollständig angekommen und geprüft, liegt die Datei sofort in ihrer
+     * Freigabe ({@see ShopSync::uploadMedia()}).
+     */
+    private function cmdShopMediaUpload(array $request): array
+    {
+        $this->requireShopKey('shopmediaupload');
+        $this->requireMethod('POST', false);
+
+        return $this->shopStep('sync', function () use ($request): array {
+            $result = $this->shopSync()->uploadMedia(
+                (string) ($request['syncId'] ?? ''),
+                $request['path'] ?? null,
+                $request['offset'] ?? null,
+                $_FILES['chunk'] ?? null,
+            );
+            if ($result['complete']) {
+                $this->shopActivity()->progress('sync', [], ['stored' => 1]);
+            }
 
             return $result;
         });

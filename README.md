@@ -1429,10 +1429,11 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `shopbuild`    | POST | –                                   | **Mit Schlüssel statt Sitzung:** Webseite bauen, auf Anstoß von OpensourceERP (siehe „Shop-Anbindung") |
 | `shopbuildstatus`| GET | –                                  | **Mit Schlüssel statt Sitzung:** Baustand — läuft ein Hugo-Lauf, wie ging der letzte aus, wartet eine Lieferung; dazu Freigaben (`grants`, übergangsweise auch als `areas` für ältere OpensourceERP) und Endungen |
 | `shopmanifest` | POST | `files` (Liste aus `path`, `sha256`, bei signiertem PHP `signature`) | **Mit Schlüssel:** Abgleich einer Lieferung — nennt, was fehlt oder abweicht, und vergibt eine `syncId` |
-| `shopupload`   | POST | `syncId`, `files` (Liste aus `path`, `content` Base64) | **Mit Schlüssel:** eine Portion in die Bereitstellung, noch nicht in die Webseite |
+| `shopupload`   | POST | `syncId`, `files` (Liste aus `path`, `content` Base64) | **Mit Schlüssel:** eine Portion Textdateien in die Bereitstellung, noch nicht in die Webseite |
+| `shopmediaupload` | POST (multipart) | `syncId`, `path`, `offset`, Datei `chunk` | **Mit Schlüssel:** ein Stück einer Mediendatei (Produktbild, Vorschaubild, Download); mit dem letzten Stück liegt die Datei geprüft in ihrer Freigabe (`received`, `complete`) |
 | `shopcommit`   | POST | `syncId`                            | **Mit Schlüssel:** Übernahme — schreiben, nicht mehr Geliefertes löschen, Bau vormerken |
-| `shopthumbnails` | POST | `names` (Dateinamen), `size`?, `offset`? | **Mit Schlüssel:** Vorschaubilder der Produktbilder erzeugen, abschnittsweise (`next`, `done`) |
-| `shopdownloads` | POST | `names` (Dateinamen)                   | **Mit Schlüssel:** welche Download-Dateien der Produktseiten in der Freigabe „Downloads“ fehlen (`missing`, `invalid`) — nur lesen |
+| `shopthumbnails` | POST | `names` (Dateinamen), `size`?, `offset`? | **Mit Schlüssel:** Vorschaubilder der Produktbilder erzeugen, abschnittsweise (`next`, `done`) — nur für ein OpensourceERP ohne Medienbibliothek |
+| `shopdownloads` | POST | `names` (Dateinamen)                   | **Mit Schlüssel:** welche Download-Dateien der Produktseiten in der Freigabe „Downloads“ fehlen (`missing`, `invalid`) — nur lesen, nur für ein OpensourceERP ohne Medienbibliothek |
 
 Alle POST-Befehle verlangen das **CSRF-Token** aus `whoami` (Feld `csrf`) im
 Header `X-CSRF-Token`; sonst antwortet das Backend mit `ECSRF` (403).
@@ -1459,8 +1460,9 @@ aufgebaut (`{ "key": …, "params": […] }`).
 
 OpensourceERP erzeugt die Produktseiten eines Webshops und stößt danach den Bau
 der Webseite an. Der Plan dazu steht im OpensourceERP-Repository unter
-`dev/shop-hugocms-trennung.md`. Umgesetzt sind Zugang, Bau und die
-Übertragung der Inhaltsdateien; die Vorschaubilder erzeugt HugoCMS noch nicht.
+`dev/shop-hugocms-trennung.md`. Umgesetzt sind Zugang, Bau, die Übertragung
+der Inhaltsdateien und — seit 2026-10-15 — der Medien aus der Medienbibliothek
+von OpensourceERP (Produktbilder, Vorschaubilder, Downloads).
 
 **Shop-Erweiterung.** Je Webseite einschaltbar, kein Pro-Merkmal
 (Projekteinstellungen → „Shop-Erweiterung", nur Administratoren,
@@ -1491,10 +1493,11 @@ Der Pausenschalter `pause_build` der Webseite gilt auch hier.
 **Übertragung** (`Shop\ShopSync`). In drei Schritten, damit nie eine halbe
 Lieferung gebaut wird:
 
-1. `shopmanifest` — das Verzeichnis aller Dateien mit Prüfsumme. Die Antwort
-   nennt, was fehlt oder abweicht.
-2. `shopupload` — nur diese Dateien, in Portionen, zunächst in die
-   Bereitstellung unter `var/shop/<sha1(Quelle)>/sync/<syncId>/`.
+1. `shopmanifest` — das Verzeichnis aller Dateien mit Prüfsumme (Medien
+   zusätzlich mit Größe). Die Antwort nennt, was fehlt oder abweicht.
+2. `shopupload` — nur diese Textdateien, in Portionen, zunächst in die
+   Bereitstellung unter `var/shop/<sha1(Quelle)>/sync/<syncId>/`;
+   `shopmediaupload` — Medien als Binärdaten in Stücken (siehe „Medien“).
 3. `shopcommit` — alles in die Webseite schreiben, nicht mehr Geliefertes
    löschen, die Bau-Markierung setzen.
 
@@ -1511,9 +1514,9 @@ begrenzt ist (`shopbrowsedirs`); OpensourceERP fragt sie über
 |---|---|---|---|
 | Produktseiten | `content_dir` | `content/de/produkt` | Markdown schreiben und löschen |
 | Kategorieübersicht | `category_groups` | `data/category_groups.json` | genau diese Datei |
-| Produktbilder | `images` | `static/images/products` | nichts — HugoCMS liest sie für die Vorschaubilder |
-| Vorschaubilder | `thumbnails` | `static/images/thumbnails` | nichts — HugoCMS schreibt sie |
-| Downloads | `downloads` | `static/downloads` | nichts — HugoCMS prüft für OpensourceERP, ob die Dateien da sind (`shopdownloads`) |
+| Produktbilder | `images` | `static/images/products` | `jpg`, `jpeg`, `png`, `gif`, `webp` schreiben und löschen, direkt im Verzeichnis |
+| Vorschaubilder | `thumbnails` | `static/images/thumbnails` | wie Produktbilder (fertige Vorschaubilder aus OpensourceERP) |
+| Downloads | `downloads` | `static/downloads` | zusätzlich `pdf`, `zip`, `txt` schreiben und löschen, direkt im Verzeichnis |
 | Shop-Paket | fest `oserp-shop/` | – | `md`, `json`, `html`, `js`, `css`; PHP nur signiert |
 
 Ein unbrauchbarer Eintrag (absolut, `..`, versteckte Bestandteile, andere
@@ -1551,7 +1554,43 @@ nach dem Verlegen einer Freigabe: Die Seiten am alten Ort stammen aus einer
 Lieferung und werden gelöscht, statt verwaist mit alten Preisen veröffentlicht
 zu bleiben (`ShopSync::deletablePath()`).
 
-**Vorschaubilder** (`Shop\ShopThumbnails`). Die Produktbilder liegen auf dem
+**Medien aus OpensourceERP** (seit 2026-10-15; Plan in OpensourceERP unter
+`dev/shop-medienbibliothek.md`). Produktbilder, Vorschaubilder und Downloads
+verwaltet OpensourceERP in seiner Medienbibliothek und liefert sie mit jeder
+Lieferung in die Freigaben „Produktbilder“, „Vorschaubilder“ und „Downloads“ —
+als Binärdaten in Stücken, nicht Base64 in JSON:
+
+- Im Abgleich tragen Medien ihre Größe. Ob eines schon da ist, entscheidet
+  nicht jedes Mal eine neue Prüfsumme über Gigabytes: Die Übernahme merkt sich
+  je Medium Größe und Zeit (`last-manifest.json`, `stat`), und solange beide
+  stimmen, gilt die gemerkte Prüfsumme.
+- `shopmediaupload` (multipart/form-data: `syncId`, `path`, `offset`, Datei
+  `chunk`) sammelt die Stücke unter `sync/<syncId>/media/`; mit dem letzten
+  Stück wird die Prüfsumme geprüft und die Datei **sofort** in ihre Freigabe
+  gelegt (`FileService::putFile`, atomar) — nicht erst mit der Übernahme, damit
+  eine abgebrochene erste Übertragung beim nächsten Abgleich dort weitermacht,
+  wo sie stand. Ein Stück mit `offset` 0 beginnt die Datei neu; passt der
+  Versatz nicht, antwortet `SHOP-MEDIA-OFFSET` (409). Größtes Stück 8 MiB,
+  begrenzt durch `upload_max_filesize` und `post_max_size`; `shopbuildstatus`
+  nennt die Grenze (`media.chunkBytes`), OpensourceERP richtet sich danach.
+  Einzeldatei bis 100 MB.
+- Nur direkt in der Freigabe, keine Unterverzeichnisse, Bilder mit `jpg`,
+  `jpeg`, `png`, `gif`, `webp`, Downloads zusätzlich `pdf`, `zip`, `txt`, nie
+  PHP. Eine Medienfreigabe darf im Shop-Paket oder unter den Produktseiten
+  liegen; die Medienregel geht vor. Im Paket selbst bleibt es bei `md`, `json`,
+  `html`, `js`, `css`.
+- Die Übernahme prüft, dass jedes angeforderte Medium vollständig liegt, und
+  löscht aus der vorigen Lieferung Verschwundenes — auch Medien: Ein in
+  OpensourceERP gelöschtes Bild verschwindet von der Webseite. Was HugoCMS
+  früher selbst als Vorschaubild erzeugt hat, steht in keiner Lieferung und
+  bleibt liegen.
+- `shopbuildstatus` meldet unter `media`, dass Medien angenommen werden
+  (`accepted`), dazu `chunkBytes`, `maxBytes` und die Endungen. Ein
+  OpensourceERP, das dies liest, lässt `shopthumbnails` und `shopdownloads`
+  aus; ein älteres arbeitet wie bisher.
+
+**Vorschaubilder** (`Shop\ShopThumbnails`, nur für ein OpensourceERP ohne
+Medienbibliothek). Die Produktbilder liegen dann auf dem
 Webserver, nicht in OpensourceERP. OpensourceERP nennt mit `shopthumbnails` nur
 die Dateinamen (das erste Bild jedes Artikels) und die größte Seite der
 Vorschau (`size`, Vorgabe 200, erlaubt 16–2000); verkleinert wird hier. Quelle

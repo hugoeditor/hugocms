@@ -324,6 +324,55 @@ final class FileService
     }
 
     /**
+     * Legt eine fertig geprüfte Datei an ihrem Ziel ab — verschoben, nicht
+     * kopiert, für die Medien der Shop-Anbindung, die stückweise unter var/
+     * ankommen. Wie putImage(), nur ohne Bildprüfung: Welche Dateiarten hier
+     * ankommen dürfen, entscheidet der Aufrufer über den Mount und seine
+     * Pfadregeln. Ein vorhandenes Ziel wird ersetzt.
+     *
+     * @param string $sourceAbs Datei außerhalb des Mounts; danach weg
+     */
+    public function putFile(Mount $mount, string $rel, string $abs, string $sourceAbs): array
+    {
+        $name = basename($abs);
+        self::assertValidName($name);
+        if (!$mount->accepts($name)) {
+            throw ApiException::denied('FILETYPE-NOT-ALLOWED-MOUNT');
+        }
+        clearstatcache(true, $sourceAbs);
+        $size = @filesize($sourceAbs);
+        if ($size === false || !is_file($sourceAbs)) {
+            throw new ApiException('EIO', 500, 'FILE-SAVE-FAILED');
+        }
+        if ($size > $this->maxUploadBytes) {
+            @unlink($sourceAbs);
+            throw ApiException::denied('CONTENT-TOO-LARGE');
+        }
+
+        // Erst neben das Ziel (dasselbe Dateisystem), dann atomar umbenennen;
+        // liegt die Quelle auf einem anderen Dateisystem, wird kopiert
+        $tmp = @tempnam(dirname($abs), '.hugofm');
+        if ($tmp === false) {
+            throw new ApiException('EIO', 500, 'TEMPFILE-FAILED');
+        }
+        if (!@rename($sourceAbs, $tmp)) {
+            if (!@copy($sourceAbs, $tmp)) {
+                @unlink($tmp);
+                throw new ApiException('EIO', 500, 'FILE-SAVE-FAILED');
+            }
+            @unlink($sourceAbs);
+        }
+        if (!@rename($tmp, $abs)) {
+            @unlink($tmp);
+            throw new ApiException('EIO', 500, 'FILE-SAVE-FAILED');
+        }
+        @chmod($abs, 0644);
+        clearstatcache(true, $abs);
+
+        return $this->entryInfo($mount, $rel, $abs);
+    }
+
+    /**
      * Löscht eine Datei endgültig, ohne Papierkorb.
      *
      * Für Bereiche, deren Stand eine Quelle außerhalb von HugoCMS hält (die

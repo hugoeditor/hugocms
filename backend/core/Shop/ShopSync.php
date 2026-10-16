@@ -63,8 +63,25 @@ use HugoCMS\FileManager\MountResolver;
  */
 final class ShopSync
 {
-    /** Endungen, die die Anbindung schreiben darf. */
+    /** Endungen, die die Anbindung im Webseiten-Paket schreiben darf. */
     public const ACCEPT = ['md', 'json', 'html', 'js', 'css'];
+
+    /**
+     * Medien aus der Bibliothek von OpensourceERP (dort
+     * dev/shop-medienbibliothek.md, seit 2026-10-15): Produkt- und
+     * Vorschaubilder in den Freigaben „Produktbilder" und „Vorschaubilder",
+     * Datenblätter und Anleitungen in „Downloads" — jede Freigabe mit ihrer
+     * Endungsliste, nur direkt im Verzeichnis, nie PHP. Sie kommen als
+     * Binärdaten in Stücken ({@see uploadMedia()}), nicht Base64 in JSON.
+     */
+    public const MEDIA_IMAGE_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    public const MEDIA_DOWNLOAD_EXT = ['pdf', 'zip', 'txt', 'jpg', 'jpeg', 'png', 'gif', 'webp'];
+
+    /** Größte Mediendatei — die Grenze der Bibliothek für Downloads. */
+    public const MAX_MEDIA_BYTES = 104_857_600;
+
+    /** Größtes Stück einer Medienübertragung je Anfrage, vor den Grenzen von php.ini. */
+    public const MAX_CHUNK_BYTES = 8_388_608;
 
     /**
      * Verzeichnis des Webseiten-Pakets (Vorlagen, Skripte, Konfiguration),
@@ -87,8 +104,8 @@ final class ShopSync
     /** Zweck der Signatur — sie taugt für nichts anderes. */
     private const SIGNATURE_CONTEXT = "hugocms-shop-php\n";
 
-    /** Höchstzahl der Dateien in einem Abgleich. */
-    private const MAX_FILES = 20000;
+    /** Höchstzahl der Dateien in einem Abgleich — Seiten, Paket und Medien zusammen. */
+    private const MAX_FILES = 60000;
 
     /** Größte Einzeldatei — dieselbe Grenze wie im Texteditor. */
     private const MAX_FILE_BYTES = 5_242_880;
@@ -104,6 +121,14 @@ final class ShopSync
     private readonly bool $signedPhp;
 
     /**
+     * Freigaben der Medien: images, thumbnails, downloads => Verzeichnis
+     * relativ zur Quelle oder null (unbrauchbar eingetragen).
+     *
+     * @var array<string, ?string>
+     */
+    private readonly array $mediaGrants;
+
+    /**
      * @param string $source Hugo-Quellverzeichnis der Webseite
      * @param string $varDir Laufzeitverzeichnis, etwa var/shop/<sha1(Quelle)>
      * @param ?string $contentDir Freigabe der Produktseiten, relativ zur Quelle
@@ -112,6 +137,9 @@ final class ShopSync
      *                                relativ zur Quelle, null wie oben
      * @param ?string $signingKey öffentlicher Ed25519-Schlüssel von OpensourceERP
      *                            (Base64, aus [shop] signing_key), null = kein PHP
+     * @param ?string $images Freigabe der Produktbilder, relativ zur Quelle, null wie oben
+     * @param ?string $thumbnails Freigabe der Vorschaubilder
+     * @param ?string $downloads Freigabe der Downloads
      */
     public function __construct(
         string $source,
@@ -119,16 +147,29 @@ final class ShopSync
         private readonly ?string $contentDir,
         private readonly ?string $categoryGroups,
         private readonly ?string $signingKey = null,
+        ?string $images = null,
+        ?string $thumbnails = null,
+        ?string $downloads = null,
     ) {
         $this->signedPhp = self::signedPhpReady($signingKey);
-        // php nur mit Schlüssel — welche Pfade, entscheidet allowedPath()
-        $accept = $this->signedPhp ? [...self::ACCEPT, 'php'] : self::ACCEPT;
+        $this->mediaGrants = ['images' => $images, 'thumbnails' => $thumbnails, 'downloads' => $downloads];
+        // php nur mit Schlüssel — welche Pfade, entscheidet allowedPath(); die
+        // Medienendungen nimmt der Mount an, allowedPath() lässt sie nur in
+        // den Medienfreigaben zu
+        $accept = array_values(array_unique([...self::ACCEPT, ...self::MEDIA_DOWNLOAD_EXT, ...($this->signedPhp ? ['php'] : [])]));
         $this->mount = new Mount('shop', $source, 'Shop', ['read', 'write', 'delete', 'mkdir'], $accept);
         $this->resolver = new MountResolver();
         $this->resolver->add($this->mount);
         // Eigene Endungsliste statt der Editor-Vorgabe: Die Anbindung schreibt
-        // auch .js (oserp-shop/), das der Texteditor nur mit extra_editable öffnet.
-        $this->files = new FileService($this->resolver, $accept);
+        // auch .js (oserp-shop/), das der Texteditor nur mit extra_editable
+        // öffnet. Die Grenze für Uploads ist die der Medien (Downloads).
+        $this->files = new FileService($this->resolver, $accept, 5_242_880, self::MAX_MEDIA_BYTES);
+    }
+
+    /** Freigaben der Medien, wie dem Konstruktor übergeben. */
+    public function mediaGrants(): array
+    {
+        return $this->mediaGrants;
     }
 
     // --- Signierte PHP-Dateien -------------------------------------------------
@@ -220,8 +261,14 @@ final class ShopSync
     /**
      * Nimmt das Verzeichnis der Lieferung entgegen und nennt, was fehlt.
      *
+     * Medien (Pfade in den Medienfreigaben) tragen zusätzlich ihre Größe. Ob
+     * eines schon da ist, entscheidet nicht jedes Mal eine neue Prüfsumme über
+     * Gigabytes: Die Übernahme merkt sich je Medium Prüfsumme, Größe und Zeit
+     * (last-manifest.json), und solange Größe und Zeit stimmen, gilt die
+     * gemerkte Prüfsumme.
+     *
      * @param mixed $entries Liste aus {path, sha256}, bei {@see SIGNED_PHP}
-     *                      zusätzlich signature (Base64)
+     *                      zusätzlich signature (Base64), bei Medien size
      * @return array{syncId: string, needed: list<string>, unchanged: int, total: int}
      */
     public function manifest(mixed $entries): array
@@ -234,6 +281,7 @@ final class ShopSync
         }
 
         $files = [];
+        $sizes = [];
         foreach ($entries as $entry) {
             if (!is_array($entry) || !is_string($entry['path'] ?? null) || !is_string($entry['sha256'] ?? null)) {
                 throw ApiException::badRequest('SHOP-MANIFEST-INVALID');
@@ -251,13 +299,43 @@ final class ShopSync
                 && !$this->signatureValid($path, $hash, $entry['signature'] ?? null)) {
                 throw ApiException::denied('SHOP-SIGNATURE-INVALID', [$path]);
             }
+            if ($this->mediaArea($path) !== null) {
+                // Medien: die Größe gehört dazu — die Stücke werden daran gemessen
+                $size = $entry['size'] ?? null;
+                if (!is_int($size) && !(is_string($size) && ctype_digit($size))) {
+                    throw ApiException::badRequest('SHOP-MANIFEST-INVALID');
+                }
+                if ((int) $size > self::MAX_MEDIA_BYTES) {
+                    throw ApiException::badRequest('SHOP-FILE-TOO-LARGE', [$path]);
+                }
+                $sizes[$path] = (int) $size;
+            }
             $files[$path] = $hash;
         }
+
+        $previous = $this->readJson($this->varDir . '/last-manifest.json');
+        $known = is_array($previous['files'] ?? null) ? $previous['files'] : [];
+        $stat = is_array($previous['stat'] ?? null) ? $previous['stat'] : [];
 
         $needed = [];
         foreach ($files as $path => $hash) {
             $abs = $this->mount->root() . '/' . $path;
-            if (!is_file($abs) || hash_file('sha256', $abs) !== $hash) {
+            if (!is_file($abs)) {
+                $needed[] = $path;
+                continue;
+            }
+            if (isset($sizes[$path]) && is_array($stat[$path] ?? null) && is_string($known[$path] ?? null)) {
+                clearstatcache(true, $abs);
+                if ((int) ($stat[$path][0] ?? -1) === filesize($abs) && (int) ($stat[$path][1] ?? -1) === filemtime($abs)) {
+                    // Unverändert seit der letzten Übernahme: Die gemerkte
+                    // Prüfsumme ist die der Datei
+                    if ($known[$path] !== $hash) {
+                        $needed[] = $path;
+                    }
+                    continue;
+                }
+            }
+            if (hash_file('sha256', $abs) !== $hash) {
                 $needed[] = $path;
             }
         }
@@ -271,6 +349,7 @@ final class ShopSync
         $this->writeJson($dir . '/manifest.json', [
             'created' => time(),
             'files' => $files,
+            'sizes' => $sizes,
             'needed' => $needed,
         ]);
 
@@ -308,6 +387,9 @@ final class ShopSync
             if (!isset($needed[$path])) {
                 throw ApiException::badRequest('SHOP-PATH-NOT-EXPECTED', [$path]);
             }
+            if (isset($manifest['sizes'][$path])) {
+                throw ApiException::badRequest('SHOP-MEDIA-USE-CHUNKS', [$path]);
+            }
             $content = base64_decode($entry['content'], true);
             if ($content === false) {
                 throw ApiException::badRequest('SHOP-UPLOAD-INVALID');
@@ -332,10 +414,141 @@ final class ShopSync
         return ['stored' => $stored];
     }
 
+    // --- 2b. Medien in Stücken ------------------------------------------------
+
+    /**
+     * Nimmt ein Stück einer Mediendatei an. Die Stücke kommen der Reihe nach
+     * ($offset = bisher angekommene Bytes) und sammeln sich in der
+     * Bereitstellung; mit dem letzten Stück wird die Prüfsumme geprüft und die
+     * Datei sofort in ihre Freigabe gelegt — nicht erst mit der Übernahme:
+     * Eine abgebrochene erste Übertragung (Gigabytes) macht beim nächsten
+     * Abgleich dort weiter, wo sie stand, statt von vorn. Ein Stück mit
+     * $offset 0 beginnt die Datei neu.
+     *
+     * @param mixed $path Pfad aus dem Abgleich
+     * @param mixed $offset bisher angekommene Bytes
+     * @param mixed $chunk Eintrag aus $_FILES (tmp_name, error, size)
+     * @return array{path: string, received: int, complete: bool}
+     */
+    public function uploadMedia(string $syncId, mixed $path, mixed $offset, mixed $chunk): array
+    {
+        $manifest = $this->loadManifest($syncId);
+        if (!is_string($path) || !is_numeric($offset) || !is_array($chunk)) {
+            throw ApiException::badRequest('SHOP-MEDIA-INVALID');
+        }
+        $path = $this->allowedPath($path);
+        if (!isset($manifest['sizes'][$path]) || !in_array($path, $manifest['needed'], true)) {
+            throw ApiException::badRequest('SHOP-PATH-NOT-EXPECTED', [$path]);
+        }
+        $size = (int) $manifest['sizes'][$path];
+        $offset = (int) $offset;
+
+        $error = (int) ($chunk['error'] ?? UPLOAD_ERR_NO_FILE);
+        if ($error === UPLOAD_ERR_INI_SIZE || $error === UPLOAD_ERR_FORM_SIZE) {
+            throw ApiException::badRequest('SHOP-CHUNK-TOO-LARGE', [self::chunkBytes()]);
+        }
+        $source = (string) ($chunk['tmp_name'] ?? '');
+        if ($error !== UPLOAD_ERR_OK || $source === '' || !is_file($source)) {
+            throw ApiException::badRequest('SHOP-MEDIA-INVALID');
+        }
+        clearstatcache(true, $source);
+        $length = (int) filesize($source);
+        if ($length > self::MAX_CHUNK_BYTES) {
+            throw ApiException::badRequest('SHOP-CHUNK-TOO-LARGE', [self::chunkBytes()]);
+        }
+
+        $part = $this->syncDir($syncId) . '/media/' . md5($path) . '.part';
+        if (!is_dir(dirname($part)) && !@mkdir(dirname($part), 0775, true)) {
+            throw new ApiException('EIO', 500, 'SHOP-SYNC-STORE-FAILED');
+        }
+        clearstatcache(true, $part);
+        $have = is_file($part) ? (int) filesize($part) : 0;
+        if ($offset === 0 && $have > 0) {
+            @unlink($part);
+            $have = 0;
+        }
+        if ($offset !== $have) {
+            throw new ApiException('ECONFLICT', 409, 'SHOP-MEDIA-OFFSET', [$path, $have]);
+        }
+        if ($have + $length > $size) {
+            @unlink($part);
+            throw ApiException::badRequest('SHOP-MEDIA-SIZE-MISMATCH', [$path]);
+        }
+
+        $in = @fopen($source, 'rb');
+        $out = @fopen($part, 'ab');
+        $copied = $in !== false && $out !== false ? stream_copy_to_stream($in, $out) : false;
+        if ($in !== false) {
+            fclose($in);
+        }
+        if ($out !== false) {
+            fclose($out);
+        }
+        if ($copied !== $length) {
+            @unlink($part);
+            throw new ApiException('EIO', 500, 'SHOP-SYNC-STORE-FAILED');
+        }
+        $have += $length;
+        if ($have < $size) {
+            return ['path' => $path, 'received' => $have, 'complete' => false];
+        }
+
+        // Vollständig: Prüfsumme, dann an den Ort der Freigabe
+        if (hash_file('sha256', $part) !== $manifest['files'][$path]) {
+            @unlink($part);
+            throw ApiException::badRequest('SHOP-HASH-MISMATCH', [$path]);
+        }
+        $this->ensureDir(dirname($path));
+        $target = $this->resolver->resolve($this->resolver->encodeId('shop', $path), false);
+        $this->files->putFile($this->mount, $target['rel'], $target['abs'], $part);
+
+        return ['path' => $path, 'received' => $have, 'complete' => true];
+    }
+
+    /**
+     * Größtes Stück, das diese Installation annimmt: die eigene Grenze, soweit
+     * php.ini (upload_max_filesize, post_max_size abzüglich der Felder) sie
+     * zulässt. OpensourceERP richtet seine Stücke danach.
+     */
+    public static function chunkBytes(): int
+    {
+        $limit = self::MAX_CHUNK_BYTES;
+        foreach (['upload_max_filesize' => 0, 'post_max_size' => 65536] as $key => $reserve) {
+            $bytes = self::iniBytes((string) ini_get($key));
+            if ($bytes > 0) {
+                $limit = min($limit, max(0, $bytes - $reserve));
+            }
+        }
+
+        return $limit;
+    }
+
+    /** Kurzschreibweise aus php.ini (8M, 512K, 1G) in Bytes; 0 = unbegrenzt oder unlesbar. */
+    private static function iniBytes(string $value): int
+    {
+        $value = trim($value);
+        if ($value === '' || preg_match('/^(\d+)\s*([kmg]?)$/i', $value, $m) !== 1) {
+            return 0;
+        }
+        $factor = match (strtolower($m[2])) {
+            'k' => 1024,
+            'm' => 1_048_576,
+            'g' => 1_073_741_824,
+            default => 1,
+        };
+
+        return (int) $m[1] * $factor;
+    }
+
     // --- 3. Übernahme ----------------------------------------------------------
 
     /**
      * Schreibt die Lieferung in die Webseite und räumt nicht mehr Geliefertes weg.
+     *
+     * Medien liegen zu diesem Zeitpunkt schon in ihrer Freigabe
+     * ({@see uploadMedia()}); hier wird nur geprüft, dass jedes angeforderte
+     * vollständig angekommen ist, und ihr Stand (Größe, Zeit) für den
+     * nächsten Abgleich gemerkt.
      *
      * @return array{written: int, deleted: int, unchanged: int, buildPending: bool}
      */
@@ -343,19 +556,33 @@ final class ShopSync
     {
         $manifest = $this->loadManifest($syncId);
         $staging = $this->syncDir($syncId) . '/files';
+        $sizes = is_array($manifest['sizes'] ?? null) ? $manifest['sizes'] : [];
 
         // Erst vollständig prüfen, dann schreiben: fehlt eine Datei, bleibt die
         // Webseite unberührt
-        $missing = array_values(array_filter(
-            $manifest['needed'],
-            static fn (string $path): bool => !is_file($staging . '/' . $path),
-        ));
+        $missing = [];
+        foreach ($manifest['needed'] as $path) {
+            if (isset($sizes[$path])) {
+                $abs = $this->mount->root() . '/' . $path;
+                clearstatcache(true, $abs);
+                if (!is_file($abs) || filesize($abs) !== (int) $sizes[$path]) {
+                    $missing[] = $path;
+                }
+            } elseif (!is_file($staging . '/' . $path)) {
+                $missing[] = $path;
+            }
+        }
         if ($missing !== []) {
             throw new ApiException('ECONFLICT', 409, 'SHOP-SYNC-INCOMPLETE', [count($missing), $missing[0]]);
         }
 
         $written = 0;
         foreach ($manifest['needed'] as $path) {
+            if (isset($sizes[$path])) {
+                // Medium: liegt schon an seinem Ort
+                $written++;
+                continue;
+            }
             $this->ensureDir(dirname($path));
             $target = $this->resolver->resolve($this->resolver->encodeId('shop', $path), false);
             $this->files->writeText($this->mount, $target['rel'], $target['abs'], (string) file_get_contents($staging . '/' . $path));
@@ -387,9 +614,19 @@ final class ShopSync
             $deleted++;
         }
 
+        // Stand der Medien für den nächsten Abgleich (Größe, Zeit je Datei)
+        $stat = [];
+        foreach (array_keys($sizes) as $path) {
+            $abs = $this->mount->root() . '/' . $path;
+            clearstatcache(true, $abs);
+            if (is_file($abs)) {
+                $stat[$path] = [(int) filesize($abs), (int) filemtime($abs)];
+            }
+        }
         $this->writeJson($this->varDir . '/last-manifest.json', [
             'committed' => time(),
             'files' => $manifest['files'],
+            'stat' => $stat,
         ]);
 
         $pending = $written + $deleted > 0;
@@ -421,10 +658,20 @@ final class ShopSync
         if ($this->categoryGroups !== null && $path === $this->categoryGroups) {
             // Kategorieübersicht: genau diese Datei, ihre Endung prüft schon
             // die Freigabe (json)
+        } elseif ($this->mediaArea($path) !== null) {
+            // Medien: direkt in ihrer Freigabe, mit der Endung der Medienart —
+            // geprüft in mediaArea(); vor dem Paket und den Produktseiten,
+            // weil eine Medienfreigabe darin liegen darf
         } elseif (str_starts_with($path, self::PACKAGE_DIR . '/')) {
             // PHP nur an den festen Pfaden und nur mit hinterlegtem Schlüssel —
-            // der Mount nimmt php dann zwar an, aber nicht an beliebiger Stelle
-            if ($extension === 'php' && (!$this->signedPhp || !in_array($path, self::SIGNED_PHP, true))) {
+            // der Mount nimmt php dann zwar an, aber nicht an beliebiger Stelle.
+            // Die Medienendungen nimmt der Mount ebenfalls an; im Paket gilt
+            // trotzdem nur ACCEPT
+            if ($extension === 'php') {
+                if (!$this->signedPhp || !in_array($path, self::SIGNED_PHP, true)) {
+                    throw ApiException::denied('SHOP-FILETYPE-NOT-ALLOWED', [$path]);
+                }
+            } elseif (!in_array($extension, self::ACCEPT, true)) {
                 throw ApiException::denied('SHOP-FILETYPE-NOT-ALLOWED', [$path]);
             }
         } elseif ($this->contentDir !== null && str_starts_with($path, $this->contentDir . '/')) {
@@ -454,11 +701,41 @@ final class ShopSync
     private function deletablePath(string $path): string
     {
         $path = $this->validPath($path);
-        if (!in_array(strtolower(pathinfo($path, PATHINFO_EXTENSION)), self::ACCEPT, true)) {
+        $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        if (!in_array($extension, self::ACCEPT, true) && !in_array($extension, self::MEDIA_DOWNLOAD_EXT, true)) {
             throw ApiException::denied('SHOP-FILETYPE-NOT-ALLOWED', [$path]);
         }
 
         return $path;
+    }
+
+    /**
+     * In welcher Medienfreigabe liegt ein Pfad? Nur direkt im Verzeichnis der
+     * Freigabe (keine Unterverzeichnisse — die Artikel nennen nur Dateinamen)
+     * und nur mit einer Endung der Medienart; eine andere Endung im
+     * Verzeichnis einer Freigabe ist ein Fehler, kein „woanders".
+     *
+     * @return ?string images, thumbnails, downloads oder null (keine Medienfreigabe)
+     */
+    private function mediaArea(string $path): ?string
+    {
+        $dir = dirname($path);
+        $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        $inGrant = false;
+        foreach (['images' => self::MEDIA_IMAGE_EXT, 'thumbnails' => self::MEDIA_IMAGE_EXT, 'downloads' => self::MEDIA_DOWNLOAD_EXT] as $area => $allowed) {
+            if ($this->mediaGrants[$area] === null || $dir !== $this->mediaGrants[$area]) {
+                continue;
+            }
+            if (in_array($extension, $allowed, true)) {
+                return $area;
+            }
+            $inGrant = true;
+        }
+        if ($inGrant) {
+            throw ApiException::denied('SHOP-FILETYPE-NOT-ALLOWED', [$path]);
+        }
+
+        return null;
     }
 
     /** Relativ, ohne .. und ohne versteckte Bestandteile. */
