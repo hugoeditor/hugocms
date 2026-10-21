@@ -310,6 +310,10 @@ export const useFilesStore = defineStore('files', {
         await api.post('write', { target: meta.id, content })
       }
       await this.refresh()
+      // Eine für den Editor geeignete Datei (editierbare Endung, dem Konto
+      // erlaubt — beides meldet entryInfo) gleich öffnen: Wer sie anlegt,
+      // will sie in aller Regel auch füllen.
+      if (meta?.editable) await this.openTextFile(meta)
     },
 
     async renameEntry(id, name) {
