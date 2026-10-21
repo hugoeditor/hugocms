@@ -10,6 +10,9 @@ export const useAuthStore = defineStore('auth', {
     setupRequired: false, // true, solange keine hugocms.ini existiert (Erstinbetriebnahme)
     setupDefaults: null, // Vorgaben des Servers für das Setup-Formular
     buildable: false, // true, wenn für diese Webseite ein Hugo-Aufruf konfiguriert ist
+    // Endungen, die das Konto als neue Datei anlegen darf (Editor-Endungen,
+    // bei eingeschränktem Konto nur dessen Liste) — Auswahl im Dialog „Neue Datei“.
+    editableTypes: [],
     reconfigurable: false, // true, wenn die hugocms.ini im Betrieb änderbar ist
     // true, wenn die Einstellungen DIESER Webseite änderbar sind (die Mounts
     // stammen aus einer Datei). Steuert den Dialog „Projekteinstellungen“.
@@ -102,6 +105,7 @@ export const useAuthStore = defineStore('auth', {
       this.setupRequired = data.setupRequired ?? false
       this.setupDefaults = data.defaults ?? null
       this.buildable = data.buildable ?? false
+      this.editableTypes = data.editableTypes ?? []
       this.reconfigurable = data.reconfigurable ?? false
       this.projectConfigurable = data.projectConfigurable ?? false
       this.ai = data.ai ?? { enabled: false, model: '', writeMode: 'confirm' }

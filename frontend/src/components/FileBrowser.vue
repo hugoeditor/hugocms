@@ -281,18 +281,34 @@ function runItem(item) {
 
 // --- Dialog (Neu / Umbenennen) ------------------------------------------
 
-const dialog = reactive({ open: false, title: '', label: '', confirm: '', value: '', onOk: null })
+// extensions/extension: nur bei „Neue Datei“ — Auswahlliste der Endungen und
+// die gewählte; sie wird beim Bestätigen an den Namen angehängt.
+const dialog = reactive({ open: false, title: '', label: '', confirm: '', value: '', extensions: [], extension: '', onOk: null })
 const dialogInput = ref(null)
 
-function showDialog({ title, label, confirm, value, onOk }) {
+function showDialog({ title, label, confirm, value, extensions = [], extension = '', onOk }) {
   dialog.title = title
   dialog.label = label
   dialog.confirm = confirm
   dialog.value = value
+  dialog.extensions = extensions
+  dialog.extension = extension
   dialog.onOk = onOk
   dialog.open = true
   nextTick(() => dialogInput.value?.focus())
 }
+
+// Endungen für eine neue Datei: was das Konto bearbeiten darf (whoami),
+// eingeschränkt auf die accept-Liste des aktiven Orts. Vorauswahl ist md
+// (Markdown), sonst die erste Endung. Der Server prüft beim Anlegen erneut.
+function newFileExtensions() {
+  const mount = files.mounts.find((m) => m.name === files.activeMount)
+  const accept = mount?.accept ?? []
+  const types = auth.editableTypes.filter((ext) => accept.length === 0 || accept.includes(ext))
+  return { extensions: types, extension: types.includes('md') ? 'md' : (types[0] ?? '') }
+}
+
+const extensionItems = computed(() => dialog.extensions.map((ext) => ({ title: '.' + ext, value: ext })))
 
 function openNew(kind) {
   if (kind === 'folder') {
@@ -309,6 +325,7 @@ function openNew(kind) {
       label: t('dialog.newFileLabel'),
       confirm: t('dialog.create'),
       value: '',
+      ...newFileExtensions(),
       onOk: (name) => files.createFile(name),
     })
   }
@@ -325,8 +342,13 @@ function openRename(entry) {
 }
 
 async function confirmDialog() {
-  const name = dialog.value.trim()
+  let name = dialog.value.trim()
   if (!name) return
+  // Gewählte Endung anhängen — außer der Name trägt sie bereits.
+  if (dialog.extension) {
+    const suffix = '.' + dialog.extension
+    if (!name.toLowerCase().endsWith(suffix)) name += suffix
+  }
   const ok = dialog.onOk
   dialog.open = false
   await run(() => ok(name))
@@ -641,16 +663,30 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
       <v-card>
         <v-card-title class="text-subtitle-1">{{ dialog.title }}</v-card-title>
         <v-card-text>
-          <v-text-field
-            ref="dialogInput"
-            v-model="dialog.value"
-            :label="dialog.label"
-            variant="outlined"
-            density="comfortable"
-            hide-details
-            autofocus
-            @keydown.enter="confirmDialog"
-          />
+          <div class="d-flex ga-2">
+            <v-text-field
+              ref="dialogInput"
+              v-model="dialog.value"
+              :label="dialog.label"
+              variant="outlined"
+              density="comfortable"
+              hide-details
+              autofocus
+              class="flex-grow-1"
+              @keydown.enter="confirmDialog"
+            />
+            <!-- Dateiendung (nur „Neue Datei“): wird beim Anlegen angehängt. -->
+            <v-select
+              v-if="dialog.extensions.length"
+              v-model="dialog.extension"
+              :items="extensionItems"
+              :label="$t('dialog.newFileExtension')"
+              variant="outlined"
+              density="comfortable"
+              hide-details
+              class="nemo-ext-select"
+            />
+          </div>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -772,6 +808,11 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 .nemo-match-line {
   color: var(--mint-text-muted);
   margin-right: 6px;
+}
+
+/* Auswahl der Dateiendung im Dialog „Neue Datei“. */
+.nemo-ext-select {
+  flex: 0 0 150px;
 }
 
 .nemo-empty {

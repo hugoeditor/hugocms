@@ -749,6 +749,8 @@ final class Connector
             // Ist ein Hugo-Aufruf möglich? Nötig sind das zentrale Programm
             // (hugocms.ini) UND der Webseiten-Teil (source) der Mount-Konfig.
             'buildable' => $this->hugo !== null && $this->hugoBin !== null,
+            // Endungen für die Auswahl beim Anlegen einer neuen Datei.
+            'editableTypes' => $this->userEditableTypes(),
             // Lässt sich die Konfiguration im laufenden Betrieb EINSEHEN? Das
             // setzt nur voraus, dass der Connector aus einer hugocms.ini
             // aufgebaut wurde. Ob das Konto auch SPEICHERN darf, sagt
@@ -5386,6 +5388,29 @@ final class Connector
         $this->logger->info('Benutzereinstellungen gespeichert: ' . implode(', ', array_keys($changes)));
 
         return ['ok' => true, 'ui' => $this->uiState()];
+    }
+
+    /**
+     * Endungen, die das angemeldete Konto als neue Datei anlegen und bearbeiten
+     * darf: die Editor-Endungen (Standard + [editor] extra_editable), bei einem
+     * eingeschränkten Konto geschnitten mit dessen Liste. Daraus speist sich die
+     * Auswahl der Dateiendung beim Anlegen; die Einschränkung des Orts (accept)
+     * wendet der Client zusätzlich an. Der Server prüft beim Anlegen ohnehin
+     * beides erneut (FileService::makeFile).
+     *
+     * @return list<string>
+     */
+    private function userEditableTypes(): array
+    {
+        $types = $this->editableTypes;
+        if ($this->auth instanceof FileTypeAwareInterface) {
+            $allowed = $this->auth->allowedFileTypes();
+            if ($allowed !== null) {
+                $types = array_intersect($types, $allowed);
+            }
+        }
+
+        return array_values($types);
     }
 
     /**

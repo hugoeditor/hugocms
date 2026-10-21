@@ -1216,6 +1216,7 @@ export default {
     newFolderLabel: 'Ordnername',
     newFileTitle: 'Neue Datei',
     newFileLabel: 'Dateiname',
+    newFileExtension: 'Dateiendung',
     renameTitle: 'Umbenennen',
     renameLabel: 'Neuer Name',
   },

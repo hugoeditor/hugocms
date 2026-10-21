@@ -1215,6 +1215,7 @@ export default {
     newFolderLabel: 'Folder name',
     newFileTitle: 'New file',
     newFileLabel: 'File name',
+    newFileExtension: 'Extension',
     renameTitle: 'Rename',
     renameLabel: 'New name',
   },

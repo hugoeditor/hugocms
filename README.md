@@ -1349,7 +1349,7 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 
 | Befehl     | Methode | Parameter                            | Zweck                                  |
 |------------|---------|--------------------------------------|----------------------------------------|
-| `whoami`   | GET     | –                                    | Anmeldestatus abfragen (liefert u. a. `ui`, `manageUsers`, `csrf`) |
+| `whoami`   | GET     | –                                    | Anmeldestatus abfragen (liefert u. a. `ui`, `manageUsers`, `csrf`, `editableTypes` = Endungen für „Neue Datei“) |
 | `login`    | POST    | `username`, `password`               | Anmelden — die Antwort trägt `ui` und `manageUsers` mit, da der Client danach kein `whoami` nachholt |
 | `logout`   | POST    | –                                    | Abmelden                               |
 | `mounts`   | GET     | –                                    | Mounts auflisten                       |
