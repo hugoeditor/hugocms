@@ -457,7 +457,9 @@ Ausführrechte auf das Binary und Schreibrechte im Ziel.
 
 Im Editor gibt es für Dateien im Content-Ordner einen **Seitenvorschau**-Knopf
 (`mdi-eye-outline`) — im Quelltext-Modus in der Werkzeugleiste, im visuellen
-Modus in der Formatleiste. Er zeigt die Seite so, wie das Theme sie später
+Modus in der Aktionsleiste über der Front-Matter-Ansicht (zusammen mit
+„Speichern“ und „Als Entwurf speichern“) und zusätzlich vorn in der
+Formatleiste. Er zeigt die Seite so, wie das Theme sie später
 darstellt, einschließlich des **ungespeicherten** Editor-Stands. Die Datei auf
 der Platte und der Publish-Ordner bleiben dabei unangetastet
 (`PreviewService`).

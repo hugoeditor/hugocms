@@ -86,7 +86,8 @@ const previewing = ref(false)
 
 // Vorschau nur für Dateien im Content-Ordner eines Hugo-Projekts; Layouts,
 // Konfiguration oder Bilder ergeben keine eigene Seite. Gilt für beide
-// Bearbeitungsarten — im visuellen Modus trägt die Formatleiste den Knopf.
+// Bearbeitungsarten — im visuellen Modus tragen die Aktionsleiste über dem
+// Front Matter und die Formatleiste den Knopf.
 const canPreview = computed(() => auth.buildable && !!files.openFile?.contentFile)
 const error = useTransientError() // blendet sich nach kurzer Zeit selbst aus
 const notice = useTransientError(4000) // kurzlebige Erfolgsmeldung (z. B. Entwurf abgelegt)
@@ -334,7 +335,7 @@ const tools = computed(() => [
     action: saveAsDraft,
   }] : []),
   // Vorschau der Seite (im visuellen Modus sitzt derselbe Knopf in der
-  // Formatleiste des WysiwygEditor).
+  // Aktionsleiste über der Front-Matter-Ansicht und in der Formatleiste).
   ...(canPreview.value ? [{
     name: 'preview',
     icon: 'mdi-eye-outline',
@@ -688,8 +689,10 @@ onBeforeUnmount(() => {
         <v-btn icon="mdi-close" variant="text" @click="close" />
       </v-toolbar>
 
-      <!-- Werkzeugleiste des Quelltext-Editors; im visuellen Modus trägt die
-           Formatleiste des WysiwygEditor den Speichern-Knopf selbst. -->
+      <!-- Werkzeugleiste des Quelltext-Editors; im visuellen Modus stehen
+           Speichern, Entwurf und Vorschau in der Aktionsleiste über der
+           Front-Matter-Ansicht und zusätzlich vorn in der Formatleiste des
+           WysiwygEditor (siehe unten). -->
       <div v-if="mode === 'source'" class="d-flex flex-wrap align-center border-b px-2 py-1">
         <template v-for="(tool, i) in tools" :key="i">
           <v-divider v-if="tool.divider" vertical class="mx-1 align-self-stretch" />
@@ -727,13 +730,60 @@ onBeforeUnmount(() => {
       </v-alert>
 
       <div class="flex-grow-1 d-flex flex-column" style="overflow: hidden">
-        <!-- Visueller Markdown-Modus: Front-Matter separat, Body in TipTap -->
+        <!-- Visueller Markdown-Modus: Aktionsleiste (Speichern, Entwurf,
+             Vorschau) über der Front-Matter-Ansicht, darunter der Body in
+             TipTap mit seiner Formatleiste. -->
         <template v-if="mode === 'wysiwyg'">
+          <!-- mousedown.prevent wie in der Formatleiste: Der Klick nimmt dem
+               Text nicht den Fokus, die Schreibmarke bleibt stehen. -->
+          <div class="editor-actions nemo-noselect">
+            <v-btn
+              size="small"
+              variant="flat"
+              color="primary"
+              prepend-icon="mdi-content-save"
+              :disabled="!files.dirty || saving"
+              :loading="saving"
+              @mousedown.prevent
+              @click="save"
+            >
+              {{ $t('editor.save') }}
+            </v-btn>
+            <!-- Als Entwurf zur Freigabe ablegen (nur bei Hugo-Projekt). -->
+            <v-btn
+              v-if="auth.review"
+              size="small"
+              variant="tonal"
+              prepend-icon="mdi-content-save-edit-outline"
+              :disabled="!files.dirty || savingDraft"
+              :loading="savingDraft"
+              @mousedown.prevent
+              @click="saveAsDraft"
+            >
+              {{ $t('editor.saveDraft') }}
+            </v-btn>
+            <!-- Seitenvorschau — zeigt auch den ungespeicherten Stand, daher
+                 ohne Abhängigkeit vom Speichern-Zustand. -->
+            <v-btn
+              v-if="canPreview"
+              size="small"
+              variant="text"
+              prepend-icon="mdi-eye-outline"
+              :disabled="previewing"
+              :loading="previewing"
+              @mousedown.prevent
+              @click="previewPage"
+            >
+              {{ $t('editor.preview') }}
+            </v-btn>
+          </div>
           <FrontMatterPanel
             :key="files.openFile.id + ':fm:' + files.reloadTick"
             :model-value="fmDraft"
             @update:model-value="onFmInput"
           />
+          <!-- Die Formatleiste trägt dieselben drei Knöpfe noch einmal vorn,
+               damit sie beim Arbeiten im Text in Griffweite bleiben. -->
           <WysiwygEditor
             :key="files.openFile.id + ':wysiwyg:' + files.reloadTick"
             :model-value="bodyDraft"
@@ -855,6 +905,19 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Aktionsleiste des visuellen Modus (Speichern, Entwurf, Vorschau) — über der
+   Front-Matter-Ansicht, im Stil der Formatleiste darunter. */
+.editor-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 5px 8px;
+  background: var(--mint-panel);
+  border-bottom: 1px solid var(--mint-border);
+  flex: 0 0 auto;
 }
 
 /* Indikator für ungespeicherte Änderungen: deutlich größer als der Titel, damit

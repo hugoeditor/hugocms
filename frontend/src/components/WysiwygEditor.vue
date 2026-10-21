@@ -12,6 +12,10 @@ import { useAuthStore } from '../stores/auth'
 import LinkDialog from './LinkDialog.vue'
 import { domainFromText } from '../util/linkSnippet'
 
+// Speichern, Entwurf und Vorschau stehen zweimal: in der Aktionsleiste des
+// EditorPanel über dem Front Matter UND vorn in dieser Formatleiste, damit sie
+// auch beim Arbeiten im Text in Griffweite bleiben. Zustand und Auslösung
+// kommen in beiden Fällen vom EditorPanel.
 const props = defineProps({
   modelValue: { type: String, default: '' },
   // Zustand des Speichern-Knopfs in der Formatleiste (vom EditorPanel).
