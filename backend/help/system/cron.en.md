@@ -33,7 +33,7 @@ The scripts are scheduled through the server's crontab. Things to watch:
   command line there is no domain name, so the two Pro scripts need
   `--host=example.com` with exactly the licensed domain.
 - **`--mounts` for multiple websites.** If one installation runs several
-  websites, each gets its own crontab entry with its mount configuration.
+  websites, each gets its own crontab entry with its places file.
 
 A common example for a single website:
 
@@ -48,7 +48,7 @@ A common example for a single website:
 
 Each invocation only ever covers **one** website — there is no run across all
 projects. With several websites, each therefore gets its own entries with its
-mount file (`--mounts=…/mounts/<hash>.ini`); the two Pro scripts also with their
+places file (`--mounts=…/mounts/<hash>.ini`); the two Pro scripts also with their
 respective licensed domain (`--host`). Example for two websites:
 
     # Website 1 (one.example.com)
@@ -63,8 +63,8 @@ respective licensed domain (`--host`). Example for two websites:
 
 You don't have to assemble these lines by hand: the `bin/crontab-entries.sh`
 script in the release directory prints them ready-made for every configured
-website — it reads the mount path, host, and license status from the mount
-files. It does not change the crontab, it only prints the lines; review, then
+website — it reads the places file path, host, and license status from the
+places files. It does not change the crontab, it only prints the lines; review, then
 apply them (`crontab -e`).
 
 The other way round, `bin/crontab-entries.sh --status` answers what is already
@@ -161,7 +161,7 @@ license-bound, so `--host` is only required for the real run. The `hugocms.ini`
 is never an argument anyway (the file next to the script always applies), and
 `--mounts` defaults to `backend/mounts.ini`.
 
-Only with **multiple websites** should the trial run be given the matching mount
+Only with **multiple websites** should the trial run be given the matching places
 file too — the same one the real cron uses (`--mounts=…/mounts/<hash>.ini`) — so
 it previews the right backlog.
 

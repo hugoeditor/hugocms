@@ -36,7 +36,7 @@ Die Skripte werden über die Crontab des Servers zeitgesteuert. Wichtig dabei:
   Pro-Skripte `--host=example.com` mit genau der lizenzierten Domain.
 - **`--mounts` bei mehreren Webseiten.** Betreibt eine Installation mehrere
   Webseiten, bekommt jede einen eigenen Crontab-Eintrag mit ihrer
-  Mount-Konfiguration.
+  Orte-Datei.
 
 Ein übliches Beispiel für eine Webseite:
 
@@ -51,7 +51,7 @@ Ein übliches Beispiel für eine Webseite:
 
 Ein Aufruf betrifft immer nur **eine** Webseite — es gibt keinen Lauf über alle
 Projekte hinweg. Bei mehreren Webseiten bekommt daher jede eigene Einträge mit
-ihrer Mount-Datei (`--mounts=…/mounts/<hash>.ini`); die beiden Pro-Skripte
+ihrer Orte-Datei (`--mounts=…/mounts/<hash>.ini`); die beiden Pro-Skripte
 zusätzlich mit ihrer jeweils lizenzierten Domain (`--host`). Beispiel für zwei
 Webseiten:
 
@@ -67,8 +67,8 @@ Webseiten:
 
 Diese Zeilen muss man nicht von Hand zusammenstellen: Das Skript
 `bin/crontab-entries.sh` im Release-Verzeichnis gibt sie für alle eingerichteten
-Webseiten fertig aus — Mount-Pfad, Host und Lizenzstatus liest es aus den
-Mount-Dateien. Es ändert die Crontab nicht, sondern gibt nur die Zeilen aus;
+Webseiten fertig aus — Pfad der Orte-Datei, Host und Lizenzstatus liest es aus
+den Orte-Dateien. Es ändert die Crontab nicht, sondern gibt nur die Zeilen aus;
 prüfen und dann übernehmen (`crontab -e`).
 
 Umgekehrt beantwortet `bin/crontab-entries.sh --status` die Frage, was bereits
@@ -173,7 +173,7 @@ Lizenzpflichtiges auf, deshalb ist `--host` nur für den echten Lauf Pflicht. Di
 `hugocms.ini` ist ohnehin nie ein Argument (es gilt immer die Datei neben dem
 Skript), und `--mounts` hat die Vorgabe `backend/mounts.ini`.
 
-Nur bei **mehreren Webseiten** sollte auch der Probelauf die passende Mount-Datei
+Nur bei **mehreren Webseiten** sollte auch der Probelauf die passende Orte-Datei
 bekommen — dieselbe, die der echte Cron nutzt (`--mounts=…/mounts/<hash>.ini`) —,
 damit er den richtigen Vorrat vorschaut.
 
