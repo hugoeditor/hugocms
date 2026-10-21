@@ -15,6 +15,8 @@ const MIN_PASSWORD_LENGTH = 8
 const username = ref(defaults.username ?? 'admin')
 const password = ref('')
 const passwordConfirm = ref('')
+// Passwörter im Klartext zeigen (Augen-Symbol) — ein Schalter für beide Felder.
+const revealPasswords = ref(false)
 const sessionPath = ref(defaults.sessionPath ?? 'var/sessions')
 const logFile = ref(defaults.logFile ?? 'log/hugocms.log')
 const logLevel = ref(defaults.logLevel ?? 'warning')
@@ -100,19 +102,23 @@ async function submit() {
           <v-text-field
             v-model="password"
             :label="$t('setup.password')"
-            type="password"
+            :type="revealPasswords ? 'text' : 'password'"
+            :append-inner-icon="revealPasswords ? 'mdi-eye-off' : 'mdi-eye'"
             prepend-inner-icon="mdi-lock"
             variant="outlined"
             density="comfortable"
             class="mb-2"
+            @click:append-inner="revealPasswords = !revealPasswords"
           />
           <v-text-field
             v-model="passwordConfirm"
             :label="$t('setup.passwordConfirm')"
-            type="password"
+            :type="revealPasswords ? 'text' : 'password'"
+            :append-inner-icon="revealPasswords ? 'mdi-eye-off' : 'mdi-eye'"
             prepend-inner-icon="mdi-lock-check"
             variant="outlined"
             density="comfortable"
+            @click:append-inner="revealPasswords = !revealPasswords"
           />
 
           <v-divider class="my-3" />

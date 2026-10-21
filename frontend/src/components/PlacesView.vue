@@ -1,6 +1,8 @@
 <script setup>
 // Orte verwalten: Mounts dieser Webseite hinzufügen, bearbeiten, entfernen.
 // Nur für Administratoren (auth.manageConfig); der Server prüft das selbst.
+// Als Overlay-Ansicht wie die Benutzerverwaltung (OverlayView), nicht als
+// v-dialog.
 //
 // Jeder Ort ist ein Expansion-Panel; ausgeklappt lassen sich Name und
 // Einschränkungen (readonly, permissions, accept) bearbeiten. Gespeichert wird
@@ -17,6 +19,7 @@ import { api } from '../api/client'
 import { errorText } from '../i18n/apiMessage'
 import { useConfirm } from '../util/confirm'
 import DirectoryPickerDialog from './DirectoryPickerDialog.vue'
+import OverlayView from './OverlayView.vue'
 
 const open = defineModel({ type: Boolean, default: false })
 // changed = die Orte haben sich geändert; App lädt die Orte-Liste neu.
@@ -30,8 +33,8 @@ const MAX_LABEL = 80
 const loading = ref(false)
 const busy = ref(false)
 // Eine Fehlermeldung für alle Aktionen (Laden, Anlegen, Speichern, Entfernen).
-// Sie steht unter der Einleitung außerhalb des scrollenden Bereichs und ist
-// damit sichtbar, wo im Dialog man auch gerade arbeitet.
+// Sie steht in der festen Zwischenzeile außerhalb des scrollenden Bereichs und
+// ist damit sichtbar, wo in der Ansicht man auch gerade arbeitet.
 const error = ref(null)
 const mounts = ref([])
 const shared = ref(false) // Rückfall-Datei mounts.ini, gilt für mehrere Webseiten
@@ -59,7 +62,6 @@ const expanded = ref([])
 const permissionItems = computed(() =>
   allPermissions.value.map((p) => ({ value: p, title: t(`places.perm.${p}`) })),
 )
-// Vorschläge für accept: die Endungen der vorhandenen Orte.
 // Alle Dateitypen, die HugoCMS verarbeitet (vom Server: Editor-Endungen samt
 // [editor] extra_editable und Bildformate) — Ziel von „Alle Dateitypen
 // erlauben“.
@@ -190,7 +192,7 @@ function scheduleSave(name, delay = 0) {
   }, delay)
 }
 
-// Alle vorgemerkten Speichervorgänge sofort ausführen (Dialog schließt).
+// Alle vorgemerkten Speichervorgänge sofort ausführen (Ansicht schließt).
 function flushSaves() {
   for (const name of Object.keys(timers)) scheduleSave(name, 0)
 }
@@ -256,222 +258,225 @@ watch(open, (isOpen) => {
 </script>
 
 <template>
-  <v-dialog v-model="open" width="760" scrollable :persistent="busy">
-    <v-card class="pa-2">
-      <v-card-title class="text-h6 d-flex align-center">
-        <v-icon icon="mdi-folder-edit-outline" class="mr-2" />
-        {{ $t('places.title') }}
-        <v-spacer />
-        <v-btn
-          icon="mdi-close"
-          size="small"
-          variant="text"
-          :title="$t('common.close')"
-          :disabled="busy"
-          @click="open = false"
-        />
-      </v-card-title>
-      <v-card-subtitle class="text-wrap">{{ $t('places.intro') }}</v-card-subtitle>
-      <!-- Außerhalb von v-card-text: scrollt nicht mit und bleibt sichtbar. -->
+  <OverlayView
+    v-if="open"
+    icon="mdi-folder-edit-outline"
+    :title="$t('places.title')"
+    :busy="busy"
+    @close="open = false"
+  >
+    <template #actions>
+      <v-btn
+        size="small"
+        variant="text"
+        prepend-icon="mdi-refresh"
+        :loading="loading"
+        :disabled="busy"
+        @click="load"
+      >
+        {{ $t('common.refresh') }}
+      </v-btn>
+    </template>
+
+    <!-- Fest über dem scrollenden Inhalt: Einleitung und Meldung bleiben sichtbar. -->
+    <template #subheader>
+      <p class="text-body-2 text-medium-emphasis mb-0">{{ $t('places.intro') }}</p>
       <v-alert
         v-if="error"
         type="error"
         density="comfortable"
         closable
-        class="mx-4 mt-2"
+        class="mt-2"
         @click:close="error = null"
       >
         {{ error }}
       </v-alert>
+    </template>
 
-      <v-card-text>
-        <v-alert v-if="shared" type="warning" variant="tonal" density="compact" class="mb-3">
-          {{ $t('places.sharedHint') }}
-        </v-alert>
-        <v-progress-linear v-if="loading" indeterminate class="mb-2" />
+    <v-alert v-if="shared" type="warning" variant="tonal" density="compact" class="mb-3">
+      {{ $t('places.sharedHint') }}
+    </v-alert>
+    <v-progress-linear v-if="loading" indeterminate class="mb-2" />
 
-        <v-expansion-panels v-model="expanded" multiple variant="accordion" class="pl-panels">
-          <v-expansion-panel v-for="mount in mounts" :key="mount.name" :value="mount.name">
-            <v-expansion-panel-title>
-              <div class="pl-head">
-                <div class="pl-head-line">
-                  <v-icon icon="mdi-folder-outline" size="18" class="mr-2" />
-                  <span class="font-weight-medium">{{ mount.label }}</span>
-                  <v-chip v-if="mount.readonly" size="x-small" variant="tonal" color="warning" class="ml-2">
-                    {{ $t('places.readonly') }}
-                  </v-chip>
-                  <v-chip
-                    v-else-if="(mount.permissions ?? []).length < allPermissions.length"
-                    size="x-small"
-                    variant="tonal"
-                    class="ml-2"
-                  >
-                    {{ $t('places.restricted') }}
-                  </v-chip>
-                  <v-chip v-if="mount.accept?.length" size="x-small" variant="tonal" class="ml-1">
-                    {{ mount.accept.length }} {{ $t('places.types') }}
-                  </v-chip>
-                  <v-chip v-if="saving[mount.name]" size="x-small" color="primary" variant="tonal" class="ml-1">
-                    {{ $t('places.saving') }}
-                  </v-chip>
-                  <v-chip v-else-if="isDirty(mount)" size="x-small" color="error" variant="tonal" class="ml-1">
-                    {{ $t('places.unsaved') }}
-                  </v-chip>
-                </div>
-                <div class="text-caption text-medium-emphasis pl-path" :title="mount.path">
-                  <v-icon v-if="mount.missing" icon="mdi-alert-outline" size="14" color="warning" :title="$t('places.missing')" />
-                  {{ mount.path }}
-                </div>
-              </div>
-            </v-expansion-panel-title>
-
-            <v-expansion-panel-text v-if="drafts[mount.name]">
-              <v-text-field
-                v-model="drafts[mount.name].label"
-                :label="$t('places.label')"
-                :maxlength="MAX_LABEL"
-                :error-messages="drafts[mount.name].label.trim() ? [] : [$t('places.labelRequired')]"
-                prepend-inner-icon="mdi-label-outline"
-                variant="outlined"
-                density="comfortable"
-                class="mb-1"
-                @update:model-value="scheduleSave(mount.name, LABEL_DELAY)"
-                @blur="timers[mount.name] && scheduleSave(mount.name)"
-                @keyup.enter="scheduleSave(mount.name)"
-              />
-              <v-switch
-                v-model="drafts[mount.name].readonly"
-                :label="$t('places.readonlyLabel')"
-                @update:model-value="scheduleSave(mount.name)"
-                :hint="$t('places.readonlyHint')"
-                persistent-hint
-                color="warning"
-                density="compact"
-                class="mb-3"
-              />
-              <div class="text-caption text-medium-emphasis mb-1">{{ $t('places.permissionsHint') }}</div>
-              <v-chip-group
-                v-model="drafts[mount.name].permissions"
-                multiple
-                @update:model-value="scheduleSave(mount.name)"
-                column
-                selected-class="text-primary"
-                :disabled="drafts[mount.name].readonly"
-                class="mb-3"
+    <v-expansion-panels v-model="expanded" multiple variant="accordion" class="pl-panels">
+      <v-expansion-panel v-for="mount in mounts" :key="mount.name" :value="mount.name">
+        <v-expansion-panel-title>
+          <div class="pl-head">
+            <div class="pl-head-line">
+              <v-icon icon="mdi-folder-outline" size="18" class="mr-2" />
+              <span class="font-weight-medium">{{ mount.label }}</span>
+              <v-chip v-if="mount.readonly" size="x-small" variant="tonal" color="warning" class="ml-2">
+                {{ $t('places.readonly') }}
+              </v-chip>
+              <v-chip
+                v-else-if="(mount.permissions ?? []).length < allPermissions.length"
+                size="x-small"
+                variant="tonal"
+                class="ml-2"
               >
-                <v-chip
-                  v-for="item in permissionItems"
-                  :key="item.value"
-                  :value="item.value"
-                  :disabled="drafts[mount.name].readonly || item.value === 'read'"
-                  filter
-                  variant="outlined"
-                  size="small"
-                >
-                  {{ item.title }}
-                </v-chip>
-              </v-chip-group>
-              <v-combobox
-                v-model="drafts[mount.name].accept"
-                v-model:menu="acceptMenus[mount.name]"
-                :items="acceptSuggestions"
-                @update:model-value="scheduleSave(mount.name)"
-                :label="$t('places.accept')"
-                :placeholder="$t('places.acceptAll')"
-                :hint="$t('places.acceptHint')"
-                persistent-hint
-                multiple
-                chips
-                closable-chips
-                prepend-inner-icon="mdi-file-check-outline"
-                variant="outlined"
-                density="comfortable"
-              >
-                <!-- Oben in der Liste: alle verfügbaren Typen bzw. die Grundausstattung
-                     für Redakteure (ohne extra_editable) auf einmal eintragen. -->
-                <template #prepend-item>
-                  <v-list-item
-                    prepend-icon="mdi-check-all"
-                    :title="$t('places.acceptAllTypes')"
-                    :subtitle="availableTypes.join(', ')"
-                    @click="allowTypes(mount.name, availableTypes)"
-                  />
-                  <v-list-item
-                    prepend-icon="mdi-account-edit-outline"
-                    :title="$t('places.acceptEditorTypes')"
-                    :subtitle="editorTypes.join(', ')"
-                    @click="allowEditorTypes(mount.name)"
-                  />
-                  <v-divider class="my-1" />
-                </template>
-              </v-combobox>
-              <div class="d-flex align-center mt-4">
-                <v-btn
-                  color="error"
-                  variant="text"
-                  prepend-icon="mdi-delete"
-                  :disabled="busy || mounts.length <= 1"
-                  @click="remove(mount)"
-                >
-                  {{ $t('places.deleteAction') }}
-                </v-btn>
-              </div>
-            </v-expansion-panel-text>
-          </v-expansion-panel>
-        </v-expansion-panels>
+                {{ $t('places.restricted') }}
+              </v-chip>
+              <v-chip v-if="mount.accept?.length" size="x-small" variant="tonal" class="ml-1">
+                {{ mount.accept.length }} {{ $t('places.types') }}
+              </v-chip>
+              <v-chip v-if="saving[mount.name]" size="x-small" color="primary" variant="tonal" class="ml-1">
+                {{ $t('places.saving') }}
+              </v-chip>
+              <v-chip v-else-if="isDirty(mount)" size="x-small" color="error" variant="tonal" class="ml-1">
+                {{ $t('places.unsaved') }}
+              </v-chip>
+            </div>
+            <div class="text-caption text-medium-emphasis pl-path" :title="mount.path">
+              <v-icon v-if="mount.missing" icon="mdi-alert-outline" size="14" color="warning" :title="$t('places.missing')" />
+              {{ mount.path }}
+            </div>
+          </div>
+        </v-expansion-panel-title>
 
-        <v-divider class="my-4" />
-        <div class="text-subtitle-2 mb-2">{{ $t('places.addTitle') }}</div>
-        <v-text-field
-          v-model="newPath"
-          :label="$t('places.path')"
-          :hint="$t('places.pathHint')"
-          persistent-hint
-          prepend-inner-icon="mdi-folder-outline"
-          variant="outlined"
-          density="comfortable"
-          class="mb-3"
-        >
-          <template #append-inner>
-            <v-icon
-              icon="mdi-folder-open-outline"
+        <v-expansion-panel-text v-if="drafts[mount.name]">
+          <v-text-field
+            v-model="drafts[mount.name].label"
+            :label="$t('places.label')"
+            :maxlength="MAX_LABEL"
+            :error-messages="drafts[mount.name].label.trim() ? [] : [$t('places.labelRequired')]"
+            prepend-inner-icon="mdi-label-outline"
+            variant="outlined"
+            density="comfortable"
+            class="mb-1"
+            @update:model-value="scheduleSave(mount.name, LABEL_DELAY)"
+            @blur="timers[mount.name] && scheduleSave(mount.name)"
+            @keyup.enter="scheduleSave(mount.name)"
+          />
+          <v-switch
+            v-model="drafts[mount.name].readonly"
+            :label="$t('places.readonlyLabel')"
+            @update:model-value="scheduleSave(mount.name)"
+            :hint="$t('places.readonlyHint')"
+            persistent-hint
+            color="warning"
+            density="compact"
+            class="mb-3"
+          />
+          <div class="text-caption text-medium-emphasis mb-1">{{ $t('places.permissionsHint') }}</div>
+          <v-chip-group
+            v-model="drafts[mount.name].permissions"
+            multiple
+            @update:model-value="scheduleSave(mount.name)"
+            column
+            selected-class="text-primary"
+            :disabled="drafts[mount.name].readonly"
+            class="mb-3"
+          >
+            <v-chip
+              v-for="item in permissionItems"
+              :key="item.value"
+              :value="item.value"
+              :disabled="drafts[mount.name].readonly || item.value === 'read'"
+              filter
+              variant="outlined"
               size="small"
-              class="pl-browse"
-              :title="$t('directoryPicker.browse')"
-              @mousedown.prevent
-              @click.stop="pickerOpen = true"
-            />
-          </template>
-        </v-text-field>
-        <v-text-field
-          v-model="newLabel"
-          :label="$t('places.label')"
-          :maxlength="MAX_LABEL"
-          prepend-inner-icon="mdi-label-outline"
-          variant="outlined"
-          density="comfortable"
-          @keyup.enter="add"
-        />
-      </v-card-text>
+            >
+              {{ item.title }}
+            </v-chip>
+          </v-chip-group>
+          <v-combobox
+            v-model="drafts[mount.name].accept"
+            v-model:menu="acceptMenus[mount.name]"
+            :items="acceptSuggestions"
+            @update:model-value="scheduleSave(mount.name)"
+            :label="$t('places.accept')"
+            :placeholder="$t('places.acceptAll')"
+            :hint="$t('places.acceptHint')"
+            persistent-hint
+            multiple
+            chips
+            closable-chips
+            prepend-inner-icon="mdi-file-check-outline"
+            variant="outlined"
+            density="comfortable"
+          >
+            <!-- Oben in der Liste: alle verfügbaren Typen bzw. die Grundausstattung
+                 für Redakteure (ohne extra_editable) auf einmal eintragen. -->
+            <template #prepend-item>
+              <v-list-item
+                prepend-icon="mdi-check-all"
+                :title="$t('places.acceptAllTypes')"
+                :subtitle="availableTypes.join(', ')"
+                @click="allowTypes(mount.name, availableTypes)"
+              />
+              <v-list-item
+                prepend-icon="mdi-account-edit-outline"
+                :title="$t('places.acceptEditorTypes')"
+                :subtitle="editorTypes.join(', ')"
+                @click="allowEditorTypes(mount.name)"
+              />
+              <v-divider class="my-1" />
+            </template>
+          </v-combobox>
+          <div class="d-flex align-center mt-4">
+            <v-btn
+              color="error"
+              variant="text"
+              prepend-icon="mdi-delete"
+              :disabled="busy || mounts.length <= 1"
+              @click="remove(mount)"
+            >
+              {{ $t('places.deleteAction') }}
+            </v-btn>
+          </div>
+        </v-expansion-panel-text>
+      </v-expansion-panel>
+    </v-expansion-panels>
 
-      <v-card-actions>
-        <v-spacer />
-        <v-btn variant="text" :disabled="busy" @click="open = false">{{ $t('common.close') }}</v-btn>
-        <v-btn
-          color="primary"
-          variant="flat"
-          prepend-icon="mdi-folder-plus-outline"
-          :loading="busy"
-          :disabled="!newPath.trim() || !newLabel.trim()"
-          @click="add"
-        >
-          {{ $t('places.add') }}
-        </v-btn>
-      </v-card-actions>
-    </v-card>
+    <v-divider class="my-4" />
+    <div class="text-subtitle-2 mb-2">{{ $t('places.addTitle') }}</div>
+    <v-text-field
+      v-model="newPath"
+      :label="$t('places.path')"
+      :hint="$t('places.pathHint')"
+      persistent-hint
+      prepend-inner-icon="mdi-folder-outline"
+      variant="outlined"
+      density="comfortable"
+      class="mb-3"
+    >
+      <template #append-inner>
+        <v-icon
+          icon="mdi-folder-open-outline"
+          size="small"
+          class="pl-browse"
+          :title="$t('directoryPicker.browse')"
+          @mousedown.prevent
+          @click.stop="pickerOpen = true"
+        />
+      </template>
+    </v-text-field>
+    <v-text-field
+      v-model="newLabel"
+      :label="$t('places.label')"
+      :maxlength="MAX_LABEL"
+      prepend-inner-icon="mdi-label-outline"
+      variant="outlined"
+      density="comfortable"
+      @keyup.enter="add"
+    />
 
     <DirectoryPickerDialog v-model="pickerOpen" :start="newPath" :purpose="$t('places.pickerPurpose')" @select="onPicked" />
-  </v-dialog>
+
+    <template #footer>
+      <v-btn variant="text" :disabled="busy" @click="open = false">{{ $t('common.close') }}</v-btn>
+      <v-btn
+        color="primary"
+        variant="flat"
+        prepend-icon="mdi-folder-plus-outline"
+        :loading="busy"
+        :disabled="!newPath.trim() || !newLabel.trim()"
+        @click="add"
+      >
+        {{ $t('places.add') }}
+      </v-btn>
+    </template>
+  </OverlayView>
 </template>
 
 <style scoped>

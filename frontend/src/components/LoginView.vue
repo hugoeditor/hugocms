@@ -10,6 +10,8 @@ const auth = useAuthStore()
 
 const username = ref('')
 const password = ref('')
+// Passwort im Klartext zeigen (Augen-Symbol).
+const revealPassword = ref(false)
 const loading = ref(false)
 const error = ref(null)
 
@@ -46,10 +48,12 @@ async function submit() {
           <v-text-field
             v-model="password"
             :label="$t('login.password')"
-            type="password"
+            :type="revealPassword ? 'text' : 'password'"
+            :append-inner-icon="revealPassword ? 'mdi-eye-off' : 'mdi-eye'"
             prepend-inner-icon="mdi-lock"
             variant="outlined"
             density="comfortable"
+            @click:append-inner="revealPassword = !revealPassword"
           />
           <v-alert v-if="error" type="error" density="compact" class="mb-3">{{ error }}</v-alert>
           <v-btn type="submit" color="primary" block :loading="loading">{{ $t('login.submit') }}</v-btn>

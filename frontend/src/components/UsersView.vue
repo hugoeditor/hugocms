@@ -39,6 +39,10 @@ const resetTarget = ref(null)
 const resetPassword = ref('')
 const resetError = ref(null)
 
+// Passwort im Klartext zeigen (Augen-Symbol); gilt für beide Formulare und
+// wird beim Öffnen eines Formulars wieder verborgen.
+const revealPassword = ref(false)
+
 const roleOptions = computed(() => [
   { title: t('users.roleEditor'), value: 'editor' },
   { title: t('users.roleAdmin'), value: 'admin' },
@@ -55,6 +59,7 @@ function openCreate() {
   editing.value = null
   form.value = { username: '', password: '', role: 'editor', allSites: true, sites: [], fileTypes: [], hiddenAllowed: false }
   formError.value = null
+  revealPassword.value = false
   formOpen.value = true
 }
 
@@ -70,6 +75,7 @@ function openEdit(user) {
     hiddenAllowed: !!user.hiddenAllowed,
   }
   formError.value = null
+  revealPassword.value = false
   formOpen.value = true
 }
 
@@ -144,6 +150,7 @@ function openReset(user) {
   resetTarget.value = user
   resetPassword.value = ''
   resetError.value = null
+  revealPassword.value = false
   resetOpen.value = true
 }
 
@@ -355,12 +362,14 @@ async function removeUser(user) {
               :label="$t('users.password')"
               :hint="$t('users.passwordHint', [MIN_PASSWORD_LENGTH])"
               persistent-hint
-              type="password"
+              :type="revealPassword ? 'text' : 'password'"
+              :append-inner-icon="revealPassword ? 'mdi-eye-off' : 'mdi-eye'"
               autocomplete="new-password"
               prepend-inner-icon="mdi-lock-plus"
               variant="outlined"
               density="comfortable"
               class="mb-4"
+              @click:append-inner="revealPassword = !revealPassword"
             />
             <v-select
               v-model="form.role"
@@ -446,11 +455,13 @@ async function removeUser(user) {
             :label="$t('users.passwordNew')"
             :hint="$t('users.passwordHint', [MIN_PASSWORD_LENGTH])"
             persistent-hint
-            type="password"
+            :type="revealPassword ? 'text' : 'password'"
+            :append-inner-icon="revealPassword ? 'mdi-eye-off' : 'mdi-eye'"
             autocomplete="new-password"
             prepend-inner-icon="mdi-lock-reset"
             variant="outlined"
             density="comfortable"
+            @click:append-inner="revealPassword = !revealPassword"
           />
           <v-alert v-if="resetError" type="error" density="compact" class="mt-3">{{ resetError }}</v-alert>
         </v-card-text>

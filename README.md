@@ -985,7 +985,7 @@ verläuft entlang SCHREIBEN, nicht LESEN:
 
 Entsprechend melden `reconfigurable` und `projectConfigurable` nur, ob es
 überhaupt eine Datei zum Anzeigen gibt; die Befugnis zum Speichern steht getrennt
-in `manageConfig`. Der Konfigurationsdialog öffnet sich damit auch für
+in `manageConfig`. Die Konfigurations-Ansicht öffnet sich damit auch für
 Redakteure, sperrt aber sämtliche Felder (`<v-form :disabled>`) und blendet einen
 Hinweis ein. `licensable` bleibt an `config.manage` gebunden — dort gibt es
 nichts einzusehen, nur zu aktivieren.
@@ -995,7 +995,7 @@ Beim Einzelbenutzer liefert `can()` immer `true` — dort ändert sich nichts.
 **Selbstsperren ausgeschlossen.** Das letzte aktive Administratorkonto lässt sich
 weder löschen noch herabstufen noch sperren; das eigene Konto lässt sich nicht
 selbst entmachten und nicht über die Verwaltung ändern — dafür gibt es den
-Konto-Dialog mit Passwortbestätigung.
+Konto-Ansicht mit Passwortbestätigung.
 
 ### Lizenzmodell
 

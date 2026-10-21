@@ -5,7 +5,7 @@
 // Hinweisdialog und bietet an, die Konfiguration zu öffnen.
 //
 // Analog zu util/confirm.js: ein app-weit geteilter Zustand, den App.vue
-// beobachtet, um den ReconfigureDialog zu öffnen.
+// beobachtet, um die Konfigurations-Ansicht (ReconfigureView) zu öffnen.
 import { reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'

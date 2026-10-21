@@ -17,10 +17,10 @@ import ContentQualityView from './components/ContentQualityView.vue'
 import ReviewQueueView from './components/ReviewQueueView.vue'
 import LinkScanView from './components/LinkScanView.vue'
 import EditorPanel from './components/EditorPanel.vue'
-import ReconfigureDialog from './components/ReconfigureDialog.vue'
-import ProjectSettingsDialog from './components/ProjectSettingsDialog.vue'
-import PlacesDialog from './components/PlacesDialog.vue'
-import AccountDialog from './components/AccountDialog.vue'
+import ReconfigureView from './components/ReconfigureView.vue'
+import ProjectSettingsView from './components/ProjectSettingsView.vue'
+import PlacesView from './components/PlacesView.vue'
+import AccountView from './components/AccountView.vue'
 import LicenseDialog from './components/LicenseDialog.vue'
 import RepositoryDialog from './components/RepositoryDialog.vue'
 import HelpView from './components/HelpView.vue'
@@ -287,15 +287,16 @@ async function leaveEditorThen(action) {
   // Offene Überlagerungen schließen, sonst blieben sie über der neu gewählten
   // Ansicht (Dateimanager, Papierkorb, SEO-Audit) liegen: die Hilfe, der
   // Qualitätsbericht (ContentQualityView), die Freigabe-Warteschlange, die
-  // Hyperlink-Suche, der Systemstatus und die Benutzerverwaltung — sie alle
-  // haben einen höheren z-index als die Dateiliste und würden sie sonst
-  // verdecken.
+  // Hyperlink-Suche, der Systemstatus, die Benutzerverwaltung und die
+  // Einstellungs-Ansichten — sie alle haben einen höheren z-index als die
+  // Dateiliste und würden sie sonst verdecken.
   help.close()
   auditContent.closeDialog()
   review.closeQueue()
   linkScan.close()
   status.close()
   users.close()
+  closeSettingsViews()
   // Auch den SEO-Check verlassen: Er ist keine Überlagerung, sondern ein
   // Modus der Hauptansicht — bliebe er gesetzt, zeigte die Werkzeugschiene ihn
   // weiter als aktiv, und sein nächster Klick würde ihn abschalten statt ihn zu
@@ -380,12 +381,37 @@ function openBuildDetails() {
 }
 const editorPanelRef = ref(null)
 
-// --- Konfiguration im laufenden Betrieb ändern -----------------------------
-const reconfigureOpen = ref(false)
-// Einstellungen nur DIESER Webseite (Mount-Konfiguration).
-const projectSettingsOpen = ref(false)
-// Orte verwalten (Mounts dieser Webseite) — nur Administratoren.
-const placesDialogOpen = ref(false)
+// --- Einstellungs-Ansichten -------------------------------------------------
+// Konto, Projekteinstellungen, Orte und Konfiguration sind Overlay-Ansichten
+// wie die Benutzerverwaltung. Ihre Knöpfe in der Werkzeugschiene wirken als
+// Umschalter; beim Öffnen schließen die übrigen Überlagerungen
+// (leaveEditorThen), beim zweiten Klick schließt die Ansicht wieder.
+const reconfigureOpen = ref(false) // Konfiguration im laufenden Betrieb ändern
+const projectSettingsOpen = ref(false) // Einstellungen nur DIESER Webseite (Mount-Konfiguration)
+// (placesOpen ist die eingeschobene Orte-Seitenleiste, siehe unten.)
+const placesViewOpen = ref(false) // Orte verwalten (Mounts dieser Webseite) — nur Administratoren
+const accountOpen = ref(false) // Konto und Einstellungen des angemeldeten Benutzers
+
+function closeSettingsViews() {
+  accountOpen.value = false
+  projectSettingsOpen.value = false
+  placesViewOpen.value = false
+  reconfigureOpen.value = false
+}
+
+function toggleSettingsView(flag) {
+  if (flag.value) {
+    flag.value = false
+    return
+  }
+  leaveEditorThen(() => {
+    flag.value = true
+  })
+}
+const toggleAccountView = () => toggleSettingsView(accountOpen)
+const togglePlacesView = () => toggleSettingsView(placesViewOpen)
+const toggleReconfigureView = () => toggleSettingsView(reconfigureOpen)
+const toggleProjectSettingsView = () => toggleSettingsView(projectSettingsOpen)
 
 // Nach einer Änderung der Orte die Liste neu laden. Ist der gerade angezeigte
 // Ort entfernt worden, in den ersten wechseln — sonst liefe die nächste
@@ -396,29 +422,32 @@ async function onPlacesChanged() {
     await files.openDir(files.mounts[0].id)
   }
 }
-// Sektion, zu der der Dialog beim Öffnen scrollen soll (z. B. 'cron' aus dem
+// Sektion, zu der die Ansicht beim Öffnen scrollen soll (z. B. 'cron' aus dem
 // Systemstatus). Leer = normal von oben.
 const projectSettingsFocus = ref('')
 
 // Projekteinstellungen an einer bestimmten Sektion öffnen (aus dem
-// Systemstatus, wo das Pausieren nur noch hierhin verweist).
+// Systemstatus, wo das Pausieren nur noch hierhin verweist). Der Systemstatus
+// schließt dabei mit den übrigen Überlagerungen (leaveEditorThen).
 function openProjectSettings(section = '') {
   projectSettingsFocus.value = section
-  status.close()
-  projectSettingsOpen.value = true
+  leaveEditorThen(() => {
+    projectSettingsOpen.value = true
+  })
 }
 
 // Eine KI-Funktion hat um das Öffnen der Konfiguration gebeten (Hinweisdialog
-// bestätigt). Flag wieder zurücksetzen und den ReconfigureDialog öffnen.
+// bestätigt). Flag wieder zurücksetzen und die Konfigurations-Ansicht öffnen.
 watch(
   () => aiGateState().reconfigureRequested,
   (requested) => {
     if (!requested) return
     aiGateState().reconfigureRequested = false
-    reconfigureOpen.value = true
+    leaveEditorThen(() => {
+      reconfigureOpen.value = true
+    })
   },
 )
-const accountOpen = ref(false)
 const licenseOpen = ref(false)
 const repositoryOpen = ref(false)
 const notice = ref(null) // kurze Erfolgsmeldung (Snackbar)
@@ -871,7 +900,8 @@ async function build() {
                     v-bind="props"
                     type="button"
                     class="nemo-tool-btn"
-                    @click="accountOpen = true"
+                    :class="{ active: accountOpen }"
+                    @click="toggleAccountView"
                   >
                     <v-icon icon="mdi-account-circle-outline" size="20" />
                     <span class="nemo-tool-label">{{ auth.user?.name || $t('account.open') }}</span>
@@ -909,7 +939,8 @@ async function build() {
                     v-bind="props"
                     type="button"
                     class="nemo-tool-btn"
-                    @click="projectSettingsOpen = true"
+                    :class="{ active: projectSettingsOpen }"
+                    @click="toggleProjectSettingsView"
                   >
                     <v-icon icon="mdi-folder-cog-outline" size="20" />
                     <span class="nemo-tool-label">{{ $t('projectConfig.open') }}</span>
@@ -930,7 +961,8 @@ async function build() {
                     v-bind="props"
                     type="button"
                     class="nemo-tool-btn"
-                    @click="placesDialogOpen = true"
+                    :class="{ active: placesViewOpen }"
+                    @click="togglePlacesView"
                   >
                     <v-icon icon="mdi-folder-edit-outline" size="20" />
                     <span class="nemo-tool-label">{{ $t('places.open') }}</span>
@@ -945,7 +977,8 @@ async function build() {
                     v-bind="props"
                     type="button"
                     class="nemo-tool-btn"
-                    @click="reconfigureOpen = true"
+                    :class="{ active: reconfigureOpen }"
+                    @click="toggleReconfigureView"
                   >
                     <v-icon icon="mdi-cog-outline" size="20" />
                     <span class="nemo-tool-label">{{ $t('reconfigure.open') }}</span>
@@ -1006,6 +1039,17 @@ async function build() {
             <!-- Benutzerverwaltung (Mehrbenutzer): Konten anlegen, zuordnen,
                  sperren, Passwörter neu vergeben. Overlay wie der Systemstatus. -->
             <UsersView @notice="notice = $event" />
+            <!-- Einstellungs-Ansichten: Konto, Projekteinstellungen, Orte und
+                 Konfiguration — Overlays wie die Benutzerverwaltung, aus der
+                 Werkzeugschiene geöffnet (Umschalter). -->
+            <AccountView v-model="accountOpen" @changed="onAccountChanged" @saved="onAccountSaved" />
+            <ProjectSettingsView
+              v-model="projectSettingsOpen"
+              :focus-section="projectSettingsFocus"
+              @saved="onProjectSettingsSaved"
+            />
+            <PlacesView v-model="placesViewOpen" @changed="onPlacesChanged" />
+            <ReconfigureView v-model="reconfigureOpen" @saved="onReconfigured" />
             <!-- Systemstatus: Lizenz, Zugänge, Cron-Aufgaben. Die
                  Lizenzaktivierung öffnet von hier aus den bestehenden Dialog. -->
             <StatusView
@@ -1046,16 +1090,6 @@ async function build() {
         </v-card-actions>
       </v-card>
     </v-dialog>
-
-    <!-- Konfiguration im laufenden Betrieb ändern -->
-    <ReconfigureDialog v-model="reconfigureOpen" @saved="onReconfigured" />
-    <ProjectSettingsDialog
-      v-model="projectSettingsOpen"
-      :focus-section="projectSettingsFocus"
-      @saved="onProjectSettingsSaved"
-    />
-    <PlacesDialog v-model="placesDialogOpen" @changed="onPlacesChanged" />
-    <AccountDialog v-model="accountOpen" @changed="onAccountChanged" @saved="onAccountSaved" />
 
     <!-- Pro-Lizenz aktivieren · Git-Versionierung (Pro-Funktion) -->
     <LicenseDialog v-model="licenseOpen" @activated="onLicenseActivated" />
