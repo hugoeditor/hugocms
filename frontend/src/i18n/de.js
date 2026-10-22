@@ -222,6 +222,7 @@ export default {
     shopKeyShownOnce:
       'Den Schlüssel jetzt kopieren und in OpensourceERP eintragen. Er wird nur dieses eine Mal angezeigt; gespeichert ist nur ein Prüfwert.',
     shopKeyCopy: 'Schlüssel kopieren',
+    shopKeyReveal: 'Schlüssel sichtbar machen',
     shopKeyCreate: 'Schlüssel erzeugen',
     shopKeyReplace: 'Neuen Schlüssel erzeugen',
     shopKeyReplaceTitle: 'Schlüssel ersetzen?',
@@ -236,7 +237,7 @@ export default {
     shopSigningSet: 'Signaturschlüssel hinterlegt (endet auf …{0}).',
     shopSigningNone: 'Kein Signaturschlüssel hinterlegt — die PHP-Dateien des Shop-Pakets werden nicht übertragen.',
     shopSigningKey: 'Öffentlicher Schlüssel aus OpensourceERP',
-    shopSigningKeyHint: 'Steht in OpensourceERP in den Systemeinstellungen (Shop-Erweiterung: Signaturschlüssel) und in der Karte des Verkaufskanals. Ersetzt einen hinterlegten Schlüssel.',
+    shopSigningKeyHint: 'Steht in OpensourceERP in den Systemeinstellungen (Shop-Erweiterung: Signaturschlüssel) und in der Karte des Verkaufskanals. Der hinterlegte Schlüssel ist vorbefüllt; Speichern ersetzt ihn durch die Eingabe.',
     shopSigningSave: 'Signaturschlüssel speichern',
     shopSigningDelete: 'Signaturschlüssel entfernen',
     shopSigningDeleteTitle: 'Signaturschlüssel entfernen?',
@@ -1002,7 +1003,7 @@ export default {
     section: 'KI-Assistent',
     apiKey: 'Anthropic API-Schlüssel',
     setupHint: 'Optional: API-Schlüssel für den KI-Assistenten. Leer lassen, wenn nicht gewünscht.',
-    apiKeyHintSet: 'Ein Schlüssel ist hinterlegt. Leer lassen, um ihn beizubehalten; Eingabe ersetzt ihn.',
+    apiKeyHintSet: 'Ein Schlüssel ist hinterlegt und vorbefüllt (Augen-Symbol zeigt ihn an). Ein leeres Feld lässt ihn unverändert.',
     apiKeyHintUnset: 'Noch kein Schlüssel hinterlegt. Leer lassen lässt den Assistenten deaktiviert.',
     model: 'Modell (Assistent)',
     modelHint: 'Modell des interaktiven KI-Assistenten und Vorgabe für die beiden folgenden Aufgaben.',
@@ -1026,7 +1027,7 @@ export default {
     url: 'Dienst-URL',
     urlHint: 'Basis-Adresse des Dienstes (Pro) — ein Schlüssel für Live-Analyse und Spracheingabe. Standard: https://api.hugocms.com/',
     key: 'API-Schlüssel',
-    keyHintSet: 'Ein Schlüssel ist hinterlegt. Leer lassen, um ihn beizubehalten; Eingabe ersetzt ihn.',
+    keyHintSet: 'Ein Schlüssel ist hinterlegt und vorbefüllt (Augen-Symbol zeigt ihn an). Ein leeres Feld lässt ihn unverändert.',
     keyHintUnset: 'Noch kein Schlüssel hinterlegt. Ohne Schlüssel bleiben Live-Analyse und Spracheingabe deaktiviert.',
   },
 
@@ -1035,7 +1036,7 @@ export default {
     intro:
       'Globaler Google-API-Schlüssel für PageSpeed Insights. Die zu messende Live-Adresse wird je Webseite direkt im PageSpeed-Reiter eingegeben.',
     key: 'Google-API-Schlüssel',
-    keyHintSet: 'Ein Schlüssel ist hinterlegt. Leer lassen, um ihn beizubehalten; Eingabe ersetzt ihn.',
+    keyHintSet: 'Ein Schlüssel ist hinterlegt und vorbefüllt (Augen-Symbol zeigt ihn an). Ein leeres Feld lässt ihn unverändert.',
     keyHintUnset:
       'Optional. Ohne Schlüssel gilt ein kleines Kontingent; mit kostenlosem Schlüssel aus der Google Cloud Console deutlich mehr (25.000 Anfragen/Tag).',
   },
@@ -1055,7 +1056,7 @@ export default {
     user: 'Benutzername',
     userHint: 'Leer lassen für Versand ohne Authentifizierung.',
     pass: 'Passwort',
-    passHintSet: 'Ein Passwort ist hinterlegt. Leer lassen, um es beizubehalten; Eingabe ersetzt es.',
+    passHintSet: 'Ein Passwort ist hinterlegt und vorbefüllt (Augen-Symbol zeigt es an). Ein leeres Feld lässt es unverändert.',
     passHintUnset: 'Noch kein Passwort hinterlegt. Nur nötig, wenn der Server eine Anmeldung verlangt.',
     from: 'Absender',
     fromHint: "z. B. HugoCMS <cms{'@'}example.com>",

@@ -108,6 +108,7 @@ const perDayTooHigh = computed(
 const SHOP_EMPTY = { enabled: false, set: false, hint: null, created: null, grants: {} }
 const shop = ref({ ...SHOP_EMPTY })
 const newShopKey = ref('')
+const revealShopKey = ref(false) // Augen-Symbol: Schlüssel im Klartext zeigen
 const shopBusy = ref(false)
 const shopError = ref(null)
 const shopCopied = ref(false)
@@ -265,8 +266,11 @@ async function deleteShopKey() {
 
 // Signaturschlüssel von OpensourceERP: Erst damit nimmt die Anbindung die
 // PHP-Einstiegspunkte des Pakets an (Weiterleiter, 404-Seite), und nur
-// signiert. Der Schlüssel ist öffentlich — er darf angezeigt werden.
+// signiert. Der Schlüssel ist öffentlich — er darf angezeigt werden; das Feld
+// ist beim Öffnen mit dem hinterlegten Schlüssel vorbefüllt (Passwortfeld mit
+// Augen-Symbol wie die übrigen Schlüssel), Speichern ersetzt ihn.
 const newSigningKey = ref('')
+const revealSigningKey = ref(false)
 
 async function setSigningKey() {
   shopBusy.value = true
@@ -274,7 +278,7 @@ async function setSigningKey() {
   try {
     const res = await auth.shopSigningKeySet(newSigningKey.value.trim())
     shop.value = { ...shop.value, signingKey: res.signingKey, signingAvailable: res.signingAvailable }
-    newSigningKey.value = ''
+    newSigningKey.value = res.signingKey ?? ''
   } catch (e) {
     shopError.value = errorText(t, e)
   } finally {
@@ -295,6 +299,7 @@ async function deleteSigningKey() {
   try {
     await auth.shopSigningKeyDelete()
     shop.value = { ...shop.value, signingKey: null }
+    newSigningKey.value = ''
   } catch (e) {
     shopError.value = errorText(t, e)
   } finally {
@@ -344,7 +349,9 @@ watch(model, async (open) => {
     shop.value = cfg.shop ?? { ...SHOP_EMPTY }
     resetShopGrants()
     newShopKey.value = ''
-    newSigningKey.value = ''
+    newSigningKey.value = shop.value.signingKey ?? ''
+    revealShopKey.value = false
+    revealSigningKey.value = false
     shopError.value = null
     shopCopied.value = false
   } catch (e) {
@@ -717,8 +724,12 @@ async function submit() {
             class="mb-2"
           >
             <div class="mb-2">{{ $t('projectConfig.shopKeyShownOnce') }}</div>
+            <!-- Passwortfeld mit Augen-Symbol wie die übrigen Schlüssel; der
+                 Schlüssel ist nur als Hash gespeichert und daher nur hier,
+                 direkt nach dem Erzeugen, zu sehen. -->
             <v-text-field
               :model-value="newShopKey"
+              :type="revealShopKey ? 'text' : 'password'"
               variant="outlined"
               density="compact"
               readonly
@@ -728,10 +739,19 @@ async function submit() {
             >
               <template #append-inner>
                 <v-btn
+                  :icon="revealShopKey ? 'mdi-eye-off' : 'mdi-eye'"
+                  variant="text"
+                  size="small"
+                  :aria-label="$t('projectConfig.shopKeyReveal')"
+                  :title="$t('projectConfig.shopKeyReveal')"
+                  @click="revealShopKey = !revealShopKey"
+                />
+                <v-btn
                   :icon="shopCopied ? 'mdi-check' : 'mdi-content-copy'"
                   variant="text"
                   size="small"
                   :aria-label="$t('projectConfig.shopKeyCopy')"
+                  :title="$t('projectConfig.shopKeyCopy')"
                   @click="copyShopKey"
                 />
               </template>
@@ -832,19 +852,24 @@ async function submit() {
             v-model="newSigningKey"
             :label="$t('projectConfig.shopSigningKey')"
             :hint="$t('projectConfig.shopSigningKeyHint')"
+            :type="revealSigningKey ? 'text' : 'password'"
+            :append-inner-icon="revealSigningKey ? 'mdi-eye-off' : 'mdi-eye'"
             prepend-inner-icon="mdi-shield-key-outline"
+            autocomplete="off"
             variant="outlined"
             density="comfortable"
             persistent-hint
             class="mb-3"
+            @click:append-inner="revealSigningKey = !revealSigningKey"
           />
           <div class="d-flex flex-wrap" style="gap: 8px">
+            <!-- Speichern nur, wenn sich der Schlüssel vom hinterlegten unterscheidet. -->
             <v-btn
               variant="tonal"
               color="primary"
               prepend-icon="mdi-shield-key"
               :loading="shopBusy"
-              :disabled="!newSigningKey.trim() || loading || saving"
+              :disabled="!newSigningKey.trim() || newSigningKey.trim() === (shop.signingKey ?? '') || loading || saving"
               @click="setSigningKey"
             >
               {{ $t('projectConfig.shopSigningSave') }}

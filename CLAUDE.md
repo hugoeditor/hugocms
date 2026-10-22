@@ -33,8 +33,13 @@ offensichtlich ist — die ausführliche Funktionsübersicht steht in der README
   Persistenz der Anmeldedaten macht der Treiber selbst (`changeCredentials`),
   nicht der Connector. Für Mehrbenutzer einen neuen Treiber bauen, nicht den
   Connector erweitern.
-- **Geheimnisse** (Passwort-Hash, `[ai] api_key`) werden nie an den Client
-  zurückgegeben; in Formularen heißt „Feld leer = unverändert".
+- **Geheimnisse**: Passwort-Hashes und der Shop-Schlüssel (nur als Hash
+  gespeichert) werden nie an den Client zurückgegeben. Die Schlüssel der
+  `hugocms.ini` (`[ai] api_key`, Dienst-/PageSpeed-Schlüssel, SMTP-Passwort)
+  liefert `config` ausschließlich an Administratoren (`config.manage`) zum
+  Vorbefüllen der Konfigurations-Ansicht (Passwortfeld mit Augen-Symbol);
+  Redakteure bekommen nur „…Configured"-Flags. Beim Speichern gilt weiterhin
+  „Feld leer = unverändert".
 - **KI-Assistent**: `AssistantService` (Tool-Loop, 3 Schreibmodi
   readonly/confirm/auto), `AnthropicClient` (cURL). Modell-Default
   `claude-opus-5`. Tools sind dünne Hüllen um `FileService`.

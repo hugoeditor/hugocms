@@ -222,6 +222,7 @@ export default {
     shopKeyShownOnce:
       'Copy the key now and enter it in OpensourceERP. It is shown this one time only; only a check value is stored.',
     shopKeyCopy: 'Copy key',
+    shopKeyReveal: 'Reveal key',
     shopKeyCreate: 'Create key',
     shopKeyReplace: 'Create new key',
     shopKeyReplaceTitle: 'Replace key?',
@@ -236,7 +237,7 @@ export default {
     shopSigningSet: 'Signing key stored (ends in …{0}).',
     shopSigningNone: 'No signing key stored — the PHP files of the shop package are not transferred.',
     shopSigningKey: 'Public key from OpensourceERP',
-    shopSigningKeyHint: 'Shown in OpensourceERP in the system settings (Shop extension: signing key) and on the sales channel card. Replaces a stored key.',
+    shopSigningKeyHint: 'Shown in OpensourceERP in the system settings (Shop extension: signing key) and on the sales channel card. The stored key is prefilled; saving replaces it with your entry.',
     shopSigningSave: 'Save signing key',
     shopSigningDelete: 'Remove signing key',
     shopSigningDeleteTitle: 'Remove signing key?',
@@ -1001,7 +1002,7 @@ export default {
     section: 'AI assistant',
     apiKey: 'Anthropic API key',
     setupHint: 'Optional: API key for the AI assistant. Leave empty if not needed.',
-    apiKeyHintSet: 'A key is stored. Leave empty to keep it; entering one replaces it.',
+    apiKeyHintSet: 'A key is stored and prefilled (the eye icon reveals it). An empty field leaves it unchanged.',
     apiKeyHintUnset: 'No key stored yet. Leaving it empty keeps the assistant disabled.',
     model: 'Model (assistant)',
     modelHint: 'Model of the interactive AI assistant and default for the two tasks below.',
@@ -1025,7 +1026,7 @@ export default {
     url: 'Service URL',
     urlHint: 'Base address of the service (Pro) — one key for live analysis and speech input. Default: https://api.hugocms.com/',
     key: 'API key',
-    keyHintSet: 'A key is stored. Leave empty to keep it; entering one replaces it.',
+    keyHintSet: 'A key is stored and prefilled (the eye icon reveals it). An empty field leaves it unchanged.',
     keyHintUnset: 'No key stored yet. Without a key, live analysis and speech input stay disabled.',
   },
 
@@ -1034,7 +1035,7 @@ export default {
     intro:
       'Global Google API key for PageSpeed Insights. The URL to measure is entered per site directly in the PageSpeed tab.',
     key: 'Google API key',
-    keyHintSet: 'A key is stored. Leave empty to keep it; entering one replaces it.',
+    keyHintSet: 'A key is stored and prefilled (the eye icon reveals it). An empty field leaves it unchanged.',
     keyHintUnset:
       'Optional. Without a key a small quota applies; a free key from the Google Cloud Console raises it considerably (25,000 requests/day).',
   },
@@ -1054,7 +1055,7 @@ export default {
     user: 'Username',
     userHint: 'Leave empty for delivery without authentication.',
     pass: 'Password',
-    passHintSet: 'A password is stored. Leave empty to keep it; entering one replaces it.',
+    passHintSet: 'A password is stored and prefilled (the eye icon reveals it). An empty field leaves it unchanged.',
     passHintUnset: 'No password stored yet. Only needed if the server requires a login.',
     from: 'Sender',
     fromHint: "e.g. HugoCMS <cms{'@'}example.com>",

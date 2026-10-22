@@ -585,8 +585,10 @@ vollständigen Antwort zusammen.
 ist der bevorzugte Weg für Änderungen an bestehenden Dateien: Das Modell gibt
 nur den betroffenen Abschnitt aus statt der ganzen Seite. Damit gelten für ihn
 **dieselben Grenzen** wie für die Oberfläche: Einsperrung pro Mount,
-`permissions`/`readonly` und erlaubte Endungen. Der API-Schlüssel verlässt das
-Backend nie (wie der Passwort-Hash); im Formular heißt „Feld leer = unverändert".
+`permissions`/`readonly` und erlaubte Endungen. Der API-Schlüssel geht nur an
+Administratoren (`config.manage`), die ihn in der Konfigurations-Ansicht
+vorbefüllt sehen (Passwortfeld mit Augen-Symbol); Redakteure erhalten nur das
+Flag, ob einer hinterlegt ist. Im Formular heißt „Feld leer = unverändert".
 Bei aktiver Pro-Lizenz kommt das Nur-Lese-Werkzeug **`get_file_report`** hinzu:
 Es liefert zu einer Datei den Gesamt-Bericht (Qualitätsurteil + SEO-Funde) —
 Grundlage der KI-Verbesserung (siehe „SEO-Check & Content-Qualität").

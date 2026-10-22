@@ -4668,17 +4668,31 @@ final class Connector
      */
     private function cmdConfig(): array
     {
-        // Nur LESEN — das darf jedes angemeldete Konto. Die Antwort enthält
-        // keine Geheimnisse (Schlüssel und Passwörter erscheinen ausschließlich
-        // als „…Configured"-Flag). Geschrieben wird über cmdReconfigure, und das
-        // verlangt config.manage.
+        // Nur LESEN — das darf jedes angemeldete Konto. Für Redakteure enthält
+        // die Antwort keine Geheimnisse (Schlüssel und Passwörter erscheinen
+        // nur als „…Configured"-Flag). Administratoren (config.manage) bekommen
+        // die hinterlegten Schlüssel und das SMTP-Passwort zusätzlich im
+        // Klartext — zum erneuten Kopieren und zur Fehlersuche; die Ansicht
+        // zeigt sie in Passwortfeldern mit Augen-Symbol. Geschrieben wird
+        // über cmdReconfigure, und das verlangt config.manage.
         $this->requireAuth();
         if ($this->configPath === null) {
             throw new ApiException('ECONFIG', 409, 'RECONFIGURE-UNAVAILABLE');
         }
         $raw = Config::raw($this->configPath);
 
+        $secrets = [];
+        if ($this->auth->can('config.manage')) {
+            $secrets = [
+                'aiApiKey'     => trim((string) ($raw['ai']['api_key'] ?? '')),
+                'speechKey'    => trim((string) ($raw['services']['service_key'] ?? $raw['services']['speech_key'] ?? '')),
+                'pagespeedKey' => trim((string) ($raw['services']['pagespeed_key'] ?? '')),
+                'mailPass'     => trim((string) ($raw['mail']['smtp_pass'] ?? '')),
+            ];
+        }
+
         return [
+            ...$secrets,
             // Anmeldeverfahren. `authUserCount` sagt dem Dialog, ob beim Wechsel
             // auf multiuser noch ein Konto aus dem Einzelbenutzer entsteht oder
             // ob bereits Konten liegen (dann gelten die).
@@ -4691,7 +4705,8 @@ final class Connector
             'hugoBin'     => $raw['hugo']['bin'] ?? '',
             'hugoClean'   => filter_var($raw['hugo']['clean'] ?? false, FILTER_VALIDATE_BOOLEAN),
             'logLevels'   => self::LOG_LEVELS,
-            // KI-Assistent: Status + Modus/Modelle, aber NIE der API-Schlüssel.
+            // KI-Assistent: Status + Modus/Modelle; der API-Schlüssel selbst nur
+            // für Administratoren (siehe $secrets oben).
             // Cron-/Audit-Modell leer = „wie Assistenten-Modell" (Fallback).
             'aiConfigured' => trim((string) ($raw['ai']['api_key'] ?? '')) !== '',
             'aiModel'      => $raw['ai']['model'] ?? '',
@@ -4707,18 +4722,18 @@ final class Connector
             // Hinterlegte Modell-Auswahl (leer = der Client nutzt seine eigene
             // Liste). Der Aktualisieren-Knopf im Dialog füllt sie über /aimodels.
             'aiModels'     => Config::normalizeModels($raw['ai']['models'] ?? ''),
-            // seo-success-Dienst (Pro): Status + Basis-URL, aber NIE der Schlüssel.
-            // Leere URL → der Client füllt den Standard vor. Neue Namen (service_*)
-            // mit Rückfall auf die alten (speech_*).
+            // seo-success-Dienst (Pro): Status + Basis-URL; der Schlüssel selbst
+            // nur für Administratoren. Leere URL → der Client füllt den Standard
+            // vor. Neue Namen (service_*) mit Rückfall auf die alten (speech_*).
             'speechConfigured' => trim((string) ($raw['services']['service_key'] ?? $raw['services']['speech_key'] ?? '')) !== '',
             'speechUrl'        => $raw['services']['service_url'] ?? $raw['services']['speech_url'] ?? '',
             // PageSpeed-Check: Status des optionalen (globalen) Google-Schlüssels
-            // — nie der Schlüssel selbst. Die zu messende Live-Adresse steht
+            // (der Schlüssel selbst nur für Administratoren). Die zu messende Live-Adresse steht
             // dagegen pro Webseite in der Mount-Konfiguration und wird im Panel
             // gesetzt, nicht hier.
             'pagespeedConfigured' => trim((string) ($raw['services']['pagespeed_key'] ?? '')) !== '',
-            // E-Mail-Versand (Gesundheitscheck): alle Werte AUSSER dem Passwort.
-            // mailPassConfigured zeigt nur an, ob bereits eines hinterlegt ist.
+            // E-Mail-Versand (Gesundheitscheck): alle Werte; das Passwort selbst
+            // nur für Administratoren, mailPassConfigured für alle.
             'mailHost'           => $raw['mail']['smtp_host'] ?? '',
             'mailPort'           => $raw['mail']['smtp_port'] ?? '',
             'mailSecurity'       => $raw['mail']['smtp_security'] ?? '',

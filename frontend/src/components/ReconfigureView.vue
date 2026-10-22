@@ -2,7 +2,7 @@
 // Konfiguration ändern: die globalen Einstellungen der hugocms.ini im
 // laufenden Betrieb. Als Overlay-Ansicht wie die Benutzerverwaltung
 // (OverlayView), nicht als v-dialog.
-import { computed, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 import { errorText } from '../i18n/apiMessage'
@@ -37,8 +37,14 @@ const editorDefaultEditable = ref([])
 // Einstiegspunkte der Verzeichnisauswahl ([system] browse_roots), einer je Zeile.
 const systemBrowseRoots = ref('')
 
-// KI-Assistent. Der Schlüssel wird nie geladen (Geheimnis); leeres Feld lässt
-// ihn unverändert. aiConfigured zeigt nur an, ob bereits einer gesetzt ist.
+// Geheimnisse (KI-Schlüssel, Dienst-Schlüssel, PageSpeed-Schlüssel, SMTP-
+// Passwort): Für Administratoren liefert der Server sie beim Öffnen mit, die
+// Felder sind dann vorbefüllt und per Augen-Symbol lesbar (erneut kopieren,
+// Fehlersuche). Redakteure sehen leere, gesperrte Felder. Ein leeres Feld
+// lässt den gespeicherten Wert beim Speichern unverändert.
+const reveal = reactive({ ai: false, speech: false, pagespeed: false, mail: false })
+
+// KI-Assistent. aiConfigured zeigt an, ob bereits ein Schlüssel gesetzt ist.
 const aiApiKey = ref('')
 const aiModel = ref('claude-opus-5')
 // Cron-Verbesserer und Content-Qualität: leerer Wert = „wie Assistenten-Modell“.
@@ -87,23 +93,21 @@ const writeModeItems = computed(() =>
   ['readonly', 'confirm', 'auto'].map((v) => ({ value: v, title: t(`assistant.mode.${v}`) })),
 )
 
-// Spracheingabe (Pro-Dienst). Der Schlüssel wird nie geladen (Geheimnis); leeres
-// Feld lässt ihn unverändert. Die URL ist die Basis-Adresse des Dienstes; fehlt
+// Spracheingabe (Pro-Dienst). Die URL ist die Basis-Adresse des Dienstes; fehlt
 // ein Eintrag in der hugocms.ini, wird der Standard vorbefüllt.
 const DEFAULT_SPEECH_URL = 'https://api.hugocms.com/'
 const speechUrl = ref(DEFAULT_SPEECH_URL)
 const speechKey = ref('')
 const speechConfigured = ref(false)
 
-// PageSpeed-Check (Pro-Dienst). Nur der (globale) Google-Schlüssel — optional und
-// ein Geheimnis: leeres Feld = unverändert. Die zu messende Live-Adresse steht
-// pro Webseite in der Mount-Konfiguration und wird im PageSpeed-Panel gesetzt.
+// PageSpeed-Check (Pro-Dienst). Nur der (globale) Google-Schlüssel — optional.
+// Die zu messende Live-Adresse steht pro Webseite in der Orte-Konfiguration und
+// wird im PageSpeed-Panel gesetzt.
 const pagespeedKey = ref('')
 const pagespeedConfigured = ref(false)
 
-// E-Mail-Versand (Gesundheitscheck). Das SMTP-Passwort wird nie geladen
-// (Geheimnis); leeres Feld lässt es unverändert. mailPassConfigured zeigt nur
-// an, ob bereits eines gesetzt ist.
+// E-Mail-Versand (Gesundheitscheck). mailPassConfigured zeigt an, ob bereits
+// ein SMTP-Passwort gesetzt ist.
 const mailHost = ref('')
 const mailPort = ref('')
 const mailSecurity = ref('tls')
@@ -178,6 +182,7 @@ watch(model, async (open) => {
   if (!open) return
   error.value = null
   loading.value = true
+  reveal.ai = reveal.speech = reveal.pagespeed = reveal.mail = false
   try {
     const cfg = await auth.loadConfig()
     authDriver.value = cfg.authDriver ?? 'singleuser'
@@ -193,7 +198,7 @@ watch(model, async (open) => {
     editorExtraEditable.value = cfg.editorExtraEditable ?? ''
     editorDefaultEditable.value = cfg.editorDefaultEditable ?? []
     systemBrowseRoots.value = cfg.systemBrowseRoots ?? ''
-    aiApiKey.value = ''
+    aiApiKey.value = cfg.aiApiKey ?? '' // nur für Administratoren gefüllt
     aiModel.value = cfg.aiModel || 'claude-opus-5'
     aiModelCron.value = cfg.aiModelCron || ''
     aiModelAudit.value = cfg.aiModelAudit || ''
@@ -204,16 +209,16 @@ watch(model, async (open) => {
     // Hinterlegte Liste bevorzugen; ohne Eintrag bleibt die mitgelieferte.
     aiModels.value = cfg.aiModels?.length ? cfg.aiModels : AI_MODELS
     speechUrl.value = cfg.speechUrl || DEFAULT_SPEECH_URL
-    speechKey.value = ''
+    speechKey.value = cfg.speechKey ?? ''
     speechConfigured.value = !!cfg.speechConfigured
-    pagespeedKey.value = ''
+    pagespeedKey.value = cfg.pagespeedKey ?? ''
     pagespeedConfigured.value = !!cfg.pagespeedConfigured
     mailHost.value = cfg.mailHost ?? ''
     mailPort.value = cfg.mailPort ?? ''
     mailSecurity.value = cfg.mailSecurity || 'tls'
     mailSecurities.value = cfg.mailSecurities ?? ['tls', 'ssl', 'none']
     mailUser.value = cfg.mailUser ?? ''
-    mailPass.value = ''
+    mailPass.value = cfg.mailPass ?? ''
     mailFrom.value = cfg.mailFrom ?? ''
     mailTo.value = cfg.mailTo ?? ''
     mailPassConfigured.value = !!cfg.mailPassConfigured
@@ -232,7 +237,7 @@ async function submit() {
   saving.value = true
   error.value = null
   try {
-    // Ist ein (neuer) Dienst-Schlüssel eingegeben, vor dem Speichern gegen den
+    // Ist ein Dienst-Schlüssel eingetragen, vor dem Speichern gegen den
     // Dienst prüfen; bei ungültigem Schlüssel oder nicht erreichbarem Dienst
     // nicht speichern (der Fehler landet im gemeinsamen catch).
     if (speechKey.value.trim()) {
@@ -455,12 +460,14 @@ async function submit() {
       <v-text-field
         v-model="aiApiKey"
         :label="$t('aiConfig.apiKey')"
-        type="password"
+        :type="reveal.ai ? 'text' : 'password'"
+        :append-inner-icon="reveal.ai ? 'mdi-eye-off' : 'mdi-eye'"
         prepend-inner-icon="mdi-key-variant"
         autocomplete="off"
         variant="outlined"
         density="comfortable"
         class="mb-2"
+        @click:append-inner="reveal.ai = !reveal.ai"
       />
       <div class="text-caption text-medium-emphasis mb-2">{{ $t('aiConfig.modelHint') }}</div>
       <v-select
@@ -536,11 +543,13 @@ async function submit() {
       <v-text-field
         v-model="speechKey"
         :label="$t('speechConfig.key')"
-        type="password"
+        :type="reveal.speech ? 'text' : 'password'"
+        :append-inner-icon="reveal.speech ? 'mdi-eye-off' : 'mdi-eye'"
         prepend-inner-icon="mdi-key-variant"
         autocomplete="off"
         variant="outlined"
         density="comfortable"
+        @click:append-inner="reveal.speech = !reveal.speech"
       />
 
       <v-divider class="my-3" />
@@ -592,12 +601,14 @@ async function submit() {
       <v-text-field
         v-model="mailPass"
         :label="$t('mailConfig.pass')"
-        type="password"
+        :type="reveal.mail ? 'text' : 'password'"
+        :append-inner-icon="reveal.mail ? 'mdi-eye-off' : 'mdi-eye'"
         prepend-inner-icon="mdi-key-variant"
         autocomplete="off"
         variant="outlined"
         density="comfortable"
         class="mb-2"
+        @click:append-inner="reveal.mail = !reveal.mail"
       />
       <v-text-field
         v-model="mailFrom"
@@ -652,11 +663,13 @@ async function submit() {
       <v-text-field
         v-model="pagespeedKey"
         :label="$t('pagespeedConfig.key')"
-        type="password"
+        :type="reveal.pagespeed ? 'text' : 'password'"
+        :append-inner-icon="reveal.pagespeed ? 'mdi-eye-off' : 'mdi-eye'"
         prepend-inner-icon="mdi-key-variant"
         autocomplete="off"
         variant="outlined"
         density="comfortable"
+        @click:append-inner="reveal.pagespeed = !reveal.pagespeed"
       />
 
       <div class="text-caption text-medium-emphasis mt-3">{{ $t('reconfigure.note') }}</div>
