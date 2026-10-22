@@ -2173,8 +2173,13 @@ final class Connector
             // Freigaben: wohin die Anbindung schreiben darf, festgelegt von
             // einem Administrator in den Projekteinstellungen. OpensourceERP
             // legt die Dateien genau dort ab, statt erst am Abgleich zu
-            // scheitern; null = unbrauchbar eingetragen, nichts freigegeben
+            // scheitern; null = unbrauchbar eingetragen oder kein Online-Shop,
+            // nichts freigegeben
             'grants' => $this->shopGrants(),
+            // Online-Shop auf dieser Webseite: nur dann gibt es die fünf
+            // Freigaben des Shops. OpensourceERP unterscheidet damit „nicht
+            // freigeschaltet“ von „unbrauchbar eingetragen“
+            'onlineShop' => $this->shop['onlineShop'],
             // Dieselben Freigaben als Bereiche, für OpensourceERP vor dem
             // 2026-10-09: Es liest areas, und ohne sie ließe es jede Datei
             // aus — die Übernahme löschte dann die vorige Lieferung. Entfällt,
@@ -2291,7 +2296,10 @@ final class Connector
      * Schlüssel und Freigaben stehen — wieder eingeschaltet, geht es weiter
      * wie zuvor.
      *
-     * @param array<string, mixed> $request enabled, contentDir, categoryGroups, images, thumbnails
+     * onlineShop schaltet die fünf Freigaben des Shops frei; aus heißt: nur das
+     * Kundenportal-Paket, die eingetragenen Pfade bleiben für später stehen.
+     *
+     * @param array<string, mixed> $request enabled, onlineShop, contentDir, categoryGroups, images, thumbnails, downloads
      * @return array<string, mixed> Stand wie projectconfig.shop
      */
     private function cmdShopSettingsSet(array $request): array
@@ -2299,6 +2307,9 @@ final class Connector
         $this->requireShopKeyAdmin();
 
         $changes = [];
+        if (array_key_exists('onlineShop', $request)) {
+            $changes['online_shop'] = filter_var($request['onlineShop'], FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
+        }
         $grants = $this->shopGrants();
         foreach (MountConfig::SHOP_GRANTS as $key => [$field, $file]) {
             if (!array_key_exists($field, $request)) {
@@ -2325,12 +2336,23 @@ final class Connector
         }
         if (array_key_exists('enabled', $request)) {
             $changes['enabled'] = filter_var($request['enabled'], FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
+            // Neue Anbindung (noch kein Schlüssel, kein Schalter): ausdrücklich
+            // ohne Online-Shop anfangen — ohne den Eintrag gälte der Rückfall
+            // „Shop“ für Anbindungen von vor dem Schalter
+            $raw = Config::raw((string) $this->mountsPath)['shop'] ?? [];
+            if ($changes['enabled'] === 'true' && $this->shop['keyHash'] === null
+                && !array_key_exists('online_shop', $changes) && !array_key_exists('online_shop', is_array($raw) ? $raw : [])) {
+                $changes['online_shop'] = 'false';
+            }
         }
 
         $before = $this->shop;
         $this->writeShopSection($changes);
         if ($before['enabled'] !== $this->shop['enabled']) {
-            $this->logger->info('Shop-Erweiterung ' . ($this->shop['enabled'] ? 'eingeschaltet' : 'ausgeschaltet'));
+            $this->logger->info('OpensourceERP-Anbindung ' . ($this->shop['enabled'] ? 'eingeschaltet' : 'ausgeschaltet'));
+        }
+        if ($before['onlineShop'] !== $this->shop['onlineShop']) {
+            $this->logger->info('Online-Shop auf dieser Webseite ' . ($this->shop['onlineShop'] ? 'freigegeben' : 'nicht mehr freigegeben'));
         }
         $changed = [];
         foreach (MountConfig::SHOP_GRANTS as $key => [$field]) {
@@ -2395,6 +2417,7 @@ final class Connector
     {
         $state = [
             'enabled' => $this->shop['enabled'],
+            'onlineShop' => $this->shop['onlineShop'],
             'set' => $this->shop['keyHash'] !== null,
             'hint' => $this->shop['keyHint'],
             'created' => $this->shop['keyCreated'],

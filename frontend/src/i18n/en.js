@@ -191,6 +191,9 @@ export default {
       'OpensourceERP can then no longer reach this website: product pages, prices and stock are no longer updated. Key and grants stay stored.',
     shopDisable: 'Switch off',
     shopGrantsSection: 'Grants for OpensourceERP',
+    shopOnlineShop: 'Online shop on this website',
+    shopOnlineShopHint:
+      'When enabled, the connection also accepts product pages, category overview, product images, thumbnails and downloads — their grants appear below. A plain customer portal leaves this off; the connection then accepts only the customer portal package.',
     shopGrantsHint:
       'Where OpensourceERP may write, relative to the Hugo project. OpensourceERP only displays the grants and applies them on every run. If a directory is moved, the next run removes the pages at the old location. Applied with “Save”.',
     shopGrant: {
@@ -199,7 +202,7 @@ export default {
       images: 'Product images',
       thumbnails: 'Thumbnails',
       downloads: 'Downloads',
-      package: 'Shop package',
+      package: 'Customer portal package',
     },
     shopGrantHint: {
       contentDir: 'Directory of the product pages. OpensourceERP writes only Markdown files here and deletes only what it delivered itself.',
@@ -207,7 +210,7 @@ export default {
       images: 'OpensourceERP delivers the product images from its media library here (jpg, png, gif, webp) and deletes only what it delivered itself.',
       thumbnails: 'OpensourceERP delivers the finished thumbnails here — not the same directory as the product images.',
       downloads: 'OpensourceERP delivers the download files of the product pages (data sheets, manuals: pdf, zip, txt, images) from its media library here.',
-      package: 'Templates, scripts and settings of the shop. Fixed, cannot be changed.',
+      package: 'Templates, widgets and settings of the customer portal, with a shop also those of the shop. Fixed, cannot be changed.',
     },
     shopGrantPick: 'Choose a directory in the Hugo project',
     shopGrantRequired: 'Please enter a path.',
@@ -217,6 +220,7 @@ export default {
     shopGrantsUnsaved: 'Changed grants are applied with “Save”.',
     shopEndpoint: 'Address for OpensourceERP',
     shopEndpointHint: 'Enter exactly this address in OpensourceERP — HugoCMS recognises the website by host and endpoint.',
+    shopEndpointCopy: 'Copy address',
     shopKeySet: 'Key stored (ends in …{0}), created on {1}.',
     shopKeyNone: 'No key stored — OpensourceERP cannot reach this website.',
     shopKeyShownOnce:

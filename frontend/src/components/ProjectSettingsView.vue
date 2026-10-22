@@ -105,7 +105,7 @@ const perDayTooHigh = computed(
 // Webseite, nur für Administratoren. Der Schlüssel selbst kommt nur einmal,
 // direkt nach dem Erzeugen — dann steht er in newShopKey, bis die Ansicht
 // schließt. Schalter und Schlüssel wirken sofort, die Freigaben mit „Speichern“.
-const SHOP_EMPTY = { enabled: false, set: false, hint: null, created: null, grants: {} }
+const SHOP_EMPTY = { enabled: false, onlineShop: false, set: false, hint: null, created: null, grants: {} }
 const shop = ref({ ...SHOP_EMPTY })
 const newShopKey = ref('')
 const revealShopKey = ref(false) // Augen-Symbol: Schlüssel im Klartext zeigen
@@ -130,8 +130,10 @@ function resetShopGrants() {
   shopGrants.value = Object.fromEntries(SHOP_GRANTS.map(({ field }) => [field, shop.value.grants?.[field] ?? '']))
 }
 
+// Nur mit Online-Shop: ohne ihn gibt es die fünf Felder nicht
 const shopGrantsDirty = computed(() =>
-  SHOP_GRANTS.some(({ field }) => String(shopGrants.value[field] ?? '').trim() !== (shop.value.grants?.[field] ?? '')),
+  !!shop.value.onlineShop
+  && SHOP_GRANTS.some(({ field }) => String(shopGrants.value[field] ?? '').trim() !== (shop.value.grants?.[field] ?? '')),
 )
 
 // Dieselben Regeln wie auf dem Server (MountConfig::shopGrantPath), damit ein
@@ -201,6 +203,21 @@ async function toggleShop(enabled) {
     resetShopGrants()
     // Der Systemstatus und andere Ansichten lesen den Schalter aus whoami
     await auth.check()
+  } catch (e) {
+    shopError.value = errorText(t, e)
+  } finally {
+    shopBusy.value = false
+  }
+}
+
+// Online-Shop auf dieser Webseite: wirkt sofort. Aus heißt: nur das
+// Kundenportal-Paket; die eingetragenen Freigaben bleiben für später stehen.
+async function toggleOnlineShop(onlineShop) {
+  shopBusy.value = true
+  shopError.value = null
+  try {
+    shop.value = await auth.shopSettingsSet({ onlineShop })
+    resetShopGrants()
   } catch (e) {
     shopError.value = errorText(t, e)
   } finally {
@@ -318,6 +335,19 @@ async function copyShopKey() {
   }
 }
 
+// Adresse für OpensourceERP in die Zwischenablage; das Häkchen bestätigt kurz.
+const endpointCopied = ref(false)
+
+async function copyShopEndpoint() {
+  try {
+    await navigator.clipboard.writeText(shopEndpoint)
+    endpointCopied.value = true
+    setTimeout(() => { endpointCopied.value = false }, 2000)
+  } catch {
+    endpointCopied.value = false
+  }
+}
+
 const loading = ref(false) // Laden der aktuellen Werte beim Öffnen
 const saving = ref(false)
 const error = ref(null)
@@ -376,7 +406,7 @@ async function submit() {
   try {
     // Freigaben der Shop-Anbindung zuerst: Sie prüft der Server streng, und
     // ein Fehler darin bricht ab, bevor der Rest gespeichert ist.
-    if (auth.manageConfig && shop.value.enabled && shopGrantsDirty.value) {
+    if (auth.manageConfig && shop.value.enabled && shop.value.onlineShop && shopGrantsDirty.value) {
       shop.value = await auth.shopSettingsSet(
         Object.fromEntries(SHOP_GRANTS.map(({ field }) => [field, String(shopGrants.value[field] ?? '').trim()])),
       )
@@ -707,7 +737,19 @@ async function submit() {
             readonly
             persistent-hint
             class="mb-3 mt-2"
-          />
+            @focus="$event.target.select()"
+          >
+            <template #append-inner>
+              <v-btn
+                :icon="endpointCopied ? 'mdi-check' : 'mdi-content-copy'"
+                variant="text"
+                size="small"
+                :aria-label="$t('projectConfig.shopEndpointCopy')"
+                :title="$t('projectConfig.shopEndpointCopy')"
+                @click="copyShopEndpoint"
+              />
+            </template>
+          </v-text-field>
 
           <div class="text-body-2 mb-2">
             <template v-if="shop.set">
@@ -786,7 +828,31 @@ async function submit() {
           <div class="text-subtitle-2 mt-5 mb-1">{{ $t('projectConfig.shopGrantsSection') }}</div>
           <div class="text-caption text-medium-emphasis mb-3">{{ $t('projectConfig.shopGrantsHint') }}</div>
           <v-text-field
-            v-for="grant in SHOP_GRANTS"
+            :model-value="`${shop.grants?.package ?? 'oserp-portal'}/`"
+            :label="$t('projectConfig.shopGrant.package')"
+            :hint="$t('projectConfig.shopGrantHint.package')"
+            prepend-inner-icon="mdi-package-variant-closed"
+            variant="outlined"
+            density="comfortable"
+            readonly
+            persistent-hint
+            class="mb-3"
+          />
+          <!-- Online-Shop: erst damit gibt es die fünf Freigaben des Shops -->
+          <v-switch
+            :model-value="shop.onlineShop"
+            :label="$t('projectConfig.shopOnlineShop')"
+            :loading="shopBusy"
+            :disabled="shopBusy || loading || saving"
+            color="primary"
+            density="compact"
+            hide-details
+            class="mb-1"
+            @update:model-value="toggleOnlineShop"
+          />
+          <div class="text-caption text-medium-emphasis mb-3">{{ $t('projectConfig.shopOnlineShopHint') }}</div>
+          <v-text-field
+            v-for="grant in SHOP_GRANTS.filter(() => shop.onlineShop)"
             :key="grant.field"
             v-model="shopGrants[grant.field]"
             :label="$t(`projectConfig.shopGrant.${grant.field}`)"
@@ -811,17 +877,6 @@ async function submit() {
               />
             </template>
           </v-text-field>
-          <v-text-field
-            :model-value="`${shop.grants?.package ?? 'oserp-portal'}/`"
-            :label="$t('projectConfig.shopGrant.package')"
-            :hint="$t('projectConfig.shopGrantHint.package')"
-            prepend-inner-icon="mdi-package-variant-closed"
-            variant="outlined"
-            density="comfortable"
-            readonly
-            persistent-hint
-            class="mb-2"
-          />
           <div v-if="shopGrantsDirty" class="text-caption text-warning mb-2">
             {{ $t('projectConfig.shopGrantsUnsaved') }}
           </div>

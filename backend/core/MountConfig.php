@@ -104,6 +104,10 @@ use HugoCMS\FileManager\Exception\ApiException;
  *   key_hash    Hash des Schlüssels (sha256:…). Der Schlüssel selbst steht nirgends.
  *   key_hint    letzte vier Zeichen des Schlüssels, zum Wiedererkennen.
  *   key_created Zeitpunkt der Erzeugung (ISO 8601).
+ *   online_shop Online-Shop auf dieser Webseite (true/false). Nur dann gelten
+ *               die fünf Freigaben des Shops; ein reines Kundenportal bekommt
+ *               nur das Kundenportal-Paket. Fehlt der Schlüssel, gilt true
+ *               (Anbindungen von vor dem Schalter waren immer Shops).
  *   Freigaben, jeweils relativ zur Hugo-Quelle, ohne .. und ohne versteckte
  *   Bestandteile ({@see shopGrantPath()}). Ein unbrauchbarer Eintrag gibt
  *   nichts frei (Hinweis SHOP-GRANT-UNUSABLE) — lieber steht der Shop, als
@@ -236,7 +240,7 @@ final class MountConfig
      *   improve: array{auto: bool, windowStart: string, windowEnd: string, perDay: int, skipWeekends: bool},
      *   cron: array{pauseBuild: bool, pauseImprove: bool, pauseHealthcheck: bool},
      *   git: array{autoCommit: bool, commitMessage: string, commitMessagePending: string},
-     *   shop: array{enabled: bool, keyHash: ?string, keyHint: ?string, keyCreated: ?string, contentDir: ?string, categoryGroups: ?string, images: ?string, thumbnails: ?string, downloads: ?string, signingKey: ?string},
+     *   shop: array{enabled: bool, onlineShop: bool, keyHash: ?string, keyHint: ?string, keyCreated: ?string, contentDir: ?string, categoryGroups: ?string, images: ?string, thumbnails: ?string, downloads: ?string, signingKey: ?string},
      *   warnings: list<array{key: string, params: list<mixed>}>
      * }
      */
@@ -436,7 +440,7 @@ final class MountConfig
      *
      * @param array<string, mixed> $section
      * @param list<array{key: string, params: list<mixed>}> $warnings
-     * @return array{enabled: bool, keyHash: ?string, keyHint: ?string, keyCreated: ?string, contentDir: ?string, categoryGroups: ?string, images: ?string, thumbnails: ?string, downloads: ?string, signingKey: ?string}
+     * @return array{enabled: bool, onlineShop: bool, keyHash: ?string, keyHint: ?string, keyCreated: ?string, contentDir: ?string, categoryGroups: ?string, images: ?string, thumbnails: ?string, downloads: ?string, signingKey: ?string}
      */
     private static function shopSection(array $section, string $configPath, array &$warnings): array
     {
@@ -450,12 +454,24 @@ final class MountConfig
             'enabled' => array_key_exists('enabled', $section)
                 ? filter_var($section['enabled'], FILTER_VALIDATE_BOOLEAN)
                 : $hash !== '',
+            // Online-Shop: erst damit gelten die fünf Freigaben des Shops. Fehlt
+            // der Schlüssel, war die Anbindung von vor dem Schalter — damals
+            // war jede ein Shop, also ein. Neue Anbindungen bekommen beim
+            // Einschalten ein explizites false (Connector::cmdShopSettingsSet).
+            'onlineShop' => array_key_exists('online_shop', $section)
+                ? filter_var($section['online_shop'], FILTER_VALIDATE_BOOLEAN)
+                : true,
             'keyHash' => $hash === '' ? null : $hash,
             'keyHint' => $hash === '' || $hint === '' ? null : $hint,
             'keyCreated' => $hash === '' || $created === '' ? null : $created,
             'signingKey' => null,
         ];
         foreach (self::SHOP_GRANTS as $key => [$field, $file, $default]) {
+            if (!$shop['onlineShop']) {
+                // Kein Online-Shop: nichts freigegeben, und das ist kein Fehler
+                $shop[$field] = null;
+                continue;
+            }
             $value = trim((string) ($section[$key] ?? ''));
             $shop[$field] = $value === '' ? $default : self::shopGrantPath($value, $file);
             // Vorschaubilder tragen den Namen ihres Produktbilds: im selben

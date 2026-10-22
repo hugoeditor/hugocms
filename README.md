@@ -1536,7 +1536,17 @@ begrenzt ist (`shopbrowsedirs`); OpensourceERP fragt sie über
 | Produktbilder | `images` | `static/images/products` | `jpg`, `jpeg`, `png`, `gif`, `webp` schreiben und löschen, direkt im Verzeichnis |
 | Vorschaubilder | `thumbnails` | `static/images/thumbnails` | wie Produktbilder (fertige Vorschaubilder aus OpensourceERP) |
 | Downloads | `downloads` | `static/downloads` | zusätzlich `pdf`, `zip`, `txt` schreiben und löschen, direkt im Verzeichnis |
-| Shop-Paket | fest `oserp-portal/` | – | `md`, `json`, `html`, `js`, `css`; PHP nur signiert |
+| Kundenportal-Paket | fest `oserp-portal/` | – | `md`, `json`, `html`, `js`, `css`; PHP nur signiert |
+
+Die ersten fünf Freigaben gelten nur mit **Online-Shop auf dieser Webseite**
+(`[shop] online_shop = true`, Schalter in den Projekteinstellungen). Aus heißt:
+Die Anbindung nimmt nur das Kundenportal-Paket an, `shopbuildstatus` meldet die
+fünf Freigaben als nicht vorhanden (`onlineShop: false`), und OpensourceERP
+sagt beim Shop-Lauf, dass der Online-Shop in HugoCMS nicht freigegeben ist. Ein
+reines Kundenportal lässt den Schalter aus. Fehlt der Schlüssel in der Sektion,
+gilt `true` — Anbindungen von vor dem Schalter waren immer Shops und laufen so
+weiter; eine neu eingeschaltete Anbindung bekommt `online_shop = false`
+eingetragen und ist damit zunächst ein reines Kundenportal.
 
 Ein unbrauchbarer Eintrag (absolut, `..`, versteckte Bestandteile, andere
 Zeichen als Buchstaben, Ziffern, `- _ .` und Leerzeichen) gibt nichts frei und

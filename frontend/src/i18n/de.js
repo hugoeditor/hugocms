@@ -191,6 +191,9 @@ export default {
       'OpensourceERP erreicht diese Webseite danach nicht mehr: Produktseiten, Preise und Bestände werden nicht mehr aktualisiert. Schlüssel und Freigaben bleiben gespeichert.',
     shopDisable: 'Ausschalten',
     shopGrantsSection: 'Freigaben für OpensourceERP',
+    shopOnlineShop: 'Online-Shop auf dieser Webseite',
+    shopOnlineShopHint:
+      'Eingeschaltet nimmt die Anbindung auch Produktseiten, Kategorieübersicht, Produktbilder, Vorschaubilder und Downloads an — die Freigaben dafür erscheinen darunter. Ein reines Kundenportal lässt den Schalter aus; die Anbindung nimmt dann nur das Kundenportal-Paket an.',
     shopGrantsHint:
       'Wohin OpensourceERP schreiben darf, relativ zum Hugo-Projekt. OpensourceERP zeigt die Freigaben nur an und übernimmt sie bei jedem Lauf. Wird ein Verzeichnis verlegt, entfernt der nächste Lauf die Seiten am alten Ort. Übernommen mit „Speichern“.',
     shopGrant: {
@@ -199,7 +202,7 @@ export default {
       images: 'Produktbilder',
       thumbnails: 'Vorschaubilder',
       downloads: 'Downloads',
-      package: 'Shop-Paket',
+      package: 'Kundenportal-Paket',
     },
     shopGrantHint: {
       contentDir: 'Verzeichnis der Produktseiten. OpensourceERP schreibt hier nur Markdown-Dateien und löscht nur, was es selbst geliefert hat.',
@@ -207,7 +210,7 @@ export default {
       images: 'Hierhin liefert OpensourceERP die Produktbilder aus seiner Medienbibliothek (jpg, png, gif, webp) und löscht nur, was es selbst geliefert hat.',
       thumbnails: 'Hierhin liefert OpensourceERP die fertigen Vorschaubilder — nicht dasselbe Verzeichnis wie die Produktbilder.',
       downloads: 'Hierhin liefert OpensourceERP die Download-Dateien der Produktseiten (Datenblätter, Anleitungen: pdf, zip, txt, Bilder) aus seiner Medienbibliothek.',
-      package: 'Vorlagen, Skripte und Einstellungen des Shops. Fest, nicht änderbar.',
+      package: 'Vorlagen, Widgets und Einstellungen des Kundenportals, mit Shop auch die des Shops. Fest, nicht änderbar.',
     },
     shopGrantPick: 'Verzeichnis im Hugo-Projekt auswählen',
     shopGrantRequired: 'Bitte einen Pfad angeben.',
@@ -217,6 +220,7 @@ export default {
     shopGrantsUnsaved: 'Geänderte Freigaben werden mit „Speichern“ übernommen.',
     shopEndpoint: 'Adresse für OpensourceERP',
     shopEndpointHint: 'Genau diese Adresse in OpensourceERP eintragen — HugoCMS erkennt die Webseite an Host und Endpunkt.',
+    shopEndpointCopy: 'Adresse kopieren',
     shopKeySet: 'Schlüssel hinterlegt (endet auf …{0}), erzeugt am {1}.',
     shopKeyNone: 'Kein Schlüssel hinterlegt — OpensourceERP kann diese Webseite nicht ansprechen.',
     shopKeyShownOnce:
