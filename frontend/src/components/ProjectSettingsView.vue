@@ -792,7 +792,7 @@ async function submit() {
             </template>
           </v-text-field>
           <v-text-field
-            :model-value="`${shop.grants?.package ?? 'oserp-shop'}/`"
+            :model-value="`${shop.grants?.package ?? 'oserp-portal'}/`"
             :label="$t('projectConfig.shopGrant.package')"
             :hint="$t('projectConfig.shopGrantHint.package')"
             prepend-inner-icon="mdi-package-variant-closed"

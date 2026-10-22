@@ -181,12 +181,12 @@ export default {
     submit: 'Speichern',
     cancel: 'Abbrechen',
     success: 'Projekteinstellungen gespeichert.',
-    shopSection: 'Shop-Erweiterung (OpensourceERP)',
+    shopSection: 'OpensourceERP-Anbindung (Kundenportal und Shop)',
     shopHint:
-      'OpensourceERP erzeugt die Produktseiten des Webshops und stößt danach den Bau dieser Webseite an. Dafür die Erweiterung einschalten, einen Schlüssel erzeugen, der nur für diese Webseite gilt, und festlegen, wohin OpensourceERP schreiben darf.',
-    shopEnabled: 'Shop-Erweiterung einschalten',
+      'OpensourceERP liefert das Kundenportal (Anmeldung, Kundenkonto, Rechnungen) und — mit Shop — die Produktseiten, und stößt danach den Bau dieser Webseite an. Dafür die Anbindung einschalten, einen Schlüssel erzeugen, der nur für diese Webseite gilt, und festlegen, wohin OpensourceERP schreiben darf.',
+    shopEnabled: 'OpensourceERP-Anbindung einschalten',
     shopDisabledHint: 'Ausgeschaltet weist die Webseite jeden Aufruf von OpensourceERP ab. Schlüssel und Freigaben bleiben gespeichert.',
-    shopDisableTitle: 'Shop-Erweiterung ausschalten?',
+    shopDisableTitle: 'OpensourceERP-Anbindung ausschalten?',
     shopDisableConfirm:
       'OpensourceERP erreicht diese Webseite danach nicht mehr: Produktseiten, Preise und Bestände werden nicht mehr aktualisiert. Schlüssel und Freigaben bleiben gespeichert.',
     shopDisable: 'Ausschalten',

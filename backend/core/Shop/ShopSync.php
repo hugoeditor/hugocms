@@ -86,9 +86,13 @@ final class ShopSync
     /**
      * Verzeichnis des Webseiten-Pakets (Vorlagen, Skripte, Konfiguration),
      * relativ zur Hugo-Quelle. Fest, nicht wählbar: Die Vorlagen von
-     * OpensourceERP binden es unter diesem Namen ein.
+     * OpensourceERP binden es unter diesem Namen ein. Der Name stammt vom
+     * Shop; seit dem Kundenportal von OpensourceERP (2026-10-21) liegt darin
+     * das Paket des Portals (Konto-Widgets, Weiterleiter, features.json) und
+     * — mit Shop — das des Shops. Er bleibt, weil die Mounts jeder laufenden
+     * Webseite darauf zeigen.
      */
-    public const PACKAGE_DIR = 'oserp-shop';
+    public const PACKAGE_DIR = 'oserp-portal';
 
     /** Freigaben, solange in [shop] nichts anderes steht: der Aufbau, den OpensourceERP erzeugt. */
     public const DEFAULT_CONTENT_DIR = 'content/de/produkt';
@@ -99,7 +103,7 @@ final class ShopSync
      * signiert. Fest im Code, nicht in der Konfiguration: welche PHP-Dateien
      * es überhaupt geben darf, entscheidet HugoCMS, nicht die Lieferung.
      */
-    public const SIGNED_PHP = ['oserp-shop/static/shop-api/index.php', 'oserp-shop/static/not_found.php'];
+    public const SIGNED_PHP = ['oserp-portal/static/shop-api/index.php', 'oserp-portal/static/not_found.php'];
 
     /** Zweck der Signatur — sie taugt für nichts anderes. */
     private const SIGNATURE_CONTEXT = "hugocms-shop-php\n";
@@ -161,7 +165,7 @@ final class ShopSync
         $this->resolver = new MountResolver();
         $this->resolver->add($this->mount);
         // Eigene Endungsliste statt der Editor-Vorgabe: Die Anbindung schreibt
-        // auch .js (oserp-shop/), das der Texteditor nur mit extra_editable
+        // auch .js (oserp-portal/), das der Texteditor nur mit extra_editable
         // öffnet. Die Grenze für Uploads ist die der Medien (Downloads).
         $this->files = new FileService($this->resolver, $accept, 5_242_880, self::MAX_MEDIA_BYTES);
     }

@@ -1474,13 +1474,28 @@ bleiben gespeichert. Fehlt der Eintrag, gilt eine Webseite mit Schlüssel als
 eingeschaltet — Shops aus der Zeit vor dem Schalter laufen weiter. Plan in
 OpensourceERP unter `dev/shop-hugocms-verzeichnisse.md`.
 
-**Einrichten.** In den Projekteinstellungen unter „Shop-Erweiterung" die
-Erweiterung einschalten und einen Schlüssel erzeugen (nur Administratoren). Er
-wird genau einmal angezeigt; in OpensourceERP werden er und die dort angezeigte
-Adresse eingetragen. HugoCMS erkennt die Webseite an Host und Endpunkt — ein
-Schlüssel gilt deshalb nur für die Webseite, zu der er gehört. Abgelegt wird er
-als Hash in der `[shop]`-Sektion ihrer Mount-Datei. Danach die Freigaben prüfen
-(siehe unten).
+**Einrichten.** In den Projekteinstellungen unter „OpensourceERP-Anbindung"
+(bis 2026-10-21 „Shop-Erweiterung") die Anbindung einschalten und einen
+Schlüssel erzeugen (nur Administratoren). Er wird genau einmal angezeigt; in
+OpensourceERP werden er und die dort angezeigte Adresse bei der **Webseite**
+eingetragen (System → Webseiten — das Kundenportal von OpensourceERP, Plan
+dort unter `dev/kundenportal.md`). HugoCMS erkennt die Webseite an Host und
+Endpunkt — ein Schlüssel gilt deshalb nur für die Webseite, zu der er gehört.
+Abgelegt wird er als Hash in der `[shop]`-Sektion ihrer Mount-Datei. Danach die
+Freigaben prüfen (siehe unten).
+
+**Kundenportal ohne Shop.** Seit dem Kundenportal liefert OpensourceERP das
+Paket `oserp-portal/` auch für Webseiten ohne Webshop: Shortcodes und Partials
+für Anmeldung, Kundenkonto, Rechnungen, Kontakt und Freischaltung, den
+Weiterleiter `shop-api/index.php` und die Widget-Bündel unter
+`assets/portal-ui/` (`portal-widgets.js`, mit Shop `shop-widgets.js`, mit
+Fahrzeugen `lxcars-widgets.js`, dazu geteilte `chunk-*.js`); welche davon der
+Partial lädt, steht in `assets/portal-ui/features.json`. Die Freigaben für
+Produktseiten und Medien braucht eine solche Webseite nicht — die Anbindung
+schreibt dann nur ins Paket. Der Paketname ist seit 2026-10-22 `oserp-portal/`
+(vorher `oserp-shop/`, ohne Übergangsfrist): Eine Webseite aus der Zeit davor
+braucht die Mounts auf `oserp-portal/…` und ein neues „Paket installieren“ aus
+OpensourceERP; das alte Verzeichnis `oserp-shop/` ist von Hand zu löschen.
 
 **Anmeldung.** Bewusst kein Treiber der `AuthInterface`: Die beschreibt die
 Anmeldung von Benutzern (Passwort, Sitzung, Konten); ein Schlüssel für
@@ -1519,7 +1534,7 @@ begrenzt ist (`shopbrowsedirs`); OpensourceERP fragt sie über
 | Produktbilder | `images` | `static/images/products` | `jpg`, `jpeg`, `png`, `gif`, `webp` schreiben und löschen, direkt im Verzeichnis |
 | Vorschaubilder | `thumbnails` | `static/images/thumbnails` | wie Produktbilder (fertige Vorschaubilder aus OpensourceERP) |
 | Downloads | `downloads` | `static/downloads` | zusätzlich `pdf`, `zip`, `txt` schreiben und löschen, direkt im Verzeichnis |
-| Shop-Paket | fest `oserp-shop/` | – | `md`, `json`, `html`, `js`, `css`; PHP nur signiert |
+| Shop-Paket | fest `oserp-portal/` | – | `md`, `json`, `html`, `js`, `css`; PHP nur signiert |
 
 Ein unbrauchbarer Eintrag (absolut, `..`, versteckte Bestandteile, andere
 Zeichen als Buchstaben, Ziffern, `- _ .` und Leerzeichen) gibt nichts frei und
@@ -1530,13 +1545,13 @@ dürfen nicht im selben Verzeichnis liegen (gleiche Dateinamen). Das frühere
 das Speichern der Freigaben entfernt es. **Kein PHP** außerhalb der beiden
 signierten Einstiegspunkte — der Texteditor schreibt ebenfalls keines, und die
 Anbindung soll nicht mehr dürfen als ein Redakteur. Ihre Konfiguration kommt
-als `oserp-shop/config.json` über die Übertragung.
+als `oserp-portal/config.json` über die Übertragung.
 
 **Signiertes PHP** (seit 2026-10-08, Plan in OpensourceERP unter
 `dev/shop-php-signatur.md`). Einzige Ausnahme sind die beiden
 PHP-Einstiegspunkte aus dem Webseiten-Paket von OpensourceERP (Weiterleiter
-`oserp-shop/static/shop-api/index.php`, 404-Seite
-`oserp-shop/static/not_found.php`, fest in `ShopSync::SIGNED_PHP`). Sie nimmt
+`oserp-portal/static/shop-api/index.php`, 404-Seite
+`oserp-portal/static/not_found.php`, fest in `ShopSync::SIGNED_PHP`). Sie nimmt
 die Anbindung nur an, wenn ein Administrator in den Projekteinstellungen den
 öffentlichen Ed25519-Schlüssel von OpensourceERP hinterlegt hat
 (`[shop] signing_key`) und jede dieser Dateien im Abgleich eine gültige
@@ -1544,7 +1559,7 @@ Signatur über Zweck, Pfad und Prüfsumme trägt
 (`"hugocms-shop-php\n<pfad>\n<sha256>"`). Der Schlüssel der Anbindung allein
 reicht so nicht, um PHP auf den Webserver zu bringen. Geprüft wird mit der
 Sodium-Erweiterung von PHP; fehlt sie, bleibt PHP gesperrt, und man legt die
-beiden Dateien von Hand nach `oserp-shop/static/`. `shopbuildstatus` meldet
+beiden Dateien von Hand nach `oserp-portal/static/`. `shopbuildstatus` meldet
 unter `signedPhp`, ob signiertes PHP angenommen wird. Gelöscht werden die beiden Dateien von
 der Anbindung nie, nur ersetzt — fehlen sie in einer Lieferung, bleiben sie
 stehen; ohne Weiterleiter stünde der ganze Shop still.

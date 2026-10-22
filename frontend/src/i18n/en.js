@@ -181,12 +181,12 @@ export default {
     submit: 'Save',
     cancel: 'Cancel',
     success: 'Project settings saved.',
-    shopSection: 'Shop extension (OpensourceERP)',
+    shopSection: 'OpensourceERP integration (customer portal and shop)',
     shopHint:
-      'OpensourceERP creates the product pages of the web shop and then triggers the build of this website. To allow this, switch the extension on, create a key that is valid for this website only, and set where OpensourceERP may write.',
-    shopEnabled: 'Enable shop extension',
+      'OpensourceERP delivers the customer portal (sign-in, customer account, invoices) and — with a shop — the product pages, and then triggers the build of this website. To allow this, switch the integration on, create a key that is valid for this website only, and set where OpensourceERP may write.',
+    shopEnabled: 'Enable OpensourceERP integration',
     shopDisabledHint: 'While switched off, the website rejects every call from OpensourceERP. Key and grants stay stored.',
-    shopDisableTitle: 'Switch off shop extension?',
+    shopDisableTitle: 'Switch off OpensourceERP integration?',
     shopDisableConfirm:
       'OpensourceERP can then no longer reach this website: product pages, prices and stock are no longer updated. Key and grants stay stored.',
     shopDisable: 'Switch off',

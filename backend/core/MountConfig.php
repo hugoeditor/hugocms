@@ -118,7 +118,7 @@ use HugoCMS\FileManager\Exception\ApiException;
  *   downloads       Download-Dateien der Produktseiten (Datenblätter,
  *                   Anleitungen). HugoCMS prüft für OpensourceERP, ob sie
  *                   vorhanden sind (shopdownloads). Standard: static/downloads.
- *   Das Webseiten-Paket liegt fest in oserp-shop/ ({@see Shop\ShopSync::PACKAGE_DIR}).
+ *   Das Webseiten-Paket liegt fest in oserp-portal/ ({@see Shop\ShopSync::PACKAGE_DIR}).
  *   areas       wird nicht mehr ausgewertet (abgelöst durch die Freigaben,
  *               Hinweis SHOP-AREAS-OBSOLETE); das Speichern der Freigaben
  *               entfernt den Eintrag.
