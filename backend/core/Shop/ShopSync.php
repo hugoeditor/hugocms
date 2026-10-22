@@ -103,7 +103,7 @@ final class ShopSync
      * signiert. Fest im Code, nicht in der Konfiguration: welche PHP-Dateien
      * es überhaupt geben darf, entscheidet HugoCMS, nicht die Lieferung.
      */
-    public const SIGNED_PHP = ['oserp-portal/static/shop-api/index.php', 'oserp-portal/static/not_found.php'];
+    public const SIGNED_PHP = ['oserp-portal/static/portal-api/index.php', 'oserp-portal/static/not_found.php'];
 
     /** Zweck der Signatur — sie taugt für nichts anderes. */
     private const SIGNATURE_CONTEXT = "hugocms-shop-php\n";

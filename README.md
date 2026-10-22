@@ -1487,7 +1487,7 @@ Freigaben prüfen (siehe unten).
 **Kundenportal ohne Shop.** Seit dem Kundenportal liefert OpensourceERP das
 Paket `oserp-portal/` auch für Webseiten ohne Webshop: Shortcodes und Partials
 für Anmeldung, Kundenkonto, Rechnungen, Kontakt und Freischaltung, den
-Weiterleiter `shop-api/index.php` und die Widget-Bündel unter
+Weiterleiter `portal-api/index.php` und die Widget-Bündel unter
 `assets/portal-ui/` (`portal-widgets.js`, mit Shop `shop-widgets.js`, mit
 Fahrzeugen `lxcars-widgets.js`, dazu geteilte `chunk-*.js`); welche davon der
 Partial lädt, steht in `assets/portal-ui/features.json`. Die Freigaben für
@@ -1550,7 +1550,7 @@ als `oserp-portal/config.json` über die Übertragung.
 **Signiertes PHP** (seit 2026-10-08, Plan in OpensourceERP unter
 `dev/shop-php-signatur.md`). Einzige Ausnahme sind die beiden
 PHP-Einstiegspunkte aus dem Webseiten-Paket von OpensourceERP (Weiterleiter
-`oserp-portal/static/shop-api/index.php`, 404-Seite
+`oserp-portal/static/portal-api/index.php`, 404-Seite
 `oserp-portal/static/not_found.php`, fest in `ShopSync::SIGNED_PHP`). Sie nimmt
 die Anbindung nur an, wenn ein Administrator in den Projekteinstellungen den
 öffentlichen Ed25519-Schlüssel von OpensourceERP hinterlegt hat
