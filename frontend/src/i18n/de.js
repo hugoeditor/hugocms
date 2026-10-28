@@ -1732,6 +1732,7 @@ export default {
     'SHOP-SYNC-INCOMPLETE': 'Die Übertragung ist unvollständig: {0} Dateien fehlen, etwa {1}.',
     'SHOP-SYNC-STORE-FAILED': 'Die Lieferung ließ sich nicht zwischenspeichern.',
     'SHOP-TASK-ABORTED': 'Abgebrochen — OpensourceERP hat sich mitten in der Aufgabe nicht mehr gemeldet.',
+    'SHOP-BUILD-FAILED': 'Hugo-Lauf fehlgeschlagen (Code {0}): {1}',
     'SHOP-THUMBNAILS-INVALID': 'Die Liste der Bildnamen für die Vorschaubilder ist ungültig.',
     'SHOP-THUMBNAILS-TOO-MANY': 'Mehr als {0} Bilder in einem Aufruf.',
     'SHOP-THUMBNAILS-NO-GD': 'Die PHP-Erweiterung GD fehlt — Vorschaubilder lassen sich nicht erzeugen.',

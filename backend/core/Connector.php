@@ -2188,10 +2188,37 @@ final class Connector
             $activity->finish('build', $result['success'], [
                 'seconds' => $result['seconds'],
                 'exitCode' => $result['exitCode'],
+            ], $result['success'] ? null : [
+                'code' => 'EBUILD',
+                'key' => 'SHOP-BUILD-FAILED',
+                'params' => [$result['exitCode'], self::hugoErrorLine($result['output'])],
             ]);
 
             return ['paused' => false] + $result;
         });
+    }
+
+    /**
+     * Die aussagekräftigste Zeile einer gescheiterten Hugo-Ausgabe für den
+     * Systemstatus: die erste ERROR-Zeile, sonst die letzte nicht leere Zeile
+     * (etwa wenn die Shell das Programm nicht starten konnte). Die vollständige
+     * Ausgabe steht im Log.
+     */
+    private static function hugoErrorLine(string $output): string
+    {
+        $lines = array_values(array_filter(array_map('trim', explode("\n", $output)), 'strlen'));
+        $line = '';
+        foreach ($lines as $candidate) {
+            if (str_starts_with($candidate, 'ERROR')) {
+                $line = trim(substr($candidate, 5));
+                break;
+            }
+        }
+        if ($line === '' && $lines !== []) {
+            $line = end($lines);
+        }
+
+        return mb_strlen($line) > 400 ? mb_substr($line, 0, 400) . ' …' : $line;
     }
 
     /**

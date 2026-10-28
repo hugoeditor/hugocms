@@ -1727,6 +1727,7 @@ export default {
     'SHOP-SYNC-INCOMPLETE': 'The transfer is incomplete: {0} files are missing, e.g. {1}.',
     'SHOP-SYNC-STORE-FAILED': 'The delivery could not be stored temporarily.',
     'SHOP-TASK-ABORTED': 'Aborted — OpensourceERP stopped responding in the middle of the task.',
+    'SHOP-BUILD-FAILED': 'Hugo build failed (exit code {0}): {1}',
     'SHOP-THUMBNAILS-INVALID': 'The list of image names for the thumbnails is invalid.',
     'SHOP-THUMBNAILS-TOO-MANY': 'More than {0} images in one call.',
     'SHOP-THUMBNAILS-NO-GD': 'The PHP extension GD is missing — thumbnails cannot be created.',
