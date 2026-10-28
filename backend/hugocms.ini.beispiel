@@ -118,10 +118,12 @@ keep = 3
 ; Die je Webseite unterschiedlichen Pfade (source/destination) stehen in der
 ; [hugo]-Sektion der jeweiligen Mount-Konfiguration (siehe mounts.ini.beispiel).
 bin = ../bin/hugo/hugo
-; Optional: clean = true übergibt Hugo --cleanDestinationDir und leert vor jedem
-; Build das Zielverzeichnis von allem, was Hugo nicht selbst erzeugt. VORSICHT,
-; wenn im Zielordner weitere Dateien liegen. Standard: aus. Über den Dialog
-; „Konfiguration ändern" schaltbar.
+; Optional: clean = true wirkt wie Hugos --cleanDestinationDir: Nach jedem
+; erfolgreichen Build bleibt im Zielverzeichnis nichts, was Hugo nicht selbst
+; erzeugt (versteckte Verzeichnisse wie .well-known/ ausgenommen). VORSICHT,
+; wenn im Zielordner weitere Dateien liegen. Ein gescheiterter Build ändert das
+; Ziel nicht — gebaut wird in ein Zwischenverzeichnis daneben. Standard: aus.
+; Über den Dialog „Konfiguration ändern" schaltbar.
 ;clean = true
 
 ;[editor]

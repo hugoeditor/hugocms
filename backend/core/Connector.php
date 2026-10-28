@@ -24,6 +24,7 @@ use HugoCMS\FileManager\Shop\ShopDownloads;
 use HugoCMS\FileManager\Shop\ShopKey;
 use HugoCMS\FileManager\Shop\ShopSync;
 use HugoCMS\FileManager\Shop\ShopThumbnails;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -1938,7 +1939,11 @@ final class Connector
      * Ein fehlgeschlagener Lauf ist KEIN API-Fehler: Die Antwort trägt
      * success=false samt Hugo-Ausgabe, damit sie vollständig angezeigt werden
      * kann. Nur die Vorbedingungen (fehlende Konfiguration/Programm/Quelle)
-     * werfen eine Ausnahme.
+     * und ein gescheiterter Tausch des Zwischenverzeichnisses
+     * (HUGO-PUBLISH-FAILED) werfen eine Ausnahme.
+     *
+     * Hugo baut in ein Zwischenverzeichnis neben dem Ziel; erst ein
+     * erfolgreicher Lauf ersetzt die veröffentlichte Fassung ({@see StagedBuild}).
      *
      * $applyDrafts=false überspringt das Anwenden fälliger Freigaben — für
      * Aufrufer, die das bereits selbst erledigt haben ({@see buildSite()}, das
@@ -1982,17 +1987,30 @@ final class Connector
             throw new ApiException('ECONFIG', 500, 'HUGO-SOURCE-MISSING', [$source]);
         }
 
-        // --cleanDestinationDir nur auf Wunsch: global über [hugo] clean in der
-        // hugocms.ini oder je Webseite über die Mount-Konfiguration. Es entfernt
-        // im Ziel ALLES, was Hugo nicht selbst erzeugt — auch die im Publish-
-        // Ordner liegende Installation (edit/, cms-api/). Standard: aus.
+        // clean (global über [hugo] clean in der hugocms.ini oder je Webseite
+        // über die Mount-Konfiguration) entspricht --cleanDestinationDir: Im
+        // Ziel bleibt nichts, was Hugo nicht selbst erzeugt — außer versteckten
+        // Verzeichnissen wie .well-known/. Standard: aus.
+        $clean = $this->hugoClean || !empty($this->hugo['clean']);
+
+        // Gebaut wird in ein Zwischenverzeichnis; das Ziel wird erst nach einem
+        // erfolgreichen Lauf getauscht ({@see StagedBuild}). Ein gescheiterter
+        // Lauf lässt die veröffentlichte Webseite so unverändert online. Nur
+        // ohne Schreibrechte neben dem Ziel baut Hugo wie früher direkt hinein.
+        $staged = new StagedBuild($dest);
+        if (!$staged->available()) {
+            $staged = null;
+            $this->logger->warning("Kein Zwischenverzeichnis möglich (übergeordnetes Verzeichnis von {$dest} nicht beschreibbar) — Hugo baut direkt ins Ziel.");
+        }
+
         // Bewusst OHNE --buildFuture/--buildDrafts: künftige publishDate und
         // draft:true bleiben so unveröffentlicht — genau die Staffelung.
-        $clean = $this->hugoClean || !empty($this->hugo['clean']);
+        // --cleanDestinationDir braucht nur der direkte Lauf; das
+        // Zwischenverzeichnis ist ohnehin leer.
         $cmd = escapeshellarg($bin)
-            . ($clean ? ' --cleanDestinationDir' : '')
+            . ($staged === null && $clean ? ' --cleanDestinationDir' : '')
             . ' -s ' . escapeshellarg($source)
-            . ' -d ' . escapeshellarg($dest)
+            . ' -d ' . escapeshellarg($staged?->stagingDir() ?? $dest)
             . (!empty($this->hugo['minify']) ? ' --minify' : '')
             . ' 2>&1';
 
@@ -2009,19 +2027,34 @@ final class Connector
             $start = hrtime(true);
             $lines = [];
             $exitCode = 1;
-            exec($cmd, $lines, $exitCode);
+            $publishError = null;
+            try {
+                $staged?->prepare();
+                exec($cmd, $lines, $exitCode);
+                if ($exitCode === 0) {
+                    $staged?->publish($clean);
+                } else {
+                    $staged?->discard();
+                }
+            } catch (RuntimeException $e) {
+                $publishError = $e;
+                $staged?->discard();
+            }
             $seconds = round((hrtime(true) - $start) / 1e9, 2);
+            $success = $exitCode === 0 && $publishError === null;
 
             // Ausgabe begrenzen (Logs können lang werden): die letzten 200 Zeilen.
             $output = implode("\n", array_slice($lines, -200));
-            if ($exitCode === 0) {
+            if ($success) {
                 $this->logger->info("Hugo-Lauf erfolgreich ({$seconds}s, {$trigger}): {$source} -> {$dest}");
+            } elseif ($publishError !== null) {
+                $this->logger->error("Hugo-Lauf nicht veröffentlicht ({$trigger}): " . $publishError->getMessage() . ' — die bisherige Fassung bleibt online.');
             } else {
                 $this->logger->warning("Hugo-Lauf fehlgeschlagen (Code {$exitCode}, {$trigger}): {$output}");
             }
 
             $result = [
-                'success' => $exitCode === 0,
+                'success' => $success,
                 'exitCode' => $exitCode,
                 'output' => $output,
                 'seconds' => $seconds,
@@ -2029,8 +2062,14 @@ final class Connector
             $lock->recordFinish($result);
             // Gescheitert: die Lieferung bleibt vorgemerkt, damit der nächste
             // Lauf sie baut, sobald der Fehler behoben ist
-            if ($shopPending && $exitCode !== 0) {
+            if ($shopPending && !$success) {
                 ShopSync::markBuildPending($shopVarDir);
+            }
+            // Hugo lief durch (oder kam gar nicht zum Zug), aber Zwischen-
+            // verzeichnis oder Tausch scheiterten: kein Hugo-Fehler, sondern
+            // eine Frage der Schreibrechte am Server
+            if ($publishError !== null) {
+                throw new ApiException('EIO', 500, 'HUGO-PUBLISH-FAILED', [$dest]);
             }
 
             return $result;

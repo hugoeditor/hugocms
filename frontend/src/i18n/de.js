@@ -170,8 +170,8 @@ export default {
     cancel: 'Abbrechen',
     success: 'Konfiguration gespeichert.',
     note: 'Änderungen am Sitzungsverzeichnis und an der Logdatei greifen erst beim nächsten Laden.',
-    hugoClean: 'Zielverzeichnis vor dem Build leeren',
-    hugoCleanHint: 'Entfernt beim Veröffentlichen alles im Zielordner, was Hugo nicht selbst erzeugt. Vorsicht, wenn im Zielordner weitere Dateien liegen.',
+    hugoClean: 'Nicht erzeugte Dateien aus dem Zielverzeichnis entfernen',
+    hugoCleanHint: 'Entfernt beim Veröffentlichen alles im Zielordner, was Hugo nicht selbst erzeugt (versteckte Verzeichnisse wie .well-known/ bleiben). Vorsicht, wenn im Zielordner weitere Dateien liegen. Ein gescheiterter Build ändert den Zielordner nicht.',
   },
 
   projectConfig: {
@@ -1827,6 +1827,7 @@ export default {
     'HUGO-BIN-NOT-CONFIGURED': 'Hugo-Programm ist nicht konfiguriert ([hugo] bin in der hugocms.ini).',
     'HUGO-BIN-MISSING': 'Hugo-Programm nicht gefunden oder nicht ausführbar: {0}',
     'HUGO-SOURCE-MISSING': 'Hugo-Projektverzeichnis nicht gefunden: {0}',
+    'HUGO-PUBLISH-FAILED': 'Der neue Stand konnte nicht nach {0} übernommen werden — die bisherige Fassung bleibt online. Bitte die Schreibrechte im übergeordneten Verzeichnis prüfen (Details im Log).',
 
     'PREVIEW-NO-PROJECT': 'Für diese Webseite ist kein Hugo-Projekt konfiguriert — ohne das lässt sich keine Seite erzeugen.',
     'PREVIEW-NOT-CONTENT': 'Diese Datei liegt nicht im Content-Ordner und ergibt daher keine eigene Seite.',

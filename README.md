@@ -446,12 +446,31 @@ das Backend fällige terminierte Austausche an, damit Hugo den neuen Stand sieht
 Ein erfolgreicher Lauf meldet sich mit einer kurzen Einblendung samt
 **Details**-Knopf; ein fehlgeschlagener öffnet sofort den Dialog mit der
 Hugo-Ausgabe (die letzten 200 Zeilen). Der Webserver-Benutzer braucht
-Ausführrechte auf das Binary und Schreibrechte im Ziel.
+Ausführrechte auf das Binary und Schreibrechte im Ziel **und** in dessen
+übergeordnetem Verzeichnis (für das Zwischenverzeichnis, siehe unten).
+
+**Build über ein Zwischenverzeichnis.** Hugo baut nicht direkt ins Ziel,
+sondern in ein frisches, verstecktes Geschwisterverzeichnis
+(`.public.staging` neben `public/`). Erst wenn der Lauf erfolgreich war, wird
+getauscht: Das bisherige Ziel wird zu `.public.previous`, das
+Zwischenverzeichnis wird zum Ziel, danach wird der alte Stand gelöscht. Ein
+gescheiterter Lauf — etwa an einem fehlenden Shortcode — lässt die
+veröffentlichte Webseite damit **unverändert online**; früher konnte
+`--cleanDestinationDir` in diesem Fall alle Seiten löschen, bevor Hugo
+abbrach. Vor dem Tausch wird aus dem alten Ziel übernommen, was ein direkter
+Lauf dort gelassen hätte (per Hardlink, ersatzweise als Kopie): ohne `clean`
+alles, was der neue Lauf nicht selbst erzeugt hat; mit `clean` nur versteckte
+Verzeichnisse wie `.well-known/`. Reste eines abgebrochenen Laufs räumt der
+nächste Lauf weg. Während des Laufs belegt die Webseite vorübergehend den
+doppelten Platz. Ist das übergeordnete Verzeichnis nicht beschreibbar, baut
+Hugo wie früher direkt ins Ziel (Warnung im Log). Scheitert erst der Tausch,
+meldet der Build `HUGO-PUBLISH-FAILED`; die bisherige Fassung bleibt online.
 
 > **Zu `--cleanDestinationDir`:** Der Schalter entfernt im Ziel alles, was Hugo
-> nicht selbst erzeugt. Damit die Installation (`edit/`, `cms-api/`) das
-> übersteht, legt `install.sh` sie zusätzlich im `static/`-Verzeichnis ab —
-> Hugo spiegelt `static/` bei jedem Build in den Publish-Ordner.
+> nicht selbst erzeugt — ausgenommen versteckte Verzeichnisse wie
+> `.well-known/`. Damit die Installation (`edit/`, `cms-api/`) das übersteht,
+> legt `install.sh` sie zusätzlich im `static/`-Verzeichnis ab — Hugo spiegelt
+> `static/` bei jedem Build in den Publish-Ordner.
 
 ### Seitenvorschau
 

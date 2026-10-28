@@ -280,6 +280,8 @@ tatsächlich** und veröffentlicht dabei fällige Freigaben. Das ist derselbe
 Vorgang wie ein Klick auf „Veröffentlichen", also normalerweise unbedenklich —
 nur wenn `--cleanDestinationDir` konfiguriert ist, sollte man wissen, dass der
 Zielordner dabei von allem befreit wird, was Hugo nicht selbst erzeugt.
+Scheitert der Lauf, bleibt der Zielordner unverändert: Hugo baut in ein
+Zwischenverzeichnis, getauscht wird nur nach einem erfolgreichen Lauf.
 
 Nach den ersten echten Läufen zeigt der Systemstatus unter „Cron-Aufgaben", ob
 sie ankommen, wie oft sie laufen und ob eine überfällig ist.
