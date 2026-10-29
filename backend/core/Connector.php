@@ -6214,8 +6214,15 @@ final class Connector
             return null;
         }
 
-        return ['enabled' => $this->shop['enabled'], 'configured' => $this->shop['keyHash'] !== null]
-            + $this->shopActivity()->state();
+        return [
+            'enabled' => $this->shop['enabled'],
+            'configured' => $this->shop['keyHash'] !== null,
+            // Umfang der Anbindung: nur Kundenportal oder auch Online-Shop
+            // (Produktseiten, Medien), und ob die PHP-Einstiege des Pakets
+            // signiert angenommen werden (Signaturschlüssel hinterlegt)
+            'onlineShop' => $this->shop['onlineShop'],
+            'signedPhp' => ShopSync::signedPhpReady($this->shop['signingKey']),
+        ] + $this->shopActivity()->state();
     }
 
     /**

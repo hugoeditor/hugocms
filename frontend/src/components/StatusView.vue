@@ -578,10 +578,11 @@ function scoreColor(score) {
             </div>
           </section>
 
-          <!-- Shop-Anbindung: letzter Kontakt, laufende und letzte Aufgabe -->
+          <!-- OpensourceERP-Anbindung (Kundenportal und Shop): Verbindung, Umfang,
+               letzter Kontakt, laufende und letzte Aufgabe -->
           <section v-if="shopVisible" class="st-card">
             <h2 class="st-card-title">
-              <v-icon icon="mdi-storefront-outline" size="18" />
+              <v-icon icon="mdi-web-sync" size="18" />
               {{ $t('status.shop.heading') }}
             </h2>
             <p class="st-hint">{{ $t('status.shop.hint') }}</p>
@@ -608,6 +609,26 @@ function scoreColor(score) {
               <v-icon
                 :icon="shopConnected ? 'mdi-check-circle-outline' : 'mdi-minus-circle-outline'"
                 :color="shopConnected ? 'success' : 'grey'"
+                size="18"
+              />
+            </div>
+
+            <!-- Umfang: Kundenportal allein oder mit Online-Shop; signierte PHP-Einstiege -->
+            <div v-if="shop.enabled !== false" class="st-row">
+              <v-icon :icon="shop.onlineShop ? 'mdi-storefront-outline' : 'mdi-account-circle-outline'" size="18" class="st-row-icon" />
+              <div class="st-row-main">
+                <div class="st-row-title">{{ $t('status.shop.scope') }}</div>
+                <div class="st-row-sub">
+                  {{ $t(shop.onlineShop ? 'status.shop.scopeShop' : 'status.shop.scopePortal') }}
+                </div>
+                <div v-if="shop.signedPhp === false" class="st-row-check text-warning">
+                  <v-icon icon="mdi-shield-key-outline" size="14" />
+                  {{ $t('status.shop.noSigning') }}
+                </div>
+              </div>
+              <v-icon
+                :icon="shop.signedPhp === false ? 'mdi-alert-circle-outline' : 'mdi-check-circle-outline'"
+                :color="shop.signedPhp === false ? 'warning' : 'success'"
                 size="18"
               />
             </div>

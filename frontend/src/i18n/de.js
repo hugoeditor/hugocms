@@ -457,9 +457,13 @@ export default {
       checkedAt: 'Geprüft am {0}',
     },
     shop: {
-      heading: 'Shop-Anbindung (OpensourceERP)',
-      hint: 'OpensourceERP ruft diese Webseite auf, liefert Produktseiten und Vorschaubilder und stößt den Bau an. HugoCMS vermerkt jeden dieser Aufrufe.',
+      heading: 'OpensourceERP-Anbindung (Kundenportal und Shop)',
+      hint: 'OpensourceERP ruft diese Webseite auf, liefert das Kundenportal-Paket (Anmeldung, Kundenkonto, Rechnungen, Portalseiten) und mit Online-Shop die Produktseiten und Medien, und stößt danach den Bau an. HugoCMS vermerkt jeden dieser Aufrufe.',
       connection: 'Verbindung',
+      scope: 'Umfang',
+      scopePortal: 'Nur Kundenportal — Produktseiten, Kategorien und Medien nimmt die Anbindung nicht an (Schalter „Online-Shop auf dieser Webseite“ in den Projekteinstellungen).',
+      scopeShop: 'Kundenportal und Online-Shop — Produktseiten, Kategorieübersicht und Medien kommen aus OpensourceERP.',
+      noSigning: 'Kein Signaturschlüssel von OpensourceERP hinterlegt — Weiterleiter und 404-Seite (PHP) nimmt die Anbindung nicht an, sie sind von Hand abzulegen.',
       noKey: 'Kein Schlüssel hinterlegt — OpensourceERP kann diese Webseite nicht ansprechen.',
       noContact: 'Noch kein Aufruf von OpensourceERP angekommen.',
       lastContact: 'Letzter erfolgreicher Aufruf {0} ({1})',
@@ -468,7 +472,7 @@ export default {
       last: 'Zuletzt: {0}',
       noTask: 'Noch keine Aufgabe ausgeführt.',
       task: {
-        sync: 'Inhalte übertragen',
+        sync: 'Paket und Inhalte übertragen',
         thumbnails: 'Vorschaubilder erzeugen',
         build: 'Webseite bauen',
       },
@@ -480,7 +484,7 @@ export default {
       thumbnailsFailed: '{0} nicht erzeugt',
       buildResult: 'Dauer {0} s',
       buildPaused: 'Nicht gebaut — das Bauen ist pausiert.',
-      disabled: 'Shop-Erweiterung ausgeschaltet — OpensourceERP wird abgewiesen.',
+      disabled: 'OpensourceERP-Anbindung ausgeschaltet — OpensourceERP wird abgewiesen.',
     },
     log: {
       heading: 'Protokoll',

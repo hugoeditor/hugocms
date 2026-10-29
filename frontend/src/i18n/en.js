@@ -457,9 +457,13 @@ export default {
       checkedAt: 'Checked on {0}',
     },
     shop: {
-      heading: 'Shop connection (OpensourceERP)',
-      hint: 'OpensourceERP calls this website, delivers product pages and thumbnails and triggers the build. HugoCMS records each of these calls.',
+      heading: 'OpensourceERP connection (customer portal and shop)',
+      hint: 'OpensourceERP calls this website, delivers the customer portal package (login, customer account, invoices, portal pages) and, with an online shop, the product pages and media, and then triggers the build. HugoCMS records each of these calls.',
       connection: 'Connection',
+      scope: 'Scope',
+      scopePortal: 'Customer portal only — the connection does not accept product pages, categories or media (switch “Online shop on this website” in the project settings).',
+      scopeShop: 'Customer portal and online shop — product pages, category overview and media come from OpensourceERP.',
+      noSigning: 'No OpensourceERP signing key configured — the connection does not accept the proxy and the 404 page (PHP); they have to be placed by hand.',
       noKey: 'No key configured — OpensourceERP cannot reach this website.',
       noContact: 'No call from OpensourceERP has arrived yet.',
       lastContact: 'Last successful call {0} ({1})',
@@ -468,7 +472,7 @@ export default {
       last: 'Last: {0}',
       noTask: 'No task run yet.',
       task: {
-        sync: 'Transfer content',
+        sync: 'Transfer package and content',
         thumbnails: 'Create thumbnails',
         build: 'Build website',
       },
@@ -480,7 +484,7 @@ export default {
       thumbnailsFailed: '{0} not created',
       buildResult: 'Took {0} s',
       buildPaused: 'Not built — building is paused.',
-      disabled: 'Shop extension switched off — OpensourceERP is rejected.',
+      disabled: 'OpensourceERP connection switched off — OpensourceERP is rejected.',
     },
     log: {
       heading: 'Log',
