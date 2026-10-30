@@ -2257,6 +2257,11 @@ final class Connector
             ])),
             // Endungen im Webseiten-Paket; Produktseiten sind immer Markdown
             'accept' => ShopSync::ACCEPT,
+            // Hugo-Version dieser Installation (null, wenn kein Hugo eingerichtet):
+            // OpensourceERP richtet den Vorspann seiner Paketseiten danach aus —
+            // Hugo ab 0.145 kennt für Bauoptionen nur noch „build“, davor nur
+            // „_build“
+            'hugo' => $this->hugoVersionInfo()['version'],
             // Medien aus der Bibliothek von OpensourceERP (seit 2026-10-15):
             // Produkt- und Vorschaubilder sowie Downloads kommen mit der
             // Lieferung in ihre Freigaben, stückweise über shopmediaupload.
