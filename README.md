@@ -1451,6 +1451,7 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `shopbrowsedirs` | GET | `path`?                           | Verzeichnisauswahl für die Freigaben, auf die Hugo-Quelle begrenzt (`config.manage`) |
 | `shopbuild`    | POST | –                                   | **Mit Schlüssel statt Sitzung:** Webseite bauen, auf Anstoß von OpensourceERP (siehe „Shop-Anbindung") |
 | `shopbuildstatus`| GET | –                                  | **Mit Schlüssel statt Sitzung:** Baustand — läuft ein Hugo-Lauf, wie ging der letzte aus, wartet eine Lieferung; dazu Freigaben (`grants`, übergangsweise auch als `areas` für ältere OpensourceERP) und Endungen, Hugo-Version (`hugo`, seit 2026-10-29) |
+| `shopsiteconfig` | GET | –                                  | **Mit Schlüssel:** Hugo-Konfiguration der Webseite für die Konfigurationsprüfung in OpensourceERP (seit 2026-10-30): Auszug aus `hugo config` (`disableKinds`, `taxonomies`, `permalinks`, `outputs`, Mounts, `params.portalui`, Theme, Sprachen), Hugos Warnungen beim Laden (`warnings`), Übersichtsseiten der Taxonomien (`files.taxonomyIndex`), dazu Freigaben und Hugo-Version |
 | `shopmanifest` | POST | `files` (Liste aus `path`, `sha256`, bei signiertem PHP `signature`) | **Mit Schlüssel:** Abgleich einer Lieferung — nennt, was fehlt oder abweicht, und vergibt eine `syncId` |
 | `shopupload`   | POST | `syncId`, `files` (Liste aus `path`, `content` Base64) | **Mit Schlüssel:** eine Portion Textdateien in die Bereitstellung, noch nicht in die Webseite |
 | `shopmediaupload` | POST (multipart) | `syncId`, `path`, `offset`, Datei `chunk` | **Mit Schlüssel:** ein Stück einer Mediendatei (Produktbild, Vorschaubild, Download); mit dem letzten Stück liegt die Datei geprüft in ihrer Freigabe (`received`, `complete`) |
@@ -1527,6 +1528,22 @@ Maschinenaufrufe steht daneben und gilt nur für die `shop*`-Befehle
 selbst und antwortet mit dem Ergebnis — ohne Hintergrundprozess, wie das übrige
 Backend. OpensourceERP ruft den Befehl aus seinem eigenen Hintergrundlauf auf.
 Der Pausenschalter `pause_build` der Webseite gilt auch hier.
+
+**Konfigurationsprüfung.** `shopsiteconfig` (seit 2026-10-30) gibt OpensourceERP
+die Hugo-Konfiguration der Webseite, wie Hugo sie auflöst (`hugo config
+--format json`, `Shop\SiteConfig`): `disableKinds`, `taxonomies`,
+`permalinks`, `outputs`, die Mounts, `params.portalui`, Theme und Sprachen,
+dazu die Warnungen, die Hugo beim Laden ausgibt (abgekündigte Schlüssel wie
+`languageCode`), und ob je Taxonomie eine Übersichtsseite
+(`content/<taxonomie>/_index.md`) liegt. OpensourceERP vergleicht das beim
+„Verbindung prüfen“ mit Kanalkarte und Portaleinstellungen und zeigt dort,
+was in der Webseite fehlt oder abweicht: Mounts des Pakets, abgeschaltete
+Taxonomie-Seiten, nicht angemeldete Taxonomie der Shop-Kategorien, andere
+Adressen der Kategorieseiten. HugoCMS bewertet nichts und schreibt nichts —
+die Konfiguration bleibt Sache der Webseite. Nicht enthalten sind Teile der
+Konfiguration, in denen Zugangsdaten stehen können (`services`,
+`deployment`). Ohne eingerichtetes Hugo antwortet der Befehl mit
+`HUGO-NOT-CONFIGURED`.
 
 **Übertragung** (`Shop\ShopSync`). In drei Schritten, damit nie eine halbe
 Lieferung gebaut wird:

@@ -24,6 +24,7 @@ use HugoCMS\FileManager\Shop\ShopDownloads;
 use HugoCMS\FileManager\Shop\ShopKey;
 use HugoCMS\FileManager\Shop\ShopSync;
 use HugoCMS\FileManager\Shop\ShopThumbnails;
+use HugoCMS\FileManager\Shop\SiteConfig;
 use RuntimeException;
 use Throwable;
 
@@ -635,6 +636,7 @@ final class Connector
                 // Administrator in den Projekteinstellungen.
                 'shopbuild' => $this->cmdShopBuild(),
                 'shopbuildstatus' => $this->cmdShopBuildStatus(),
+                'shopsiteconfig' => $this->cmdShopSiteConfig(),
                 'shopmanifest' => $this->cmdShopManifest($request),
                 'shopupload' => $this->cmdShopUpload($request),
                 'shopmediaupload' => $this->cmdShopMediaUpload($request),
@@ -2284,6 +2286,36 @@ final class Connector
                 'paths' => ShopSync::SIGNED_PHP,
             ],
         ];
+    }
+
+    /**
+     * Hugo-Konfiguration dieser Webseite für die Konfigurationsprüfung in
+     * OpensourceERP (seit 2026-10-30, {@see SiteConfig}): ein Auszug der von
+     * Hugo aufgelösten Konfiguration, Hugos Warnungen beim Laden und ob die
+     * Übersichtsseiten der Taxonomien vorhanden sind. OpensourceERP vergleicht
+     * das mit Kanalkarte und Portaleinstellungen — fehlende Mounts des
+     * Pakets, abgeschaltete Taxonomie-Seiten, nicht angemeldete Taxonomie der
+     * Shop-Kategorien, abweichende Adressen. HugoCMS bewertet nicht.
+     */
+    private function cmdShopSiteConfig(): array
+    {
+        $this->requireShopKey('shopsiteconfig');
+        if ($this->hugo === null || $this->hugoBin === null) {
+            throw new ApiException('ECONFIG', 409, 'HUGO-NOT-CONFIGURED');
+        }
+        $bin = $this->hugoBin;
+        $source = (string) $this->hugo['source'];
+        if (!is_file($bin) || !is_executable($bin)) {
+            throw new ApiException('ECONFIG', 500, 'HUGO-BIN-MISSING', [$bin]);
+        }
+        if (!is_dir($source)) {
+            throw new ApiException('ECONFIG', 500, 'HUGO-SOURCE-MISSING', [$source]);
+        }
+
+        return [
+            'hugo' => $this->hugoVersionInfo()['version'],
+            'grants' => $this->shopGrants(),
+        ] + SiteConfig::read($bin, $source);
     }
 
     /**
