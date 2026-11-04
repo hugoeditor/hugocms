@@ -296,6 +296,58 @@ function scoreColor(score) {
   if (score >= 40) return 'warning'
   return 'error'
 }
+
+// --- Software-Update (nur Administratoren) ---------------------------------
+// Der Server nennt die Voraussetzungen (`store.update`), die Prüfung nach
+// außen und der Lauf selbst laufen nur auf Knopfdruck. Was der Lauf ausgibt,
+// steht danach wörtlich in einem Feld — bei einem Fehlschlag ist genau das die
+// Auskunft, die ein Administrator braucht.
+const updateCaps = computed(() => store.update)
+const updateCheck = computed(() => store.updateCheck)
+const updateResult = computed(() => store.updateResult)
+
+// Gründe, warum das Update hier nicht (vollständig) geht — als Schlüssel vom
+// Server, hier übersetzt.
+const updateReasons = computed(() =>
+  (updateCaps.value?.reasons ?? []).map((r) => (te(`status.update.reason.${r}`) ? t(`status.update.reason.${r}`) : r)),
+)
+
+// Ergebniszeile der Prüfung für das Release-Repo.
+const releaseState = computed(() => {
+  const r = updateCheck.value?.release
+  if (!r) return null
+  if (r.error) {
+    const key = `status.update.releaseError.${r.error}`
+    return { color: 'warning', icon: 'mdi-alert-circle-outline', text: te(key) ? t(key) : t('status.update.releaseErrorText', [r.error]) }
+  }
+  if (r.behind > 0) return { color: 'primary', icon: 'mdi-arrow-down-circle-outline', text: t('status.update.releaseBehind', [r.behind, r.remote]) }
+  return { color: 'success', icon: 'mdi-check-circle-outline', text: t('status.update.releaseCurrent') }
+})
+
+// Ergebniszeile der Prüfung für das Hugo-Programm.
+const hugoState = computed(() => {
+  const h = updateCheck.value?.hugo
+  if (!h) return null
+  if (h.error) {
+    const key = `status.update.hugoError.${h.error}`
+    return { color: 'warning', icon: 'mdi-alert-circle-outline', text: te(key) ? t(key) : t('status.update.hugoErrorText', [h.error]) }
+  }
+  if (!h.installed) return { color: 'primary', icon: 'mdi-arrow-down-circle-outline', text: t('status.update.hugoMissing', [h.newest]) }
+  if (h.updateAvailable) return { color: 'primary', icon: 'mdi-arrow-down-circle-outline', text: t('status.update.hugoAvailable', [h.installed, h.newest]) }
+  return { color: 'success', icon: 'mdi-check-circle-outline', text: t('status.update.hugoCurrent', [h.installed]) }
+})
+
+// Der Lauf greift in die Installation ein (Pull, Kopieren, Austausch des
+// Hugo-Programms) — deshalb mit Rückfrage, die den Umfang nennt.
+async function runUpdate(scope) {
+  const ok = await confirm({
+    title: t('status.update.confirmTitle'),
+    message: t(`status.update.confirm.${scope}`),
+    confirmText: t('status.update.confirmAction'),
+    cancelText: t('common.cancel'),
+  })
+  if (ok) await store.runUpdate(scope)
+}
 </script>
 
 <template>
@@ -380,6 +432,124 @@ function scoreColor(score) {
                 {{ license?.edition === 'pro' ? $t('status.license.change') : $t('license.activate') }}
               </v-btn>
             </div>
+          </section>
+
+          <!-- Software-Update: Release-Stand und Hugo-Programm aus der
+               Oberfläche erneuern (bin/update.sh). Nur Administratoren
+               bekommen die Angaben; die Knöpfe hängen an den Voraussetzungen,
+               die der Server rein lokal ermittelt. -->
+          <section v-if="updateCaps" class="st-card">
+            <h2 class="st-card-title">
+              <v-icon icon="mdi-update" size="18" />
+              {{ $t('status.update.heading') }}
+              <v-btn
+                icon="mdi-help-circle-outline"
+                variant="text"
+                size="small"
+                density="comfortable"
+                :title="$t('status.update.help')"
+                @click="help.open('system', 'update', locale)"
+              />
+              <v-spacer />
+              <v-btn
+                size="small"
+                variant="tonal"
+                prepend-icon="mdi-cloud-search-outline"
+                :loading="store.updateChecking"
+                :disabled="store.updating || !updateCaps.ready"
+                @click="store.checkUpdate()"
+              >
+                {{ $t('status.update.check') }}
+              </v-btn>
+            </h2>
+            <p class="st-hint">{{ $t('status.update.hint') }}</p>
+
+            <!-- Voraussetzungen fehlen: Gründe nennen statt stumm zu deaktivieren -->
+            <v-alert
+              v-if="updateReasons.length"
+              :type="updateCaps.ready ? 'info' : 'warning'"
+              density="compact"
+              variant="tonal"
+              class="mb-2"
+            >
+              <div>{{ updateCaps.ready ? $t('status.update.partlyAvailable') : $t('status.update.notAvailable') }}</div>
+              <ul class="st-update-reasons">
+                <li v-for="r in updateReasons" :key="r">{{ r }}</li>
+              </ul>
+            </v-alert>
+
+            <!-- Release-Repo -->
+            <div class="st-row">
+              <v-icon icon="mdi-source-repository" size="18" class="st-row-icon" />
+              <div class="st-row-main">
+                <div class="st-row-title">{{ $t('status.update.release') }}</div>
+                <div class="st-row-sub">
+                  <template v-if="updateCheck?.release?.commit">
+                    {{ $t('status.update.releaseAt', [updateCheck.release.commit, updateCheck.release.subject, formatDate(updateCheck.release.date)]) }}
+                  </template>
+                  <template v-else>{{ $t('status.update.releaseUnknown') }}</template>
+                </div>
+                <div v-if="releaseState" class="st-row-check" :class="`text-${releaseState.color}`">
+                  <v-icon :icon="releaseState.icon" size="14" />
+                  {{ releaseState.text }}
+                </div>
+              </div>
+            </div>
+
+            <!-- Hugo-Programm -->
+            <div class="st-row">
+              <v-icon icon="mdi-hammer-wrench" size="18" class="st-row-icon" />
+              <div class="st-row-main">
+                <div class="st-row-title">{{ $t('status.update.hugo') }}</div>
+                <div class="st-row-sub">
+                  <template v-if="hugoVersionText">{{ $t('version.hugo') }} {{ hugoVersionText }}</template>
+                  <template v-else>{{ $t('status.update.hugoNotConfigured') }}</template>
+                </div>
+                <div v-if="hugoState" class="st-row-check" :class="`text-${hugoState.color}`">
+                  <v-icon :icon="hugoState.icon" size="14" />
+                  {{ hugoState.text }}
+                </div>
+              </div>
+            </div>
+
+            <!-- Aktionen: der volle Lauf braucht git, die Hugo-Erneuerung nicht -->
+            <div class="st-update-actions">
+              <v-btn
+                size="small"
+                color="primary"
+                variant="flat"
+                prepend-icon="mdi-download"
+                :loading="store.updating"
+                :disabled="store.updateChecking || !updateCaps.gitReady"
+                @click="runUpdate('all')"
+              >
+                {{ $t('status.update.runAll') }}
+              </v-btn>
+              <v-btn
+                size="small"
+                variant="tonal"
+                prepend-icon="mdi-hammer-wrench"
+                :loading="store.updating"
+                :disabled="store.updateChecking || !updateCaps.ready"
+                @click="runUpdate('hugo')"
+              >
+                {{ $t('status.update.runHugo') }}
+              </v-btn>
+              <span v-if="store.updating" class="st-hint st-update-running">{{ $t('status.update.running') }}</span>
+            </div>
+
+            <!-- Ergebnis des letzten Laufs mit der Skriptausgabe -->
+            <template v-if="updateResult">
+              <div class="st-row-check mt-2" :class="updateResult.success ? 'text-success' : 'text-error'">
+                <v-icon :icon="updateResult.success ? 'mdi-check-circle-outline' : 'mdi-alert-circle-outline'" size="14" />
+                {{ updateResult.success
+                  ? $t('status.update.resultOk', [updateResult.seconds])
+                  : $t('status.update.resultFailed', [updateResult.exit, updateResult.seconds]) }}
+              </div>
+              <p v-if="updateResult.success" class="st-hint">{{ $t('status.update.reloadHint') }}</p>
+              <pre class="st-log st-update-output"><template v-if="updateResult.truncated">{{ $t('status.update.outputTruncated') }}
+</template>{{ updateResult.output.join('\n') }}</pre>
+            </template>
           </section>
 
           <!-- Zugänge: hinterlegt ja/nein, Prüfung gegen die Dienste auf Knopfdruck -->
@@ -1069,6 +1239,29 @@ function scoreColor(score) {
   font-weight: 600;
 }
 .st-features-none { opacity: 0.55; font-style: italic; }
+
+/* Software-Update: Knopfleiste und Skriptausgabe. Die Ausgabe nutzt die
+   Protokoll-Optik (.st-log), als <pre> mit Umbruch langer Zeilen. */
+.st-update-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--mint-border);
+}
+.st-update-running { margin: 0; }
+.st-update-reasons {
+  margin: 4px 0 0 18px;
+  padding: 0;
+}
+.st-update-output {
+  margin-top: 6px;
+  padding: 6px 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 
 /* Kennzeichnung einer Pro-Funktion. Ohne gültige Lizenz gedämpft und
    durchgestrichen — die Funktion ist dann vorhanden, aber nicht nutzbar. */

@@ -601,6 +601,8 @@ final class Connector
                 'statuscheck' => $this->cmdStatusCheck(),
                 'statuslog' => $this->cmdStatusLog($request),
                 'statuslogrotate' => $this->cmdStatusLogRotate(),
+                'systemupdatecheck' => $this->cmdSystemUpdateCheck(),
+                'systemupdate' => $this->cmdSystemUpdate($request),
                 'help' => $this->cmdHelp($request),
                 'gitstatus' => $this->cmdGitStatus(),
                 'gitlog' => $this->cmdGitLog($request),
@@ -6235,6 +6237,9 @@ final class Connector
             'cron' => $this->cronStatusList(),
             'tasks' => $this->pendingCronTasks(),
             'shop' => $this->shopStatus(),
+            // Software-Update aus der Oberfläche: nur Administratoren sehen die
+            // Karte — die Voraussetzungen nennen Serverpfade.
+            'update' => $this->auth->can('config.manage') ? $this->updateService()->capabilities() : null,
         ];
     }
 
@@ -6448,6 +6453,58 @@ final class Connector
         $this->requireAuth();
 
         return ['rotated' => $this->logger->rotate()];
+    }
+
+    /**
+     * systemupdatecheck — steht ein neuer Release-Stand oder eine neuere
+     * Hugo-Fassung bereit? Fragt nach außen (git fetch, GitHub-API) und läuft
+     * deshalb wie {@see cmdStatusCheck()} nur auf Knopfdruck.
+     */
+    private function cmdSystemUpdateCheck(): array
+    {
+        $this->requireConfigAdmin();
+        $this->requireMethod('POST');
+        @set_time_limit(60);
+
+        return $this->updateService()->check();
+    }
+
+    /**
+     * systemupdate — führt `bin/update.sh` des Release-Repos aus: `scope`
+     * all (Release ziehen, Webseiten auffrischen, Hugo erneuern), hugo (nur
+     * das Hugo-Programm) oder sites (Release und Webseiten). Ein Aufruf, eine
+     * Antwort mit der Skriptausgabe — kein Streaming.
+     *
+     * Während des Laufs hält der Befehl die Bausperre der Webseite, damit kein
+     * Hugo-Lauf in den Austausch des Binärprogramms gerät. Der Pull tauscht
+     * auch die PHP-Dateien aus; danach wird hier nichts mehr nachgeladen, nur
+     * noch geantwortet.
+     */
+    private function cmdSystemUpdate(array $request): array
+    {
+        $this->requireConfigAdmin();
+        $this->requireMethod('POST');
+        $scope = strtolower(trim((string) ($request['scope'] ?? 'all')));
+
+        // Pull, Kopieren und der Hugo-Download zusammen — großzügig bemessen.
+        @set_time_limit(300);
+
+        $lock = $this->hugo !== null ? $this->buildLock() : null;
+        $lock?->acquire();
+        try {
+            return $this->updateService()->run($scope);
+        } finally {
+            $lock?->release();
+        }
+    }
+
+    /**
+     * Der Update-Dienst arbeitet auf dem Release-Repo — dem Elternverzeichnis
+     * von backend/.
+     */
+    private function updateService(): UpdateService
+    {
+        return new UpdateService(dirname(__DIR__, 2), $this->logger);
     }
 
     /**

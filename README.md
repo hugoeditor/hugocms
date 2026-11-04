@@ -424,6 +424,17 @@ installierte ist. Ist die installierte Version gleich oder neuer, bleibt sie
 unverändert. Zurück auf einen bekannten Stand (auch älter): `bin/get-hugo.sh
 --version <x.y.z>`.
 
+**Aus der Oberfläche:** Administratoren finden dasselbe im **Systemstatus**
+unter „Software-Update“ (`UpdateService`, Befehle `systemupdatecheck` und
+`systemupdate`). „Auf Updates prüfen“ macht `git fetch` und fragt die
+GitHub-API nach Hugo, ohne etwas zu ändern; „Alles aktualisieren“ entspricht
+`update.sh --all`, „Nur Hugo erneuern“ `update.sh --hugo`. Der Lauf hält die
+Bausperre der Webseite und liefert die Skriptausgabe als Ergebnis — ein
+Request, eine Antwort, kein Streaming. Voraussetzung ist, dass der PHP-Prozess
+Programme starten darf (`exec`), `bash`/`git` erreicht und das Release-Repo
+samt `.git/` schreiben darf; fehlt etwas, nennt die Karte den Grund und
+deaktiviert den Knopf (Hilfeseite `system/update`).
+
 ### Veröffentlichen: Hugo aufrufen
 
 Der Client zeigt in der linken Werkzeugleiste einen **Veröffentlichen**-Knopf,
@@ -1428,6 +1439,8 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `userdelete`| POST   | `username`                           | **Pro/multiuser:** Konto löschen        |
 | `license`  | GET     | –                                    | Lizenzstatus (Edition, Lizenznehmer, Domain) |
 | `activate` | POST    | `key`                                | Pro-Lizenz aktivieren (schreibt `mounts/<hash>.ini`) |
+| `systemupdatecheck` | POST | –                              | Nur Administratoren: steht ein neuer Release-Stand (`git fetch`, Abstand zum Upstream) oder eine neuere Hugo-Fassung bereit? Fragt nach außen |
+| `systemupdate` | POST | `scope` (`all` \| `hugo` \| `sites`) | Nur Administratoren: führt `bin/update.sh` des Release-Repos aus (`--all`, `--hugo`, ohne Option); Antwort mit `success`, `exit`, `seconds`, `output` |
 | `gitstatus`| GET     | –                                    | **Pro:** Git-Status (Branch, geänderte Dateien, nächste freie Versionsnummer) |
 | `gitlog`   | GET     | `page`?, `perPage`?                  | **Pro:** Verlauf der Versionsstände samt Versionsnummern (seitenweise) |
 | `gitdiff`  | GET     | `sha`                                | **Pro:** Diff eines Versionsstands samt vollständiger Beschreibung (`message`) |

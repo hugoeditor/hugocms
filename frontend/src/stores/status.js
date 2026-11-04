@@ -23,6 +23,15 @@ export const useStatusStore = defineStore('status', {
     // Gewählter Stand: 0 die aktuelle Datei, N > 0 der rotierte Stand „.N“.
     logIndex: 0,
     logRotating: false,
+    // Software-Update (nur Administratoren): Ergebnis von `systemupdatecheck`
+    // — { capabilities, release: {commit, subject, date, remote, behind,
+    // error}, hugo: {installed, newest, updateAvailable, error} } — und das
+    // Ergebnis des letzten Laufs von `systemupdate` ({ scope, success, exit,
+    // seconds, output, truncated }).
+    updateCheck: null,
+    updateChecking: false,
+    updateResult: null,
+    updating: false,
   }),
 
   getters: {
@@ -32,6 +41,9 @@ export const useStatusStore = defineStore('status', {
     // Shop-Anbindung: { enabled, configured, contact, running, last } oder null
     // (ohne Hugo-Projekt).
     shop: (state) => state.data?.shop ?? null,
+    // Voraussetzungen des Software-Updates auf diesem Server: { releaseDir,
+    // ready, gitReady, reasons } — null für Redakteure (Karte entfällt).
+    update: (state) => state.data?.update ?? null,
     // Anzahl Aufgaben, die auf einen Cron-Lauf warten — Abzeichen der Werkzeugschiene.
     pendingCount: (state) =>
       (state.data?.tasks?.scheduled?.length ?? 0) + (state.data?.tasks?.improve?.length ?? 0),
@@ -99,6 +111,40 @@ export const useStatusStore = defineStore('status', {
         this.error = e
       } finally {
         this.logLoading = false
+      }
+    },
+
+    // Fragt nach außen, ob ein neuer Release-Stand oder eine neuere
+    // Hugo-Fassung bereitsteht (git fetch, GitHub-API) — nur auf Knopfdruck.
+    async checkUpdate() {
+      this.error = null
+      this.updateChecking = true
+      try {
+        this.updateCheck = await api.post('systemupdatecheck', {})
+      } catch (e) {
+        this.error = e
+      } finally {
+        this.updateChecking = false
+      }
+    },
+
+    // Führt `bin/update.sh` des Release-Repos aus (`scope` all | hugo | sites).
+    // Ein fehlgeschlagener Lauf kommt als Ergebnis mit `success: false` und
+    // der Skriptausgabe zurück, nicht als Fehler. Danach den Status neu laden:
+    // Buildnummer und Hugo-Version können sich geändert haben — und die
+    // Prüfung ist überholt.
+    async runUpdate(scope = 'all') {
+      this.error = null
+      this.updating = true
+      this.updateResult = null
+      try {
+        this.updateResult = await api.post('systemupdate', { scope })
+        this.updateCheck = null
+        await this.fetch()
+      } catch (e) {
+        this.error = e
+      } finally {
+        this.updating = false
       }
     },
 
