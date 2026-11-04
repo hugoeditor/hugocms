@@ -377,8 +377,9 @@ hugocms-release/bin/install.sh <host> <hugo-publish-ordner>
 Das Skript:
 
 1. **Hugo bereitstellen** – fehlt `bin/hugo/`, lädt `get-hugo.sh` den
-   Static-Site-Generator (Variante *extended*, gepinnte Version) und prüft die
-   Prüfsumme. Das Binary ist nicht Teil des Repos.
+   Static-Site-Generator (Variante *extended*, neueste Version laut GitHub)
+   und prüft die Prüfsumme. Das Binary ist nicht Teil des Repos. Ein
+   bestimmter Stand: `bin/get-hugo.sh --version 0.164.0`.
 2. **Mount-Datei erzeugen** – `backend/mounts/<hash>.ini`. Die Direktzugänge
    `content` → `content/`, `layouts` → `layouts/`, `static` → `static/`
    (Elternverzeichnis des Publish-Ordners) und als letzter Mount `project` →
@@ -407,7 +408,21 @@ Das Verfahren kommt **ohne Symlinks** aus und funktioniert daher auch auf
 Hostings, deren Webserver Symlinks nicht folgt (z. B. Hetzner Webhosting); das
 Release-Repo bleibt außerhalb des Webroots. Nach einem Update (`git pull` im
 Release-Repo) das Skript erneut ausführen, damit die App neu kopiert wird —
-das Backend ist ohne diesen Schritt bereits aktuell.
+das Backend ist ohne diesen Schritt bereits aktuell. Für alle Webseiten auf
+einmal übernimmt das `bin/update.sh`:
+
+```bash
+hugocms-release/bin/update.sh            # git pull, dann alle Webseiten auffrischen
+hugocms-release/bin/update.sh --hugo     # nur den Hugo-Generator aktualisieren
+hugocms-release/bin/update.sh --all      # git pull, Webseiten auffrischen UND Hugo aktualisieren
+hugocms-release/bin/update.sh --dry-run  # nur anzeigen, was geschähe
+```
+
+`--hugo`/`--all` fragen bei GitHub die neueste Hugo-Version ab und ersetzen
+`bin/hugo/hugo` (Variante *extended*, prüfsummengeprüft), wenn sie neuer als die
+installierte ist. Ist die installierte Version gleich oder neuer, bleibt sie
+unverändert. Zurück auf einen bekannten Stand (auch älter): `bin/get-hugo.sh
+--version <x.y.z>`.
 
 ### Veröffentlichen: Hugo aufrufen
 
