@@ -116,6 +116,7 @@ export default {
     contentQuality: 'Check quality with AI',
     queueImprove: 'Improve with AI later',
     editImage: 'Edit image',
+    convertImage: 'Convert to another format …',
   },
 
   dnd: {
@@ -1277,6 +1278,15 @@ export default {
     newFileExtension: 'Extension',
     renameTitle: 'Rename',
     renameLabel: 'New name',
+    upload: 'Upload',
+    uploadImagesTitle: 'Upload images',
+    uploadImagesHint: 'Images can be converted to another format while uploading. Other files are stored unchanged.',
+    uploadImageFormat: 'Image format',
+    keepFormat: 'Keep format',
+    convert: 'Convert',
+    convertImageTitle: 'Convert “{0}”',
+    convertImageFormat: 'Target format',
+    convertImageHint: 'Creates a new file in the chosen format next to the original. The original is kept. JPEG has no transparency (becomes white); animated GIFs lose their animation.',
   },
 
   editor: {
@@ -1868,6 +1878,10 @@ export default {
     'UPLOAD-TOO-LARGE': '“{0}” is too large (at most {1}).',
     'NOT-AN-IMAGE': 'Not an image file.',
     'FILETYPE-NOT-IMAGE': 'The edited data is not a supported image format (JPEG, PNG, WebP, GIF).',
+    'IMAGE-FORMAT-UNSUPPORTED': 'Converting to {0} is not possible on this server (GD library).',
+    'IMAGE-FORMAT-SAME': '“{0}” already has this format.',
+    'IMAGE-CONVERT-FAILED': '“{0}” could not be converted.',
+    'IMAGE-TOO-LARGE': '“{0}” is too large to convert (at most 40 megapixels).',
 
     ECSRF: 'Security token invalid — please reload the page.',
     'TRASH-NOT-FOUND': 'Trash entry not found.',

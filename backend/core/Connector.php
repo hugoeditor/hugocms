@@ -550,6 +550,7 @@ final class Connector
                 'move' => $this->cmdMove($request),
                 'upload' => $this->cmdUpload($request),
                 'writeimage' => $this->cmdWriteImage($request),
+                'convertimage' => $this->cmdConvertImage($request),
                 'download' => $this->cmdDownload($request),
                 'raw' => $this->cmdRaw($request),
                 'thumb' => $this->cmdThumb($request),
@@ -756,6 +757,9 @@ final class Connector
             'buildable' => $this->hugo !== null && $this->hugoBin !== null,
             // Endungen für die Auswahl beim Anlegen einer neuen Datei.
             'editableTypes' => $this->userEditableTypes(),
+            // Zielformate, in die GD dieses Servers Bilder umwandeln kann
+            // (Upload-Dialog und „Umwandeln“); leer = Funktion ausgeblendet.
+            'imageFormats' => FileService::imageFormats(),
             // Lässt sich die Konfiguration im laufenden Betrieb EINSEHEN? Das
             // setzt nur voraus, dass der Connector aus einer hugocms.ini
             // aufgebaut wurde. Ob das Konto auch SPEICHERN darf, sagt
@@ -1140,7 +1144,11 @@ final class Connector
 
     // --- Stufe 3: Upload und Auslieferung -----------------------------------
 
-    /** Nimmt multipart-Uploads entgegen (Feld files[], Ziel = Verzeichnis-ID). */
+    /**
+     * Nimmt multipart-Uploads entgegen (Feld files[], Ziel = Verzeichnis-ID).
+     * Optional `format` (webp, jpg, png, avif): Rasterbilder werden beim
+     * Ablegen in dieses Format umgewandelt (siehe FileService::storeUpload).
+     */
     private function cmdUpload(array $request): array
     {
         $this->requireAuth();
@@ -1150,13 +1158,34 @@ final class Connector
         if (!is_dir($target['abs'])) {
             throw ApiException::badRequest('NOT-A-DIRECTORY');
         }
+        $format = (string) ($request['format'] ?? '');
 
         $entries = [];
         foreach ($this->uploadedFiles() as $file) {
-            $entries[] = $this->files->storeUpload($target['mount'], $target['rel'], $target['abs'], $file);
+            $entries[] = $this->files->storeUpload($target['mount'], $target['rel'], $target['abs'], $file, $format);
         }
 
         return ['count' => count($entries), 'entries' => $entries];
+    }
+
+    /**
+     * Legt neben einem Rasterbild eine Fassung in einem anderen Format an
+     * (GD; `format` = webp, jpg, png, avif). Das Original bleibt bestehen,
+     * deshalb genügt — wie bei der Kopie aus dem Bild-Editor — das Recht `write`.
+     */
+    private function cmdConvertImage(array $request): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+        $target = $this->resolver->resolve($this->requireParam($request, 'target'));
+        $this->requirePermission($target['mount'], 'write');
+
+        return $this->files->convertImage(
+            $target['mount'],
+            $target['rel'],
+            $target['abs'],
+            (string) ($request['format'] ?? ''),
+        );
     }
 
     /**

@@ -546,9 +546,14 @@ final class FileService
      * (aufgelöstes) Zielverzeichnis. Bei Namenskollision wird nummeriert
      * („name (2).ext“) — es wird nie stillschweigend überschrieben.
      *
+     * Ist $format gesetzt (webp, jpg, png, avif) und die Datei ein Rasterbild,
+     * wird sie beim Ablegen mit GD in dieses Format umgewandelt — die Endung
+     * folgt dem Zielformat. Andere Dateien und Bilder, die das Format schon
+     * haben, bleiben unverändert.
+     *
      * @param array{name?: mixed, tmp_name?: mixed, error?: mixed, size?: mixed} $file
      */
-    public function storeUpload(Mount $mount, string $parentRel, string $parentAbs, array $file): array
+    public function storeUpload(Mount $mount, string $parentRel, string $parentAbs, array $file, string $format = ''): array
     {
         $name = basename((string) ($file['name'] ?? ''));
         $error = (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE);
@@ -560,22 +565,212 @@ final class FileService
             throw new ApiException('EIO', 500, 'UPLOAD-FAILED', [$name]);
         }
         self::assertValidName($name);
-        if (!$mount->accepts($name)) {
-            throw ApiException::denied('FILETYPE-NOT-ALLOWED-MOUNT');
-        }
-        $this->assertUserAllows($name);
         if ((int) ($file['size'] ?? 0) > $this->maxUploadBytes) {
             throw ApiException::badRequest('UPLOAD-TOO-LARGE', [$name, self::humanBytes($this->maxUploadBytes)]);
         }
 
+        // Umwandeln nur, wenn die TATSÄCHLICHEN Bytes ein Rasterbild sind und
+        // das Zielformat vom vorhandenen abweicht. Der Name wird mit der
+        // neuen Endung geprüft — Mount-Filter und Konto-Liste gelten für das
+        // Ergebnis, nicht für die Quelle.
+        $tmp = (string) ($file['tmp_name'] ?? '');
+        $format = self::normalizeImageFormat($format);
+        $convert = $format !== '' && is_file($tmp) && $this->needsImageConversion($tmp, $format);
+        if ($convert) {
+            $name = pathinfo($name, PATHINFO_FILENAME) . '.' . $format;
+        }
+        if (!$mount->accepts($name)) {
+            throw ApiException::denied('FILETYPE-NOT-ALLOWED-MOUNT');
+        }
+        $this->assertUserAllows($name);
+
         $dest = $this->uniqueTarget($parentAbs, $name, numbered: true);
-        if (!@move_uploaded_file((string) ($file['tmp_name'] ?? ''), $dest)) {
+        if ($convert) {
+            $this->writeConvertedImage($tmp, $format, $dest, $name);
+        } elseif (!@move_uploaded_file($tmp, $dest)) {
             throw new ApiException('EIO', 500, 'UPLOAD-FAILED', [$name]);
         }
         @chmod($dest, 0644);
         clearstatcache(true, $dest);
 
         return $this->entryInfo($mount, self::childRel($parentRel, basename($dest)), $dest);
+    }
+
+    // --- Bildumwandlung (GD) --------------------------------------------------
+
+    /**
+     * Zielformate der Bildumwandlung (Upload und „Umwandeln“): Endung =>
+     * GD-Ausgabefunktion. Welche davon DIESER Server beherrscht, sagt
+     * imageFormats() — auf Shared Hosting fehlt GD häufig WebP oder AVIF.
+     */
+    private const IMAGE_FORMATS = ['webp' => 'imagewebp', 'jpg' => 'imagejpeg', 'png' => 'imagepng', 'avif' => 'imageavif'];
+
+    /** MIME-Typ je Zielformat — ein Bild, das ihn schon trägt, wird nicht neu kodiert. */
+    private const IMAGE_FORMAT_MIME = ['webp' => 'image/webp', 'jpg' => 'image/jpeg', 'png' => 'image/png', 'avif' => 'image/avif'];
+
+    /**
+     * Obergrenze der Pixelzahl beim Umwandeln (Dekomprimierungs-Schutz, wie
+     * bei der Vorschau im Connector). GD hält das Bild unkomprimiert im
+     * Speicher — 40 Megapixel sind rund 160 MB.
+     */
+    private const IMAGE_MAX_PIXELS = 40_000_000;
+
+    /**
+     * Zielformate, die GD dieses Servers schreiben kann (für whoami: der
+     * Client bietet nur diese an; leer = keine Umwandlung möglich).
+     *
+     * @return list<string>
+     */
+    public static function imageFormats(): array
+    {
+        if (!function_exists('imagecreatefromstring')) {
+            return [];
+        }
+
+        return array_keys(array_filter(self::IMAGE_FORMATS, 'function_exists'));
+    }
+
+    /**
+     * Legt neben einem Rasterbild im Mount eine Fassung in einem anderen
+     * Format an („foto.webp“ neben „foto.jpg“; Kollision wird nummeriert).
+     * Das Original bleibt unverändert.
+     *
+     * @return array Metadaten der neuen Datei
+     */
+    public function convertImage(Mount $mount, string $rel, string $abs, string $format): array
+    {
+        if (!is_file($abs)) {
+            throw ApiException::notFound('FILE-NOT-FOUND');
+        }
+        $format = self::normalizeImageFormat($format);
+        if (!isset(self::IMAGE_FORMATS[$format])) {
+            throw ApiException::badRequest('PARAM-INVALID', ['format']);
+        }
+        $mime = $this->detectMime($abs);
+        if (!in_array($mime, self::IMAGE_MIME, true)) {
+            throw ApiException::badRequest('NOT-AN-IMAGE');
+        }
+        if ($mime === self::IMAGE_FORMAT_MIME[$format]) {
+            throw ApiException::badRequest('IMAGE-FORMAT-SAME', [basename($abs)]);
+        }
+
+        $name = pathinfo($abs, PATHINFO_FILENAME) . '.' . $format;
+        if (!$mount->accepts($name)) {
+            throw ApiException::denied('FILETYPE-NOT-ALLOWED-MOUNT');
+        }
+        $this->assertUserAllows($name);
+
+        $destAbs = $this->uniqueTarget(dirname($abs), $name, numbered: true);
+        $this->writeConvertedImage($abs, $format, $destAbs, basename($abs));
+        @chmod($destAbs, 0644);
+        clearstatcache(true, $destAbs);
+
+        return $this->entryInfo($mount, self::childRel(self::parentRel($rel), basename($destAbs)), $destAbs);
+    }
+
+    /** Kleinschreibung, „jpeg“ → „jpg“; unbekannte Werte bleiben, der Aufrufer prüft. */
+    private static function normalizeImageFormat(string $format): string
+    {
+        $format = strtolower(trim($format));
+
+        return $format === 'jpeg' ? 'jpg' : $format;
+    }
+
+    /** Rasterbild (nach den Bytes), das das Zielformat noch nicht hat? */
+    private function needsImageConversion(string $abs, string $format): bool
+    {
+        $mime = $this->detectMime($abs);
+
+        return in_array($mime, self::IMAGE_MIME, true) && $mime !== (self::IMAGE_FORMAT_MIME[$format] ?? null);
+    }
+
+    /**
+     * Kodiert das Rasterbild in $srcAbs mit GD nach $format und schreibt es
+     * atomar nach $destAbs (Zwischendatei + rename). Besonderheiten:
+     * - Die EXIF-Ausrichtung von JPEGs wird angewendet (Drehungen 3/6/8), da
+     *   GD sie verwirft und Handyfotos sonst gedreht erschienen.
+     * - JPEG kennt keine Transparenz; sie wird auf Weiß gelegt.
+     * - Animierte GIFs verlieren die Animation (erstes Bild).
+     * - Qualität 85 für WebP und JPEG, 75 für AVIF (andere Skala), PNG
+     *   verlustfrei.
+     *
+     * @param string $name Anzeigename für Fehlermeldungen
+     */
+    private function writeConvertedImage(string $srcAbs, string $format, string $destAbs, string $name): void
+    {
+        $writer = self::IMAGE_FORMATS[$format] ?? null;
+        if ($writer === null || !function_exists($writer) || !function_exists('imagecreatefromstring')) {
+            throw ApiException::badRequest('IMAGE-FORMAT-UNSUPPORTED', [strtoupper($format)]);
+        }
+        $info = @getimagesize($srcAbs);
+        if ($info === false) {
+            throw ApiException::badRequest('IMAGE-CONVERT-FAILED', [$name]);
+        }
+        if ((int) $info[0] * (int) $info[1] > self::IMAGE_MAX_PIXELS) {
+            throw ApiException::badRequest('IMAGE-TOO-LARGE', [$name]);
+        }
+        $data = @file_get_contents($srcAbs);
+        $img = $data === false ? false : @imagecreatefromstring($data);
+        unset($data);
+        if ($img === false) {
+            throw ApiException::badRequest('IMAGE-CONVERT-FAILED', [$name]);
+        }
+
+        if (!imageistruecolor($img)) {
+            // GIF/8-Bit-PNG: WebP und AVIF verlangen Truecolor; die
+            // transparente Palettenfarbe wird dabei zu Alpha.
+            imagepalettetotruecolor($img);
+        }
+        $img = self::applyExifOrientation($img, $srcAbs, (int) $info[2]);
+
+        if ($format === 'jpg') {
+            $flat = imagecreatetruecolor(imagesx($img), imagesy($img));
+            imagefill($flat, 0, 0, imagecolorallocate($flat, 255, 255, 255));
+            imagecopy($flat, $img, 0, 0, 0, 0, imagesx($img), imagesy($img));
+            $img = $flat;
+        } else {
+            imagesavealpha($img, true);
+        }
+
+        $tmp = @tempnam(dirname($destAbs), '.hugofm');
+        if ($tmp === false) {
+            throw new ApiException('EIO', 500, 'TEMPFILE-FAILED');
+        }
+        $ok = match ($format) {
+            'webp'  => @imagewebp($img, $tmp, 85),
+            'jpg'   => @imagejpeg($img, $tmp, 85),
+            'avif'  => @imageavif($img, $tmp, 75),
+            default => @imagepng($img, $tmp),
+        };
+        if (!$ok || !@rename($tmp, $destAbs)) {
+            @unlink($tmp);
+            throw new ApiException('EIO', 500, 'IMAGE-CONVERT-FAILED', [$name]);
+        }
+    }
+
+    /**
+     * Dreht ein JPEG nach seiner EXIF-Ausrichtung in die Anzeigelage.
+     * Gespiegelte Lagen (2, 4, 5, 7) erzeugen Kameras praktisch nie und
+     * bleiben unbehandelt; ohne EXIF-Erweiterung bleibt das Bild, wie es ist.
+     */
+    private static function applyExifOrientation(\GdImage $img, string $abs, int $type): \GdImage
+    {
+        if ($type !== IMAGETYPE_JPEG || !function_exists('exif_read_data')) {
+            return $img;
+        }
+        $exif = @exif_read_data($abs);
+        $angle = match ((int) ($exif['Orientation'] ?? 1)) {
+            3 => 180,
+            6 => -90, // 90° im Uhrzeigersinn; imagerotate dreht gegen den Uhrzeigersinn
+            8 => 90,
+            default => 0,
+        };
+        if ($angle === 0) {
+            return $img;
+        }
+        $rotated = @imagerotate($img, $angle, 0);
+
+        return $rotated === false ? $img : $rotated;
     }
 
     /** MIME-Typ einer Datei (für die Auslieferung durch den Connector). */
@@ -585,12 +780,13 @@ final class FileService
     }
 
     /**
-     * Erlaubte Rasterbild-Typen für den Bild-Editor. SVG bleibt bewusst außen
-     * vor — es wird als Text über read/write bearbeitet, nicht neu kodiert.
+     * Erlaubte Rasterbild-Typen für Bild-Editor und Bildumwandlung. SVG
+     * bleibt bewusst außen vor — es wird als Text über read/write bearbeitet,
+     * nicht neu kodiert.
      *
      * @var list<string>
      */
-    private const IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    private const IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'];
 
     /**
      * Speichert im Bild-Editor bearbeitete Rasterbild-Rohdaten. Bewusst getrennt

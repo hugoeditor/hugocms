@@ -116,6 +116,7 @@ export default {
     contentQuality: 'Qualität mit KI prüfen',
     queueImprove: 'Mit KI später verbessern',
     editImage: 'Bild bearbeiten',
+    convertImage: 'In anderes Format umwandeln …',
   },
 
   dnd: {
@@ -1278,6 +1279,15 @@ export default {
     newFileExtension: 'Dateiendung',
     renameTitle: 'Umbenennen',
     renameLabel: 'Neuer Name',
+    upload: 'Hochladen',
+    uploadImagesTitle: 'Bilder hochladen',
+    uploadImagesHint: 'Die Bilder können beim Hochladen in ein anderes Format umgewandelt werden. Andere Dateien bleiben unverändert.',
+    uploadImageFormat: 'Format der Bilder',
+    keepFormat: 'Format beibehalten',
+    convert: 'Umwandeln',
+    convertImageTitle: '„{0}“ umwandeln',
+    convertImageFormat: 'Zielformat',
+    convertImageHint: 'Legt eine neue Datei im gewählten Format neben dem Original an. Das Original bleibt erhalten. JPEG kennt keine Transparenz (wird weiß); animierte GIFs verlieren die Animation.',
   },
 
   editor: {
@@ -1873,6 +1883,10 @@ export default {
     'ANALYZE-REQUEST-FAILED': 'Die Analyse-Anfrage ist fehlgeschlagen ({0}).',
     'NOT-AN-IMAGE': 'Keine Bilddatei.',
     'FILETYPE-NOT-IMAGE': 'Die bearbeiteten Daten sind kein unterstütztes Bildformat (JPEG, PNG, WebP, GIF).',
+    'IMAGE-FORMAT-UNSUPPORTED': 'Umwandeln nach {0} ist auf diesem Server nicht möglich (GD-Bibliothek).',
+    'IMAGE-FORMAT-SAME': '„{0}“ hat dieses Format bereits.',
+    'IMAGE-CONVERT-FAILED': '„{0}“ konnte nicht umgewandelt werden.',
+    'IMAGE-TOO-LARGE': '„{0}“ ist zum Umwandeln zu groß (höchstens 40 Megapixel).',
 
     ECSRF: 'Sicherheits-Token ungültig — bitte die Seite neu laden.',
     'TRASH-NOT-FOUND': 'Papierkorb-Eintrag nicht gefunden.',

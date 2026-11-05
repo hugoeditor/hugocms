@@ -470,11 +470,14 @@ export const useFilesStore = defineStore('files', {
 
     // --- Stufe 3: Upload, Download, Bildbetrachter -----------------------
 
-    async upload(fileList) {
+    // format (webp, jpg, png, avif): Rasterbilder werden beim Ablegen auf dem
+    // Server in dieses Format umgewandelt; leer = unverändert speichern.
+    async upload(fileList, format = '') {
       if (!this.cwd || !fileList?.length) return
       const form = new FormData()
       form.append('cmd', 'upload')
       form.append('target', this.cwd.id)
+      if (format) form.append('format', format)
       for (const f of fileList) form.append('files[]', f)
       this.uploading = true
       try {
@@ -527,6 +530,15 @@ export const useFilesStore = defineStore('files', {
 
     closeImageEditor() {
       this.editImageId = null
+    },
+
+    // Legt neben einem Rasterbild eine Fassung in einem anderen Format an
+    // (Server, GD). Das Original bleibt; die neue Datei wird ausgewählt.
+    async convertImage(entry, format) {
+      const meta = await api.post('convertimage', { target: entry.id, format })
+      await this.refresh()
+      if (meta?.id) this.selectOnly(meta.id)
+      return meta
     },
 
     // Speichert ein bearbeitetes Rasterbild zurück. dataUrl ist die base64-

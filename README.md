@@ -581,6 +581,30 @@ beim Serialisieren maskiert tiptap-markdown jedes `<`/`>` zu `&lt;`/`&gt;` —
 `restoreHugoMarkup()` in `WysiwygEditor.vue` führt Shortcode-Begrenzer **und**
 den Trenner wieder auf ihre kanonische Form zurück.
 
+### Bildformat beim Hochladen und Umwandeln
+
+Sind Rasterbilder unter den hochzuladenden Dateien, fragt der Dateimanager
+vorher nach dem **Format der Bilder**: beibehalten oder nach WebP, JPEG, PNG
+oder AVIF umwandeln. Andere Dateien im selben Upload bleiben unverändert, ebenso
+Bilder, die das Zielformat schon haben. Die Wahl wird im Browser gemerkt. Über
+das Kontextmenü eines Bilds („In anderes Format umwandeln …“) entsteht eine
+neue Datei im gewählten Format **neben** dem Original — das Original bleibt.
+
+Umgewandelt wird auf dem Server mit **GD** (`FileService`), ohne weitere
+Abhängigkeit. Welche Zielformate GD der jeweiligen Installation schreiben kann,
+meldet `whoami` als `imageFormats`; ohne GD oder ohne passende Ausgabefunktion
+(auf Shared Hosting fehlt oft WebP, häufiger AVIF) bietet der Client das Format
+gar nicht erst an. Regeln: Mount-Filter und Endungsliste des Kontos gelten für
+die **neue** Endung; die EXIF-Ausrichtung von JPEGs wird angewendet (GD würde
+sie verwerfen, Handyfotos erschienen gedreht); JPEG kennt keine Transparenz
+(Weiß); animierte GIFs verlieren die Animation; Qualität 85 für WebP/JPEG, 75
+für AVIF, PNG verlustfrei; Obergrenze 40 Megapixel (Dekomprimierungs-Schutz wie
+bei der Vorschau). SVG wird nie neu kodiert.
+
+Hugo selbst kann Bilder zur Bauzeit umwandeln (Hugo Pipes, `.Process "webp"`);
+die Umwandlung im CMS ist für Themes gedacht, die das nicht nutzen, oder wenn
+die Originale von vornherein klein bleiben sollen.
+
 ### Konfiguration im laufenden Betrieb ändern
 
 Die `hugocms.ini` lässt sich auch nach der Einrichtung über die Oberfläche
@@ -1409,7 +1433,8 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `delete`   | POST    | `targets` (ID-Liste)                 | In den Papierkorb (`.trash`) löschen   |
 | `copy`     | POST    | `sources` (ID-Liste), `dest` (ID)    | Kopieren (gleicher Mount)              |
 | `move`     | POST    | `sources` (ID-Liste), `dest` (ID)    | Verschieben (gleicher Mount)           |
-| `upload`   | POST    | multipart: `target` (ID), `files[]`  | Dateien hochladen (Kollision: „ (2)“)  |
+| `upload`   | POST    | multipart: `target` (ID), `files[]`, `format`? | Dateien hochladen (Kollision: „ (2)“); `format` (webp, jpg, png, avif) wandelt Rasterbilder beim Ablegen um |
+| `convertimage` | POST | `target` (Bild-ID), `format`         | Fassung des Bilds in einem anderen Format neben dem Original anlegen (GD) |
 | `download` | GET     | `target` (ID)                        | Datei herunterladen (attachment)       |
 | `raw`      | GET     | `target` (ID)                        | Bild inline ausliefern (Betrachter)    |
 | `thumb`    | GET     | `target` (ID), `size`?               | Bildvorschau (GD; ohne GD das Original)|
@@ -1597,7 +1622,7 @@ begrenzt ist (`shopbrowsedirs`); OpensourceERP fragt sie über
 |---|---|---|---|
 | Produktseiten | `content_dir` | `content/de/produkt` | Markdown schreiben und löschen |
 | Kategorieübersicht | `category_groups` | `data/category_groups.json` | genau diese Datei |
-| Produktbilder | `images` | `static/images/products` | `jpg`, `jpeg`, `png`, `gif`, `webp` schreiben und löschen, direkt im Verzeichnis |
+| Produktbilder | `images` | `static/images/products` | `jpg`, `jpeg`, `png`, `gif`, `webp`, `avif` schreiben und löschen, direkt im Verzeichnis |
 | Vorschaubilder | `thumbnails` | `static/images/thumbnails` | wie Produktbilder (fertige Vorschaubilder aus OpensourceERP) |
 | Downloads | `downloads` | `static/downloads` | zusätzlich `pdf`, `zip`, `txt` schreiben und löschen, direkt im Verzeichnis |
 | Kundenportal-Paket | fest `oserp-portal/` | – | `md`, `json`, `html`, `js`, `css`; PHP nur signiert |
@@ -1668,7 +1693,7 @@ als Binärdaten in Stücken, nicht Base64 in JSON:
   nennt die Grenze (`media.chunkBytes`), OpensourceERP richtet sich danach.
   Einzeldatei bis 100 MB.
 - Nur direkt in der Freigabe, keine Unterverzeichnisse, Bilder mit `jpg`,
-  `jpeg`, `png`, `gif`, `webp`, Downloads zusätzlich `pdf`, `zip`, `txt`, nie
+  `jpeg`, `png`, `gif`, `webp`, `avif`, Downloads zusätzlich `pdf`, `zip`, `txt`, nie
   PHP. Eine Medienfreigabe darf im Shop-Paket oder unter den Produktseiten
   liegen; die Medienregel geht vor. Im Paket selbst bleibt es bei `md`, `json`,
   `html`, `js`, `css`.
@@ -1695,7 +1720,7 @@ und Ziel sind die Freigaben „Produktbilder" und „Vorschaubilder"
 - Ein Vorschaubild gilt als aktuell, wenn es nicht älter ist als seine Quelle
   und die erwartete Größe hat — eine geänderte Größe wirkt so beim nächsten
   Lauf.
-- Nur reine Dateinamen mit Bildendung (`jpg`, `jpeg`, `png`, `gif`, `webp`);
+- Nur reine Dateinamen mit Bildendung (`jpg`, `jpeg`, `png`, `gif`, `webp`, `avif`);
   alles andere steht in `failed`, fehlende Quellen in `missing`.
 - Jeder Aufruf arbeitet höchstens 20 Sekunden und nennt in `next`, wo es
   weitergeht; `done` meldet das Ende. Der Aufrufer ruft mit `offset` erneut

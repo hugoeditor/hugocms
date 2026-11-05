@@ -74,8 +74,8 @@ final class ShopSync
      * Endungsliste, nur direkt im Verzeichnis, nie PHP. Sie kommen als
      * Binärdaten in Stücken ({@see uploadMedia()}), nicht Base64 in JSON.
      */
-    public const MEDIA_IMAGE_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-    public const MEDIA_DOWNLOAD_EXT = ['pdf', 'zip', 'txt', 'jpg', 'jpeg', 'png', 'gif', 'webp'];
+    public const MEDIA_IMAGE_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif'];
+    public const MEDIA_DOWNLOAD_EXT = ['pdf', 'zip', 'txt', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'avif'];
 
     /** Größte Mediendatei — die Grenze der Bibliothek für Downloads. */
     public const MAX_MEDIA_BYTES = 104_857_600;

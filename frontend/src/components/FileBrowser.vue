@@ -174,6 +174,10 @@ function buildItems(entry) {
       // vor (image && editable) — es läuft über den Texteditor.
       if (entry.image && !entry.editable && sel === 1 && files.can('write')) {
         items.push({ icon: 'mdi-image-edit-outline', label: t('ctx.editImage'), action: () => files.openImageEditor(entry) })
+        // In ein anderes Format umwandeln (nur, wenn GD des Servers eines bietet)
+        if (convertTargets(entry).length) {
+          items.push({ icon: 'mdi-image-sync-outline', label: t('ctx.convertImage'), action: () => openConvert(entry) })
+        }
       }
     }
     if (entry.type === 'file' && sel === 1) {
@@ -369,8 +373,95 @@ function pickUpload() {
 
 function onPicked(event) {
   const list = event.target.files
-  if (list?.length) run(() => files.upload(list))
+  if (list?.length) startUpload(list)
   event.target.value = '' // gleiche Auswahl erneut möglich
+}
+
+// --- Bildformat (Upload-Dialog und „Umwandeln“) ---------------------------
+
+// Anzeigenamen der Zielformate; welche der Server kann, sagt auth.imageFormats.
+const FORMAT_TITLES = { webp: 'WebP', jpg: 'JPEG', png: 'PNG', avif: 'AVIF' }
+const RASTER_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif'])
+
+function extOf(name) {
+  const dot = name.lastIndexOf('.')
+  return dot > 0 ? name.slice(dot + 1).toLowerCase() : ''
+}
+
+// Rasterbild? SVG bleibt außen vor — es wird nie neu kodiert.
+function isRasterFile(file) {
+  const type = file.type || ''
+  if (type.startsWith('image/')) return type !== 'image/svg+xml'
+  return RASTER_EXTS.has(extOf(file.name || ''))
+}
+
+function formatItems() {
+  return (auth.imageFormats || []).map((f) => ({ title: FORMAT_TITLES[f] || f.toUpperCase(), value: f }))
+}
+
+// Zuletzt gewähltes Upload-Format merken — wer alles nach WebP wandelt, muss
+// es nicht bei jedem Hochladen neu wählen.
+const UPLOAD_FORMAT_KEY = 'hugocms.uploadImageFormat'
+
+const uploadDialog = reactive({ open: false, files: [], format: '', busy: false })
+
+const uploadFormatItems = computed(() => [{ title: t('dialog.keepFormat'), value: '' }, ...formatItems()])
+
+// Bilder dabei und der Server kann umwandeln → erst nach dem Format fragen;
+// sonst wie bisher sofort hochladen.
+function startUpload(list) {
+  const arr = Array.from(list)
+  if (!auth.imageFormats?.length || !arr.some(isRasterFile)) {
+    run(() => files.upload(arr))
+    return
+  }
+  const remembered = localStorage.getItem(UPLOAD_FORMAT_KEY) || ''
+  uploadDialog.files = arr
+  uploadDialog.format = auth.imageFormats.includes(remembered) ? remembered : ''
+  uploadDialog.busy = false
+  uploadDialog.open = true
+}
+
+async function confirmUpload() {
+  if (uploadDialog.busy) return
+  uploadDialog.busy = true
+  localStorage.setItem(UPLOAD_FORMAT_KEY, uploadDialog.format)
+  try {
+    await run(() => files.upload(uploadDialog.files, uploadDialog.format))
+  } finally {
+    uploadDialog.busy = false
+    uploadDialog.open = false
+    uploadDialog.files = []
+  }
+}
+
+// Zielformate für ein vorhandenes Bild: alle, die der Server kann, außer dem
+// jetzigen (jpeg zählt als jpg).
+function convertTargets(entry) {
+  const current = extOf(entry.name) === 'jpeg' ? 'jpg' : extOf(entry.name)
+  return formatItems().filter((f) => f.value !== current)
+}
+
+const convertDialog = reactive({ open: false, entry: null, format: '', items: [], busy: false })
+
+function openConvert(entry) {
+  const items = convertTargets(entry)
+  convertDialog.entry = entry
+  convertDialog.items = items
+  convertDialog.format = items[0]?.value || ''
+  convertDialog.busy = false
+  convertDialog.open = true
+}
+
+async function confirmConvert() {
+  if (convertDialog.busy || !convertDialog.entry || !convertDialog.format) return
+  convertDialog.busy = true
+  try {
+    await run(() => files.convertImage(convertDialog.entry, convertDialog.format))
+  } finally {
+    convertDialog.busy = false
+    convertDialog.open = false
+  }
 }
 
 function onDragOver(event) {
@@ -391,7 +482,7 @@ function onDrop(event) {
   event.preventDefault()
   dragOver.value = false
   const list = event.dataTransfer?.files
-  if (list?.length) run(() => files.upload(list))
+  if (list?.length) startUpload(list)
 }
 
 // Anfragen der Toolbar (Neuer Ordner / Neue Datei / Hochladen) konsumieren.
@@ -701,6 +792,66 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
     <!-- Verstecktes Upload-Feld (Toolbar/Kontextmenü lösen es aus) -->
     <input ref="uploadInput" type="file" multiple class="nemo-upload-input" @change="onPicked" />
 
+    <!-- Dialog: Bilder hochladen (Zielformat wählen) -->
+    <v-dialog v-model="uploadDialog.open" width="480" :persistent="uploadDialog.busy">
+      <v-card>
+        <v-card-title class="text-subtitle-1">{{ $t('dialog.uploadImagesTitle') }}</v-card-title>
+        <v-card-text>
+          <div class="text-caption text-medium-emphasis mb-3">{{ $t('dialog.uploadImagesHint') }}</div>
+          <ul class="nemo-upload-list mb-3">
+            <li v-for="(f, i) in uploadDialog.files" :key="i" class="nemo-upload-list-item">
+              <v-icon :icon="isRasterFile(f) ? 'mdi-image-outline' : 'mdi-file-outline'" size="16" class="nemo-menu-icon" />
+              <span class="text-truncate">{{ f.name }}</span>
+              <span class="text-medium-emphasis ms-auto">{{ formatSize(f.size) }}</span>
+            </li>
+          </ul>
+          <v-select
+            v-model="uploadDialog.format"
+            :items="uploadFormatItems"
+            :label="$t('dialog.uploadImageFormat')"
+            variant="outlined"
+            density="comfortable"
+            hide-details
+            :disabled="uploadDialog.busy"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" :disabled="uploadDialog.busy" @click="uploadDialog.open = false">{{ $t('dialog.cancel') }}</v-btn>
+          <v-btn color="primary" variant="flat" :loading="uploadDialog.busy" @click="confirmUpload">
+            {{ $t('dialog.upload') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Dialog: Bild in ein anderes Format umwandeln -->
+    <v-dialog v-model="convertDialog.open" width="420" :persistent="convertDialog.busy">
+      <v-card>
+        <v-card-title class="text-subtitle-1">{{ $t('dialog.convertImageTitle', [convertDialog.entry?.name ?? '']) }}</v-card-title>
+        <v-card-text>
+          <v-select
+            v-model="convertDialog.format"
+            :items="convertDialog.items"
+            :label="$t('dialog.convertImageFormat')"
+            variant="outlined"
+            density="comfortable"
+            hide-details
+            class="mb-3"
+            :disabled="convertDialog.busy"
+          />
+          <div class="text-caption text-medium-emphasis">{{ $t('dialog.convertImageHint') }}</div>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" :disabled="convertDialog.busy" @click="convertDialog.open = false">{{ $t('dialog.cancel') }}</v-btn>
+          <v-btn color="primary" variant="flat" :loading="convertDialog.busy" :disabled="!convertDialog.format" @click="confirmConvert">
+            {{ $t('dialog.convert') }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <!-- Bildbetrachter -->
     <ImageViewer />
 
@@ -813,6 +964,22 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 /* Auswahl der Dateiendung im Dialog „Neue Datei“. */
 .nemo-ext-select {
   flex: 0 0 150px;
+}
+
+.nemo-upload-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  font-size: 0.875rem;
+}
+
+.nemo-upload-list-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
 }
 
 .nemo-empty {

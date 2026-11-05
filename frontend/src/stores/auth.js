@@ -13,6 +13,9 @@ export const useAuthStore = defineStore('auth', {
     // Endungen, die das Konto als neue Datei anlegen darf (Editor-Endungen,
     // bei eingeschränktem Konto nur dessen Liste) — Auswahl im Dialog „Neue Datei“.
     editableTypes: [],
+    // Zielformate, in die der Server Bilder umwandeln kann (GD): Auswahl im
+    // Upload-Dialog und beim „Umwandeln“. Leer = Funktion ausgeblendet.
+    imageFormats: [],
     reconfigurable: false, // true, wenn die hugocms.ini im Betrieb änderbar ist
     // true, wenn die Einstellungen DIESER Webseite änderbar sind (die Mounts
     // stammen aus einer Datei). Steuert den Dialog „Projekteinstellungen“.
@@ -106,6 +109,7 @@ export const useAuthStore = defineStore('auth', {
       this.setupDefaults = data.defaults ?? null
       this.buildable = data.buildable ?? false
       this.editableTypes = data.editableTypes ?? []
+      this.imageFormats = data.imageFormats ?? []
       this.reconfigurable = data.reconfigurable ?? false
       this.projectConfigurable = data.projectConfigurable ?? false
       this.ai = data.ai ?? { enabled: false, model: '', writeMode: 'confirm' }

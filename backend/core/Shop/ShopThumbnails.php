@@ -32,7 +32,7 @@ use HugoCMS\FileManager\MountResolver;
 final class ShopThumbnails
 {
     /** Bildarten, die verkleinert werden. */
-    public const IMAGE_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+    public const IMAGE_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif'];
 
     public const DEFAULT_IMAGES = 'static/images/products';
     public const DEFAULT_THUMBNAILS = 'static/images/thumbnails';
@@ -167,6 +167,7 @@ final class ShopThumbnails
             IMAGETYPE_PNG => 'imagecreatefrompng',
             IMAGETYPE_GIF => 'imagecreatefromgif',
             IMAGETYPE_WEBP => 'imagecreatefromwebp',
+            IMAGETYPE_AVIF => 'imagecreatefromavif',
         ];
         if (!isset($load[$type]) || !function_exists($load[$type])) {
             return null;
@@ -187,6 +188,7 @@ final class ShopThumbnails
             IMAGETYPE_JPEG => imagejpeg($thumb, null, 85),
             IMAGETYPE_PNG => imagepng($thumb),
             IMAGETYPE_GIF => imagegif($thumb),
+            IMAGETYPE_AVIF => function_exists('imageavif') && imageavif($thumb, null, 60, 6),
             default => function_exists('imagewebp') && imagewebp($thumb, null, 85),
         };
         $binary = (string) ob_get_clean();
