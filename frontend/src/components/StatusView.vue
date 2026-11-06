@@ -337,6 +337,12 @@ const hugoState = computed(() => {
   return { color: 'success', icon: 'mdi-check-circle-outline', text: t('status.update.hugoCurrent', [h.installed]) }
 })
 
+// Nach einem Code-Austausch: Seite neu laden, damit Client und Server
+// denselben Stand nutzen. Der Status wird bis dahin nicht mehr abgefragt.
+function reloadPage() {
+  window.location.reload()
+}
+
 // Der Lauf greift in die Installation ein (Pull, Kopieren, Austausch des
 // Hugo-Programms) — deshalb mit Rückfrage, die den Umfang nennt.
 async function runUpdate(scope) {
@@ -456,7 +462,7 @@ async function runUpdate(scope) {
                 variant="tonal"
                 prepend-icon="mdi-cloud-search-outline"
                 :loading="store.updateChecking"
-                :disabled="store.updating || !updateCaps.ready"
+                :disabled="store.updating || store.updateStale || !updateCaps.ready"
                 @click="store.checkUpdate()"
               >
                 {{ $t('status.update.check') }}
@@ -520,7 +526,7 @@ async function runUpdate(scope) {
                 variant="flat"
                 prepend-icon="mdi-download"
                 :loading="store.updating"
-                :disabled="store.updateChecking || !updateCaps.gitReady"
+                :disabled="store.updateChecking || store.updateStale || !updateCaps.gitReady"
                 @click="runUpdate('all')"
               >
                 {{ $t('status.update.runAll') }}
@@ -530,7 +536,7 @@ async function runUpdate(scope) {
                 variant="tonal"
                 prepend-icon="mdi-hammer-wrench"
                 :loading="store.updating"
-                :disabled="store.updateChecking || !updateCaps.ready"
+                :disabled="store.updateChecking || store.updateStale || !updateCaps.ready"
                 @click="runUpdate('hugo')"
               >
                 {{ $t('status.update.runHugo') }}
@@ -546,7 +552,22 @@ async function runUpdate(scope) {
                   ? $t('status.update.resultOk', [updateResult.seconds])
                   : $t('status.update.resultFailed', [updateResult.exit, updateResult.seconds]) }}
               </div>
-              <p v-if="updateResult.success" class="st-hint">{{ $t('status.update.reloadHint') }}</p>
+              <!-- Das Backend wurde ausgetauscht: Diese Oberfläche ist alt.
+                   Kein weiterer Aufruf mehr — nur noch neu laden. -->
+              <v-alert
+                v-if="store.updateStale"
+                type="info"
+                density="compact"
+                variant="tonal"
+                class="mt-2 mb-2"
+              >
+                <div class="st-update-stale">
+                  <span>{{ $t('status.update.reloadHint') }}</span>
+                  <v-btn size="small" color="primary" variant="flat" prepend-icon="mdi-reload" @click="reloadPage">
+                    {{ $t('status.update.reload') }}
+                  </v-btn>
+                </div>
+              </v-alert>
               <pre class="st-log st-update-output"><template v-if="updateResult.truncated">{{ $t('status.update.outputTruncated') }}
 </template>{{ updateResult.output.join('\n') }}</pre>
             </template>
@@ -1252,6 +1273,13 @@ async function runUpdate(scope) {
   border-top: 1px solid var(--mint-border);
 }
 .st-update-running { margin: 0; }
+.st-update-stale {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.st-update-stale > span { flex: 1 1 auto; }
 .st-update-reasons {
   margin: 4px 0 0 18px;
   padding: 0;

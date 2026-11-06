@@ -539,7 +539,8 @@ export default {
       confirmAction: 'Ausführen',
       resultOk: 'Abgeschlossen in {0} s.',
       resultFailed: 'Fehlgeschlagen (Exit-Code {0}, {1} s).',
-      reloadHint: 'Seite neu laden, damit die Oberfläche den neuen Stand nutzt.',
+      reloadHint: 'Die Anwendung wurde ausgetauscht. Seite neu laden, damit Oberfläche und Server denselben Stand nutzen — bis dahin werden keine weiteren Aufrufe gemacht.',
+      reload: 'Seite neu laden',
       outputTruncated: '… (Anfang der Ausgabe gekürzt)',
     },
     log: {

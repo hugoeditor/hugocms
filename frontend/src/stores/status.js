@@ -32,6 +32,9 @@ export const useStatusStore = defineStore('status', {
     updateChecking: false,
     updateResult: null,
     updating: false,
+    // Nach einem Lauf, der das Backend ausgetauscht hat (all | sites): Diese
+    // Oberfläche ist dann veraltet — keine weiteren Aufrufe, Seite neu laden.
+    updateStale: false,
   }),
 
   getters: {
@@ -130,9 +133,15 @@ export const useStatusStore = defineStore('status', {
 
     // Führt `bin/update.sh` des Release-Repos aus (`scope` all | hugo | sites).
     // Ein fehlgeschlagener Lauf kommt als Ergebnis mit `success: false` und
-    // der Skriptausgabe zurück, nicht als Fehler. Danach den Status neu laden:
-    // Buildnummer und Hugo-Version können sich geändert haben — und die
-    // Prüfung ist überholt.
+    // der Skriptausgabe zurück, nicht als Fehler.
+    //
+    // Hat der Lauf das Backend ausgetauscht (all | sites), wird danach NICHT
+    // mehr nachgeladen: Der laufende Client ist alt, der Server neu — ein
+    // weiterer Aufruf kann in den Austausch geraten (Opcache, halb
+    // geschriebene Dateien) und eine unbrauchbare Antwort bekommen. Statt
+    // dessen bleibt das Ergebnis stehen und die Ansicht bietet das Neuladen
+    // an. Nur nach `hugo` (kein Code-Austausch) wird der Status neu geladen,
+    // damit die Hugo-Version stimmt.
     async runUpdate(scope = 'all') {
       this.error = null
       this.updating = true
@@ -140,7 +149,11 @@ export const useStatusStore = defineStore('status', {
       try {
         this.updateResult = await api.post('systemupdate', { scope })
         this.updateCheck = null
-        await this.fetch()
+        if (this.updateResult?.success && scope !== 'hugo') {
+          this.updateStale = true
+        } else {
+          await this.fetch()
+        }
       } catch (e) {
         this.error = e
       } finally {

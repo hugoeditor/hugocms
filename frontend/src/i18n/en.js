@@ -539,7 +539,8 @@ export default {
       confirmAction: 'Run',
       resultOk: 'Finished in {0} s.',
       resultFailed: 'Failed (exit code {0}, {1} s).',
-      reloadHint: 'Reload the page so the interface uses the new version.',
+      reloadHint: 'The application has been replaced. Reload the page so interface and server use the same version — no further requests are made until then.',
+      reload: 'Reload page',
       outputTruncated: '… (beginning of output truncated)',
     },
     log: {

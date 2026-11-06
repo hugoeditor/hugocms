@@ -56,7 +56,10 @@ final class Response
             header('Cache-Control: no-store, max-age=0');
         }
 
-        echo json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        // Ungültiges UTF-8 in der Nutzlast (fremde Programmausgaben, Datei-
+        // namen) wird ersetzt statt die Antwort ganz scheitern zu lassen —
+        // sonst käme ein leerer Rumpf mit Status 200 beim Client an.
+        echo json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
         exit;
     }
 }

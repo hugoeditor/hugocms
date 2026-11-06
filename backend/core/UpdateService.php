@@ -160,9 +160,22 @@ final class UpdateService
         if ($truncated) {
             $lines = array_slice($lines, -self::MAX_OUTPUT_LINES);
         }
+        // Die Ausgabe geht als JSON an den Client. Ein einziges ungültiges
+        // UTF-8-Byte (git-Meldung in anderer Kodierung, Dateiname) ließe
+        // json_encode scheitern — also vorher bereinigen.
+        $lines = array_map(
+            static fn (string $l): string => mb_check_encoding($l, 'UTF-8') ? $l : mb_convert_encoding($l, 'UTF-8', 'UTF-8'),
+            $lines,
+        );
 
         if ($exit === 0) {
             $this->logger?->info("Software-Update abgeschlossen ({$seconds}s, Umfang: {$scope}).");
+            if ($scope !== 'hugo' && function_exists('opcache_reset')) {
+                // Der Pull hat die PHP-Dateien ausgetauscht. Ohne Leeren
+                // könnte der Opcache für die nächsten Requests noch alte
+                // Bytecodes einzelner Dateien mit neuen mischen.
+                @opcache_reset();
+            }
         } else {
             $tail = implode("\n", array_slice($lines, -10));
             $this->logger?->warning("Software-Update fehlgeschlagen (Code {$exit}, Umfang: {$scope}): {$tail}");
