@@ -143,6 +143,7 @@ final class MountConfig
     private const CRON_SECTION = 'cron';
     private const GIT_SECTION = 'git';
     private const SHOP_SECTION = 'shop';
+    private const IMAGES_SECTION = 'images';
 
     /**
      * Freigaben der Shop-Anbindung: Schlüssel in [shop] => [Feld im Ergebnis,
@@ -160,8 +161,11 @@ final class MountConfig
     private const RESERVED_SECTIONS = [
         self::HUGO_SECTION, self::LICENSE_SECTION, self::PAGESPEED_SECTION,
         self::LIVE_ANALYSIS_SECTION, self::SEO_REPORT_SECTION, self::IMPROVE_SECTION,
-        self::CRON_SECTION, self::GIT_SECTION, self::SHOP_SECTION,
+        self::CRON_SECTION, self::GIT_SECTION, self::SHOP_SECTION, self::IMAGES_SECTION,
     ];
+
+    /** Zulässige Werte für [images] upload_format (leer = Format beibehalten). */
+    public const IMAGE_UPLOAD_FORMATS = ['webp', 'jpg', 'png', 'avif'];
 
     /** Ist $name eine reservierte Sektion (kein Mount)? */
     public static function isReserved(string $name): bool
@@ -276,6 +280,8 @@ final class MountConfig
         ];
         $warnings = [];
         $shop = self::shopSection([], $configPath, $warnings);
+        // Vorgabe des Upload-Dialogs für Bilder (leer = Format beibehalten).
+        $images = ['uploadFormat' => ''];
 
         foreach ($raw as $name => $section) {
             if (!is_array($section)) {
@@ -347,6 +353,13 @@ final class MountConfig
                     'pauseImprove' => filter_var($section['pause_improve'] ?? false, FILTER_VALIDATE_BOOLEAN),
                     'pauseHealthcheck' => filter_var($section['pause_healthcheck'] ?? false, FILTER_VALIDATE_BOOLEAN),
                 ];
+                continue;
+            }
+
+            // Bilder: Vorgabe-Zielformat beim Hochladen. Unbekannte Werte
+            // (Tippfehler) zählen als „beibehalten“ — die Datei bleibt gültig.
+            if (strtolower((string) $name) === self::IMAGES_SECTION) {
+                $images = ['uploadFormat' => self::imageUploadFormat($section['upload_format'] ?? '')];
                 continue;
             }
 
@@ -430,8 +443,20 @@ final class MountConfig
             'cron' => $cron,
             'git' => $git,
             'shop' => $shop,
+            'images' => $images,
             'warnings' => $warnings,
         ];
+    }
+
+    /** Normalisiert ein Zielformat (Kleinschreibung, jpeg → jpg); unbekannt → leer. */
+    public static function imageUploadFormat(mixed $value): string
+    {
+        $format = strtolower(trim((string) $value));
+        if ($format === 'jpeg') {
+            $format = 'jpg';
+        }
+
+        return in_array($format, self::IMAGE_UPLOAD_FORMATS, true) ? $format : '';
     }
 
     /**

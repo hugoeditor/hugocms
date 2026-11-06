@@ -399,10 +399,6 @@ function formatItems() {
   return (auth.imageFormats || []).map((f) => ({ title: FORMAT_TITLES[f] || f.toUpperCase(), value: f }))
 }
 
-// Zuletzt gewähltes Upload-Format merken — wer alles nach WebP wandelt, muss
-// es nicht bei jedem Hochladen neu wählen.
-const UPLOAD_FORMAT_KEY = 'hugocms.uploadImageFormat'
-
 const uploadDialog = reactive({ open: false, files: [], format: '', busy: false })
 
 const uploadFormatItems = computed(() => [{ title: t('dialog.keepFormat'), value: '' }, ...formatItems()])
@@ -415,9 +411,11 @@ function startUpload(list) {
     run(() => files.upload(arr))
     return
   }
-  const remembered = localStorage.getItem(UPLOAD_FORMAT_KEY) || ''
+  // Vorgabe aus den Projekteinstellungen ([images] upload_format) — nur,
+  // wenn der Server das Format auch schreiben kann.
+  const preset = auth.imageUploadFormat || ''
   uploadDialog.files = arr
-  uploadDialog.format = auth.imageFormats.includes(remembered) ? remembered : ''
+  uploadDialog.format = auth.imageFormats.includes(preset) ? preset : ''
   uploadDialog.busy = false
   uploadDialog.open = true
 }
@@ -425,7 +423,6 @@ function startUpload(list) {
 async function confirmUpload() {
   if (uploadDialog.busy) return
   uploadDialog.busy = true
-  localStorage.setItem(UPLOAD_FORMAT_KEY, uploadDialog.format)
   try {
     await run(() => files.upload(uploadDialog.files, uploadDialog.format))
   } finally {

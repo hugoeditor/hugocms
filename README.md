@@ -161,9 +161,12 @@ write_mode = confirm          ; readonly | confirm | auto (Standard: confirm)
 
 ### Mounts
 
-Jede `[Sektion]` ist ein Mount (Sektionsname = interne ID). Felder:
-`path` (Pflicht), `label`, `permissions`, `accept`, `readonly`. Relative Pfade
-gelten relativ zur Mount-Datei. Sektions- und Schlüsselnamen sind englisch
+Jede `[Sektion]` ist ein Mount (Sektionsname = interne ID) — mit Ausnahme der
+reservierten Sektionen `[hugo]`, `[license]`, `[pagespeed]`, `[live_analysis]`,
+`[seo_report]`, `[improve]`, `[cron]`, `[git]`, `[shop]` und `[images]`, die
+Einstellungen dieser Webseite tragen (siehe `backend/mounts.ini.beispiel`).
+Felder: `path` (Pflicht), `label`, `permissions`, `accept`, `readonly`.
+Relative Pfade gelten relativ zur Mount-Datei. Sektions- und Schlüsselnamen sind englisch
 (`[content]`, `[layouts]`, `[static]`, `[project]`); der sichtbare Name steht in
 `label`. Von älteren `install.sh`-Versionen erzeugte Dateien tragen `[projekt]`
 statt `[project]` — das bleibt gültig, und `install.sh` ergänzt dann kein
@@ -586,9 +589,12 @@ den Trenner wieder auf ihre kanonische Form zurück.
 Sind Rasterbilder unter den hochzuladenden Dateien, fragt der Dateimanager
 vorher nach dem **Format der Bilder**: beibehalten oder nach WebP, JPEG, PNG
 oder AVIF umwandeln. Andere Dateien im selben Upload bleiben unverändert, ebenso
-Bilder, die das Zielformat schon haben. Die Wahl wird im Browser gemerkt. Über
-das Kontextmenü eines Bilds („In anderes Format umwandeln …“) entsteht eine
-neue Datei im gewählten Format **neben** dem Original — das Original bleibt.
+Bilder, die das Zielformat schon haben. Welches Format vorausgewählt ist, legen
+die **Projekteinstellungen** (Abschnitt „Bilder“) je Webseite fest — gespeichert
+als `[images] upload_format` in der Mount-Konfiguration; ohne Eintrag bleibt das
+Format erhalten. Über das Kontextmenü eines Bilds („In anderes Format
+umwandeln …“) entsteht eine neue Datei im gewählten Format **neben** dem
+Original — das Original bleibt.
 
 Umgewandelt wird auf dem Server mit **GD** (`FileService`), ohne weitere
 Abhängigkeit. Welche Zielformate GD der jeweiligen Installation schreiben kann,

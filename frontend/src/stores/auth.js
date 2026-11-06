@@ -16,6 +16,8 @@ export const useAuthStore = defineStore('auth', {
     // Zielformate, in die der Server Bilder umwandeln kann (GD): Auswahl im
     // Upload-Dialog und beim „Umwandeln“. Leer = Funktion ausgeblendet.
     imageFormats: [],
+    // Vorgabe des Upload-Dialogs ([images] upload_format der Webseite; leer = beibehalten).
+    imageUploadFormat: '',
     reconfigurable: false, // true, wenn die hugocms.ini im Betrieb änderbar ist
     // true, wenn die Einstellungen DIESER Webseite änderbar sind (die Mounts
     // stammen aus einer Datei). Steuert den Dialog „Projekteinstellungen“.
@@ -110,6 +112,7 @@ export const useAuthStore = defineStore('auth', {
       this.buildable = data.buildable ?? false
       this.editableTypes = data.editableTypes ?? []
       this.imageFormats = data.imageFormats ?? []
+      this.imageUploadFormat = data.imageUploadFormat ?? ''
       this.reconfigurable = data.reconfigurable ?? false
       this.projectConfigurable = data.projectConfigurable ?? false
       this.ai = data.ai ?? { enabled: false, model: '', writeMode: 'confirm' }

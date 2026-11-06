@@ -193,6 +193,14 @@ final class Connector
     private array $cronPause = ['pauseBuild' => false, 'pauseImprove' => false, 'pauseHealthcheck' => false];
 
     /**
+     * Bilder dieser Webseite ([images] der Mount-Konfiguration): Vorgabe-
+     * Zielformat im Upload-Dialog (leer = Format beibehalten).
+     *
+     * @var array{uploadFormat: string}
+     */
+    private array $images = ['uploadFormat' => ''];
+
+    /**
      * Shop-Erweiterung (Anbindung an OpensourceERP) aus der [shop]-Sektion der
      * Mount-Konfiguration: Schalter, Freigaben und vom Zugang nur Hash,
      * Kennung und Erzeugungszeit, nie der Schlüssel selbst ({@see ShopKey}).
@@ -481,6 +489,8 @@ final class Connector
         $this->gitAuto = $config['git'];
         // Zugang der Shop-Anbindung.
         $this->shop = $config['shop'];
+        // Vorgabe-Zielformat für hochgeladene Bilder.
+        $this->images = $config['images'];
         foreach ($config['warnings'] as $warning) {
             $this->addSetupWarning($warning['key'], $warning['params']);
         }
@@ -760,6 +770,9 @@ final class Connector
             // Zielformate, in die GD dieses Servers Bilder umwandeln kann
             // (Upload-Dialog und „Umwandeln“); leer = Funktion ausgeblendet.
             'imageFormats' => FileService::imageFormats(),
+            // Vorgabe des Upload-Dialogs ([images] upload_format dieser
+            // Webseite); der Client prüft sie gegen imageFormats.
+            'imageUploadFormat' => $this->images['uploadFormat'],
             // Lässt sich die Konfiguration im laufenden Betrieb EINSEHEN? Das
             // setzt nur voraus, dass der Connector aus einer hugocms.ini
             // aufgebaut wurde. Ob das Konto auch SPEICHERN darf, sagt
@@ -5234,6 +5247,8 @@ final class Connector
             // hinterlegt ist. Der Schlüssel selbst ist nirgends gespeichert
             // und kommt nie zurück.
             'shop' => $this->shopConfigState(),
+            // Vorgabe-Zielformat beim Hochladen von Bildern (leer = beibehalten).
+            'imageUploadFormat' => $this->images['uploadFormat'],
         ];
     }
 
@@ -5272,11 +5287,14 @@ final class Connector
         $improveSection = $this->improveSectionFrom($request);
         $cronSection = $this->cronSectionFrom($request);
         $gitSection = $this->gitSectionFrom($request);
+        // [images]: leer = Format beibehalten → Sektion entfernen (null).
+        $uploadFormat = MountConfig::imageUploadFormat($request['imageUploadFormat'] ?? '');
         Config::updateSections($this->mountsPath, [
             'seo_report' => $seoSection,
             'improve' => $improveSection,
             'cron' => $cronSection,
             'git' => $gitSection,
+            'images' => $uploadFormat === '' ? null : ['upload_format' => $uploadFormat],
         ]);
         // Für den weiteren Verlauf DIESES Requests sofort wirksam (der Audit
         // liest die Ausschlüsse aus dem Connector, nicht erneut aus der Datei).
@@ -5290,6 +5308,7 @@ final class Connector
         $reloaded = MountConfig::load($this->mountsPath);
         $this->cronPause = $reloaded['cron'];
         $this->gitAuto = $reloaded['git'];
+        $this->images = $reloaded['images'];
         $this->logger->info('Projekteinstellungen aktualisiert (projectreconfigure).');
 
         return ['ok' => true];

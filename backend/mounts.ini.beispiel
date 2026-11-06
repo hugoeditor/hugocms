@@ -151,6 +151,16 @@ label = Alle Dateien
 ;pause_improve = false
 ;pause_healthcheck = false
 
+; Reservierte Sektion [images] (KEIN Mount): Vorgabe des Upload-Dialogs für
+; Bilder DIESER Webseite. Rasterbilder werden beim Hochladen mit GD in dieses
+; Format umgewandelt, sofern im Dialog nichts anderes gewählt wird; andere
+; Dateien bleiben unverändert. Der Client pflegt diese Sektion über die
+; Projekteinstellungen. Fehlt die Sektion, bleibt das Format erhalten.
+;   upload_format  webp, jpg, png oder avif — nur, was GD des Servers schreiben
+;                  kann; ein unbekannter Wert zählt als „beibehalten“.
+;[images]
+;upload_format = "webp"
+
 ; Reservierte Sektion [git] (KEIN Mount): automatischer Commit beim Cron-Build
 ; (cron-build.php). Ist auto_commit an und das Quellverzeichnis ein
 ; Git-Repository, sichert der Cron VOR dem Build offene Änderungen (falls

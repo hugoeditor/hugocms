@@ -48,6 +48,15 @@ const pauseBuild = ref(false)
 const pauseImprove = ref(false)
 const pauseHealthcheck = ref(false)
 
+// Vorgabe-Zielformat im Upload-Dialog für Bilder ('' = Format beibehalten).
+// Auswahl nur aus dem, was GD des Servers schreiben kann (auth.imageFormats).
+const imageUploadFormat = ref('')
+const IMAGE_FORMAT_TITLES = { webp: 'WebP', jpg: 'JPEG', png: 'PNG', avif: 'AVIF' }
+const imageFormatItems = computed(() => [
+  { title: t('projectConfig.imageKeepFormat'), value: '' },
+  ...(auth.imageFormats || []).map((f) => ({ title: IMAGE_FORMAT_TITLES[f] || f.toUpperCase(), value: f })),
+])
+
 // Automatischer Commit nach der zeitgesteuerten Veröffentlichung (cron-build).
 // Nur wirksam, wenn das Quellverzeichnis ein Git-Repository ist (gitRepo) und
 // die Pro-Lizenz gilt (auth.git). Das Datum hängt der Server an die Nachricht.
@@ -369,6 +378,7 @@ watch(model, async (open) => {
     pauseBuild.value = !!cfg.pauseBuild
     pauseImprove.value = !!cfg.pauseImprove
     pauseHealthcheck.value = !!cfg.pauseHealthcheck
+    imageUploadFormat.value = cfg.imageUploadFormat ?? ''
     autoCommit.value = !!cfg.autoCommit
     commitMessage.value = cfg.commitMessage ?? ''
     commitMessagePending.value = cfg.commitMessagePending ?? ''
@@ -423,6 +433,7 @@ async function submit() {
       pauseBuild: pauseBuild.value,
       pauseImprove: pauseImprove.value,
       pauseHealthcheck: pauseHealthcheck.value,
+      imageUploadFormat: imageUploadFormat.value,
       autoCommit: autoCommit.value,
       commitMessage: commitMessage.value,
       commitMessagePending: commitMessagePending.value,
@@ -578,6 +589,25 @@ async function submit() {
       <div class="text-caption text-medium-emphasis">
         {{ $t('projectConfig.improveSkipWeekendsHint') }}
       </div>
+
+      <!-- Bilder: Vorgabe-Zielformat des Upload-Dialogs. Die Liste zeigt nur,
+           was GD dieses Servers schreiben kann; ohne GD bleibt nur „beibehalten“. -->
+      <v-divider class="my-4" />
+      <div class="text-subtitle-2 mb-1">{{ $t('projectConfig.imagesSection') }}</div>
+      <div class="text-caption text-medium-emphasis mb-2">
+        {{ $t('projectConfig.imagesHint') }}
+      </div>
+      <v-select
+        v-model="imageUploadFormat"
+        :items="imageFormatItems"
+        :label="$t('projectConfig.imageUploadFormat')"
+        variant="outlined"
+        density="compact"
+        :disabled="!auth.imageFormats?.length"
+        :hint="auth.imageFormats?.length ? '' : $t('projectConfig.imagesUnavailable')"
+        :persistent-hint="!auth.imageFormats?.length"
+        class="mb-2"
+      />
 
       <!-- Cron-Aufgaben pausieren. Der Systemstatus verweist zum Umstellen
            hierher; ein pausiertes Skript prüft das beim Start und tut
