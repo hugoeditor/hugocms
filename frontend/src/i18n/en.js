@@ -96,6 +96,7 @@ export default {
     items: '{0} items',
     itemOne: '1 item',
     selected: '{0} selected',
+    uploading: 'Uploading: {0} of {1}',
   },
 
   ctx: {
@@ -1882,6 +1883,7 @@ export default {
     'ANALYZE-UNREACHABLE': 'The analysis service is unreachable ({0}).',
     'ANALYZE-REQUEST-FAILED': 'The analysis request failed ({0}).',
     'UPLOAD-TOO-LARGE': '“{0}” is too large (at most {1}).',
+    'UPLOAD-REJECTED-SIZE': 'Too large for this server and therefore not uploaded: {0}. The remaining files were transferred.',
     'NOT-AN-IMAGE': 'Not an image file.',
     'FILETYPE-NOT-IMAGE': 'The edited data is not a supported image format (JPEG, PNG, WebP, GIF).',
     'IMAGE-FORMAT-UNSUPPORTED': 'Converting to {0} is not possible on this server (GD library).',

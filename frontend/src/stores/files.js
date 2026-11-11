@@ -1,11 +1,53 @@
 import { defineStore } from 'pinia'
-import { api } from '../api/client'
+import { api, ApiError } from '../api/client'
+import { useAuthStore } from './auth'
 import { ensureFrontMatter } from '../util/frontMatterTemplate'
 import { useReviewStore } from './review'
 
 const MARKDOWN_RE = /\.(md|markdown)$/i
 
 const VIEW_KEY = 'hugocms_view'
+
+// Eigene Obergrenzen je Upload-Anfrage. Sie halten die einzelne Anfrage klein
+// (Laufzeit der Bildumwandlung, Grenzen vorgeschalteter Webserver) und greifen
+// zusätzlich zu dem, was der Server über whoami meldet (uploadLimits).
+const UPLOAD_BATCH_FILES = 10
+const UPLOAD_BATCH_BYTES = 16 * 1024 * 1024
+// Abzug von post_max_size für Formularfelder und die Kopfzeilen je Datei.
+const UPLOAD_POST_RESERVE = 64 * 1024
+const UPLOAD_PART_OVERHEAD = 1024
+
+// Teilt Dateien in Anfragen auf, die Anzahl- und Größengrenzen einhalten. Eine
+// Datei, die allein schon über der Größengrenze liegt, bekommt eine eigene
+// Anfrage — ob sie durchgeht, entscheidet der Server.
+function planUploadBatches(list, limits) {
+  const maxFiles = limits.maxFiles > 0 ? Math.min(limits.maxFiles, UPLOAD_BATCH_FILES) : UPLOAD_BATCH_FILES
+  const maxBytes = limits.postBytes > 0
+    ? Math.max(1, Math.min(limits.postBytes - UPLOAD_POST_RESERVE, UPLOAD_BATCH_BYTES))
+    : UPLOAD_BATCH_BYTES
+  const batches = []
+  let batch = []
+  let bytes = 0
+  for (const f of list) {
+    const size = f.size + UPLOAD_PART_OVERHEAD
+    if (batch.length && (batch.length >= maxFiles || bytes + size > maxBytes)) {
+      batches.push(batch)
+      batch = []
+      bytes = 0
+    }
+    batch.push(f)
+    bytes += size
+  }
+  if (batch.length) batches.push(batch)
+  return batches
+}
+
+// Hat der Webserver die Anfrage wegen ihrer Größe abgewiesen? HTTP 413 kommt
+// ohne JSON zurück (ENETWORK); manche Server kappen stattdessen die Verbindung,
+// dann scheitert fetch selbst (TypeError).
+function isHttp413(e) {
+  return e instanceof ApiError && e.code === 'ENETWORK' && e.params?.[0] === '413'
+}
 
 function readView() {
   try {
@@ -83,6 +125,7 @@ export const useFilesStore = defineStore('files', {
 
     newRequest: null, // 'folder' | 'file' | 'upload' — von der Toolbar gesetzt, vom Browser konsumiert
     uploading: false, // läuft gerade ein Upload? (Fortschrittsanzeige)
+    uploadProgress: null, // { done, total } während eines Uploads, sonst null
     viewerId: null, // im Bildbetrachter geöffneter Eintrag (oder null)
     editImageId: null, // im Bild-Editor geöffneter Eintrag (oder null)
 
@@ -537,20 +580,58 @@ export const useFilesStore = defineStore('files', {
 
     // format (webp, jpg, png, avif): Rasterbilder werden beim Ablegen auf dem
     // Server in dieses Format umgewandelt; leer = unverändert speichern.
+    // Lädt Dateien in das aktuelle Verzeichnis. Viele Dateien gehen in mehreren
+    // Anfragen nacheinander hoch (planUploadBatches), damit weder die Grenzen
+    // aus php.ini noch die eines vorgeschalteten Webservers (HTTP 413) den
+    // ganzen Upload scheitern lassen. Weist der Server eine Anfrage als zu groß
+    // ab, wird sie halbiert und erneut gesendet; eine einzelne zu große Datei
+    // wird übersprungen und am Ende gemeldet — die übrigen kommen an.
     async upload(fileList, format = '') {
       if (!this.cwd || !fileList?.length) return
-      const form = new FormData()
-      form.append('cmd', 'upload')
-      form.append('target', this.cwd.id)
-      if (format) form.append('format', format)
-      for (const f of fileList) form.append('files[]', f)
+      const target = this.cwd.id
+      const limits = useAuthStore().uploadLimits ?? { fileBytes: 0, postBytes: 0, maxFiles: 0 }
+      const all = Array.from(fileList)
+      const rejected = [] // Namen der Dateien, die dem Server zu groß sind
+      const queue = []
+      for (const f of all) {
+        if (limits.fileBytes > 0 && f.size > limits.fileBytes) rejected.push(f.name)
+        else queue.push(f)
+      }
+      const pending = planUploadBatches(queue, limits)
       this.uploading = true
+      this.uploadProgress = { done: rejected.length, total: all.length }
       try {
-        await api.postForm(form)
+        while (pending.length) {
+          const batch = pending.shift()
+          const form = new FormData()
+          form.append('cmd', 'upload')
+          form.append('target', target)
+          if (format) form.append('format', format)
+          for (const f of batch) form.append('files[]', f)
+          try {
+            await api.postForm(form)
+          } catch (e) {
+            const tooLarge = isHttp413(e)
+            if (batch.length > 1 && (tooLarge || e instanceof TypeError)) {
+              const half = Math.ceil(batch.length / 2)
+              pending.unshift(batch.slice(0, half), batch.slice(half))
+              continue
+            }
+            if (!tooLarge) throw e
+            rejected.push(batch[0].name)
+          }
+          this.uploadProgress.done += batch.length
+        }
       } finally {
         this.uploading = false
+        this.uploadProgress = null
+        // Auch nach einem Abbruch neu laden: Ein Teil der Dateien ist dann
+        // bereits angekommen.
+        if (this.cwd?.id === target) await this.refresh().catch(() => {})
       }
-      await this.refresh()
+      if (rejected.length) {
+        throw new ApiError({ code: 'EINVAL', key: 'UPLOAD-REJECTED-SIZE', params: [rejected.join(', ')] })
+      }
     },
 
     // Download über eine unsichtbare Navigation — der Browser speichert die

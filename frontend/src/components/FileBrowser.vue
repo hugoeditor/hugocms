@@ -765,6 +765,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
         </span>
         <span v-if="files.selectedCount" class="nemo-status-sel">· {{ $t('statusbar.selected', [files.selectedCount]) }}</span>
         <span v-if="files.filter && !files.searchActive && !files.draftFilter" class="nemo-status-sel">· {{ entries.length }}/{{ files.entries.length }}</span>
+        <span v-if="files.uploadProgress" class="nemo-status-sel">· {{ $t('statusbar.uploading', [files.uploadProgress.done, files.uploadProgress.total]) }}</span>
       </footer>
     </template>
 

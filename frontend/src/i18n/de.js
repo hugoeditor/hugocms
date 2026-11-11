@@ -96,6 +96,7 @@ export default {
     items: '{0} Elemente',
     itemOne: '1 Element',
     selected: '{0} ausgewählt',
+    uploading: 'Hochladen: {0} von {1}',
   },
 
   ctx: {
@@ -1859,6 +1860,7 @@ export default {
 
     'UPLOAD-FAILED': 'Hochladen von „{0}“ fehlgeschlagen.',
     'UPLOAD-TOO-LARGE': '„{0}“ ist zu groß (höchstens {1}).',
+    'UPLOAD-REJECTED-SIZE': 'Zu groß für diesen Server und daher nicht hochgeladen: {0}. Die übrigen Dateien wurden übertragen.',
     'AUDIO-TOO-LARGE': 'Die Audioaufnahme ist zu groß.',
     'SPEECH-NOT-CONFIGURED': 'Die Spracheingabe ist nicht konfiguriert.',
     'SPEECH-NO-KEY': 'Kein Schlüssel zum Prüfen vorhanden.',

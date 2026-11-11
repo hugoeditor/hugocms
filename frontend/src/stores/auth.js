@@ -18,6 +18,9 @@ export const useAuthStore = defineStore('auth', {
     imageFormats: [],
     // Vorgabe des Upload-Dialogs ([images] upload_format der Webseite; leer = beibehalten).
     imageUploadFormat: '',
+    // Grenzen eines Uploads laut Server (0 = unbekannt); danach teilt der
+    // Dateimanager viele Dateien auf mehrere Anfragen auf.
+    uploadLimits: { fileBytes: 0, postBytes: 0, maxFiles: 0 },
     reconfigurable: false, // true, wenn die hugocms.ini im Betrieb änderbar ist
     // true, wenn die Einstellungen DIESER Webseite änderbar sind (die Mounts
     // stammen aus einer Datei). Steuert den Dialog „Projekteinstellungen“.
@@ -113,6 +116,7 @@ export const useAuthStore = defineStore('auth', {
       this.editableTypes = data.editableTypes ?? []
       this.imageFormats = data.imageFormats ?? []
       this.imageUploadFormat = data.imageUploadFormat ?? ''
+      this.uploadLimits = data.uploadLimits ?? { fileBytes: 0, postBytes: 0, maxFiles: 0 }
       this.reconfigurable = data.reconfigurable ?? false
       this.projectConfigurable = data.projectConfigurable ?? false
       this.ai = data.ai ?? { enabled: false, model: '', writeMode: 'confirm' }

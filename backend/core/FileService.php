@@ -1083,6 +1083,51 @@ final class FileService
 
     // --- Hilfen ------------------------------------------------------------
 
+    /**
+     * Grenzen eines Uploads für den Client, der seine Anfragen danach
+     * aufteilt (0 = keine Grenze bekannt):
+     *   fileBytes  größte einzelne Datei (eigene Grenze und upload_max_filesize)
+     *   postBytes  größte Anfrage insgesamt (post_max_size)
+     *   maxFiles   Dateien je Anfrage (max_file_uploads) — PHP verwirft
+     *              überzählige Dateien stillschweigend
+     * Eine Grenze des Webservers davor (z. B. client_max_body_size bei nginx)
+     * kennt PHP nicht; sie zeigt sich erst als HTTP 413, darauf reagiert der
+     * Client selbst.
+     *
+     * @return array{fileBytes: int, postBytes: int, maxFiles: int}
+     */
+    public function uploadLimits(): array
+    {
+        $fileBytes = $this->maxUploadBytes;
+        $iniFile = self::iniBytes((string) ini_get('upload_max_filesize'));
+        if ($iniFile > 0) {
+            $fileBytes = min($fileBytes, $iniFile);
+        }
+
+        return [
+            'fileBytes' => $fileBytes,
+            'postBytes' => self::iniBytes((string) ini_get('post_max_size')),
+            'maxFiles' => max(0, (int) ini_get('max_file_uploads')),
+        ];
+    }
+
+    /** Kurzschreibweise aus php.ini (8M, 512K, 1G) in Bytes; 0 = unbegrenzt oder unlesbar. */
+    public static function iniBytes(string $value): int
+    {
+        $value = trim($value);
+        if ($value === '' || preg_match('/^(\d+)\s*([kmg]?)$/i', $value, $m) !== 1) {
+            return 0;
+        }
+        $factor = match (strtolower($m[2])) {
+            'k' => 1024,
+            'm' => 1_048_576,
+            'g' => 1_073_741_824,
+            default => 1,
+        };
+
+        return (int) $m[1] * $factor;
+    }
+
     /** Lesbare Größenangabe für Fehlermeldungen (sprachneutral). */
     private static function humanBytes(int $bytes): string
     {

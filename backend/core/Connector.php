@@ -774,6 +774,9 @@ final class Connector
             // Vorgabe des Upload-Dialogs ([images] upload_format dieser
             // Webseite); der Client prüft sie gegen imageFormats.
             'imageUploadFormat' => $this->images['uploadFormat'],
+            // Grenzen eines Uploads (php.ini und eigene); der Client teilt
+            // viele Dateien danach auf mehrere Anfragen auf.
+            'uploadLimits' => $this->files->uploadLimits(),
             // Lässt sich die Konfiguration im laufenden Betrieb EINSEHEN? Das
             // setzt nur voraus, dass der Connector aus einer hugocms.ini
             // aufgebaut wurde. Ob das Konto auch SPEICHERN darf, sagt

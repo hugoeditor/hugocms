@@ -518,30 +518,13 @@ final class ShopSync
     {
         $limit = self::MAX_CHUNK_BYTES;
         foreach (['upload_max_filesize' => 0, 'post_max_size' => 65536] as $key => $reserve) {
-            $bytes = self::iniBytes((string) ini_get($key));
+            $bytes = FileService::iniBytes((string) ini_get($key));
             if ($bytes > 0) {
                 $limit = min($limit, max(0, $bytes - $reserve));
             }
         }
 
         return $limit;
-    }
-
-    /** Kurzschreibweise aus php.ini (8M, 512K, 1G) in Bytes; 0 = unbegrenzt oder unlesbar. */
-    private static function iniBytes(string $value): int
-    {
-        $value = trim($value);
-        if ($value === '' || preg_match('/^(\d+)\s*([kmg]?)$/i', $value, $m) !== 1) {
-            return 0;
-        }
-        $factor = match (strtolower($m[2])) {
-            'k' => 1024,
-            'm' => 1_048_576,
-            'g' => 1_073_741_824,
-            default => 1,
-        };
-
-        return (int) $m[1] * $factor;
     }
 
     // --- 3. Übernahme ----------------------------------------------------------
