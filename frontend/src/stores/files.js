@@ -17,6 +17,53 @@ function readView() {
   return 'list'
 }
 
+const SORT_KEY = 'hugocms_sort'
+const SORT_COLUMNS = ['name', 'size', 'type', 'ctime', 'mtime']
+
+function readSort() {
+  try {
+    const v = JSON.parse(localStorage.getItem(SORT_KEY) ?? 'null')
+    if (v && SORT_COLUMNS.includes(v.key) && (v.dir === 'asc' || v.dir === 'desc')) {
+      return { key: v.key, dir: v.dir }
+    }
+  } catch {
+    // ignorieren
+  }
+  return { key: 'name', dir: 'asc' }
+}
+
+const nameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+
+// Sortierschlüssel der Typ-Spalte: die Dateiendung, ersatzweise der MIME-Typ —
+// dieselbe Grundlage wie die Anzeige in der Spalte.
+function typeKey(e) {
+  const dot = e.name.lastIndexOf('.')
+  if (dot > 0 && dot < e.name.length - 1) return e.name.slice(dot + 1).toLowerCase()
+  return (e.mime || '').toLowerCase()
+}
+
+// Sortiert eine Kopie der Liste. Ordner stehen unabhängig von Spalte und
+// Richtung vor den Dateien; bei Gleichstand entscheidet der Name aufsteigend.
+function sortEntries(list, { key, dir }) {
+  const sign = dir === 'desc' ? -1 : 1
+  const compare = (a, b) => {
+    if (key === 'size') return (a.size ?? 0) - (b.size ?? 0)
+    if (key === 'ctime' || key === 'mtime') return (a[key] ?? 0) - (b[key] ?? 0)
+    if (key === 'type') return typeKey(a).localeCompare(typeKey(b))
+    return 0
+  }
+  return [...list].sort((a, b) => {
+    const aDir = a.type === 'dir'
+    const bDir = b.type === 'dir'
+    if (aDir !== bDir) return aDir ? -1 : 1
+    // Ordner haben weder Größe noch Typ — sie bleiben dort nach Namen geordnet.
+    const primary = aDir && (key === 'size' || key === 'type') ? 0 : compare(a, b) * sign
+    if (primary !== 0) return primary
+    const byName = nameCollator.compare(a.name, b.name)
+    return key === 'name' ? byName * sign : byName
+  })
+}
+
 export const useFilesStore = defineStore('files', {
   state: () => ({
     mounts: [],
@@ -28,6 +75,7 @@ export const useFilesStore = defineStore('files', {
 
     view: readView(), // 'list' | 'icons'
     filter: '', // Schnellfilter (Namensteil) auf das aktuelle Verzeichnis
+    sort: readSort(), // { key: 'name'|'size'|'type'|'ctime'|'mtime', dir: 'asc'|'desc' }
 
     selectedIds: [], // markierte Einträge (Mehrfachauswahl)
     selectionAnchor: null, // Anker für die Bereichsauswahl (Shift)
@@ -91,12 +139,16 @@ export const useFilesStore = defineStore('files', {
     // Feld vor und nach Enter gleich reagiert.
     visibleEntries: (s) => {
       const q = s.filter.trim().toLowerCase()
-      if (q === '') return s.entries
-      if (/[*?]/.test(q)) {
-        const re = new RegExp('^' + q.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$')
-        return s.entries.filter((e) => re.test(e.name.toLowerCase()))
+      let list = s.entries
+      if (q !== '') {
+        if (/[*?]/.test(q)) {
+          const re = new RegExp('^' + q.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$')
+          list = list.filter((e) => re.test(e.name.toLowerCase()))
+        } else {
+          list = list.filter((e) => e.name.toLowerCase().includes(q))
+        }
       }
-      return s.entries.filter((e) => e.name.toLowerCase().includes(q))
+      return sortEntries(list, s.sort)
     },
     searchActive: (s) => s.searchQuery !== '' || s.searchText !== '',
     isSelected: (s) => (id) => s.selectedIds.includes(id),
@@ -208,6 +260,19 @@ export const useFilesStore = defineStore('files', {
       this.view = view
       try {
         localStorage.setItem(VIEW_KEY, view)
+      } catch {
+        // ignorieren
+      }
+    },
+
+    // Klick auf eine Spaltenüberschrift: dieselbe Spalte kehrt die Richtung um,
+    // eine andere Spalte beginnt aufsteigend.
+    toggleSort(key) {
+      if (!SORT_COLUMNS.includes(key)) return
+      const dir = this.sort.key === key && this.sort.dir === 'asc' ? 'desc' : 'asc'
+      this.sort = { key, dir }
+      try {
+        localStorage.setItem(SORT_KEY, JSON.stringify(this.sort))
       } catch {
         // ignorieren
       }

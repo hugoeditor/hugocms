@@ -116,6 +116,15 @@ async function confirmQueue(instruction) {
   }
 }
 
+// Spalten der Listenansicht; ein Klick auf die Überschrift sortiert danach.
+const sortColumns = [
+  { key: 'name', cls: 'col-name', label: 'files.colName' },
+  { key: 'size', cls: 'col-size', label: 'files.colSize' },
+  { key: 'type', cls: 'col-type', label: 'files.colType' },
+  { key: 'ctime', cls: 'col-created', label: 'files.colCreated' },
+  { key: 'mtime', cls: 'col-date', label: 'files.colModified' },
+]
+
 function typeLabel(entry) {
   if (entry.type === 'dir') return t('files.typeFolder')
   const dot = entry.name.lastIndexOf('.')
@@ -647,11 +656,26 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
         <table v-else-if="files.view === 'list'" class="nemo-list">
           <thead>
             <tr>
-              <th class="col-name">{{ $t('files.colName') }}</th>
-              <th class="col-size">{{ $t('files.colSize') }}</th>
-              <th class="col-type">{{ $t('files.colType') }}</th>
-              <th class="col-created">{{ $t('files.colCreated') }}</th>
-              <th class="col-date">{{ $t('files.colModified') }}</th>
+              <th
+                v-for="col in sortColumns"
+                :key="col.key"
+                :class="col.cls"
+                :aria-sort="files.sort.key === col.key ? (files.sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'"
+              >
+                <button
+                  type="button"
+                  class="nemo-sort-btn"
+                  :class="{ active: files.sort.key === col.key }"
+                  @click="files.toggleSort(col.key)"
+                >
+                  {{ $t(col.label) }}
+                  <v-icon
+                    :icon="files.sort.key === col.key && files.sort.dir === 'desc' ? 'mdi-menu-down' : 'mdi-menu-up'"
+                    size="16"
+                    class="nemo-sort-icon"
+                  />
+                </button>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -1005,6 +1029,23 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
   padding: 6px 10px;
   white-space: nowrap;
 }
+.nemo-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.nemo-sort-btn:hover,
+.nemo-sort-btn.active { color: var(--mint-text); }
+.nemo-sort-icon { visibility: hidden; }
+.nemo-sort-btn.active .nemo-sort-icon { visibility: visible; }
+.nemo-sort-btn:hover .nemo-sort-icon { visibility: visible; opacity: 0.5; }
+.nemo-sort-btn.active:hover .nemo-sort-icon { opacity: 1; }
 .col-size { width: 110px; text-align: right; }
 .col-type { width: 130px; }
 .col-created { width: 160px; }
