@@ -161,6 +161,13 @@ export default {
     details: 'Details',
     duration: 'Dauer: {0} s',
     exitCode: 'Beendigungscode: {0}',
+    cancel: 'Lauf abbrechen',
+    cancelTitle: 'Veröffentlichungslauf abbrechen?',
+    cancelText: 'Der laufende Hugo-Lauf wird beendet. Die veröffentlichte Webseite bleibt unverändert auf dem bisherigen Stand.',
+    cancelKeep: 'Weiterlaufen lassen',
+    cancelConfirm: 'Lauf abbrechen',
+    cancelled: 'Veröffentlichungslauf abgebrochen. Die Webseite ist unverändert.',
+    cancelUnavailable: 'Der Lauf lässt sich gerade nicht abbrechen.',
   },
 
   reconfigure: {

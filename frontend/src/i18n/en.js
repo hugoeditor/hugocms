@@ -161,6 +161,13 @@ export default {
     details: 'Details',
     duration: 'Duration: {0} s',
     exitCode: 'Exit code: {0}',
+    cancel: 'Cancel run',
+    cancelTitle: 'Cancel the publishing run?',
+    cancelText: 'The running Hugo build will be stopped. The published site stays unchanged at its previous state.',
+    cancelKeep: 'Keep running',
+    cancelConfirm: 'Cancel run',
+    cancelled: 'Publishing run cancelled. The site is unchanged.',
+    cancelUnavailable: 'The run cannot be cancelled right now.',
   },
 
   reconfigure: {

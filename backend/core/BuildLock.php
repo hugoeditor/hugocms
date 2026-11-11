@@ -18,6 +18,12 @@ namespace HugoCMS\FileManager;
  *
  * Daneben steht der letzte Lauf in last.json — für die Abfrage des Baustands,
  * die OpensourceERP nach einem Anstoß stellt.
+ *
+ * Für den Abbruch eines Laufs liegt während des Hugo-Aufrufs dessen
+ * Prozessnummer in hugo.pid. Der Abbruch kommt als eigene Anfrage
+ * ({@see cancel()}): Sie hinterlegt eine Markierung und beendet den Prozess;
+ * der wartende Lauf erkennt daran, dass er abgebrochen wurde und nicht
+ * gescheitert ist.
  */
 final class BuildLock
 {
@@ -83,6 +89,78 @@ final class BuildLock
         return !$free;
     }
 
+    /**
+     * Merkt die Prozessnummer des laufenden Hugo-Aufrufs für {@see cancel()}
+     * und verwirft eine Abbruch-Markierung aus einem früheren Lauf. Nur
+     * aufrufen, solange die Sperre gehalten wird.
+     */
+    public function recordProcess(int $pid): void
+    {
+        $this->ensureDir();
+        @unlink($this->dir . '/cancel');
+        @file_put_contents($this->dir . '/hugo.pid', (string) $pid, LOCK_EX);
+    }
+
+    /** Der Hugo-Aufruf ist beendet: Prozessnummer vergessen. */
+    public function clearProcess(): void
+    {
+        @unlink($this->dir . '/hugo.pid');
+    }
+
+    /**
+     * Wurde der gerade beendete Lauf abgebrochen? Liest die Markierung von
+     * {@see cancel()} und entfernt sie.
+     */
+    public function takeCancelled(): bool
+    {
+        $file = $this->dir . '/cancel';
+        if (!is_file($file)) {
+            return false;
+        }
+        @unlink($file);
+
+        return true;
+    }
+
+    /**
+     * Bricht den laufenden Hugo-Aufruf dieser Webseite ab (SIGTERM).
+     *
+     * Die Prozessnummer gilt nur, solange die Sperre gehalten wird: Ohne
+     * laufenden Lauf wird nichts beendet — auch dann nicht, wenn nach einem
+     * hart beendeten PHP-Prozess eine veraltete hugo.pid liegen geblieben ist
+     * und die Nummer inzwischen einem fremden Prozess gehört.
+     *
+     * @return bool true, wenn das Signal zugestellt wurde
+     */
+    public function cancel(): bool
+    {
+        if (!$this->isRunning()) {
+            return false;
+        }
+        $pid = (int) trim((string) @file_get_contents($this->dir . '/hugo.pid'));
+        if ($pid <= 1) {
+            // Der Lauf wartet noch, ist schon beim Tausch oder lässt sich
+            // nicht abbrechen (direkter Lauf ohne Zwischenverzeichnis).
+            return false;
+        }
+        @file_put_contents($this->dir . '/cancel', gmdate('c'));
+        if (function_exists('posix_kill')) {
+            $sent = @posix_kill($pid, 15);
+        } elseif (function_exists('exec')) {
+            // Shared Hosting ohne POSIX-Erweiterung: über die Shell.
+            $code = 1;
+            @exec('kill -TERM ' . $pid . ' 2>/dev/null', $unused, $code);
+            $sent = $code === 0;
+        } else {
+            $sent = false;
+        }
+        if (!$sent) {
+            @unlink($this->dir . '/cancel');
+        }
+
+        return $sent;
+    }
+
     /** Vermerkt den Beginn eines Laufs; der Auslöser ist manual, cron oder shop. */
     public function recordStart(string $trigger): void
     {
@@ -91,6 +169,7 @@ final class BuildLock
             'startedAt' => gmdate('c'),
             'finishedAt' => null,
             'success' => null,
+            'cancelled' => null,
             'exitCode' => null,
             'seconds' => null,
             'output' => '',
@@ -100,7 +179,7 @@ final class BuildLock
     /**
      * Vermerkt das Ende eines Laufs.
      *
-     * @param array{success: bool, exitCode: int, output: string, seconds: float} $result
+     * @param array{success: bool, cancelled?: bool, exitCode: int, output: string, seconds: float} $result
      */
     public function recordFinish(array $result): void
     {
@@ -111,6 +190,7 @@ final class BuildLock
             'startedAt' => $last['startedAt'] ?? null,
             'finishedAt' => gmdate('c'),
             'success' => (bool) $result['success'],
+            'cancelled' => (bool) ($result['cancelled'] ?? false),
             'exitCode' => (int) $result['exitCode'],
             'seconds' => (float) $result['seconds'],
             'output' => implode("\n", array_slice($lines, -self::OUTPUT_LINES)),

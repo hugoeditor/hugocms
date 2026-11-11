@@ -373,6 +373,8 @@ const building = ref(false)
 const buildResult = ref(null) // { success, exitCode, output, seconds } oder null
 const buildDialogOpen = ref(false) // Ergebnis-Dialog mit Statistiken/Ausgabe
 const buildSuccessToast = ref(false) // kurzer Erfolgs-Toast mit Details-Knopf
+const buildCancelOpen = ref(false) // Rückfrage vor dem Abbruch eines Laufs
+const buildCancelling = ref(false) // Abbruch angefordert, Lauf endet gleich
 
 // Den Ergebnis-Dialog (Statistiken/Ausgabe) aus dem Erfolgs-Toast heraus öffnen.
 function openBuildDetails() {
@@ -552,10 +554,13 @@ async function build() {
   building.value = true
   try {
     buildResult.value = await api.post('build')
-    // Erfolg: nur ein kurzer Toast mit Details-Knopf. Fehler: der vollständige
-    // Dialog mit Ausgabe wie bisher, damit die Fehlersuche sofort sichtbar ist.
+    // Erfolg: nur ein kurzer Toast mit Details-Knopf. Abgebrochen: ein
+    // Hinweis. Fehler: der vollständige Dialog mit Ausgabe wie bisher, damit
+    // die Fehlersuche sofort sichtbar ist.
     if (buildResult.value?.success) {
       buildSuccessToast.value = true
+    } else if (buildResult.value?.cancelled) {
+      notice.value = t('build.cancelled')
     } else {
       buildDialogOpen.value = true
     }
@@ -563,6 +568,33 @@ async function build() {
     error.value = errorText(t, e) // Konfigurationsfehler als Snackbar
   } finally {
     building.value = false
+    buildCancelling.value = false
+    buildCancelOpen.value = false
+  }
+}
+
+// Klick auf die Schaltfläche: startet den Lauf oder fragt — während er läuft —
+// nach, ob er abgebrochen werden soll.
+function onBuildButton() {
+  if (building.value) buildCancelOpen.value = true
+  else build()
+}
+
+// Bricht den laufenden Hugo-Lauf ab. Das Ergebnis (abgebrochen) meldet die
+// noch offene build-Anfrage selbst; hier zählt nur, ob der Abbruch ankam.
+async function cancelBuild() {
+  buildCancelOpen.value = false
+  if (!building.value || buildCancelling.value) return
+  buildCancelling.value = true
+  try {
+    const res = await api.post('buildcancel')
+    if (!res?.cancelled && building.value) {
+      buildCancelling.value = false
+      error.value = t('build.cancelUnavailable')
+    }
+  } catch (e) {
+    buildCancelling.value = false
+    error.value = errorText(t, e)
   }
 }
 </script>
@@ -740,18 +772,19 @@ async function build() {
               </v-tooltip>
 
               <!-- Hugo veröffentlichen (nur wenn für die Webseite konfiguriert) -->
-              <v-tooltip v-if="auth.buildable" :text="$t('build.publish')" location="right" :disabled="!toolbarCollapsed">
+              <v-tooltip v-if="auth.buildable" :text="building ? $t('build.cancel') : $t('build.publish')" location="right" :disabled="!toolbarCollapsed">
                 <template #activator="{ props }">
+                  <!-- Während des Laufs bricht dieselbe Schaltfläche ihn (nach Rückfrage) ab. -->
                   <button
                     v-bind="props"
                     type="button"
                     class="nemo-tool-btn"
-                    :disabled="building"
-                    @click="build"
+                    :disabled="buildCancelling"
+                    @click="onBuildButton"
                   >
                     <v-progress-circular v-if="building" indeterminate size="18" width="2" />
                     <v-icon v-else icon="mdi-rocket-launch-outline" size="20" />
-                    <span class="nemo-tool-label">{{ $t('build.publish') }}</span>
+                    <span class="nemo-tool-label">{{ building ? $t('build.cancel') : $t('build.publish') }}</span>
                   </button>
                 </template>
               </v-tooltip>
@@ -1064,6 +1097,19 @@ async function build() {
         </div>
       </div>
     </template>
+
+    <!-- Rückfrage vor dem Abbruch eines laufenden Hugo-Laufs -->
+    <v-dialog v-model="buildCancelOpen" width="440">
+      <v-card>
+        <v-card-title class="text-subtitle-1">{{ $t('build.cancelTitle') }}</v-card-title>
+        <v-card-text>{{ $t('build.cancelText') }}</v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="buildCancelOpen = false">{{ $t('build.cancelKeep') }}</v-btn>
+          <v-btn color="error" variant="flat" @click="cancelBuild">{{ $t('build.cancelConfirm') }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- Ergebnis des Hugo-Laufs: vollständige Anzeige mit Statistiken/Ausgabe.
          Im Fehlerfall automatisch, im Erfolgsfall über „Details" im Toast. -->

@@ -572,6 +572,7 @@ final class Connector
                 'restore' => $this->cmdRestore($request),
                 'emptytrash' => $this->cmdEmptyTrash($request),
                 'build' => $this->cmdBuild(),
+                'buildcancel' => $this->cmdBuildCancel(),
                 'previewbuild' => $this->cmdPreviewBuild($request),
                 'preview' => $this->cmdPreview($request),
                 'assistant' => $this->cmdAssistant($request),
@@ -1531,8 +1532,46 @@ final class Connector
         if (!$this->auth->can('build')) {
             throw ApiException::denied('OPERATION-NOT-ALLOWED', ['build']);
         }
+        // Die Sitzung vor dem langen Lauf freigeben: PHP sperrt sie sonst bis
+        // zum Ende der Anfrage, und jede weitere Anfrage desselben Browsers —
+        // auch der Abbruch (buildcancel) — wartete so lange. Gelesen wird die
+        // Sitzung danach weiter aus dem Speicher, geschrieben nichts mehr.
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
 
         return $this->runHugoBuild(true, 'manual');
+    }
+
+    /**
+     * Bricht den laufenden Hugo-Lauf dieser Webseite ab — gleich, wer ihn
+     * gestartet hat (Knopf, Cron, Shop-Anbindung). Die veröffentlichte Webseite
+     * bleibt unverändert: Der abgebrochene Lauf verwirft sein
+     * Zwischenverzeichnis ({@see StagedBuild}). Ein direkter Lauf ohne
+     * Zwischenverzeichnis lässt sich nicht abbrechen, weil er das Ziel halb
+     * gebaut zurückließe.
+     *
+     * Das Ergebnis des Laufs (cancelled=true) erhält, wer ihn gestartet hat;
+     * diese Anfrage meldet nur, ob das Signal zugestellt wurde.
+     *
+     * @return array{cancelled: bool}
+     */
+    private function cmdBuildCancel(): array
+    {
+        $this->requireAuth();
+        $this->requireMethod('POST');
+        if (!$this->auth->can('build')) {
+            throw ApiException::denied('OPERATION-NOT-ALLOWED', ['build']);
+        }
+        if ($this->hugo === null) {
+            throw new ApiException('ECONFIG', 500, 'HUGO-NOT-CONFIGURED');
+        }
+        $cancelled = $this->buildLock()->cancel();
+        if ($cancelled) {
+            $this->logger->info('Hugo-Lauf auf Anforderung abgebrochen (buildcancel).');
+        }
+
+        return ['cancelled' => $cancelled];
     }
 
     /**
@@ -2005,7 +2044,11 @@ final class Connector
      *
      * $trigger (manual, cron, shop) steht im gespeicherten Stand des Laufs.
      *
-     * @return array{success: bool, exitCode: int, output: string, seconds: float}
+     * Ein über das Zwischenverzeichnis laufender Hugo-Aufruf lässt sich mit
+     * {@see cmdBuildCancel()} abbrechen; das Ergebnis trägt dann
+     * cancelled=true (und success=false).
+     *
+     * @return array{success: bool, cancelled: bool, exitCode: int, output: string, seconds: float}
      */
     private function runHugoBuild(bool $applyDrafts = true, string $trigger = 'manual'): array
     {
@@ -2057,12 +2100,14 @@ final class Connector
         // draft:true bleiben so unveröffentlicht — genau die Staffelung.
         // --cleanDestinationDir braucht nur der direkte Lauf; das
         // Zwischenverzeichnis ist ohnehin leer.
-        $cmd = escapeshellarg($bin)
-            . ($staged === null && $clean ? ' --cleanDestinationDir' : '')
-            . ' -s ' . escapeshellarg($source)
-            . ' -d ' . escapeshellarg($staged?->stagingDir() ?? $dest)
-            . (!empty($this->hugo['minify']) ? ' --minify' : '')
-            . ' 2>&1';
+        $argv = [$bin];
+        if ($staged === null && $clean) {
+            $argv[] = '--cleanDestinationDir';
+        }
+        array_push($argv, '-s', $source, '-d', $staged?->stagingDir() ?? $dest);
+        if (!empty($this->hugo['minify'])) {
+            $argv[] = '--minify';
+        }
 
         $lock = $this->buildLock();
         $lock->acquire();
@@ -2078,9 +2123,14 @@ final class Connector
             $lines = [];
             $exitCode = 1;
             $publishError = null;
+            $cancelled = false;
             try {
                 $staged?->prepare();
-                exec($cmd, $lines, $exitCode);
+                // Abbrechbar ist nur der Lauf über das Zwischenverzeichnis.
+                [$exitCode, $lines] = $this->execHugo($argv, $staged !== null ? $lock : null);
+                // Abgebrochen ist der Lauf nur, wenn Hugo dadurch auch
+                // gescheitert ist — kam der Abbruch zu spät, wird veröffentlicht.
+                $cancelled = $lock->takeCancelled() && $exitCode !== 0;
                 if ($exitCode === 0) {
                     $staged?->publish($clean);
                 } else {
@@ -2097,6 +2147,8 @@ final class Connector
             $output = implode("\n", array_slice($lines, -200));
             if ($success) {
                 $this->logger->info("Hugo-Lauf erfolgreich ({$seconds}s, {$trigger}): {$source} -> {$dest}");
+            } elseif ($cancelled) {
+                $this->logger->info("Hugo-Lauf abgebrochen ({$seconds}s, {$trigger}) — die bisherige Fassung bleibt online.");
             } elseif ($publishError !== null) {
                 $this->logger->error("Hugo-Lauf nicht veröffentlicht ({$trigger}): " . $publishError->getMessage() . ' — die bisherige Fassung bleibt online.');
             } else {
@@ -2105,6 +2157,7 @@ final class Connector
 
             $result = [
                 'success' => $success,
+                'cancelled' => $cancelled,
                 'exitCode' => $exitCode,
                 'output' => $output,
                 'seconds' => $seconds,
@@ -2126,6 +2179,70 @@ final class Connector
         } finally {
             $lock->release();
         }
+    }
+
+    /**
+     * Startet Hugo und wartet auf das Ende. Ausgabe und Fehlerausgabe kommen
+     * zusammen zurück, zeilenweise wie bei exec().
+     *
+     * Mit $lock läuft Hugo als eigener Prozess OHNE Shell dazwischen
+     * (proc_open mit Argumentliste) — nur so ist die gemerkte Prozessnummer die
+     * von Hugo selbst und {@see BuildLock::cancel()} trifft den richtigen
+     * Prozess. Fehlt proc_open (gesperrt auf manchem Shared Hosting), läuft
+     * Hugo wie früher über exec() und lässt sich nicht abbrechen.
+     *
+     * @param list<string> $argv Programm und Argumente
+     * @return array{0: int, 1: list<string>} Beendigungscode und Ausgabezeilen
+     */
+    private function execHugo(array $argv, ?BuildLock $lock): array
+    {
+        if ($lock !== null && function_exists('proc_open')) {
+            $pipes = [];
+            $proc = @proc_open($argv, [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes);
+            if (is_resource($proc)) {
+                $status = proc_get_status($proc);
+                $output = '';
+                $exitCode = 1;
+                try {
+                    if (!empty($status['pid'])) {
+                        $lock->recordProcess((int) $status['pid']);
+                    }
+                    // Nicht bis zum Ende der Ausgabe lesen, sondern bis zum
+                    // Ende von HUGO: Ein Hilfsprozess, den Hugo gestartet hat
+                    // (PostCSS, Asciidoctor …), hält die Ausgabe sonst nach
+                    // einem Abbruch weiter offen, und der Lauf wartete auf ihn.
+                    stream_set_blocking($pipes[1], false);
+                    while (true) {
+                        $read = [$pipes[1]];
+                        $write = $except = null;
+                        @stream_select($read, $write, $except, 0, 200_000);
+                        $output .= (string) stream_get_contents($pipes[1]);
+                        $status = proc_get_status($proc);
+                        if (!$status['running']) {
+                            // Den Code liefert nur die erste Abfrage nach dem
+                            // Ende verlässlich; ein Signal zählt wie in der
+                            // Shell als 128 + Signalnummer.
+                            $exitCode = $status['signaled'] ? 128 + (int) $status['termsig'] : (int) $status['exitcode'];
+                            $output .= (string) stream_get_contents($pipes[1]);
+                            break;
+                        }
+                    }
+                } finally {
+                    $lock->clearProcess();
+                }
+                fclose($pipes[1]);
+                proc_close($proc);
+                $output = rtrim($output, "\r\n");
+
+                return [$exitCode, $output === '' ? [] : preg_split('/\r?\n/', $output)];
+            }
+        }
+
+        $lines = [];
+        $exitCode = 1;
+        exec(implode(' ', array_map('escapeshellarg', $argv)) . ' 2>&1', $lines, $exitCode);
+
+        return [$exitCode, $lines];
     }
 
     /**

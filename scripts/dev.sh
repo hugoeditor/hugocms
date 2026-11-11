@@ -145,7 +145,10 @@ run_servers() {
 
     # Starte PHP-Connector im Hintergrund
     echo "Starting PHP Connector on http://$PHP_HOST:$PHP_PORT ..."
-    php -d post_max_size=64M -d upload_max_filesize=64M -S "$PHP_HOST:$PHP_PORT" index.php 2>&1 | while read -r line; do
+    # Mehrere Worker: Der eingebaute Server bedient sonst nur eine Anfrage
+    # zugleich — der Abbruch eines Hugo-Laufs (buildcancel) käme erst an, wenn
+    # der Lauf schon fertig ist.
+    PHP_CLI_SERVER_WORKERS=4 php -d post_max_size=64M -d upload_max_filesize=64M -S "$PHP_HOST:$PHP_PORT" index.php 2>&1 | while read -r line; do
         echo "[PHP] $line"
     done &
     PHP_PID=$!
