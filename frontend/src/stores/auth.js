@@ -31,7 +31,7 @@ export const useAuthStore = defineStore('auth', {
     // saveUserPrefs) — sie sind der Zustand nach dem nächsten Neuladen.
     // showHidden = versteckte Dateien werden gezeigt (wirksamer Zustand);
     // hiddenAllowed = das Konto darf das schalten (sonst Schalter deaktiviert).
-    ui: { contentWidth: 1200, toolbarCollapsed: false, sessionLifetimeHours: 8, updateLastmod: null, showHidden: false, hiddenAllowed: false },
+    ui: { contentWidth: 1200, toolbarCollapsed: false, sessionLifetimeHours: 8, updateLastmod: null, uploadFormat: null, showHidden: false, hiddenAllowed: false },
     // Pro-Lizenz (aus whoami). configured = ein Schlüssel ist hinterlegt (ggf.
     // ungültig/falsche Domain). git = Git-Funktion nutzbar (Pro + Hugo-Projekt).
     // Die Lizenz gilt pro Webseite; licensable = aktivierbar (Mount-Datei vorhanden).
@@ -116,7 +116,7 @@ export const useAuthStore = defineStore('auth', {
       this.reconfigurable = data.reconfigurable ?? false
       this.projectConfigurable = data.projectConfigurable ?? false
       this.ai = data.ai ?? { enabled: false, model: '', writeMode: 'confirm' }
-      this.ui = data.ui ?? { contentWidth: 1200, toolbarCollapsed: false, sessionLifetimeHours: 8, updateLastmod: null, showHidden: false, hiddenAllowed: false }
+      this.ui = data.ui ?? { contentWidth: 1200, toolbarCollapsed: false, sessionLifetimeHours: 8, updateLastmod: null, uploadFormat: null, showHidden: false, hiddenAllowed: false }
       this.license = data.license ?? { edition: 'community', licensee: null, domain: '', configured: false }
       this.licensable = data.licensable ?? false
       this.git = data.git ?? false
@@ -231,7 +231,8 @@ export const useAuthStore = defineStore('auth', {
 
     // Schreibt Einstellungen der [user]-Sektion. Das Feld-Objekt enthält nur die
     // geänderten Werte: { contentWidth?, toolbarCollapsed?, sessionLifetime?
-    // (Stunden), updateLastmod? (null = im Editor nachfragen) }.
+    // (Stunden), updateLastmod? (null = im Editor nachfragen), uploadFormat?
+    // ('' = beibehalten, null = Vorgabe der Webseite) }.
     // Fensterbreite und Werkzeugleiste schickt die Oberfläche selbsttätig; dort
     // gilt ein Fehler als unkritisch (die Einstellung hält dann bis zum
     // Neuladen). Der Konto-Dialog zeigt einen Fehler dagegen an.

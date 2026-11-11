@@ -412,6 +412,27 @@ const uploadDialog = reactive({ open: false, files: [], format: '', busy: false 
 
 const uploadFormatItems = computed(() => [{ title: t('dialog.keepFormat'), value: '' }, ...formatItems()])
 
+// Ein Zielformat gilt nur, wenn der Server es auch schreiben kann; sonst
+// „beibehalten“ ('').
+function usableFormat(format) {
+  return format && auth.imageFormats?.includes(format) ? format : ''
+}
+
+// Vorgabe der Webseite aus den Projekteinstellungen ([images] upload_format).
+function projectUploadFormat() {
+  return usableFormat(auth.imageUploadFormat || '')
+}
+
+// Merkt die Wahl im Upload-Dialog je Benutzer. Entspricht sie der Vorgabe der
+// Webseite, wird der eigene Wert entfernt (null) — der Benutzer folgt dann
+// wieder den Projekteinstellungen, auch wenn sie sich später ändern. Ein
+// Fehler beim Merken ist unkritisch und hält den Upload nicht auf.
+function rememberUploadFormat(format) {
+  const wanted = format === projectUploadFormat() ? null : format
+  if (wanted === (auth.ui?.uploadFormat ?? null)) return
+  auth.saveUserPrefs({ uploadFormat: wanted }).catch(() => {})
+}
+
 // Bilder dabei und der Server kann umwandeln → erst nach dem Format fragen;
 // sonst wie bisher sofort hochladen.
 function startUpload(list) {
@@ -420,11 +441,11 @@ function startUpload(list) {
     run(() => files.upload(arr))
     return
   }
-  // Vorgabe aus den Projekteinstellungen ([images] upload_format) — nur,
-  // wenn der Server das Format auch schreiben kann.
-  const preset = auth.imageUploadFormat || ''
+  // Vorauswahl: die zuletzt vom Benutzer getroffene Wahl ([user]
+  // upload_format), sonst die Vorgabe der Webseite.
+  const own = auth.ui?.uploadFormat
   uploadDialog.files = arr
-  uploadDialog.format = auth.imageFormats.includes(preset) ? preset : ''
+  uploadDialog.format = own == null ? projectUploadFormat() : usableFormat(own)
   uploadDialog.busy = false
   uploadDialog.open = true
 }
@@ -432,6 +453,7 @@ function startUpload(list) {
 async function confirmUpload() {
   if (uploadDialog.busy) return
   uploadDialog.busy = true
+  rememberUploadFormat(uploadDialog.format)
   try {
     await run(() => files.upload(uploadDialog.files, uploadDialog.format))
   } finally {

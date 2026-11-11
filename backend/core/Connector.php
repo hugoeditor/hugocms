@@ -140,6 +140,7 @@ final class Connector
         'toolbarCollapsed' => false,
         'updateLastmod' => null,
         'showHidden' => false,
+        'uploadFormat' => null,
     ];
 
     /** Zwischenspeicher der wirksamen Einstellungen (einmal je Request). */
@@ -5469,7 +5470,7 @@ final class Connector
      * Einzelbenutzer in der hugocms.ini, beim Mehrbenutzer in der Datei des
      * jeweiligen Kontos. Einmal je Request ermittelt.
      *
-     * @return array{sessionLifetime: int, contentWidth: int, toolbarCollapsed: bool, updateLastmod: ?bool, showHidden: bool}
+     * @return array{sessionLifetime: int, contentWidth: int, toolbarCollapsed: bool, updateLastmod: ?bool, showHidden: bool, uploadFormat: ?string}
      */
     private function userPrefs(): array
     {
@@ -5496,6 +5497,9 @@ final class Connector
      *                    null entfernt den Schlüssel = im Editor nachfragen
      *   showHidden       versteckte Dateien zeigen (show_hidden); true nur mit
      *                    dem Recht AuthInterface::HIDDEN_FILES
+     *   uploadFormat     zuletzt im Upload-Dialog gewähltes Bildformat
+     *                    (upload_format); '' = beibehalten, null entfernt den
+     *                    Schlüssel = Vorgabe der Webseite
      *
      * Jedes Feld ist einzeln optional; nur mitgegebene Felder werden
      * geschrieben, die übrigen [user]-Werte bleiben unberührt. Die ersten
@@ -5567,6 +5571,20 @@ final class Connector
             $changes['show_hidden'] = $showHidden ? 'true' : 'false';
         }
 
+        if (array_key_exists('uploadFormat', $request)) {
+            $uploadFormat = $request['uploadFormat'];
+            if ($uploadFormat === null) {
+                // null entfernt den Schlüssel: Es gilt wieder die Vorgabe der Webseite.
+                $changes['upload_format'] = null;
+            } elseif ($uploadFormat === '') {
+                $changes['upload_format'] = Config::UPLOAD_FORMAT_KEEP;
+            } elseif (is_string($uploadFormat) && MountConfig::imageUploadFormat($uploadFormat) !== '') {
+                $changes['upload_format'] = MountConfig::imageUploadFormat($uploadFormat);
+            } else {
+                throw ApiException::badRequest('PARAM-INVALID', ['uploadFormat']);
+            }
+        }
+
         if ($changes === []) {
             throw ApiException::badRequest('PARAM-MISSING', ['contentWidth']);
         }
@@ -5623,6 +5641,9 @@ final class Connector
             // Dreiwertig: null = beim Speichern nach lastmod-Aktualisierung
             // fragen; true/false = ohne Nachfrage anwenden.
             'updateLastmod' => $prefs['updateLastmod'],
+            // Dreiwertig: null = Vorgabe der Webseite (imageUploadFormat),
+            // '' = Format beibehalten, sonst das zuletzt gewählte Zielformat.
+            'uploadFormat' => $prefs['uploadFormat'],
             // Versteckte Dateien: wirksamer Zustand und ob das Konto ihn
             // überhaupt schalten darf (sonst zeigt die Oberfläche den Schalter
             // deaktiviert).

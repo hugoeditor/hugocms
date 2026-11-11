@@ -80,9 +80,11 @@ disabled = "false"
 ; Die Oberfläche schreibt diese Werte selbst: session_lifetime und
 ; update_lastmod über „Konto und Einstellungen", content_width und
 ; toolbar_collapsed beim Ziehen am Fensterrand bzw. beim Ein-/Ausklappen der
-; Werkzeugleiste.
+; Werkzeugleiste, upload_format bei der Formatwahl im Upload-Dialog (keep =
+; beibehalten; fehlt = Vorgabe der Webseite).
 ;session_lifetime = "8"
 ;content_width = "1200"
 ;toolbar_collapsed = "false"
 ;update_lastmod = "false"
 ;show_hidden = "false"
+;upload_format = "webp"

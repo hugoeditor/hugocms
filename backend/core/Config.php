@@ -24,6 +24,9 @@ use HugoCMS\FileManager\Exception\ApiException;
  *                          ; im Editor nachfragen)
  *   show_hidden = false    ; versteckte Dateien zeigen (optional; wirkt nur
  *                          ; mit dem Recht files.hidden)
+ *   upload_format = webp   ; zuletzt im Upload-Dialog gewähltes Bildformat
+ *                          ; (optional; keep = beibehalten; fehlt = Vorgabe
+ *                          ; der Webseite aus [images] upload_format)
  *
  *   [session]
  *   path = var/sessions
@@ -67,7 +70,7 @@ final class Config
     /**
      * @return array{
      *   auth: array<string, mixed>,
-     *   user: array{sessionLifetime: int, contentWidth: int, toolbarCollapsed: bool, updateLastmod: ?bool, showHidden: bool},
+     *   user: array{sessionLifetime: int, contentWidth: int, toolbarCollapsed: bool, updateLastmod: ?bool, showHidden: bool, uploadFormat: ?string},
      *   session: array{path: string},
      *   log: array{file: string, level: string, maxBytes: int, keep: int},
      *   hugoBin: ?string,
@@ -338,6 +341,9 @@ final class Config
         ];
     }
 
+    /** Wert von [user] upload_format für „Format beibehalten“. */
+    public const UPLOAD_FORMAT_KEEP = 'keep';
+
     /**
      * Globale, für alle Benutzer geltende Einstellungen ([user]-Sektion).
      * Solange driver=singleuser verwendet wird, ist die hugocms.ini der einzige
@@ -362,9 +368,9 @@ final class Config
      * angelegtes Konto (und jedes beim Umstieg übernommene) die installations-
      * weiten Vorgaben.
      *
-     * @param ?array{sessionLifetime: int, contentWidth: int, toolbarCollapsed: bool, updateLastmod: ?bool, showHidden: bool} $defaults
+     * @param ?array{sessionLifetime: int, contentWidth: int, toolbarCollapsed: bool, updateLastmod: ?bool, showHidden: bool, uploadFormat: ?string} $defaults
      *
-     * @return array{sessionLifetime: int, contentWidth: int, toolbarCollapsed: bool, updateLastmod: ?bool, showHidden: bool}  sessionLifetime in Sekunden
+     * @return array{sessionLifetime: int, contentWidth: int, toolbarCollapsed: bool, updateLastmod: ?bool, showHidden: bool, uploadFormat: ?string}  sessionLifetime in Sekunden
      */
     public static function userSection(mixed $section, ?array $defaults = null): array
     {
@@ -396,12 +402,27 @@ final class Config
             ? filter_var($section['show_hidden'], FILTER_VALIDATE_BOOLEAN)
             : ($defaults['showHidden'] ?? false);
 
+        // upload_format ist dreiwertig: fehlt der Schlüssel (null), gilt im
+        // Upload-Dialog die Vorgabe der Webseite ([images] upload_format);
+        // "keep" (hier '') heißt ausdrücklich „Format beibehalten“, sonst steht
+        // ein Zielformat. Unbekannte Werte zählen wie ein fehlender Schlüssel.
+        $uploadFormat = $defaults['uploadFormat'] ?? null;
+        if (isset($section['upload_format'])) {
+            $raw = strtolower(trim((string) $section['upload_format']));
+            if ($raw === self::UPLOAD_FORMAT_KEEP) {
+                $uploadFormat = '';
+            } elseif (MountConfig::imageUploadFormat($raw) !== '') {
+                $uploadFormat = MountConfig::imageUploadFormat($raw);
+            }
+        }
+
         return [
             'sessionLifetime' => $seconds,
             'contentWidth' => $width,
             'toolbarCollapsed' => $toolbarCollapsed,
             'updateLastmod' => $updateLastmod,
             'showHidden' => $showHidden,
+            'uploadFormat' => $uploadFormat,
         ];
     }
 

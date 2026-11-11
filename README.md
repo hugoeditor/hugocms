@@ -137,6 +137,7 @@ session_lifetime  = 8      ; Stunden Inaktivität bis zur Abmeldung (Standard 8)
 content_width     = 1200   ; Breite des Hauptfensters in px (Standard 1200)
 toolbar_collapsed = false  ; Werkzeugleiste eingeklappt starten
 update_lastmod    = false  ; lastmod beim Speichern setzen; fehlt = Editor fragt
+upload_format     = webp   ; zuletzt gewähltes Bildformat beim Hochladen; fehlt = Vorgabe der Webseite
 
 [session]
 ; Pflichtfeld; muss für den Webserver-Benutzer beschreibbar sein.
@@ -592,7 +593,11 @@ oder AVIF umwandeln. Andere Dateien im selben Upload bleiben unverändert, ebens
 Bilder, die das Zielformat schon haben. Welches Format vorausgewählt ist, legen
 die **Projekteinstellungen** (Abschnitt „Bilder“) je Webseite fest — gespeichert
 als `[images] upload_format` in der Mount-Konfiguration; ohne Eintrag bleibt das
-Format erhalten. Über das Kontextmenü eines Bilds („In anderes Format
+Format erhalten. Das ist die Vorgabe für alle: Wählt ein Benutzer im Dialog ein
+anderes Format, merkt sich HugoCMS diese Wahl **je Benutzer** (`[user]
+upload_format`, `keep` = beibehalten) und wählt sie beim nächsten Hochladen
+vor. Wer wieder das Format der Projekteinstellungen wählt, folgt ab dann
+erneut der Vorgabe. Über das Kontextmenü eines Bilds („In anderes Format
 umwandeln …“) entsteht eine neue Datei im gewählten Format **neben** dem
 Original — das Original bleibt.
 
@@ -1457,7 +1462,7 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `config`   | GET     | –                                    | Aktuelle Konfigurationswerte inkl. AI-Status (ohne Geheimnisse) |
 | `reconfigure`| POST  | `authDriver`?, `sessionPath`, `logFile`, `logLevel`, `hugoBin`?, `aiApiKey`?, `aiModel`?, `aiWriteMode`? | hugocms.ini ändern (Anmeldeverfahren/Verzeichnisse/Log/Hugo/AI). Verlangt `config.manage` — ebenso `aimodels` und `activate`. `config` (lesen) und `projectconfig`/`projectreconfigure` nicht |
 | `account`  | POST    | `currentPassword`, `username`, `password`? | Anmeldedaten ändern (danach Neuanmeldung) |
-| `setuserprefs`| POST | `contentWidth`?, `toolbarCollapsed`?, `sessionLifetime`? (Stunden), `updateLastmod`? (`null` = nachfragen) | Eigene `[user]`-Einstellungen schreiben; nur die genannten Felder |
+| `setuserprefs`| POST | `contentWidth`?, `toolbarCollapsed`?, `sessionLifetime`? (Stunden), `updateLastmod`? (`null` = nachfragen), `uploadFormat`? (`''` = beibehalten, `null` = Vorgabe der Webseite) | Eigene `[user]`-Einstellungen schreiben; nur die genannten Felder |
 | `mountadmin` | GET   | –                                    | Orte der Webseite mit Serverpfad (nur Administratoren) |
 | `mountadd` | POST    | `label`, `path`                      | Ort anlegen (nur Administratoren)       |
 | `mountupdate`| POST  | `name`, `label`?, `readonly`?, `permissions`?, `accept`? | Name und Einschränkungen eines Orts ändern (nur Administratoren) |

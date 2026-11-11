@@ -84,6 +84,12 @@ password_hash = "HIER-PASSWORT-HASH-EINTRAGEN"
 ; (.trash) bleibt immer verborgen. Wirkt beim Mehrbenutzer nur für
 ; Administratoren und für Konten mit allow_hidden = true.
 ;show_hidden = false
+; upload_format: das zuletzt im Upload-Dialog gewählte Bildformat (webp, jpg,
+; png, avif oder keep = Format beibehalten). Optional; die Oberfläche schreibt
+; den Wert selbst, sobald im Dialog etwas anderes als die Vorgabe der Webseite
+; gewählt wird. Fehlt der Schlüssel, gilt die Vorgabe der Webseite aus
+; [images] upload_format der Mount-Konfiguration.
+;upload_format = "webp"
 
 [session]
 ; Verzeichnis für die PHP-Sitzungsdateien (muss für den Webserver-Benutzer
