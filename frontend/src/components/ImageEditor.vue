@@ -180,7 +180,11 @@ onBeforeUnmount(destroyEditor)
 .imgedit {
   position: fixed;
   inset: 0;
-  z-index: 3000;
+  /* Bewusst unter 1111: filerobot hängt seine Modale, Menüs und Popups per
+     Portal an <body> (z-index 1111–1400). Läge das Overlay höher, blieben die
+     Rückfragen von „Schließen" und „Zurücksetzen" unsichtbar dahinter. Über
+     der Vuetify-Layoutebene (rund 1000) muss es dennoch liegen. */
+  z-index: 1100;
   background: #1e1e1c;
 }
 .imgedit-canvas {
