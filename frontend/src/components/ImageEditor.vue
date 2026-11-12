@@ -38,7 +38,16 @@ async function initEditor() {
   const entry = files.editImageEntry
   if (!entry || !container.value || editor) return
 
-  const mod = await import('filerobot-image-editor')
+  const german = locale.value === 'de'
+  // Die Bibliothek merkt sich übergebene Texte modulweit und mischt neue nur
+  // darüber. Deshalb auch für Englisch immer eine vollständige Tabelle
+  // übergeben — sonst bliebe der Editor nach einem Sprachwechsel deutsch.
+  const [mod, texts] = await Promise.all([
+    import('filerobot-image-editor'),
+    german
+      ? import('../i18n/imageEditorDe.js')
+      : import('react-filerobot-image-editor/lib/context/defaultTranslations'),
+  ])
   // Zwischen Laden und Fertigwerden könnte der Editor schon wieder geschlossen
   // worden sein — dann nicht mehr aufbauen.
   if (!files.editImageEntry || files.editImageEntry.id !== entry.id || !container.value) return
@@ -51,11 +60,15 @@ async function initEditor() {
     source: files.rawUrl(entry),
     defaultSavedImageName: stemOf(entry.name),
     defaultSavedImageType: savedType(extOf(entry.name)),
-    language: locale.value === 'de' ? 'de' : 'en',
+    language: german ? 'de' : 'en',
     // filerobot lädt Übersetzungen sonst von einem externen Dienst
     // (i18n.ultrafast.io) — das scheitert an CORS und widerspricht dem
-    // Prinzip „keine externen Aufrufe". Eingebaute Texte verwenden.
+    // Prinzip „keine externen Aufrufe". Stattdessen eigene Tabelle übergeben
+    // (deutsch: i18n/imageEditorDe.js, englisch: Standardtexte der Bibliothek).
     useBackendTranslations: false,
+    translations: german
+      ? texts.default
+      : { ...texts.default, colorPickerModalTitleLabel: 'Pick color' },
     // Den internen Speichern-Dialog (Name/Format/Qualität) überspringen und
     // direkt unseren Überschreiben/Kopie-Dialog zeigen.
     onBeforeSave: () => false,
@@ -63,7 +76,9 @@ async function initEditor() {
     onClose: () => files.closeImageEditor(),
     tabsIds: [TABS.ADJUST, TABS.ANNOTATE, TABS.FILTERS, TABS.FINETUNE, TABS.RESIZE],
     defaultTabId: TABS.ADJUST,
-    defaultToolId: TOOLS.CROP,
+    // Mit „Drehen" statt „Zuschneiden" starten: filerobot sperrt den Zoom,
+    // solange Zuschneiden aktiv ist, und kennt keinen Start ohne Werkzeug.
+    defaultToolId: TOOLS.ROTATE,
   })
   editor.render()
 }
@@ -190,6 +205,16 @@ onBeforeUnmount(destroyEditor)
 .imgedit-canvas {
   width: 100%;
   height: 100%;
+}
+
+/* filerobot sperrt den Zoom, solange das Zuschneiden-Werkzeug aktiv ist, lässt
+   die Prozentanzeige dabei aber wie eine aktive Schaltfläche aussehen. Den
+   gesperrten Zustand sichtbar machen. */
+.imgedit :deep(.FIE_topbar-zoom-label[aria-disabled='true']),
+.imgedit :deep(.FIE_topbar-zoom-out-btn:disabled),
+.imgedit :deep(.FIE_topbar-zoom-in-btn:disabled) {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 /* Eigener Speichern-Dialog über der Editor-Oberfläche (filerobot rendert im
