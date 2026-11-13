@@ -53,6 +53,7 @@ seo-success/
 *.ini
 *.bak
 *.ini.daten
+*.ini.*
 
 # Anwenderspezifischer Bootstrap (Vorlage: custom.php.beispiel).
 custom.php

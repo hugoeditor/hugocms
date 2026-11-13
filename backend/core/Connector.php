@@ -25,6 +25,7 @@ use HugoCMS\FileManager\Shop\ShopKey;
 use HugoCMS\FileManager\Shop\ShopSync;
 use HugoCMS\FileManager\Shop\ShopThumbnails;
 use HugoCMS\FileManager\Shop\SiteConfig;
+use HugoCMS\FileManager\Shop\SiteConfigWriter;
 use RuntimeException;
 use Throwable;
 
@@ -211,7 +212,7 @@ final class Connector
      */
     private array $shop = ['enabled' => false, 'keyHash' => null, 'keyHint' => null, 'keyCreated' => null,
                            'contentDir' => null, 'categoryGroups' => null, 'images' => null, 'thumbnails' => null,
-                           'downloads' => null, 'signingKey' => null];
+                           'downloads' => null, 'signingKey' => null, 'configApply' => true];
 
     /**
      * Automatischer Commit rund um die zeitgesteuerte Veröffentlichung, aus der
@@ -652,6 +653,7 @@ final class Connector
                 'shopbuild' => $this->cmdShopBuild(),
                 'shopbuildstatus' => $this->cmdShopBuildStatus(),
                 'shopsiteconfig' => $this->cmdShopSiteConfig(),
+                'shopsiteconfigapply' => $this->cmdShopSiteConfigApply($request),
                 'shopmanifest' => $this->cmdShopManifest($request),
                 'shopupload' => $this->cmdShopUpload($request),
                 'shopmediaupload' => $this->cmdShopMediaUpload($request),
@@ -2480,7 +2482,54 @@ final class Connector
         return [
             'hugo' => $this->hugoVersionInfo()['version'],
             'grants' => $this->shopGrants(),
+            // Ergänzen der Konfiguration (shopsiteconfigapply, seit 2026-11-12):
+            // allowed = in den Projekteinstellungen freigegeben, supported =
+            // eine einzelne JSON-Datei im Wurzelverzeichnis. Ein OpensourceERP,
+            // das dies liest, bietet die Übernahme an; fehlt das Feld (älteres
+            // HugoCMS), bleibt es bei den Hinweisen
+            'apply' => ['allowed' => $this->shop['configApply']] + SiteConfigWriter::target($source),
         ] + SiteConfig::read($bin, $source);
+    }
+
+    /**
+     * Ergänzt die Hugo-Konfiguration der Webseite um das, was die
+     * Konfigurationsprüfung von OpensourceERP beanstandet (seit 2026-11-12,
+     * {@see SiteConfigWriter}). OpensourceERP schickt benannte Korrekturen,
+     * keine Konfiguration; Schlüssel und Werte legt HugoCMS fest und prüft
+     * sie. Nur, wenn ein Administrator es in den Projekteinstellungen nicht
+     * abgeschaltet hat ([shop] config_apply, Vorgabe: ein).
+     *
+     * @param array<string, mixed> $request fixes: Liste aus op und den Feldern der Korrektur
+     * @return array<string, mixed> file, applied, changed, backup
+     */
+    private function cmdShopSiteConfigApply(array $request): array
+    {
+        $this->requireShopKey('shopsiteconfigapply');
+        // Schlüssel statt Sitzung: kein CSRF-Token, wie bei shopcommit
+        $this->requireMethod('POST', false);
+        if (!$this->shop['configApply']) {
+            throw ApiException::denied('SHOP-SITECONFIG-APPLY-OFF');
+        }
+        if ($this->hugo === null || $this->hugoBin === null) {
+            throw new ApiException('ECONFIG', 409, 'HUGO-NOT-CONFIGURED');
+        }
+        $bin = $this->hugoBin;
+        $source = (string) $this->hugo['source'];
+        if (!is_file($bin) || !is_executable($bin)) {
+            throw new ApiException('ECONFIG', 500, 'HUGO-BIN-MISSING', [$bin]);
+        }
+        if (!is_dir($source)) {
+            throw new ApiException('ECONFIG', 500, 'HUGO-SOURCE-MISSING', [$source]);
+        }
+
+        $fixes = is_array($request['fixes'] ?? null) ? array_values($request['fixes']) : [];
+        $result = SiteConfigWriter::apply($bin, $source, $this->shopVarDir(), ShopSync::PACKAGE_DIR, $fixes);
+        if ($result['changed']) {
+            $this->logger->info('Shop-Anbindung: Hugo-Konfiguration ergänzt (' . $result['file'] . ': '
+                . implode(', ', $result['applied']) . '), Sicherung ' . $result['backup']);
+        }
+
+        return $result;
     }
 
     /**
@@ -2567,7 +2616,7 @@ final class Connector
      * onlineShop schaltet die fünf Freigaben des Shops frei; aus heißt: nur das
      * Kundenportal-Paket, die eingetragenen Pfade bleiben für später stehen.
      *
-     * @param array<string, mixed> $request enabled, onlineShop, contentDir, categoryGroups, images, thumbnails, downloads
+     * @param array<string, mixed> $request enabled, onlineShop, configApply, contentDir, categoryGroups, images, thumbnails, downloads
      * @return array<string, mixed> Stand wie projectconfig.shop
      */
     private function cmdShopSettingsSet(array $request): array
@@ -2577,6 +2626,12 @@ final class Connector
         $changes = [];
         if (array_key_exists('onlineShop', $request)) {
             $changes['online_shop'] = filter_var($request['onlineShop'], FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
+        }
+        // Eigener Schalter, unabhängig von den Freigaben: darf OpensourceERP
+        // die Hugo-Konfiguration ergänzen (shopsiteconfigapply)?
+        $configApply = null;
+        if (array_key_exists('configApply', $request)) {
+            $configApply = filter_var($request['configApply'], FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
         }
         $grants = $this->shopGrants();
         foreach (MountConfig::SHOP_GRANTS as $key => [$field, $file]) {
@@ -2602,6 +2657,9 @@ final class Connector
         if ($changes !== []) {
             $changes['areas'] = null;
         }
+        if ($configApply !== null) {
+            $changes['config_apply'] = $configApply;
+        }
         if (array_key_exists('enabled', $request)) {
             $changes['enabled'] = filter_var($request['enabled'], FILTER_VALIDATE_BOOLEAN) ? 'true' : 'false';
             // Neue Anbindung (noch kein Schlüssel, kein Schalter): ausdrücklich
@@ -2618,6 +2676,9 @@ final class Connector
         $this->writeShopSection($changes);
         if ($before['enabled'] !== $this->shop['enabled']) {
             $this->logger->info('OpensourceERP-Anbindung ' . ($this->shop['enabled'] ? 'eingeschaltet' : 'ausgeschaltet'));
+        }
+        if ($before['configApply'] !== $this->shop['configApply']) {
+            $this->logger->info('Shop-Anbindung: Ergänzen der Hugo-Konfiguration ' . ($this->shop['configApply'] ? 'erlaubt' : 'nicht mehr erlaubt'));
         }
         if ($before['onlineShop'] !== $this->shop['onlineShop']) {
             $this->logger->info('Online-Shop auf dieser Webseite ' . ($this->shop['onlineShop'] ? 'freigegeben' : 'nicht mehr freigegeben'));
@@ -2686,6 +2747,7 @@ final class Connector
         $state = [
             'enabled' => $this->shop['enabled'],
             'onlineShop' => $this->shop['onlineShop'],
+            'configApply' => $this->shop['configApply'],
             'set' => $this->shop['keyHash'] !== null,
             'hint' => $this->shop['keyHint'],
             'created' => $this->shop['keyCreated'],

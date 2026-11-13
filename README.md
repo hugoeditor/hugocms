@@ -1517,6 +1517,7 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `shopbuild`    | POST | –                                   | **Mit Schlüssel statt Sitzung:** Webseite bauen, auf Anstoß von OpensourceERP (siehe „Shop-Anbindung") |
 | `shopbuildstatus`| GET | –                                  | **Mit Schlüssel statt Sitzung:** Baustand — läuft ein Hugo-Lauf, wie ging der letzte aus, wartet eine Lieferung; dazu Freigaben (`grants`, übergangsweise auch als `areas` für ältere OpensourceERP) und Endungen, Hugo-Version (`hugo`, seit 2026-10-29) |
 | `shopsiteconfig` | GET | –                                  | **Mit Schlüssel:** Hugo-Konfiguration der Webseite für die Konfigurationsprüfung in OpensourceERP (seit 2026-10-30): Auszug aus `hugo config` (`disableKinds`, `taxonomies`, `permalinks`, `outputs`, Mounts, `params.portalui`, Theme, Sprachen), Hugos Warnungen beim Laden (`warnings`), Übersichtsseiten der Taxonomien (`files.taxonomyIndex`), dazu Freigaben und Hugo-Version |
+| `shopsiteconfigapply` | POST | `fixes` (Liste benannter Korrekturen: `op` und ihre Felder) | **Mit Schlüssel:** ergänzt die Hugo-Konfiguration der Webseite um das, was die Konfigurationsprüfung verlangt (seit 2026-11-12, siehe „Konfiguration ergänzen“). Nur bei `[shop] config_apply` (Vorgabe: ein) und einer einzelnen `hugo.json`/`config.json` |
 | `shopmanifest` | POST | `files` (Liste aus `path`, `sha256`, bei signiertem PHP `signature`) | **Mit Schlüssel:** Abgleich einer Lieferung — nennt, was fehlt oder abweicht, und vergibt eine `syncId` |
 | `shopupload`   | POST | `syncId`, `files` (Liste aus `path`, `content` Base64) | **Mit Schlüssel:** eine Portion Textdateien in die Bereitstellung, noch nicht in die Webseite |
 | `shopmediaupload` | POST (multipart) | `syncId`, `path`, `offset`, Datei `chunk` | **Mit Schlüssel:** ein Stück einer Mediendatei (Produktbild, Vorschaubild, Download); mit dem letzten Stück liegt die Datei geprüft in ihrer Freigabe (`received`, `complete`) |
@@ -1594,6 +1595,30 @@ selbst und antwortet mit dem Ergebnis — ohne Hintergrundprozess, wie das übri
 Backend. OpensourceERP ruft den Befehl aus seinem eigenen Hintergrundlauf auf.
 Der Pausenschalter `pause_build` der Webseite gilt auch hier.
 
+**Konfiguration ergänzen.** `shopsiteconfigapply` (seit 2026-11-12,
+`Shop\SiteConfigWriter`) schreibt, was die Konfigurationsprüfung beanstandet,
+in die Hugo-Konfiguration der Webseite. OpensourceERP schickt dafür keine
+Konfiguration, sondern benannte Korrekturen; Schlüssel und Werte legt HugoCMS
+fest und prüft sie:
+
+| `op` | Felder | Wirkung |
+|------|--------|---------|
+| `mount` | `source`, `target` | Mount eines der vier Paketverzeichnisse (`oserp-portal/static`, `/layouts`, `/assets/portal-ui`, `/content`) ergänzen oder auf sein Ziel stellen. Ziel fest, nur bei `content` ein Unterverzeichnis `content/…`. Hatte die Datei keine Mounts, kommen Hugos sieben Vorgabe-Mounts dazu |
+| `taxonomy` | `singular`, `plural` | Taxonomie anmelden; ohne vorhandenen Block bleiben `category` und `tag` erhalten |
+| `permalinks` | `taxonomy`, `index`, `term` | Adressen der Übersicht und der Begriffsseiten (`permalinks.taxonomy`, `permalinks.term`) |
+| `enableKinds` | – | `taxonomy` und `term` aus `disableKinds` nehmen |
+| `portaluiTaxonomy` | `taxonomy` | `params.portalui.taxonomy` setzen |
+
+Geschrieben wird nur eine einzelne `hugo.json` oder `config.json` im
+Wurzelverzeichnis der Hugo-Quelle; bei TOML, YAML oder einem Verzeichnis
+`config/` meldet `shopsiteconfig` unter `apply` `supported: false` mit Grund,
+und es bleibt bei den Hinweisen. Vor dem Schreiben entsteht eine
+Sicherungskopie unter `var/shop/<…>/siteconfig-<Zeit>-<Datei>`; lädt Hugo die
+neue Datei nicht (`hugo config`), kommt die alte zurück
+(`SHOP-SITECONFIG-REJECTED`). Der Schalter „OpensourceERP darf die
+Hugo-Konfiguration ergänzen“ in den Projekteinstellungen (`[shop]
+config_apply`, Vorgabe: ein) schaltet den Befehl ab.
+
 **Konfigurationsprüfung.** `shopsiteconfig` (seit 2026-10-30) gibt OpensourceERP
 die Hugo-Konfiguration der Webseite, wie Hugo sie auflöst (`hugo config
 --format json`, `Shop\SiteConfig`): `disableKinds`, `taxonomies`,
@@ -1604,8 +1629,8 @@ dazu die Warnungen, die Hugo beim Laden ausgibt (abgekündigte Schlüssel wie
 „Verbindung prüfen“ mit Kanalkarte und Portaleinstellungen und zeigt dort,
 was in der Webseite fehlt oder abweicht: Mounts des Pakets, abgeschaltete
 Taxonomie-Seiten, nicht angemeldete Taxonomie der Shop-Kategorien, andere
-Adressen der Kategorieseiten. HugoCMS bewertet nichts und schreibt nichts —
-die Konfiguration bleibt Sache der Webseite. Nicht enthalten sind Teile der
+Adressen der Kategorieseiten. HugoCMS bewertet nichts; geschrieben wird nur
+auf ausdrückliche Anforderung (`shopsiteconfigapply`, siehe oben). Nicht enthalten sind Teile der
 Konfiguration, in denen Zugangsdaten stehen können (`services`,
 `deployment`). Ohne eingerichtetes Hugo antwortet der Befehl mit
 `HUGO-NOT-CONFIGURED`.

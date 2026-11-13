@@ -114,7 +114,7 @@ const perDayTooHigh = computed(
 // Webseite, nur für Administratoren. Der Schlüssel selbst kommt nur einmal,
 // direkt nach dem Erzeugen — dann steht er in newShopKey, bis die Ansicht
 // schließt. Schalter und Schlüssel wirken sofort, die Freigaben mit „Speichern“.
-const SHOP_EMPTY = { enabled: false, onlineShop: false, set: false, hint: null, created: null, grants: {} }
+const SHOP_EMPTY = { enabled: false, onlineShop: false, configApply: true, set: false, hint: null, created: null, grants: {} }
 const shop = ref({ ...SHOP_EMPTY })
 const newShopKey = ref('')
 const revealShopKey = ref(false) // Augen-Symbol: Schlüssel im Klartext zeigen
@@ -221,6 +221,20 @@ async function toggleShop(enabled) {
 
 // Online-Shop auf dieser Webseite: wirkt sofort. Aus heißt: nur das
 // Kundenportal-Paket; die eingetragenen Freigaben bleiben für später stehen.
+// Hugo-Konfiguration ergänzen: wirkt sofort. Aus heißt: OpensourceERP zeigt
+// weiter, was in der Konfiguration fehlt, schreibt es aber nicht selbst.
+async function toggleConfigApply(configApply) {
+  shopBusy.value = true
+  shopError.value = null
+  try {
+    shop.value = await auth.shopSettingsSet({ configApply })
+  } catch (e) {
+    shopError.value = errorText(t, e)
+  } finally {
+    shopBusy.value = false
+  }
+}
+
 async function toggleOnlineShop(onlineShop) {
   shopBusy.value = true
   shopError.value = null
@@ -868,6 +882,20 @@ async function submit() {
             persistent-hint
             class="mb-3"
           />
+          <!-- Hugo-Konfiguration: OpensourceERP darf die Einträge ergänzen,
+               die seine Konfigurationsprüfung verlangt -->
+          <v-switch
+            :model-value="shop.configApply"
+            :label="$t('projectConfig.shopConfigApply')"
+            :loading="shopBusy"
+            :disabled="shopBusy || loading || saving"
+            color="primary"
+            density="compact"
+            hide-details
+            class="mb-1"
+            @update:model-value="toggleConfigApply"
+          />
+          <div class="text-caption text-medium-emphasis mb-3">{{ $t('projectConfig.shopConfigApplyHint') }}</div>
           <!-- Online-Shop: erst damit gibt es die fünf Freigaben des Shops -->
           <v-switch
             :model-value="shop.onlineShop"

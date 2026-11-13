@@ -200,6 +200,9 @@ export default {
       'OpensourceERP erreicht diese Webseite danach nicht mehr: Produktseiten, Preise und Bestände werden nicht mehr aktualisiert. Schlüssel und Freigaben bleiben gespeichert.',
     shopDisable: 'Ausschalten',
     shopGrantsSection: 'Freigaben für OpensourceERP',
+    shopConfigApply: 'OpensourceERP darf die Hugo-Konfiguration ergänzen',
+    shopConfigApplyHint:
+      'Eingeschaltet kann OpensourceERP die Einträge, die seine Konfigurationsprüfung verlangt, selbst in die hugo.json oder config.json schreiben: Mounts des Kundenportal-Pakets, Taxonomie und Adressen der Shop-Kategorien. Andere Schlüssel und fremde Verzeichnisse sind ausgeschlossen; vor jeder Änderung entsteht eine Sicherungskopie. Ausgeschaltet zeigt OpensourceERP nur an, was fehlt.',
     shopOnlineShop: 'Online-Shop auf dieser Webseite',
     shopOnlineShopHint:
       'Eingeschaltet nimmt die Anbindung auch Produktseiten, Kategorieübersicht, Produktbilder, Vorschaubilder und Downloads an — die Freigaben dafür erscheinen darunter. Ein reines Kundenportal lässt den Schalter aus; die Anbindung nimmt dann nur das Kundenportal-Paket an.',
@@ -1791,6 +1794,11 @@ export default {
     'SHOP-KEY-NOT-SET': 'Für diese Webseite ist kein Schlüssel der Shop-Anbindung hinterlegt.',
     'SHOP-KEY-INVALID': 'Der Schlüssel der Shop-Anbindung ist ungültig.',
     'SHOP-DISABLED': 'Die Shop-Erweiterung ist für diese Webseite ausgeschaltet.',
+    'SHOP-SITECONFIG-APPLY-OFF': 'Das Ergänzen der Hugo-Konfiguration durch OpensourceERP ist in den Projekteinstellungen ausgeschaltet.',
+    'SHOP-SITECONFIG-UNSUPPORTED': 'Die Hugo-Konfiguration dieser Webseite lässt sich nicht automatisch ergänzen ({0}: {1}) — möglich ist das nur bei einer einzelnen hugo.json oder config.json.',
+    'SHOP-SITECONFIG-FIX-INVALID': 'Unzulässige Korrektur der Hugo-Konfiguration: {0}.',
+    'SHOP-SITECONFIG-REJECTED': 'Hugo lädt die ergänzte Konfiguration nicht ({0}) — die bisherige Datei wurde wiederhergestellt.',
+    'SHOP-SITECONFIG-WRITE-FAILED': 'Die Hugo-Konfiguration konnte nicht geschrieben werden ({0}).',
     'SHOP-GRANT-INVALID': 'Ungültige Freigabe „{0}“: „{1}“ — erwartet ist ein Pfad im Hugo-Projekt, ohne „..“ und versteckte Verzeichnisse, nur mit Buchstaben, Ziffern, - _ . und Leerzeichen; die Kategorieübersicht als .json-Datei.',
     'SHOP-GRANTS-SAME': '„{0}“ und „{1}“ dürfen nicht dasselbe Verzeichnis sein — die Vorschaubilder überschrieben sonst die Produktbilder.',
     'SHOP-GRANT-UNUSABLE': 'Die Freigabe „{0}“ der Shop-Anbindung ist unbrauchbar eingetragen — bitte in den Projekteinstellungen neu speichern.',

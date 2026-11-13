@@ -200,6 +200,9 @@ export default {
       'OpensourceERP can then no longer reach this website: product pages, prices and stock are no longer updated. Key and grants stay stored.',
     shopDisable: 'Switch off',
     shopGrantsSection: 'Grants for OpensourceERP',
+    shopConfigApply: 'OpensourceERP may amend the Hugo configuration',
+    shopConfigApplyHint:
+      'When enabled, OpensourceERP can write the entries its configuration check requires into hugo.json or config.json itself: mounts of the customer portal package, taxonomy and addresses of the shop categories. Other keys and foreign directories are excluded; a backup copy is made before every change. When disabled, OpensourceERP only shows what is missing.',
     shopOnlineShop: 'Online shop on this website',
     shopOnlineShopHint:
       'When enabled, the connection also accepts product pages, category overview, product images, thumbnails and downloads — their grants appear below. A plain customer portal leaves this off; the connection then accepts only the customer portal package.',
@@ -1786,6 +1789,11 @@ export default {
     'SHOP-KEY-NOT-SET': 'No shop connection key is stored for this website.',
     'SHOP-KEY-INVALID': 'The shop connection key is invalid.',
     'SHOP-DISABLED': 'The shop extension is switched off for this website.',
+    'SHOP-SITECONFIG-APPLY-OFF': 'Amending the Hugo configuration by OpensourceERP is switched off in the project settings.',
+    'SHOP-SITECONFIG-UNSUPPORTED': 'The Hugo configuration of this website cannot be amended automatically ({0}: {1}) — this is only possible with a single hugo.json or config.json.',
+    'SHOP-SITECONFIG-FIX-INVALID': 'Invalid correction of the Hugo configuration: {0}.',
+    'SHOP-SITECONFIG-REJECTED': 'Hugo does not load the amended configuration ({0}) — the previous file was restored.',
+    'SHOP-SITECONFIG-WRITE-FAILED': 'The Hugo configuration could not be written ({0}).',
     'SHOP-GRANT-INVALID': 'Invalid grant “{0}”: “{1}” — expected a path in the Hugo project, without “..” and hidden directories, only letters, digits, - _ . and spaces; the category overview as a .json file.',
     'SHOP-GRANTS-SAME': '“{0}” and “{1}” must not be the same directory — the thumbnails would otherwise overwrite the product images.',
     'SHOP-GRANT-UNUSABLE': 'The shop connection grant “{0}” is unusable — please save it again in the project settings.',

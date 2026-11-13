@@ -108,6 +108,9 @@ use HugoCMS\FileManager\Exception\ApiException;
  *               die fünf Freigaben des Shops; ein reines Kundenportal bekommt
  *               nur das Kundenportal-Paket. Fehlt der Schlüssel, gilt true
  *               (Anbindungen von vor dem Schalter waren immer Shops).
+ *   config_apply OpensourceERP darf die Hugo-Konfiguration der Webseite um
+ *               die Einträge ergänzen, die seine Konfigurationsprüfung
+ *               verlangt (true/false, Vorgabe true; {@see Shop\SiteConfigWriter}).
  *   Freigaben, jeweils relativ zur Hugo-Quelle, ohne .. und ohne versteckte
  *   Bestandteile ({@see shopGrantPath()}). Ein unbrauchbarer Eintrag gibt
  *   nichts frei (Hinweis SHOP-GRANT-UNUSABLE) — lieber steht der Shop, als
@@ -485,6 +488,11 @@ final class MountConfig
             // Einschalten ein explizites false (Connector::cmdShopSettingsSet).
             'onlineShop' => array_key_exists('online_shop', $section)
                 ? filter_var($section['online_shop'], FILTER_VALIDATE_BOOLEAN)
+                : true,
+            // Hugo-Konfiguration ergänzen (shopsiteconfigapply): erlaubt, solange
+            // ein Administrator es nicht abschaltet
+            'configApply' => array_key_exists('config_apply', $section)
+                ? filter_var($section['config_apply'], FILTER_VALIDATE_BOOLEAN)
                 : true,
             'keyHash' => $hash === '' ? null : $hash,
             'keyHint' => $hash === '' || $hint === '' ? null : $hint,
