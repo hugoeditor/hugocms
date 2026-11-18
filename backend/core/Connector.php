@@ -2441,6 +2441,10 @@ final class Connector
                 'accepted' => true,
                 'chunkBytes' => ShopSync::chunkBytes(),
                 'maxBytes' => ShopSync::MAX_MEDIA_BYTES,
+                // Eine Lieferung ohne Medien lässt die Medien der vorigen
+                // stehen (ShopSync::commit) — OpensourceERP schaltet die
+                // Übertragung der Medien je Kanal nur ab, wenn es dies liest
+                'keepWithoutMedia' => true,
                 'images' => ShopSync::MEDIA_IMAGE_EXT,
                 'downloads' => ShopSync::MEDIA_DOWNLOAD_EXT,
             ],

@@ -1644,7 +1644,11 @@ Lieferung gebaut wird:
    Bereitstellung unter `var/shop/<sha1(Quelle)>/sync/<syncId>/`;
    `shopmediaupload` — Medien als Binärdaten in Stücken (siehe „Medien“).
 3. `shopcommit` — alles in die Webseite schreiben, nicht mehr Geliefertes
-   löschen, die Bau-Markierung setzen.
+   löschen, die Bau-Markierung setzen. Führt eine Lieferung gar keine Medien,
+   bleiben die Medien der vorigen Lieferung stehen (seit 2026-11-18,
+   `media.keepWithoutMedia` in `shopbuildstatus`): OpensourceERP kann die
+   Übertragung der Medien je HugoShop abschalten, wenn sie im selben
+   Dateisystem liegen und der Webserver sie direkt ausliefert.
 
 Geschrieben wird über `FileService` und einen eigenen `MountResolver` mit einem
 Mount auf die Hugo-Quelle. Er ist bewusst nicht im Resolver der Redakteure —

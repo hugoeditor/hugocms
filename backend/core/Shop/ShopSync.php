@@ -576,11 +576,21 @@ final class ShopSync
             $written++;
         }
 
-        // Löschen nur, was die vorige Lieferung enthielt und diese nicht mehr
+        // Löschen nur, was die vorige Lieferung enthielt und diese nicht mehr.
+        // Führt die Lieferung gar keine Medien, verwaltet OpensourceERP die
+        // Medien dieser Webseite nicht über den Abgleich — etwa weil sie dort
+        // im selben Dateisystem liegen und der Kanal sie nicht mehr überträgt
+        // (dort dev/shop-medienbibliothek.md, „Medien außerhalb“). Die Medien
+        // der vorigen Lieferung bleiben dann stehen: Ein Ausschalten der
+        // Übertragung darf die Bilder und Downloads der Webseite nicht löschen.
+        $withoutMedia = $sizes === [];
         $previous = $this->readJson($this->varDir . '/last-manifest.json')['files'] ?? [];
         $deleted = 0;
         foreach (array_keys($previous) as $path) {
             if (isset($manifest['files'][$path]) || !is_string($path)) {
+                continue;
+            }
+            if ($withoutMedia && $this->inMediaGrant($path)) {
                 continue;
             }
             // Die PHP-Einstiegspunkte nie löschen, nur ersetzen: Fehlen sie in
@@ -694,6 +704,23 @@ final class ShopSync
         }
 
         return $path;
+    }
+
+    /**
+     * Liegt ein Pfad einer früheren Lieferung im Verzeichnis einer
+     * Medienfreigabe? Anders als {@see mediaArea()} ohne Blick auf die Endung
+     * und ohne Fehler — hier wird nur entschieden, was stehen bleibt.
+     */
+    private function inMediaGrant(string $path): bool
+    {
+        $dir = dirname($path);
+        foreach ($this->mediaGrants as $grant) {
+            if ($grant !== null && $dir === $grant) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
