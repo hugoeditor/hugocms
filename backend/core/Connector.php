@@ -6491,6 +6491,52 @@ final class Connector
             // Software-Update aus der Oberfläche: nur Administratoren sehen die
             // Karte — die Voraussetzungen nennen Serverpfade.
             'update' => $this->auth->can('config.manage') ? $this->updateService()->capabilities() : null,
+            // Webseitenprojekt: Basisverzeichnis und Konfigurationsdatei — wie
+            // das Update nur für Administratoren (Serverpfade).
+            'project' => $this->auth->can('config.manage') ? $this->projectInfo() : null,
+        ];
+    }
+
+    /**
+     * Angaben zum Webseitenprojekt für den Systemstatus: das Basisverzeichnis
+     * (Hugo-Quelle aus [hugo] source) sowie Pfad und Inhalt der
+     * Konfigurationsdatei dieser Webseite (mounts/<hash>.ini) — rein zur
+     * Anzeige. Geheimnisse (Lizenzschlüssel, Hashes, Passwörter) reisen nicht
+     * mit; an ihrer Stelle steht `secret: true` ohne Wert.
+     *
+     * @return array{baseDir: ?string, configFile: ?string, sections: list<array{name: string, entries: list<array{key: string, value: ?string, secret: bool}>}>}
+     */
+    private function projectInfo(): array
+    {
+        $sections = [];
+        if ($this->mountsPath !== null) {
+            try {
+                $raw = Config::raw($this->mountsPath);
+            } catch (ApiException) {
+                // Der Status darf an einer unlesbaren Datei nicht scheitern.
+                $raw = [];
+            }
+            foreach ($raw as $name => $values) {
+                $entries = [];
+                foreach ($values as $key => $value) {
+                    $secret = ($name === 'license' && $key === 'key')
+                        || preg_match('/(_hash|pass|secret|token)/i', $key) === 1;
+                    $entries[] = [
+                        'key' => $key,
+                        'value' => $secret ? null : $value,
+                        'secret' => $secret,
+                    ];
+                }
+                $sections[] = ['name' => $name, 'entries' => $entries];
+            }
+        }
+
+        return [
+            'baseDir' => $this->hugo['source'] ?? null,
+            'configFile' => $this->mountsPath === null
+                ? null
+                : (realpath($this->mountsPath) ?: $this->mountsPath),
+            'sections' => $sections,
         ];
     }
 

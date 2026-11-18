@@ -554,6 +554,16 @@ export default {
       reload: 'Reload page',
       outputTruncated: '… (beginning of output truncated)',
     },
+    project: {
+      heading: 'Website project',
+      baseDir: 'Base directory',
+      baseDirMissing: 'No Hugo project directory configured ([hugo] source is missing).',
+      configFile: 'Configuration file',
+      configFileMissing: 'No configuration file is loaded for this website.',
+      readonlyHint: 'Read-only. Change the values in the project settings or directly in the file.',
+      empty: 'The file contains no settings.',
+      secret: '(stored, not shown)',
+    },
     log: {
       heading: 'Log',
       show: 'Show',

@@ -554,6 +554,16 @@ export default {
       reload: 'Seite neu laden',
       outputTruncated: '… (Anfang der Ausgabe gekürzt)',
     },
+    project: {
+      heading: 'Webseitenprojekt',
+      baseDir: 'Basisverzeichnis',
+      baseDirMissing: 'Kein Hugo-Projektverzeichnis hinterlegt ([hugo] source fehlt).',
+      configFile: 'Konfigurationsdatei',
+      configFileMissing: 'Für diese Webseite ist keine Konfigurationsdatei geladen.',
+      readonlyHint: 'Nur zur Ansicht. Geändert werden die Werte in den Projekteinstellungen oder direkt in der Datei.',
+      empty: 'Die Datei enthält keine Einstellungen.',
+      secret: '(hinterlegt, nicht angezeigt)',
+    },
     log: {
       heading: 'Protokoll',
       show: 'Anzeigen',

@@ -52,6 +52,8 @@ const PRO_JOBS = ['improve', 'healthcheck']
 
 const keys = computed(() => store.data?.keys ?? {})
 const license = computed(() => store.data?.license ?? null)
+// Webseitenprojekt: { baseDir, configFile, sections } — null für Redakteure.
+const project = computed(() => store.data?.project ?? null)
 
 // Version des Hugo-Binärprogramms neben der Buildnummer. Ohne hinterlegtes
 // Binärprogramm entfällt die Angabe ganz; ist es hinterlegt, lässt sich aber
@@ -571,6 +573,59 @@ async function runUpdate(scope) {
               <pre class="st-log st-update-output"><template v-if="updateResult.truncated">{{ $t('status.update.outputTruncated') }}
 </template>{{ updateResult.output.join('\n') }}</pre>
             </template>
+          </section>
+
+          <!-- Webseitenprojekt: Basisverzeichnis und die Konfigurationsdatei
+               dieser Webseite, rein zur Anzeige. Wie das Update nur für
+               Administratoren — die Angaben nennen Serverpfade. -->
+          <section v-if="project" class="st-card">
+            <h2 class="st-card-title">
+              <v-icon icon="mdi-folder-cog-outline" size="18" />
+              {{ $t('status.project.heading') }}
+            </h2>
+
+            <div class="st-row">
+              <v-icon icon="mdi-folder-outline" size="18" class="st-row-icon" />
+              <div class="st-row-main">
+                <div class="st-row-title">{{ $t('status.project.baseDir') }}</div>
+                <div class="st-row-sub" :class="{ 'st-path': project.baseDir }">
+                  {{ project.baseDir || $t('status.project.baseDirMissing') }}
+                </div>
+              </div>
+            </div>
+
+            <v-expansion-panels v-if="project.configFile" class="st-project-panels" flat>
+              <v-expansion-panel>
+                <v-expansion-panel-title>
+                  <v-icon icon="mdi-file-cog-outline" size="18" class="st-row-icon mr-2" />
+                  <div class="st-row-main">
+                    <div class="st-row-title">{{ $t('status.project.configFile') }}</div>
+                    <div class="st-row-sub st-path">{{ project.configFile }}</div>
+                  </div>
+                </v-expansion-panel-title>
+                <v-expansion-panel-text>
+                  <p class="st-hint">{{ $t('status.project.readonlyHint') }}</p>
+                  <div v-if="!project.sections.length" class="text-medium-emphasis py-2">
+                    {{ $t('status.project.empty') }}
+                  </div>
+                  <div v-for="s in project.sections" :key="s.name" class="st-ini-section">
+                    <div class="st-ini-name">[{{ s.name }}]</div>
+                    <div v-for="e in s.entries" :key="e.key" class="st-ini-entry">
+                      <span class="st-ini-key">{{ e.key }}</span>
+                      <span v-if="e.secret" class="st-ini-secret">{{ $t('status.project.secret') }}</span>
+                      <span v-else class="st-ini-value">{{ e.value }}</span>
+                    </div>
+                  </div>
+                </v-expansion-panel-text>
+              </v-expansion-panel>
+            </v-expansion-panels>
+            <div v-else class="st-row">
+              <v-icon icon="mdi-file-cog-outline" size="18" class="st-row-icon" />
+              <div class="st-row-main">
+                <div class="st-row-title">{{ $t('status.project.configFile') }}</div>
+                <div class="st-row-sub">{{ $t('status.project.configFileMissing') }}</div>
+              </div>
+            </div>
           </section>
 
           <!-- Zugänge: hinterlegt ja/nein, Prüfung gegen die Dienste auf Knopfdruck -->
@@ -1289,6 +1344,49 @@ async function runUpdate(scope) {
   padding: 6px 8px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* Webseitenprojekt: Pfade im festen Zeichensatz; das Panel der
+   Konfigurationsdatei fügt sich als weitere Zeile in die Karte ein. */
+.st-path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+}
+.st-project-panels {
+  border-top: 1px solid var(--mint-border);
+}
+.st-project-panels :deep(.v-expansion-panel) {
+  background: transparent;
+}
+.st-project-panels :deep(.v-expansion-panel-title) {
+  min-height: 0;
+  padding: 8px 0;
+}
+.st-project-panels :deep(.v-expansion-panel-text__wrapper) {
+  padding: 0 0 4px;
+}
+.st-ini-section {
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--mint-border);
+  border-radius: var(--mint-radius);
+  background: var(--mint-content);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+.st-ini-name { font-weight: 700; }
+.st-ini-entry {
+  display: flex;
+  gap: 10px;
+  overflow-wrap: anywhere;
+}
+.st-ini-key { flex: 0 0 180px; opacity: 0.7; }
+.st-ini-value { flex: 1 1 auto; min-width: 0; }
+.st-ini-secret { flex: 1 1 auto; opacity: 0.55; font-style: italic; }
+@media (max-width: 600px) {
+  .st-ini-entry { flex-direction: column; gap: 0; margin-bottom: 4px; }
+  .st-ini-key { flex: 0 0 auto; }
 }
 
 /* Kennzeichnung einer Pro-Funktion. Ohne gültige Lizenz gedämpft und
