@@ -184,6 +184,8 @@ const quotaColor = computed(() => {
 // oder schon einmal etwas ankam.
 const SHOP_TASK_ICON = {
   sync: 'mdi-file-sync-outline',
+  // Nur noch für einen alten Eintrag „Zuletzt“: Vorschaubilder erzeugt
+  // HugoCMS seit 2026-11-18 nicht mehr, sie kommen fertig aus OpensourceERP
   thumbnails: 'mdi-image-multiple-outline',
   build: 'mdi-hammer',
 }
@@ -197,7 +199,6 @@ const shopConnected = computed(() => shop.value?.enabled !== false && !!shop.val
 function shopProgressText(r) {
   const d = r.detail ?? {}
   if (r.task === 'sync' && d.needed != null) return t('status.shop.syncProgress', [d.stored ?? 0, d.needed, d.total ?? d.needed])
-  if (r.task === 'thumbnails' && d.total != null) return t('status.shop.thumbnailsProgress', [d.done ?? 0, d.total])
   return ''
 }
 
@@ -205,12 +206,6 @@ function shopProgressText(r) {
 function shopResultText(l) {
   const d = l.detail ?? {}
   if (l.task === 'sync' && l.success) return t('status.shop.syncResult', [d.written ?? 0, d.deleted ?? 0, d.unchanged ?? 0])
-  if (l.task === 'thumbnails' && d.created != null) {
-    const parts = [t('status.shop.thumbnailsResult', [d.created, d.current ?? 0])]
-    if (d.missing) parts.push(t('status.shop.thumbnailsMissing', [d.missing]))
-    if (d.failed) parts.push(t('status.shop.thumbnailsFailed', [d.failed]))
-    return parts.join(', ')
-  }
   if (l.task === 'build' && d.paused) return t('status.shop.buildPaused')
   if (l.task === 'build' && d.seconds != null) return t('status.shop.buildResult', [d.seconds])
   return ''

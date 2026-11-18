@@ -118,13 +118,12 @@ use HugoCMS\FileManager\Exception\ApiException;
  *   content_dir     Produktseiten (nur Markdown). Standard: content/de/produkt.
  *   category_groups Kategorieübersicht, genau eine .json-Datei.
  *                   Standard: data/category_groups.json.
- *   images          Produktbilder, aus denen HugoCMS die Vorschaubilder
- *                   erzeugt. Standard: static/images/products.
- *   thumbnails      Vorschaubilder, die HugoCMS schreibt.
+ *   images          Produktbilder aus der Medienbibliothek von
+ *                   OpensourceERP. Standard: static/images/products.
+ *   thumbnails      Vorschaubilder, fertig aus OpensourceERP.
  *                   Standard: static/images/thumbnails.
  *   downloads       Download-Dateien der Produktseiten (Datenblätter,
- *                   Anleitungen). HugoCMS prüft für OpensourceERP, ob sie
- *                   vorhanden sind (shopdownloads). Standard: static/downloads.
+ *                   Anleitungen) aus OpensourceERP. Standard: static/downloads.
  *   Das Webseiten-Paket liegt fest in oserp-portal/ ({@see Shop\ShopSync::PACKAGE_DIR}).
  *   areas       wird nicht mehr ausgewertet (abgelöst durch die Freigaben,
  *               Hinweis SHOP-AREAS-OBSOLETE); das Speichern der Freigaben
@@ -155,9 +154,9 @@ final class MountConfig
     public const SHOP_GRANTS = [
         'content_dir' => ['contentDir', false, Shop\ShopSync::DEFAULT_CONTENT_DIR],
         'category_groups' => ['categoryGroups', true, Shop\ShopSync::DEFAULT_CATEGORY_GROUPS],
-        'images' => ['images', false, Shop\ShopThumbnails::DEFAULT_IMAGES],
-        'thumbnails' => ['thumbnails', false, Shop\ShopThumbnails::DEFAULT_THUMBNAILS],
-        'downloads' => ['downloads', false, Shop\ShopDownloads::DEFAULT_DOWNLOADS],
+        'images' => ['images', false, Shop\ShopSync::DEFAULT_IMAGES],
+        'thumbnails' => ['thumbnails', false, Shop\ShopSync::DEFAULT_THUMBNAILS],
+        'downloads' => ['downloads', false, Shop\ShopSync::DEFAULT_DOWNLOADS],
     ];
 
     /** Alle reservierten Sektionsnamen — kein Mount darf so heißen. */

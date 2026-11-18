@@ -77,6 +77,11 @@ final class ShopSync
     public const MEDIA_IMAGE_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif'];
     public const MEDIA_DOWNLOAD_EXT = ['pdf', 'zip', 'txt', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'avif'];
 
+    /** Vorgaben der Medien-Freigaben ([shop] images, thumbnails, downloads). */
+    public const DEFAULT_IMAGES = 'static/images/products';
+    public const DEFAULT_THUMBNAILS = 'static/images/thumbnails';
+    public const DEFAULT_DOWNLOADS = 'static/downloads';
+
     /** Größte Mediendatei — die Grenze der Bibliothek für Downloads. */
     public const MAX_MEDIA_BYTES = 104_857_600;
 

@@ -1522,8 +1522,6 @@ wird nicht nur die eingegebene Adresse, sondern auch, was ihr ähnlich sieht.
 | `shopupload`   | POST | `syncId`, `files` (Liste aus `path`, `content` Base64) | **Mit Schlüssel:** eine Portion Textdateien in die Bereitstellung, noch nicht in die Webseite |
 | `shopmediaupload` | POST (multipart) | `syncId`, `path`, `offset`, Datei `chunk` | **Mit Schlüssel:** ein Stück einer Mediendatei (Produktbild, Vorschaubild, Download); mit dem letzten Stück liegt die Datei geprüft in ihrer Freigabe (`received`, `complete`) |
 | `shopcommit`   | POST | `syncId`                            | **Mit Schlüssel:** Übernahme — schreiben, nicht mehr Geliefertes löschen, Bau vormerken |
-| `shopthumbnails` | POST | `names` (Dateinamen), `size`?, `offset`? | **Mit Schlüssel:** Vorschaubilder der Produktbilder erzeugen, abschnittsweise (`next`, `done`) — nur für ein OpensourceERP ohne Medienbibliothek |
-| `shopdownloads` | POST | `names` (Dateinamen)                   | **Mit Schlüssel:** welche Download-Dateien der Produktseiten in der Freigabe „Downloads“ fehlen (`missing`, `invalid`) — nur lesen, nur für ein OpensourceERP ohne Medienbibliothek |
 
 Alle POST-Befehle verlangen das **CSRF-Token** aus `whoami` (Feld `csrf`) im
 Header `X-CSRF-Token`; sonst antwortet das Backend mit `ECSRF` (403).
@@ -1744,30 +1742,12 @@ als Binärdaten in Stücken, nicht Base64 in JSON:
   früher selbst als Vorschaubild erzeugt hat, steht in keiner Lieferung und
   bleibt liegen.
 - `shopbuildstatus` meldet unter `media`, dass Medien angenommen werden
-  (`accepted`), dazu `chunkBytes`, `maxBytes` und die Endungen. Ein
-  OpensourceERP, das dies liest, lässt `shopthumbnails` und `shopdownloads`
-  aus; ein älteres arbeitet wie bisher.
-
-**Vorschaubilder** (`Shop\ShopThumbnails`, nur für ein OpensourceERP ohne
-Medienbibliothek). Die Produktbilder liegen dann auf dem
-Webserver, nicht in OpensourceERP. OpensourceERP nennt mit `shopthumbnails` nur
-die Dateinamen (das erste Bild jedes Artikels) und die größte Seite der
-Vorschau (`size`, Vorgabe 200, erlaubt 16–2000); verkleinert wird hier. Quelle
-und Ziel sind die Freigaben „Produktbilder" und „Vorschaubilder"
-(`[shop] images`, `[shop] thumbnails`), nicht Teil der Anfrage.
-
-- Eingepasst mit gleichem Seitenverhältnis, nie vergrößert; Transparenz und
-  Format der Quelle bleiben. Braucht die PHP-Erweiterung GD.
-- Ein Vorschaubild gilt als aktuell, wenn es nicht älter ist als seine Quelle
-  und die erwartete Größe hat — eine geänderte Größe wirkt so beim nächsten
-  Lauf.
-- Nur reine Dateinamen mit Bildendung (`jpg`, `jpeg`, `png`, `gif`, `webp`, `avif`);
-  alles andere steht in `failed`, fehlende Quellen in `missing`.
-- Jeder Aufruf arbeitet höchstens 20 Sekunden und nennt in `next`, wo es
-  weitergeht; `done` meldet das Ende. Der Aufrufer ruft mit `offset` erneut
-  auf — kein Hintergrundprozess, kein Zustand auf dem Server.
-- Ist ein Vorschaubild entstanden, wird der Bau vorgemerkt wie nach einer
-  Übernahme.
+  (`accepted`), dazu `chunkBytes`, `maxBytes` und die Endungen.
+- Die früheren Befehle `shopthumbnails` (Vorschaubilder in HugoCMS erzeugen)
+  und `shopdownloads` (Downloads prüfen) gibt es seit 2026-11-18 nicht mehr:
+  Vorschaubilder kommen fertig aus OpensourceERP, fehlende Dateien kennt die
+  Medienbibliothek selbst. OpensourceERP und HugoCMS brauchen dafür beide
+  einen Stand ab 2026-10-15.
 
 **Bau nach einer Lieferung.** Die Übernahme setzt eine Markierung
 (`var/shop/…/build-pending`); `cron-build.php` baut dann auch ohne fällige

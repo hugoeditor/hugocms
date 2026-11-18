@@ -20,10 +20,8 @@ use HugoCMS\FileManager\Exception\ApiException;
 use HugoCMS\FileManager\Review\FrontMatter;
 use HugoCMS\FileManager\Review\ReviewStore;
 use HugoCMS\FileManager\Shop\ShopActivity;
-use HugoCMS\FileManager\Shop\ShopDownloads;
 use HugoCMS\FileManager\Shop\ShopKey;
 use HugoCMS\FileManager\Shop\ShopSync;
-use HugoCMS\FileManager\Shop\ShopThumbnails;
 use HugoCMS\FileManager\Shop\SiteConfig;
 use HugoCMS\FileManager\Shop\SiteConfigWriter;
 use RuntimeException;
@@ -647,7 +645,7 @@ final class Connector
                 'reviewget' => $this->cmdReviewGet($request),
                 'reviewapprove' => $this->cmdReviewApprove($request),
                 'reviewdiscard' => $this->cmdReviewDiscard($request),
-                // Shop-Erweiterung: shopbuild bis shopthumbnails ruft
+                // Shop-Erweiterung: shopbuild bis shopcommit ruft
                 // OpensourceERP mit Schlüssel auf, die übrigen ein angemeldeter
                 // Administrator in den Projekteinstellungen.
                 'shopbuild' => $this->cmdShopBuild(),
@@ -658,8 +656,6 @@ final class Connector
                 'shopupload' => $this->cmdShopUpload($request),
                 'shopmediaupload' => $this->cmdShopMediaUpload($request),
                 'shopcommit' => $this->cmdShopCommit($request),
-                'shopthumbnails' => $this->cmdShopThumbnails($request),
-                'shopdownloads' => $this->cmdShopDownloads($request),
                 'shopkeycreate' => $this->cmdShopKeyCreate(),
                 'shopkeydelete' => $this->cmdShopKeyDelete(),
                 'shopsigningkeyset' => $this->cmdShopSigningKeySet($request),
@@ -2434,9 +2430,8 @@ final class Connector
             // Medien aus der Bibliothek von OpensourceERP (seit 2026-10-15):
             // Produkt- und Vorschaubilder sowie Downloads kommen mit der
             // Lieferung in ihre Freigaben, stückweise über shopmediaupload.
-            // Ein OpensourceERP, das dies liest, lässt shopthumbnails und
-            // shopdownloads aus; ein älteres kennt das Feld nicht und arbeitet
-            // wie bisher
+            // Die früheren Befehle shopthumbnails und shopdownloads gibt es
+            // seit 2026-11-18 nicht mehr
             'media' => [
                 'accepted' => true,
                 'chunkBytes' => ShopSync::chunkBytes(),
@@ -2898,71 +2893,6 @@ final class Connector
 
             return $result;
         });
-    }
-
-    /**
-     * Vorschaubilder für die genannten Produktbilder erzeugen — in Abschnitten
-     * von höchstens 20 Sekunden; die Antwort nennt mit `next`, wo der nächste
-     * Aufruf weitermacht. Entsteht ein neues Vorschaubild, wird gebaut: es liegt
-     * unter static/ und kommt erst mit dem Bau nach public/.
-     */
-    private function cmdShopThumbnails(array $request): array
-    {
-        $this->requireShopKey('shopthumbnails');
-        $this->requireMethod('POST', false);
-        if ($this->hugo === null) {
-            throw new ApiException('ECONFIG', 500, 'HUGO-NOT-CONFIGURED');
-        }
-        @set_time_limit(120);
-
-        return $this->shopStep('thumbnails', function () use ($request): array {
-            foreach (['images', 'thumbnails'] as $grant) {
-                if ($this->shop[$grant] === null) {
-                    throw new ApiException('ECONFIG', 409, 'SHOP-GRANT-UNUSABLE', [$grant]);
-                }
-            }
-            $offset = (int) ($request['offset'] ?? 0);
-            $result = (new ShopThumbnails((string) $this->hugo['source'], $this->shop['images'], $this->shop['thumbnails']))
-                ->run($request['names'] ?? null, (int) ($request['size'] ?? 0), $offset);
-            if ($result['created'] > 0) {
-                ShopSync::markBuildPending($this->shopVarDir());
-            }
-
-            // OpensourceERP ruft in Abschnitten auf; der erste (offset 0)
-            // beginnt die Aufgabe, der mit done beendet sie.
-            $activity = $this->shopActivity();
-            $activity->progress('thumbnails', ['total' => $result['total'], 'done' => $result['next']], [
-                'created' => $result['created'],
-                'current' => $result['current'],
-                'missing' => count($result['missing']),
-                'failed' => count($result['failed']),
-            ], $offset === 0);
-            if ($result['done']) {
-                $activity->finish('thumbnails', true);
-            }
-
-            return $result + ['buildPending' => ShopSync::buildPending($this->shopVarDir())];
-        });
-    }
-
-    /**
-     * Prüft für OpensourceERP, welche Download-Dateien der Produktseiten auf
-     * der Webseite fehlen — nur lesen, in der Freigabe „Downloads“. Kein
-     * Bau, keine Aufgabe im Systemstatus: eine Nachfrage, kein Vorgang.
-     */
-    private function cmdShopDownloads(array $request): array
-    {
-        $this->requireShopKey('shopdownloads');
-        $this->requireMethod('POST', false);
-        if ($this->hugo === null) {
-            throw new ApiException('ECONFIG', 500, 'HUGO-NOT-CONFIGURED');
-        }
-        if ($this->shop['downloads'] === null) {
-            throw new ApiException('ECONFIG', 409, 'SHOP-GRANT-UNUSABLE', ['downloads']);
-        }
-
-        return (new ShopDownloads((string) $this->hugo['source'], $this->shop['downloads']))
-            ->check($request['names'] ?? null);
     }
 
     /**

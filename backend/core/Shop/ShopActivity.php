@@ -25,13 +25,13 @@ namespace HugoCMS\FileManager\Shop;
 final class ShopActivity
 {
     /** Aufgaben der Anbindung. */
-    public const TASKS = ['sync', 'thumbnails', 'build'];
+    public const TASKS = ['sync', 'build'];
 
     /**
      * Sekunden ohne Lebenszeichen, nach denen eine laufende Aufgabe als
      * abgebrochen gilt — etwas über den Zeitgrenzen der einzelnen Aufrufe.
      */
-    private const STALE_AFTER = ['sync' => 360, 'thumbnails' => 180, 'build' => 660];
+    private const STALE_AFTER = ['sync' => 360, 'build' => 660];
 
     public function __construct(private readonly string $varDir)
     {
