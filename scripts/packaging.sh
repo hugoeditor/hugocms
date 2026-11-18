@@ -42,7 +42,11 @@
 #
 # Vor dem Build prüft 'npm audit' die Laufzeit-Abhängigkeiten des Frontends
 # (nur 'dependencies' — sie landen im ausgelieferten app/; Build-Werkzeuge aus
-# 'devDependencies' nicht). Bei Funden jeder Stufe (low bis critical) fragt das
+# 'devDependencies' nicht). Peer- und optionale Abhängigkeiten bleiben dabei
+# außen vor: Über sie zählt npm sonst Build-Werkzeuge zum Laufzeitbaum (vuetify
+# → vite-plugin-vuetify → vite → sass → …). Funde in Build-Werkzeugen werden
+# nur als Hinweis gelistet und brechen nichts ab.
+# Bei Funden jeder Stufe (low bis critical) in Laufzeitpaketen fragt das
 # Skript nach, ob trotzdem gebaut werden soll (Default: Nein). Ohne Nachfrage wird
 # NICHTS behoben: 'npm audit fix' ändert die Lock-Datei, und das Release
 # entspräche keinem Commit mehr. Sind Funde automatisch behebbar, bietet die
@@ -112,6 +116,10 @@ fi
 #     Ist mindestens ein Fund per 'npm audit fix' behebbar, bietet die Nachfrage
 #     zusätzlich [f] an: Fix ausführen, danach erneut prüfen. Das ändert
 #     package-lock.json — der Release-Commit wird dann als -dev markiert.
+#     Der Fix ist abgesichert: Sinkt die Zahl der Laufzeit-Funde nicht oder
+#     steigt die Fundzahl im Gesamtbaum (npm weicht mangels Fix mitunter auf
+#     ältere, verwundbare Versionen aus), wird der vorherige Stand von
+#     package.json/package-lock.json wiederhergestellt (npm ci).
 #     Verlangt ein Fund ein Update auf eine neue Hauptversion (npm meldet
 #     dann 'fixAvailable' als Objekt), bietet die Nachfrage [u] an: Die
 #     betroffenen direkten Abhängigkeiten werden per 'npm install' auf die von
@@ -122,6 +130,49 @@ fi
 #     Audit nicht; run_upgrade ermittelt sie über die Abhängigkeiten der
 #     Zielversionen (npm view) und hebt sie mit. 'npm ls' prüft zum Schluss
 #     den Baum auf Reste.
+
+# Eingrenzung der blockierenden Prüfung auf Pakete, die im ausgelieferten app/
+# landen können. --omit=peer allein genügt nicht: Die Kette zu den
+# Build-Werkzeugen läuft über optionale (Peer-)Abhängigkeiten. Optionale
+# Abhängigkeiten sind bei einem Browser-Bundle native Hilfsprogramme der
+# Werkzeuge, kein ausgelieferter Code.
+AUDIT_OMIT=(--omit=dev --omit=peer --omit=optional)
+
+# Gibt die Gesamtzahl der Funde aus (leer, wenn npm keine Daten liefert).
+# Argumente: zusätzliche Flags für npm audit (z. B. "${AUDIT_OMIT[@]}").
+audit_total() {
+    npm audit --prefix "$PROJECT_DIR/frontend" "$@" --json 2>/dev/null | node -e '
+let d;
+try { d = JSON.parse(require("fs").readFileSync(0, "utf8")); } catch { process.exit(0); }
+if (d.metadata) console.log(d.metadata.vulnerabilities.total);
+' || true
+}
+
+# Listet Funde, die nur Build-Werkzeuge betreffen (Gesamtbaum abzüglich der
+# Laufzeit-Funde aus AUDIT_JSON) — reiner Hinweis, kein Abbruch.
+report_tooling_audit() {
+    command -v npm &>/dev/null || return 0
+    local full
+    full="$(npm audit --prefix "$PROJECT_DIR/frontend" --json 2>/dev/null || true)"
+    AUDIT_RUNTIME_JSON="${AUDIT_JSON:-}" node -e '
+let d;
+try { d = JSON.parse(require("fs").readFileSync(0, "utf8")); } catch { process.exit(0); }
+if (!d.metadata) process.exit(0);
+let runtime = {};
+try { runtime = JSON.parse(process.env.AUDIT_RUNTIME_JSON).vulnerabilities || {}; } catch {}
+const hits = Object.values(d.vulnerabilities || {}).filter(v => !runtime[v.name]);
+if (!hits.length) process.exit(0);
+console.log(`   Hinweis: ${hits.length} Fund(e) nur in Build-Werkzeugen (nicht im ausgelieferten app/) — kein Abbruch:`);
+// Nur Pakete mit eigener Meldung nennen; der Rest hängt lediglich davon ab.
+let dependents = 0;
+for (const v of hits) {
+    const own = (v.via || []).find(x => typeof x === "object");
+    if (!own) { dependents++; continue; }
+    console.log(`   [${v.severity}] ${v.name} — ${own.title}`);
+}
+if (dependents) console.log(`   sowie ${dependents} davon abhängige(s) Paket(e).`);
+' <<< "$full" || true
+}
 
 # Setzt AUDIT_STATUS: 0 = keine Funde, 1 = Funde ohne automatischen Fix,
 # 2 = keine Daten, 3 = Funde, davon mindestens einer per 'npm audit fix'
@@ -137,7 +188,7 @@ run_audit() {
         AUDIT_STATUS=0
     else
         # npm audit endet bei Funden mit Exit-Code ≠ 0 — das ist hier kein Fehler.
-        AUDIT_JSON="$(npm audit --prefix "$PROJECT_DIR/frontend" --omit=dev --json 2>/dev/null || true)"
+        AUDIT_JSON="$(npm audit --prefix "$PROJECT_DIR/frontend" "${AUDIT_OMIT[@]}" --json 2>/dev/null || true)"
         AUDIT_STATUS=0
         # Die Update-Liste wandert über eine Datei zurück nach Bash — die
         # Standardausgabe des Node-Skripts ist für den Menschen bestimmt.
@@ -343,7 +394,7 @@ while (queue.length) {
 }
 
 if [ "$DO_AUDIT" = 1 ]; then
-    echo "0c. Sicherheitsprüfung der Laufzeit-Abhängigkeiten (npm audit --omit=dev)..."
+    echo "0c. Sicherheitsprüfung der Laufzeit-Abhängigkeiten (npm audit ${AUDIT_OMIT[*]})..."
     FIX_TRIED=0
     while true; do
         run_audit
@@ -384,9 +435,34 @@ if [ "$DO_AUDIT" = 1 ]; then
             [fF]*)
                 if [ "$OFFER_FIX" = 1 ]; then
                     FIX_TRIED=1
+                    # Stand und Fundzahlen vor dem Fix festhalten (siehe 0c).
+                    FE="$PROJECT_DIR/frontend"
+                    BEFORE_RT="$(audit_total "${AUDIT_OMIT[@]}")"
+                    BEFORE_ALL="$(audit_total)"
+                    FIX_BACKUP="$(mktemp -d)"
+                    cp "$FE/package.json" "$FE/package-lock.json" "$FIX_BACKUP/"
                     echo "npm audit fix --prefix frontend ..."
-                    if ! npm audit fix --prefix "$PROJECT_DIR/frontend"; then
-                        echo "⚠️  npm audit fix endete mit Fehler — es wird erneut geprüft."
+                    if ! npm audit fix --prefix "$FE"; then
+                        echo "⚠️  npm audit fix endete mit Fehler — das Ergebnis wird geprüft."
+                    fi
+                    AFTER_RT="$(audit_total "${AUDIT_OMIT[@]}")"
+                    AFTER_ALL="$(audit_total)"
+                    echo ""
+                    echo "   Funde Laufzeit: ${BEFORE_RT:-?} -> ${AFTER_RT:-?}, Gesamtbaum: ${BEFORE_ALL:-?} -> ${AFTER_ALL:-?}"
+                    # Ohne Vergleichszahlen ist der Fix nicht überprüfbar — dann
+                    # ebenfalls zurücknehmen.
+                    if [ -z "$BEFORE_RT" ] || [ -z "$AFTER_RT" ] || [ -z "$BEFORE_ALL" ] || [ -z "$AFTER_ALL" ] \
+                        || [ "$AFTER_RT" -ge "$BEFORE_RT" ] || [ "$AFTER_ALL" -gt "$BEFORE_ALL" ]; then
+                        echo "⚠️  Der Fix hat den Stand nicht verbessert — vorheriger Stand wird wiederhergestellt (npm ci)..."
+                        cp "$FIX_BACKUP/package.json" "$FIX_BACKUP/package-lock.json" "$FE/"
+                        rm -rf "$FIX_BACKUP"
+                        if ! npm ci --prefix "$FE"; then
+                            echo "❌ npm ci endete mit Fehler — node_modules von Hand herstellen:"
+                            echo "   npm ci --prefix frontend"
+                            exit 1
+                        fi
+                    else
+                        rm -rf "$FIX_BACKUP"
                     fi
                     echo ""
                     echo "Erneute Sicherheitsprüfung nach dem Fix..."
@@ -401,6 +477,8 @@ if [ "$DO_AUDIT" = 1 ]; then
             *) echo "Abgebrochen — kein Release erzeugt."; exit 1 ;;
         esac
     done
+    # Funde in Build-Werkzeugen: nur Hinweis (ohne Audit-Daten entfällt er).
+    [ "$AUDIT_STATUS" = 2 ] || report_tooling_audit
     echo ""
 fi
 
