@@ -110,7 +110,7 @@ final class SiteConfig
     /**
      * Übersichtsseite jeder Taxonomie (`content/<taxonomie>/_index.md`): ohne
      * sie trägt die Übersicht nur den Namen der Taxonomie als Titel. Gesucht in
-     * jedem Verzeichnis, das als `content` eingehängt ist, sonst im contentDir.
+     * jedem Verzeichnis, das als `content` eingehängt ist, und im contentDir.
      *
      * @param array<string, mixed> $config
      * @return array{taxonomyIndex: array<string, bool>}
@@ -123,9 +123,11 @@ final class SiteConfig
                 $roots[] = $source . '/' . trim($mount['source'], '/');
             }
         }
-        if ($roots === []) {
-            $roots[] = $source . '/' . trim((string) ($config['contentdir'] ?? 'content'), '/');
-        }
+        // Das contentDir zählt immer mit: Bei einem Inhaltsverzeichnis je
+        // Sprache (languages.<lang>.contentDir, etwa content/de) nennt Hugo
+        // unter mounts nur die Vorgabe `content`, die Seiten liegen aber dort.
+        $roots[] = $source . '/' . trim((string) ($config['contentdir'] ?? 'content'), '/');
+        $roots = array_values(array_unique($roots));
 
         $index = [];
         foreach ((array) ($config['taxonomies'] ?? []) as $plural) {
