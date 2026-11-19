@@ -65,13 +65,18 @@ done
 [ "$DO_SITES" = 0 ] && DO_PULL=0
 
 # --- Prerequisites ---------------------------------------------------------
-for d in "$APP_DIR" "$BACKEND_DIR"; do
-    if [ ! -d "$d" ]; then
-        echo "❌ Expected directory missing: $d" >&2
-        echo "   Does update.sh really live in the bin/ of the release repo?" >&2
-        exit 1
-    fi
-done
+# Only refreshing the sites needs the release layout (app/ and backend/).
+# --hugo alone merely replaces bin/hugo/hugo next to this script and therefore
+# also works outside a release repo (e.g. in a development checkout).
+if [ "$DO_SITES" = 1 ]; then
+    for d in "$APP_DIR" "$BACKEND_DIR"; do
+        if [ ! -d "$d" ]; then
+            echo "❌ Expected directory missing: $d" >&2
+            echo "   Does update.sh really live in the bin/ of the release repo?" >&2
+            exit 1
+        fi
+    done
+fi
 
 # --- 1. Update the release repo --------------------------------------------
 # By default the script first fetches the latest release state. Afterwards it

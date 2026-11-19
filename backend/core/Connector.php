@@ -6432,13 +6432,14 @@ final class Connector
     }
 
     /**
-     * Angaben zum Webseitenprojekt für den Systemstatus: das Basisverzeichnis
+     * Angaben zum Webseitenprojekt für den Systemstatus: der absolute Pfad des
+     * Hugo-Programms ([hugo] bin der hugocms.ini), das Basisverzeichnis
      * (Hugo-Quelle aus [hugo] source) sowie Pfad und Inhalt der
      * Konfigurationsdatei dieser Webseite (mounts/<hash>.ini) — rein zur
      * Anzeige. Geheimnisse (Lizenzschlüssel, Hashes, Passwörter) reisen nicht
      * mit; an ihrer Stelle steht `secret: true` ohne Wert.
      *
-     * @return array{baseDir: ?string, configFile: ?string, sections: list<array{name: string, entries: list<array{key: string, value: ?string, secret: bool}>}>}
+     * @return array{hugoBin: ?string, baseDir: ?string, configFile: ?string, sections: list<array{name: string, entries: list<array{key: string, value: ?string, secret: bool}>}>}
      */
     private function projectInfo(): array
     {
@@ -6466,6 +6467,11 @@ final class Connector
         }
 
         return [
+            // Absoluter Pfad des Hugo-Programms; realpath bereinigt „../“ aus
+            // der relativen Angabe. Fehlt die Datei, bleibt der hinterlegte Pfad.
+            'hugoBin' => $this->hugoBin === null
+                ? null
+                : (realpath($this->hugoBin) ?: $this->hugoBin),
             'baseDir' => $this->hugo['source'] ?? null,
             'configFile' => $this->mountsPath === null
                 ? null

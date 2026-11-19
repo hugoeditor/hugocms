@@ -112,7 +112,7 @@ final class SiteConfigWriter
                 throw ApiException::badRequest('SHOP-SITECONFIG-FIX-INVALID', ['op']);
             }
             match ($fix['op']) {
-                'mount' => self::fixMount($config, $package, $fix),
+                'mount' => self::fixMount($config, $package, $fix, self::matrixMounts($bin)),
                 'taxonomy' => self::fixTaxonomy($config, $fix),
                 'permalinks' => self::fixPermalinks($config, $fix),
                 'enableKinds' => self::fixKinds($config),
@@ -160,8 +160,9 @@ final class SiteConfigWriter
      * Webseite verlöre ihre eigenen Inhalte.
      *
      * @param array<string, mixed> $fix source, target
+     * @param bool $matrix Sprache eines Mounts als sites.matrix (Hugo ab 0.153) statt lang
      */
-    private static function fixMount(\stdClass $config, string $package, array $fix): void
+    private static function fixMount(\stdClass $config, string $package, array $fix, bool $matrix = false): void
     {
         $from = trim((string) ($fix['source'] ?? ''), '/');
         $to = trim((string) ($fix['target'] ?? ''), '/');
@@ -188,8 +189,14 @@ final class SiteConfigWriter
             // Alle sieben, auch wenn das Verzeichnis noch fehlt: Hugo übergeht
             // fehlende Quellen, und ein später angelegtes data/ gälte sonst nicht
             foreach (self::DEFAULT_MOUNTS as $dir) {
+                if ($dir === 'content') {
+                    array_push($mounts, ...self::contentMounts($config, $matrix));
+                    continue;
+                }
                 $mounts[] = (object) ['source' => $dir, 'target' => $dir];
             }
+        } else {
+            $mounts = self::repairContentMount($config, $mounts, $matrix);
         }
         $found = false;
         foreach ($mounts as $mount) {
@@ -202,6 +209,98 @@ final class SiteConfigWriter
             $mounts[] = (object) ['source' => $from, 'target' => $to];
         }
         $module->$key = array_values($mounts);
+    }
+
+    /**
+     * Hugos Vorgabe für die Inhalte als Mounts: das contentDir der Webseite,
+     * bei einem eigenen Verzeichnis je Sprache (languages.<lang>.contentDir,
+     * etwa content/de) eines je Sprache. Ein Mount content → content setzte
+     * diese Verzeichnisse außer Kraft: Aus /produkt/… würde /de/produkt/….
+     *
+     * Die Sprache steht nur an den Mounts einer mehrsprachigen Webseite — bis
+     * Hugo 0.152 als lang, danach als sites.matrix (lang ist dort entfernt).
+     *
+     * @return list<\stdClass>
+     */
+    private static function contentMounts(\stdClass $config, bool $matrix = false): array
+    {
+        $dir = static function (mixed $holder): string {
+            if (!$holder instanceof \stdClass) {
+                return '';
+            }
+            $value = $holder->{self::key($holder, 'contentDir')} ?? null;
+
+            return is_string($value) ? trim($value, '/') : '';
+        };
+        $global = $dir($config) !== '' ? $dir($config) : 'content';
+
+        $languages = $config->{self::key($config, 'languages')} ?? null;
+        $perLanguage = [];
+        if ($languages instanceof \stdClass) {
+            foreach (get_object_vars($languages) as $lang => $settings) {
+                if ($dir($settings) !== '') {
+                    $perLanguage[(string) $lang] = $dir($settings);
+                }
+            }
+        }
+        if ($perLanguage === []) {
+            return [(object) ['source' => $global, 'target' => 'content']];
+        }
+
+        $codes = array_map('strval', array_keys(get_object_vars($languages)));
+        if (count($codes) === 1) {
+            return [(object) ['source' => $perLanguage[$codes[0]], 'target' => 'content']];
+        }
+
+        $mounts = [];
+        foreach ($codes as $lang) {
+            $mount = ['source' => $perLanguage[$lang] ?? $global, 'target' => 'content'];
+            $mount += $matrix
+                ? ['sites' => (object) ['matrix' => (object) ['languages' => [$lang]]]]
+                : ['lang' => $lang];
+            $mounts[] = (object) $mount;
+        }
+
+        return $mounts;
+    }
+
+    /** Ob das Hugo dieser Installation die Sprache eines Mounts als sites.matrix erwartet (ab 0.153). */
+    private static function matrixMounts(string $bin): bool
+    {
+        $out = [];
+        @exec(escapeshellarg($bin) . ' version 2>/dev/null', $out);
+
+        return preg_match('/v(\d+\.\d+\.\d+)/', implode(' ', $out), $m) === 1 && version_compare($m[1], '0.153.0', '>=');
+    }
+
+    /**
+     * Stellt einen früher geschriebenen Mount content → content richtig, wenn
+     * die Webseite ihre Inhalte woanders führt (contentMounts). Andere Mounts
+     * bleiben, wie sie sind.
+     *
+     * @param array<int, mixed> $mounts
+     * @return array<int, mixed>
+     */
+    private static function repairContentMount(\stdClass $config, array $mounts, bool $matrix = false): array
+    {
+        $richtig = self::contentMounts($config, $matrix);
+        if (count($richtig) === 1 && $richtig[0]->source === 'content') {
+            return $mounts;
+        }
+        $repaired = [];
+        foreach ($mounts as $mount) {
+            $vorgabe = $mount instanceof \stdClass
+                && trim((string) ($mount->source ?? ''), '/') === 'content'
+                && trim((string) ($mount->target ?? ''), '/') === 'content'
+                && !isset($mount->lang) && !isset($mount->sites);
+            if ($vorgabe) {
+                array_push($repaired, ...$richtig);
+            } else {
+                $repaired[] = $mount;
+            }
+        }
+
+        return $repaired;
     }
 
     /**

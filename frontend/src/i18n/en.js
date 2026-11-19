@@ -552,6 +552,8 @@ export default {
     },
     project: {
       heading: 'Website project',
+      hugoBin: 'Hugo generator',
+      hugoBinMissing: 'No Hugo binary configured ([hugo] bin is missing).',
       baseDir: 'Base directory',
       baseDirMissing: 'No Hugo project directory configured ([hugo] source is missing).',
       configFile: 'Configuration file',

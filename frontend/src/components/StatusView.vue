@@ -52,7 +52,7 @@ const PRO_JOBS = ['improve', 'healthcheck']
 
 const keys = computed(() => store.data?.keys ?? {})
 const license = computed(() => store.data?.license ?? null)
-// Webseitenprojekt: { baseDir, configFile, sections } — null für Redakteure.
+// Webseitenprojekt: { hugoBin, baseDir, configFile, sections } — null für Redakteure.
 const project = computed(() => store.data?.project ?? null)
 
 // Version des Hugo-Binärprogramms neben der Buildnummer. Ohne hinterlegtes
@@ -570,7 +570,7 @@ async function runUpdate(scope) {
             </template>
           </section>
 
-          <!-- Webseitenprojekt: Basisverzeichnis und die Konfigurationsdatei
+          <!-- Webseitenprojekt: Hugo-Programm, Basisverzeichnis und die Konfigurationsdatei
                dieser Webseite, rein zur Anzeige. Wie das Update nur für
                Administratoren — die Angaben nennen Serverpfade. -->
           <section v-if="project" class="st-card">
@@ -578,6 +578,16 @@ async function runUpdate(scope) {
               <v-icon icon="mdi-folder-cog-outline" size="18" />
               {{ $t('status.project.heading') }}
             </h2>
+
+            <div class="st-row">
+              <v-icon icon="mdi-console" size="18" class="st-row-icon" />
+              <div class="st-row-main">
+                <div class="st-row-title">{{ $t('status.project.hugoBin') }}</div>
+                <div class="st-row-sub" :class="{ 'st-path': project.hugoBin }">
+                  {{ project.hugoBin || $t('status.project.hugoBinMissing') }}
+                </div>
+              </div>
+            </div>
 
             <div class="st-row">
               <v-icon icon="mdi-folder-outline" size="18" class="st-row-icon" />

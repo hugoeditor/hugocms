@@ -552,6 +552,8 @@ export default {
     },
     project: {
       heading: 'Webseitenprojekt',
+      hugoBin: 'Hugo-Generator',
+      hugoBinMissing: 'Kein Hugo-Programm hinterlegt ([hugo] bin fehlt).',
       baseDir: 'Basisverzeichnis',
       baseDirMissing: 'Kein Hugo-Projektverzeichnis hinterlegt ([hugo] source fehlt).',
       configFile: 'Konfigurationsdatei',
