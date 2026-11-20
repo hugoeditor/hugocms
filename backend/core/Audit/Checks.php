@@ -287,6 +287,10 @@ final class Checks
         if (!is_file($publicDir . '/sitemap.xml') && !is_file($publicDir . '/sitemapindex.xml')) {
             $out[] = Issue::of('sitemap.missing', '/sitemap.xml', null);
         }
+        // XML-Gültigkeit der Sitemap (samt lokaler Kind-Sitemaps eines Index).
+        foreach (Sitemap::defects($publicDir) as $d) {
+            $out[] = Issue::of($d['rule'], $d['url'], null, $d['params'], $d['context']);
+        }
 
         $robots = $publicDir . '/robots.txt';
         if (!is_file($robots)) {

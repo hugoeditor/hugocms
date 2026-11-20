@@ -102,6 +102,9 @@ final class RuleCatalog
 
         // Sitemap / robots.txt
         'sitemap.missing'          => ['sitemap', self::WARNING],
+        'sitemap.xml.malformed'    => ['sitemap', self::ERROR],
+        'sitemap.xml.root_invalid' => ['sitemap', self::ERROR],
+        'sitemap.xml.loc_missing'  => ['sitemap', self::WARNING],
         'robots.missing'           => ['robots', self::HINT],
         'robots.no_sitemap_ref'    => ['robots', self::HINT],
 

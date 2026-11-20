@@ -24,6 +24,9 @@ final class Sitemap
     /** Übliche Dateinamen der Sitemap im public/-Wurzelverzeichnis. */
     private const array FILENAMES = ['sitemap.xml', 'sitemapindex.xml'];
 
+    /** Namensraum des Sitemap-Protokolls (sitemaps.org, Version 0.9). */
+    private const string XMLNS = 'http://www.sitemaps.org/schemas/sitemap/0.9';
+
     /** Obergrenze der eingelesenen URLs (Schutz vor Speicherüberlauf). */
     private const int MAX_URLS = 50000;
 
@@ -61,6 +64,140 @@ final class Sitemap
     }
 
     /**
+     * Prüft die Sitemap (und bei einem sitemapindex dessen lokale
+     * Kind-Sitemaps) auf XML-Gültigkeit. Drei Mängel werden erkannt:
+     *
+     * - `sitemap.xml.malformed`: nicht wohlgeformtes XML (auch leere oder
+     *   unlesbare Datei) — Parameter ist die Zeile des ersten Fehlers.
+     * - `sitemap.xml.root_invalid`: Wurzelelement ist weder `<urlset>` noch
+     *   `<sitemapindex>` im Namensraum des Sitemap-Protokolls.
+     * - `sitemap.xml.loc_missing`: Einträge ohne (gefülltes) `<loc>`.
+     *
+     * Bewusst KEINE Validierung gegen das XSD: Hugo ergänzt mehrsprachige
+     * Sitemaps um `xhtml:link`-Elemente, deren Schema nachgeladen werden
+     * müsste — das wäre ein Netzzugriff.
+     *
+     * @return list<array{rule: string, url: string, params: list<scalar>, context: array<string, mixed>}>
+     */
+    public static function defects(string $publicDir): array
+    {
+        $file = self::firstFile($publicDir);
+        if ($file === null) {
+            return [];
+        }
+
+        $out = [];
+        $seen = [];
+        $pending = [$file];
+        $isRootFile = true;
+        while ($pending !== []) {
+            $abs = array_shift($pending);
+            if (isset($seen[$abs])) {
+                continue;
+            }
+            $seen[$abs] = true;
+            $url = '/' . ltrim(substr($abs, strlen($publicDir)), '/');
+
+            [$dom, $line, $message] = self::parse($abs);
+            if ($dom === null) {
+                $out[] = [
+                    'rule' => 'sitemap.xml.malformed',
+                    'url' => $url,
+                    'params' => [$line],
+                    'context' => $message === '' ? [] : ['message' => $message],
+                ];
+                $isRootFile = false;
+                continue;
+            }
+
+            $root = $dom->documentElement;
+            $kind = strtolower($root?->localName ?? '');
+            if ($root === null || !in_array($kind, ['urlset', 'sitemapindex'], true) || $root->namespaceURI !== self::XMLNS) {
+                $out[] = [
+                    'rule' => 'sitemap.xml.root_invalid',
+                    'url' => $url,
+                    'params' => [$root?->nodeName ?? ''],
+                    'context' => ['namespace' => $root?->namespaceURI ?? ''],
+                ];
+                $isRootFile = false;
+                continue;
+            }
+
+            // Einträge: <url> im urlset, <sitemap> im sitemapindex.
+            $entryName = $kind === 'urlset' ? 'url' : 'sitemap';
+            $missing = 0;
+            $children = 0;
+            foreach ($root->childNodes as $entry) {
+                if ($entry->nodeType !== XML_ELEMENT_NODE || $entry->localName !== $entryName) {
+                    continue;
+                }
+                $loc = '';
+                foreach ($entry->childNodes as $child) {
+                    if ($child->nodeType === XML_ELEMENT_NODE && $child->localName === 'loc') {
+                        $loc = trim($child->textContent);
+                        break;
+                    }
+                }
+                if ($loc === '') {
+                    $missing++;
+                    continue;
+                }
+                // Kind-Sitemaps nur von der obersten Datei aus verfolgen (eine Ebene).
+                if ($kind === 'sitemapindex' && $isRootFile && ++$children <= self::MAX_CHILDREN) {
+                    $childAbs = self::localFileFor($publicDir, $loc);
+                    if ($childAbs !== null) {
+                        $pending[] = $childAbs;
+                    }
+                }
+            }
+            if ($missing > 0) {
+                $out[] = [
+                    'rule' => 'sitemap.xml.loc_missing',
+                    'url' => $url,
+                    'params' => [$missing],
+                    'context' => [],
+                ];
+            }
+            $isRootFile = false;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Liest eine Sitemap-Datei als XML ein — ohne Netzzugriff (LIBXML_NONET).
+     * Liefert das Dokument oder, wenn es nicht wohlgeformt ist, Zeile und
+     * Meldung des ersten Fehlers (Meldung von libxml, nur zur Diagnose).
+     *
+     * @return array{0: ?DOMDocument, 1: int, 2: string}
+     */
+    private static function parse(string $absFile): array
+    {
+        $raw = @file_get_contents($absFile);
+        if ($raw === false || trim($raw) === '') {
+            return [null, 1, ''];
+        }
+
+        $dom = new DOMDocument();
+        $previous = libxml_use_internal_errors(true);
+        libxml_clear_errors();
+        $ok = $dom->loadXML($raw, LIBXML_NONET);
+        $line = 1;
+        $message = '';
+        foreach (libxml_get_errors() as $error) {
+            if ($error->level >= LIBXML_ERR_ERROR) {
+                $line = max(1, (int) $error->line);
+                $message = trim($error->message);
+                break;
+            }
+        }
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+
+        return $ok ? [$dom, 0, ''] : [null, $line, $message];
+    }
+
+    /**
      * Sammelt die Seitenpfade aus einer Sitemap-Datei. Ist es ein
      * sitemapindex, werden die Kind-Sitemaps (lokale Dateien) einmal verfolgt.
      *
@@ -71,17 +208,8 @@ final class Sitemap
         if ($depth > 1 || count($paths) >= self::MAX_URLS) {
             return; // sitemapindex nur eine Ebene tief verfolgen
         }
-        $raw = @file_get_contents($absFile);
-        if ($raw === false || $raw === '') {
-            return;
-        }
-
-        $dom = new DOMDocument();
-        $previous = libxml_use_internal_errors(true);
-        $ok = $dom->loadXML($raw, LIBXML_NOERROR | LIBXML_NOWARNING | LIBXML_NONET);
-        libxml_clear_errors();
-        libxml_use_internal_errors($previous);
-        if (!$ok) {
+        [$dom] = self::parse($absFile);
+        if ($dom === null) {
             return;
         }
 
