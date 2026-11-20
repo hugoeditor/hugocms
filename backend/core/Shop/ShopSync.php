@@ -113,11 +113,19 @@ final class ShopSync
     /** Zweck der Signatur — sie taugt für nichts anderes. */
     private const SIGNATURE_CONTEXT = "hugocms-shop-php\n";
 
-    /** Höchstzahl der Dateien in einem Abgleich — Seiten, Paket und Medien zusammen. */
-    private const MAX_FILES = 60000;
+    /**
+     * Höchstzahl der Dateien in einem Abgleich — Seiten, Paket und Medien
+     * zusammen. Bis 20.11.2026 waren es 60.000; der Shop auto-spar.de führt
+     * rund 170.000 Produktseiten.
+     */
+    private const MAX_FILES = 500000;
 
-    /** Größte Einzeldatei — dieselbe Grenze wie im Texteditor. */
-    private const MAX_FILE_BYTES = 5_242_880;
+    /**
+     * Größte Einzeldatei. Bis 20.11.2026 galt die Grenze des Texteditors
+     * (5 MB); Produktseiten mit sehr vielen kompatiblen Fahrzeugen sind
+     * größer (auto-spar.de: bis rund 12 MB).
+     */
+    private const MAX_FILE_BYTES = 33_554_432;
 
     /** Nach dieser Zeit gilt eine nicht übernommene Lieferung als aufgegeben. */
     private const SYNC_MAX_AGE = 86400;
@@ -172,7 +180,7 @@ final class ShopSync
         // Eigene Endungsliste statt der Editor-Vorgabe: Die Anbindung schreibt
         // auch .js (oserp-portal/), das der Texteditor nur mit extra_editable
         // öffnet. Die Grenze für Uploads ist die der Medien (Downloads).
-        $this->files = new FileService($this->resolver, $accept, 5_242_880, self::MAX_MEDIA_BYTES);
+        $this->files = new FileService($this->resolver, $accept, self::MAX_FILE_BYTES, self::MAX_MEDIA_BYTES);
     }
 
     /** Freigaben der Medien, wie dem Konstruktor übergeben. */
