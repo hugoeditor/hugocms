@@ -1,0 +1,109 @@
+# HugoCMS Pro-Lizenz
+
+Version 1.0, Stand 20.11.2026
+
+Diese Lizenz regelt die Nutzung der Pro-Bestandteile von HugoCMS
+(„Pro-Software“). Rechteinhaber ist Inter-Data (Ciatronical), Dirk Schwartzer
+(„Inter-Data“). Der übrige Teil von HugoCMS („Kern“) steht unter der GNU Affero
+General Public License v3 oder später (siehe LICENSE); für ihn gilt diese Lizenz
+nicht.
+
+## 1. Gegenstand
+
+Pro-Software sind alle Dateien in den Verzeichnissen
+
+- `backend/core/Pro/` und
+- `frontend/src/pro/`
+
+des Quell-Repositorys sowie die daraus erzeugten Dateien des
+Auslieferungs-Repositorys (`backend/core/Pro/`, `app/assets/pro-*.js`,
+`app/assets/pro-*.css`). Diese Dateien tragen den Kopf
+`SPDX-License-Identifier: LicenseRef-HugoCMS-Pro`. Die Pro-Software umfasst
+insbesondere den SEO-Check, die Content-Qualitätsprüfung mit KI-Verbesserung,
+PageSpeed- und Live-Analyse, Sprachausgabe, Git-Versionierung mit
+Änderungsprotokoll und das Mehrbenutzer-Verfahren mit Kontenverwaltung.
+
+## 2. Einsichtnahme, Entwicklung, Weitergabe
+
+Jede Person darf die Pro-Software
+
+1. lesen, analysieren und besprechen;
+2. in Entwicklungs- und Testumgebungen ausführen, um HugoCMS zu bewerten oder
+   Beiträge zu HugoCMS zu erstellen (siehe CLA.md);
+3. unverändert und vollständig zusammen mit HugoCMS weitergeben, etwa als Fork
+   oder Spiegel des Repositorys, sofern dieser Lizenztext, LICENSE und alle
+   Lizenzköpfe erhalten bleiben.
+
+Nicht gestattet ohne Pro-Schlüssel nach Abschnitt 3 sind der produktive
+Einsatz der Pro-Software für eine Webseite und ihre Bereitstellung für Dritte
+als Dienst.
+
+## 3. Nutzungsrecht mit Pro-Schlüssel
+
+Für jede Domain, für die Inter-Data einen Pro-Schlüssel ausgestellt hat
+(„lizenzierte Webseite“), erhält der Inhaber des Schlüssels („Lizenznehmer“)
+das nicht ausschließliche, nicht übertragbare und zeitlich unbefristete Recht,
+die Pro-Software für diese Webseite zu nutzen. Das Recht umfasst alle
+Pro-Funktionen und ihre Aktualisierungen.
+
+Der Lizenznehmer darf die Pro-Software für den Betrieb der lizenzierten
+Webseite anpassen. Geänderte Fassungen dürfen nicht weitergegeben werden.
+
+Eine Installation von HugoCMS kann mehrere Webseiten bedienen; der Pro-Schlüssel
+gilt jeweils nur für die Domain, auf die er ausgestellt ist.
+
+## 4. Unzulässige Handlungen
+
+Ohne ausdrückliche schriftliche Zustimmung von Inter-Data ist es nicht
+gestattet,
+
+1. die Schlüsselprüfung (`backend/core/License.php` und die Stellen, die sie
+   aufrufen) zu entfernen, zu deaktivieren oder zu umgehen, soweit dadurch die
+   Pro-Software ohne gültigen Pro-Schlüssel nutzbar wird;
+2. Pro-Schlüssel zu erzeugen, die nicht von Inter-Data ausgestellt sind, oder
+   einen Pro-Schlüssel für eine andere als die lizenzierte Domain einzusetzen;
+3. Pro-Schlüssel an Dritte weiterzugeben;
+4. die Pro-Software oder Teile davon aus HugoCMS herauszulösen und in anderen
+   Produkten zu verwenden;
+5. Lizenzhinweise, Lizenzköpfe oder Urhebervermerke zu entfernen oder zu
+   verändern.
+
+Dass der Kern unter der AGPL verändert werden darf, einschließlich der dort
+liegenden Schlüsselprüfung, verschafft kein Nutzungsrecht an der Pro-Software.
+Die Pro-Software ist kein Bestandteil des unter der AGPL lizenzierten Werks.
+
+## 5. Beiträge
+
+Beiträge zur Pro-Software nimmt Inter-Data nur auf Grundlage des Contributor
+License Agreements (CLA.md) an. Es gelten dieselben Regeln wie für Beiträge
+zum Kern.
+
+## 6. Gewährleistung und Haftung
+
+Die Pro-Software wird „wie sie ist“ bereitgestellt. Soweit gesetzlich zulässig,
+sind Gewährleistung und Haftung ausgeschlossen; dies gilt nicht für Vorsatz,
+grobe Fahrlässigkeit, Verletzung von Leben, Körper oder Gesundheit und
+Ansprüche nach dem Produkthaftungsgesetz. Weitergehende Zusagen können in
+einem gesonderten Vertrag (etwa Support oder kommerzielle Lizenz) getroffen
+werden.
+
+## 7. Laufzeit und Beendigung
+
+Das Nutzungsrecht nach Abschnitt 3 ist unbefristet. Es endet automatisch, wenn
+der Lizenznehmer gegen Abschnitt 3 oder 4 verstößt. Mit dem Ende ist die
+Nutzung der Pro-Software für die betroffene Webseite einzustellen. Die Rechte
+nach Abschnitt 2 bleiben unberührt.
+
+## 8. Kommerzielle Lizenz
+
+Wer HugoCMS als Ganzes ohne die Bedingungen der AGPL einsetzen möchte (etwa
+ohne Offenlegung eigener Anpassungen des Kerns) oder die Pro-Software über
+Abschnitt 3 hinaus nutzen will, kann bei Inter-Data eine kommerzielle Lizenz
+anfragen.
+
+## 9. Anwendbares Recht
+
+Es gilt das Recht der Bundesrepublik Deutschland unter Ausschluss des
+UN-Kaufrechts. Soweit zulässig, ist Gerichtsstand der Sitz von Inter-Data.
+Sollte eine Bestimmung dieser Lizenz unwirksam sein, bleibt die Wirksamkeit
+der übrigen Bestimmungen unberührt.

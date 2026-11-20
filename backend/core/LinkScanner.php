@@ -19,7 +19,7 @@ namespace HugoCMS\FileManager;
  * Der Cursor ist ein reiner INDEX in die sortierte Dateiliste, kein Pfad: Aus
  * dem Client kommt nie ein Pfadbestandteil, der Verzeichnisse verlassen könnte.
  * Gelesen wird nur innerhalb der beiden konfigurierten Ordner — wie im
- * {@see Audit\AuditRunner}, dem der gebaute Ordner ebenso direkt vorliegt.
+ * {@see Pro\Audit\AuditRunner}, dem der gebaute Ordner ebenso direkt vorliegt.
  */
 final class LinkScanner
 {
@@ -55,7 +55,7 @@ final class LinkScanner
      * @param string $contentName   sein Name relativ zur Projektwurzel (content)
      * @param string $publicDirAbs  absoluter Pfad des gebauten Ordners
      * @param string $publicName    sein Name relativ zur Projektwurzel (public)
-     * @param ?Audit\SourceGuesser $guesser Ordnet einer gebauten Seite ihre
+     * @param ?SourceGuesser $guesser Ordnet einer gebauten Seite ihre
      *        Quelldatei zu — dieselbe Zuordnung, die der SEO-Check für seine
      *        Funde nutzt. Ohne ihn tragen Treffer im gebauten Ordner keine
      *        Quellangabe.
@@ -65,7 +65,7 @@ final class LinkScanner
         private readonly string $contentName,
         private readonly string $publicDirAbs,
         private readonly string $publicName,
-        private readonly ?Audit\SourceGuesser $guesser = null,
+        private readonly ?SourceGuesser $guesser = null,
     ) {
     }
 
@@ -156,7 +156,7 @@ final class LinkScanner
             );
             // Papierkorb eines Mounts, der auf den Ordner zeigt: Hugo baut daraus
             // nichts, seine Links interessieren hier ebenso wenig.
-            if (Audit\AuditRunner::inTrash($rel)) {
+            if (SourceGuesser::inTrash($rel)) {
                 continue;
             }
             $out[] = [$file->getPathname(), $rel, $area];

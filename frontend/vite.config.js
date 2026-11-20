@@ -72,6 +72,16 @@ export default defineConfig(({ command }) => {
     },
     build: {
       outDir: 'dist',
+      rollupOptions: {
+        output: {
+          // Pro-Code (src/pro/) in einem eigenen Chunk „pro-<hash>.js“ bündeln.
+          // Er steht unter der Pro-Lizenz (LICENSE-PRO), der Rest unter der AGPL;
+          // die Trennung muss auch im ausgelieferten Bündel erkennbar bleiben.
+          manualChunks(id) {
+            if (id.includes('/src/pro/')) return 'pro'
+          },
+        },
+      },
     },
   }
 })

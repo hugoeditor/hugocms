@@ -212,7 +212,7 @@ final class MountConfig
     private const int GIT_TAG_LABEL_MAX = 40;
 
     /** Zielpfad des Änderungsprotokolls, wenn keiner konfiguriert ist. */
-    public const string GIT_CHANGELOG_PATH_DEFAULT = ChangelogService::DEFAULT_FILE;
+    public const string GIT_CHANGELOG_PATH_DEFAULT = 'changelog.md';
 
     /**
      * Höchstzahl der Zielpfade. Jeder Pfad ist eine Datei, die bei JEDEM

@@ -38,15 +38,23 @@ hugocms-2026/                     # Quell-Repo (Entwicklung)
 │   │   ├── FileService.php       # Dateioperationen (list, read, write, anlegen, …)
 │   │   ├── AssistantService.php  # KI-Assistent: Tool-Schleife über FileService
 │   │   ├── AnthropicClient.php   # Claude-API über cURL (ohne SDK)
-│   │   ├── License.php           # Pro-Lizenz prüfen (Ed25519, domaingebunden)
-│   │   ├── GitService.php        # Pro: Git-Versionierung
-│   │   ├── ChangelogService.php  # Änderungsprotokoll (content/changelog.md)
-│   │   ├── Audit/                # Pro: SEO-Check & Content-Qualität
-│   │   │   ├── AuditService.php      # SEO-Check-Läufe (Bericht je Webseite)
-│   │   │   ├── AuditRunner.php       # gebautes public/ parsen & Regeln prüfen
-│   │   │   ├── IgnoreStore.php       # dauerhaft ignorierte Funde je Webseite
-│   │   │   ├── Checks.php / RuleCatalog.php / HtmlInspector.php / …
-│   │   │   └── ContentQualityService.php # LLM-Qualitätsprüfung je Inhaltsdatei
+│   │   ├── License.php           # Pro-Schlüssel prüfen (Ed25519, domaingebunden)
+│   │   ├── SourceGuesser.php     # gebaute Seite → Hugo-Quelldatei (SEO-Check, Hyperlink-Suche)
+│   │   ├── Pro/                  # PRO-BESTANDTEILE — eigene Lizenz (LICENSE-PRO), nicht AGPL
+│   │   │   ├── ProCommands.php       # Trait: alle Pro-Befehle des Connectors
+│   │   │   ├── GitService.php        # Git-Versionierung
+│   │   │   ├── ChangelogService.php  # Änderungsprotokoll (content/changelog.md)
+│   │   │   ├── PageSpeedClient.php / SeoSuccessClient.php  # externe Dienste
+│   │   │   ├── Audit/                # SEO-Check & Content-Qualität
+│   │   │   │   ├── AuditService.php      # SEO-Check-Läufe (Bericht je Webseite)
+│   │   │   │   ├── AuditRunner.php       # gebautes public/ parsen & Regeln prüfen
+│   │   │   │   ├── IgnoreStore.php       # dauerhaft ignorierte Funde je Webseite
+│   │   │   │   ├── Checks.php / RuleCatalog.php / HtmlInspector.php / …
+│   │   │   │   └── ContentQualityService.php # LLM-Qualitätsprüfung je Inhaltsdatei
+│   │   │   └── Auth/                 # Mehrbenutzer-Verfahren
+│   │   │       ├── MultiUserDriver.php   # meldet "multiuser" an der AuthFactory an
+│   │   │       ├── MultiUser.php         # mehrere Konten mit Rollen
+│   │   │       └── UserStore.php         # Kontodateien users/<hash>.ini
 │   │   ├── Review/               # gestaffelte Veröffentlichung (Freigabe)
 │   │   │   ├── ReviewStore.php        # Entwurfsspeicher je Webseite (var/review/)
 │   │   │   └── FrontMatter.php        # draft/publishDate im Front Matter setzen
@@ -56,9 +64,7 @@ hugocms-2026/                     # Quell-Repo (Entwicklung)
 │   │   ├── Auth/                 # Anmeldeverfahren
 │   │   │   ├── AuthInterface.php     # Vertrag (Anmeldung + Einstellungen je Benutzer)
 │   │   │   ├── SingleUser.php        # ein Konto, Daten in der hugocms.ini
-│   │   │   ├── MultiUser.php         # Pro: mehrere Konten mit Rollen
-│   │   │   ├── UserStore.php         # Pro: Kontodateien users/<hash>.ini
-│   │   │   ├── UserAdminInterface.php / SiteAwareInterface.php
+│   │   │   ├── UserAdminInterface.php / SiteAwareInterface.php  # Verträge, die Pro/Auth erfüllt
 │   │   │   └── SessionHandling.php   # gemeinsamer Sitzungsteil beider Treiber
 │   │   └── Exception/            # ApiException
 │   ├── cli/                      # Kommandozeilen-Werkzeuge
@@ -82,6 +88,12 @@ hugocms-2026/                     # Quell-Repo (Entwicklung)
 │   ├── packaging.sh              # Auslieferungspaket erzeugen
 │   └── site-hash.sh              # Hash/Dateiname einer Webseite berechnen
 ├── frontend/                     # Vue 3 + Vuetify 3 + Vite (Client, base=/edit/)
+│   └── src/pro/                  # PRO-BESTANDTEILE des Clients (eigener Chunk pro-*.js)
+├── docs/drittkomponenten.md      # kuratierte Übersicht der Komponenten Dritter
+├── LICENSE                       # AGPL-3.0-or-later für den Kern + Hinweis auf die Pro-Verzeichnisse
+├── LICENSE-PRO                   # HugoCMS Pro-Lizenz (Pro-Verzeichnisse)
+├── CLA.md / CONTRIBUTING.md      # Beitragsvereinbarung und Mitwirken
+├── THIRD_PARTY_LICENSES.md       # erzeugt: Lizenztexte der npm-Pakete (npm run licenses)
 ├── daten/                        # Beispiel-Datenverzeichnis
 ├── beispiel-konfigurationen/     # Apache- und Nginx-Vorlagen
 └── hugocms-release/              # Auslieferungs-Repo (eigenes Repo, gitignored)
@@ -743,9 +755,18 @@ Funktionen frei:
 - **Git-Versionierung** des Hugo-Projekts.
 
 Voraussetzung für alle Pro-Funktionen ist eine gültige, domaingebundene Lizenz
-(siehe Lizenzmodell) und ein konfiguriertes **Hugo-Projekt** der Webseite
+(siehe Pro-Schlüssel) und ein konfiguriertes **Hugo-Projekt** der Webseite
 (`[hugo] source` der Mount-Konfiguration). Die Content-Qualität und die
 KI-Verbesserung brauchen zusätzlich einen **KI-Schlüssel** (`[ai] api_key`).
+
+**Lizenzgrenze.** Der Code der Pro-Funktionen liegt vollständig in
+`backend/core/Pro/` (Trait `ProCommands` für die Befehle, eigene Klassen für
+Audit, Git, externe Dienste und das Mehrbenutzer-Verfahren) und in
+`frontend/src/pro/` (eigener Chunk `pro-*.js`). Diese Verzeichnisse stehen
+**nicht** unter der AGPL, sondern unter der [HugoCMS Pro-Lizenz](LICENSE-PRO);
+jede Datei trägt den Kopf `SPDX-License-Identifier: LicenseRef-HugoCMS-Pro`.
+Der Kern ruft die Pro-Klassen nur auf (`Connector::run()`, `AuthFactory`), die
+Pro-Logik selbst gehört ausschließlich dorthin — siehe [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Git-Versionierung
 
@@ -835,7 +856,7 @@ muss. Die Seite entsteht beim ersten Mal von selbst, mit Front Matter und dem
 Titel „Änderungen"; danach wird nur noch ihr `lastmod` fortgeschrieben, während
 der übrige Kopf und der vorhandene Text unangetastet bleiben.
 
-Geschrieben wird **vor** `git add -A` ([GitService.php](backend/core/GitService.php),
+Geschrieben wird **vor** `git add -A` ([GitService.php](backend/core/Pro/GitService.php),
 Parameter `$beforeAdd` von `commit()`). Die Seite liegt selbst im Repository und
 muss deshalb in genau dem Stand landen, den sie beschreibt — sonst bliebe sie
 nach jedem Sichern als offene Änderung liegen und der Arbeitsbaum würde nie
@@ -1081,9 +1102,10 @@ weder löschen noch herabstufen noch sperren; das eigene Konto lässt sich nicht
 selbst entmachten und nicht über die Verwaltung ändern — dafür gibt es den
 Konto-Ansicht mit Passwortbestätigung.
 
-### Lizenzmodell
+### Pro-Schlüssel (Domainbindung)
 
-Die Lizenz gilt **pro Webseite** und ist an deren **Domain** gebunden
+Rechtliche Grundlage der Pro-Funktionen ist die [HugoCMS Pro-Lizenz](LICENSE-PRO);
+der Pro-Schlüssel ist ihr technischer Nachweis. Er gilt **pro Webseite** und ist an deren **Domain** gebunden
 (normalisierter Host: klein, ohne Port, ohne Endpunkt-Pfad). Ein Umzug des
 API-Endpunkts (`/cms-api` → `/hugocms-api`) lässt die Lizenz gültig; eine andere
 Domain nicht. Es gibt **kein Ablaufdatum**. Da eine Installation mehrere
@@ -1880,6 +1902,41 @@ verlässliche Weg bleibt der im Web-Request.
   aus `whoami` im Header `X-CSRF-Token` (zweite Schicht neben `SameSite=Lax`).
   Das einmalige Einrichtungs-Setup (vor Existenz der `hugocms.ini`) läuft ohne
   Token, da dort noch keine schützenswerte Sitzung besteht.
+
+## Lizenz
+
+Copyright (C) 2026 Inter-Data (Ciatronical), Dirk Schwartzer
+
+HugoCMS besteht aus zwei unterschiedlich lizenzierten Teilen (Details in
+[LICENSE](LICENSE)):
+
+- **Kern** — alles außerhalb der Pro-Verzeichnisse — ist freie Software unter
+  der **GNU Affero General Public License, Version 3** oder (nach Ihrer Wahl)
+  jeder späteren Version. Wer eine veränderte Fassung als Netzdienst betreibt,
+  muss den Nutzern dieses Dienstes den Quelltext der veränderten Fassung
+  anbieten (§ 13 AGPL).
+- **Pro-Bestandteile** — `backend/core/Pro/` und `frontend/src/pro/` (im
+  Auslieferungs-Repo zusätzlich `app/assets/pro-*.js`) — stehen unter der
+  [HugoCMS Pro-Lizenz](LICENSE-PRO). Sie dürfen gelesen, zum Entwickeln und
+  Testen ausgeführt und unverändert mit HugoCMS weitergegeben werden; der
+  produktive Einsatz setzt einen von Inter-Data ausgestellten Pro-Schlüssel
+  voraus. Das Entfernen oder Umgehen der Schlüsselprüfung verschafft kein
+  Nutzungsrecht an diesen Dateien.
+
+Das Programm wird in der Hoffnung bereitgestellt, dass es nützlich ist, aber
+**ohne jede Gewährleistung**, auch ohne die stillschweigende Zusicherung der
+Marktgängigkeit oder der Eignung für einen bestimmten Zweck.
+
+Eine Übersicht der verwendeten Drittkomponenten und ihrer Lizenzen steht in
+[docs/drittkomponenten.md](docs/drittkomponenten.md), die vollständigen
+Lizenztexte in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+
+Beiträge sind willkommen, siehe [CONTRIBUTING.md](CONTRIBUTING.md).
+Voraussetzung ist das [Contributor License Agreement](CLA.md).
+
+**Kommerzielle Lizenz auf Anfrage.** Wer HugoCMS ohne die Bedingungen der AGPL
+einsetzen möchte, etwa ohne Offenlegung eigener Anpassungen des Kerns, kann bei
+Inter-Data eine kommerzielle Lizenz anfragen.
 
 ## Entwicklungsstand
 

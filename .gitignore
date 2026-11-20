@@ -70,3 +70,5 @@ scripts/keygen/
 /.*
 !/.gitignore
 !/.gitmodules
+# CLA-Workflow (contributor-assistant) und seine Unterschriftenliste gehören ins Repo.
+!/.github

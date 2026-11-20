@@ -17,6 +17,15 @@ offensichtlich ist — die ausführliche Funktionsübersicht steht in der README
 - **Breite Hosting-Kompatibilität.** Läuft auf einfachem PHP; `bin/install.sh`
   nutzt das Kopierverfahren **ohne Symlinks**. Nichts einbauen, das eine
   kontrollierte Serverumgebung voraussetzt.
+- **Lizenzgrenze Pro.** Der Kern steht unter der AGPL, die Verzeichnisse
+  `backend/core/Pro/` und `frontend/src/pro/` unter der Pro-Lizenz
+  (`LICENSE-PRO`). Code, der einen Pro-Schlüssel voraussetzt, gehört NUR
+  dorthin; neue Pro-PHP-Dateien tragen den Lizenzkopf mit
+  `SPDX-License-Identifier: LicenseRef-HugoCMS-Pro` (Vorlage: jede Datei in
+  `Pro/`). Pro-Befehle des Connectors leben im Trait `Pro\ProCommands`,
+  nicht in `Connector.php`; `Connector::run()` verteilt nur. Der Kern darf
+  Pro-Klassen aufrufen, nie von ihnen abhängen. Neue Frontend-Abhängigkeiten
+  in `docs/drittkomponenten.md` eintragen und `npm run licenses` ausführen.
 - **Mount-Sicherheit ist die Grenze.** Jeder Pfad wird über `MountResolver` als
   undurchsichtige ID adressiert und in seinen Mount eingesperrt (`..` verboten).
   Neue Datei-Operationen IMMER über `FileService`/`MountResolver` führen, damit

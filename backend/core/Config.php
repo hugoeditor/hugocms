@@ -199,7 +199,7 @@ final class Config
      * Punkte entfernt, nur Buchstaben und Ziffern, entdoppelt. Ungültige
      * Einträge (leer, mit Sonderzeichen) werden verworfen. Gemeinsam genutzt von
      * [editor] extra_editable und der Dateityp-Liste je Benutzerkonto
-     * ({@see Auth\UserStore}).
+     * ({@see Pro\Auth\UserStore}).
      *
      * @return list<string>
      */
@@ -218,7 +218,7 @@ final class Config
 
     /**
      * SEO-Bericht ([seo_report]-Sektion, optional). exclude_prefixes ergänzt die
-     * fest verdrahteten Ausschlüsse des Audits ({@see \HugoCMS\FileManager\Audit\AuditRunner})
+     * fest verdrahteten Ausschlüsse des Audits ({@see \HugoCMS\FileManager\Pro\Audit\AuditRunner})
      * um WEITERE public-relative Pfad-Präfixe, die nicht geprüft werden sollen
      * (z. B. "test/", "error/"). exclude_files schließt EINZELNE Dateien aus
      * (exakter public-relativer Pfad, z. B. Suchmaschinen-Bestätigungsdateien wie

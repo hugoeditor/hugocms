@@ -653,6 +653,24 @@ cp -r "$PROJECT_DIR/bin" "$PKG/bin"
 rm -rf "$PKG/bin/hugo" "$PKG/bin/hooks"
 chmod +x "$PKG/bin/"*.sh 2>/dev/null || true
 
+# 5c. Lizenzdateien ausliefern. LICENSE nennt die Zweiteilung (Kern AGPL,
+#     Pro-Verzeichnisse Pro-Lizenz) und verweist auf app/assets/pro-*.js —
+#     der Pro-Chunk, den vite.config.js über manualChunks abtrennt.
+#     THIRD_PARTY_LICENSES.md ersetzt die beim Minifizieren entfernten
+#     Lizenzkommentare der npm-Pakete.
+echo "5c. Lizenzen -> $PKG/LICENSE, LICENSE-PRO, THIRD_PARTY_LICENSES.md"
+for f in LICENSE LICENSE-PRO THIRD_PARTY_LICENSES.md; do
+    if [ ! -f "$PROJECT_DIR/$f" ]; then
+        echo "❌ $f fehlt im Quell-Repo. Abbruch."
+        exit 1
+    fi
+    cp "$PROJECT_DIR/$f" "$PKG/$f"
+done
+if ! ls "$PKG/app/assets/pro-"*.js >/dev/null 2>&1; then
+    echo "❌ Pro-Chunk app/assets/pro-*.js fehlt im Build — Lizenztrennung nicht erkennbar. Abbruch."
+    exit 1
+fi
+
 # 6. Berechtigungen vereinheitlichen
 find "$PKG/app" "$PKG/backend" -type d -exec chmod 775 {} \; 2>/dev/null || true
 find "$PKG/app" "$PKG/backend" -type f -exec chmod 664 {} \; 2>/dev/null || true

@@ -13,7 +13,7 @@ use HugoCMS\FileManager\Exception\ApiException;
  * bleibt bis zur Freigabe unangetastet; der Entwurf berührt den Hugo-Content-
  * Baum nie und wird daher auch nie versehentlich gebaut.
  *
- * Analog zu {@see \HugoCMS\FileManager\Audit\ContentQualityService}: JSON — eine
+ * Analog zu {@see \HugoCMS\FileManager\Pro\Audit\ContentQualityService}: JSON — eine
  * Datei je Entwurf — im Speicherverzeichnis (keine Datenbank), atomar über
  * Tempdatei + rename. Kein langlaufender Zustand, hosting-tauglich.
  *
